@@ -1,6 +1,6 @@
 # Пираты — Deck Builder
 
-Веб-игра на Phaser 3, пиксель-арт. Один файл `game.js` + `index.html`.
+Веб-игра на Phaser 3, пиксель-арт. `index.html` + скрипты в `js/`.
 
 ## Правила
 
@@ -40,3 +40,13 @@
 - Одна Phaser-сцена `GameScene`
 - UI перерисовывается целиком через `renderAll()` при каждом изменении стейта
 - Контейнеры: `top`, `island`, `phase`, `hand`, `btn`, `shop`, `tip`, `fx`
+
+## Файлы (js/)
+
+| Файл | Содержимое |
+|------|-----------|
+| `js/constants.js` | `BG_COLOR`, `RES_EMOJI`, `ISLANDS`, `TYPES`, `SHOP_POOL` |
+| `js/state.js` | `G`, `mkP`, `initState`, `randomShopType`, `initialShop` |
+| `js/layout.js` | `REF_H`, `computeLayout` |
+| `js/scene.js` | `GameScene` — вся логика сцены и рендеринг |
+| `js/main.js` | Инициализация `Phaser.Game` |
