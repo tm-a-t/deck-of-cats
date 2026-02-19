@@ -59,7 +59,7 @@ class GameScene extends Phaser.Scene {
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
-      G.enemyShip = { strength: 4 * G.boardingCount + 2 };
+      G.enemyShip = { strength: 5 * G.boardingCount };
     } else {
       G.phase = 'sending';
       G.island = Phaser.Utils.Array.GetRandom(ISLANDS);
