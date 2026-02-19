@@ -16,11 +16,12 @@ class GameScene extends Phaser.Scene {
     this.L = computeLayout(this.scale.width, this.scale.height);
 
     this.ct = {};
-    ['top', 'island', 'phase', 'hand', 'btn', 'shop', 'tip', 'fx'].forEach(k => {
+    ['top', 'island', 'phase', 'hand', 'btn', 'shop', 'tip', 'fx', 'gameover'].forEach(k => {
       this.ct[k] = this.add.container(0, 0);
     });
     this.ct.tip.setDepth(100).setVisible(false);
     this.ct.fx.setDepth(50);
+    this.ct.gameover.setDepth(200);
 
     this._tipRect = null;
     this._tipJustOpened = false;
@@ -49,11 +50,23 @@ class GameScene extends Phaser.Scene {
 
   startRound() {
     G.round++;
-    G.phase = 'sending';
     G.sent = [];
-    G.cunning = 0;
+    G.enthusiasm = 0;
     G.busy = false;
-    G.island = Phaser.Utils.Array.GetRandom(ISLANDS);
+
+    const isBoarding = G.round % 5 === 0;
+    if (isBoarding) {
+      G.boardingCount++;
+      G.phase = 'boarding';
+      G.island = null;
+      G.enemyShip = { strength: 4 * G.boardingCount + 2 };
+    } else {
+      G.phase = 'sending';
+      G.island = Phaser.Utils.Array.GetRandom(ISLANDS);
+      G.enemyShip = null;
+      if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+    }
+
     G.hand = this.drawCards(5);
 
     if (G.round > 1) {
@@ -81,9 +94,20 @@ class GameScene extends Phaser.Scene {
     return out;
   }
 
+  maxSend() {
+    if (!G.island) return 0;
+    return 2 + (G.island.extraSend || 0);
+  }
+
+  sentOffsetX(si) {
+    const m = this.maxSend();
+    const sp = 100;
+    return (si - (m - 1) / 2) * sp;
+  }
+
   sendToIsland(idx) {
     if (G.phase !== 'sending' || G.busy) return;
-    if (G.sent.includes(idx) || G.sent.length >= 2) return;
+    if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
 
     this.ct.tip.setVisible(false);
     const p = G.hand[idx];
@@ -100,7 +124,7 @@ class GameScene extends Phaser.Scene {
 
     const fromX = this.handX(idx);
     const fromY = L.Y_HAND;
-    const toX = L.cx + (G.sent.length === 1 ? -50 : 50) * L.k;
+    const toX = L.cx + this.sentOffsetX(G.sent.length - 1) * L.k;
     const toY = L.Y_ISL_CY;
 
     const ghost = this.add.sprite(fromX, fromY, 'pirates', def.frame)
@@ -117,7 +141,7 @@ class GameScene extends Phaser.Scene {
 
         this.time.delayedCall(500, () => {
           G.busy = false;
-          if (G.sent.length >= 2) {
+          if (G.sent.length >= this.maxSend()) {
             this.endSending();
           } else {
             this.renderAll();
@@ -188,8 +212,11 @@ class GameScene extends Phaser.Scene {
         const r = this.resolveShip(G.hand[hi]);
         const x = this.handX(hi);
         if (r.ok) {
-          const em = r.pRes === 'cunning' ? '☠️' : RES_EMOJI[r.pRes];
-          this.float(x, L.Y_HAND - 40 * L.k, '+' + r.pN + em, '#80cbc4');
+          const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
+          let msg = '+' + r.pN + em;
+          if (r.weapon) msg += ' +🗡️';
+          if (r.cannon) msg += ' +💣';
+          this.float(x, L.Y_HAND - 40 * L.k, msg, '#80cbc4');
         } else {
           this.float(x, L.Y_HAND - 40 * L.k, '—', '#546e7a');
         }
@@ -207,15 +234,18 @@ class GameScene extends Phaser.Scene {
   resolveShip(pirate) {
     const s = TYPES[pirate.type].ship;
     if (!s.cRes) {
-      if (s.pRes === 'cunning') G.cunning += s.pN;
+      if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else G.res[s.pRes] += s.pN;
       return { ok: true, pRes: s.pRes, pN: s.pN };
     }
     if ((G.res[s.cRes] || 0) >= s.cN) {
       G.res[s.cRes] -= s.cN;
-      if (s.pRes === 'cunning') G.cunning += s.pN;
+      if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else G.res[s.pRes] += s.pN;
-      return { ok: true, pRes: s.pRes, pN: s.pN };
+      let weapon = false, cannon = false;
+      if (s.cRes === 'wood')  { G.weapons++; weapon = true; }
+      if (s.cRes === 'stone') { G.cannons++; cannon = true; }
+      return { ok: true, pRes: s.pRes, pN: s.pN, weapon, cannon };
     }
     return { ok: false };
   }
@@ -226,11 +256,11 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const type = G.shop[si];
     const def = TYPES[type];
-    if (G.cunning < def.cost) {
+    if (G.enthusiasm < def.cost) {
       this.float(L.cx, L.Y_SHOP_P - 40 * L.k, 'Not enough ☠️', '#ef5350');
       return;
     }
-    G.cunning -= def.cost;
+    G.enthusiasm -= def.cost;
     const p = mkP(type);
     G.allCrew.push(p);
     G.discard.push(p);
@@ -249,9 +279,79 @@ class GameScene extends Phaser.Scene {
     G.discard.push(...G.hand);
     G.hand = [];
     G.sent = [];
-    G.cunning = 0;
+    G.enthusiasm = 0;
     this.ct.tip.setVisible(false);
     this.startRound();
+  }
+
+  shipBonusStr() {
+    return G.weapons * 3 + G.cannons;
+  }
+
+  resolveBoarding() {
+    if (G.phase !== 'boarding' || G.busy) return;
+    G.busy = true;
+    this.ct.tip.setVisible(false);
+
+    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+    const totalStr = crewStr + this.shipBonusStr();
+    const shipStr = G.enemyShip.strength;
+    const L = this.L;
+
+    if (totalStr >= shipStr) {
+      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
+      this.time.delayedCall(1000, () => {
+        G.weapons = 0;
+        G.busy = false;
+        G.discard.push(...G.hand);
+        G.hand = [];
+        this.ct.tip.setVisible(false);
+        this.startRound();
+      });
+    } else {
+      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
+      this.time.delayedCall(1200, () => {
+        G.weapons = 0;
+        G.busy = false;
+        this.renderAll();
+        this.showGameOver();
+      });
+    }
+  }
+
+  showGameOver() {
+    this.clearCt('gameover');
+    const L = this.L;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.82);
+    overlay.fillRect(0, 0, L.W, L.H);
+    this.addTo('gameover', overlay);
+
+    this.txt('gameover', L.cx, L.H * 0.32, '☠️ DEFEATED ☠️',
+      { fontSize: L.fs(48), color: '#ff5252' });
+    this.txt('gameover', L.cx, L.H * 0.40,
+      `Survived ${G.round} rounds  ·  ${G.boardingCount} boarding${G.boardingCount !== 1 ? 's' : ''}`,
+      { fontSize: L.fs(26), color: '#b0b8c8' });
+
+    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+    const totalStr = crewStr + this.shipBonusStr();
+    this.txt('gameover', L.cx, L.H * 0.46,
+      `Your crew ${totalStr}⚔️  vs  Enemy ${G.enemyShip.strength}⚔️`,
+      { fontSize: L.fs(24), color: '#ff8a80' });
+
+    const btn = this.add.text(L.cx, L.H * 0.56, '[ Try Again ]', {
+      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
+      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
+    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    btn.on('pointerdown', () => {
+      this.clearCt('gameover');
+      initState();
+      this.startRound();
+    });
+    this.addTo('gameover', btn);
   }
 
   // ──────────── HELPERS ────────────
@@ -259,13 +359,13 @@ class GameScene extends Phaser.Scene {
   handX(idx) {
     const L = this.L;
     const n = G.hand.length;
-    const sp = Math.min(190 * L.k, (L.W - 80) / Math.max(n - 1, 1));
+    const sp = Math.min(180 * L.k, (L.W - 80) / Math.max(n - 1, 1));
     return L.cx - ((n - 1) * sp) / 2 + idx * sp;
   }
 
   shopX(idx, n) {
     const L = this.L;
-    const sp = Math.min(220 * L.k, (L.W - 80) / Math.max(n - 1, 1));
+    const sp = Math.min(190 * L.k, (L.W - 80) / Math.max(n - 1, 1));
     return L.cx - ((n - 1) * sp) / 2 + idx * sp;
   }
 
@@ -303,7 +403,9 @@ class GameScene extends Phaser.Scene {
     ['wood', 'stone', 'gold', 'map'].forEach(r => {
       for (let i = 0; i < Math.min(G.res[r], 30); i++) inv += RES_EMOJI[r];
     });
-    if (G.cunning > 0) for (let i = 0; i < Math.min(G.cunning, 20); i++) inv += '☠️';
+    if (G.enthusiasm > 0) for (let i = 0; i < Math.min(G.enthusiasm, 20); i++) inv += '☠️';
+    if (G.weapons > 0) inv += `  🗡️${G.weapons}`;
+    if (G.cannons > 0) inv += `  💣${G.cannons}`;
     if (!inv) inv = '—';
     this.txt('top', L.cx, L.Y_INV, inv,
       { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
@@ -343,6 +445,33 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const cx = L.cx, cy = L.Y_ISL_CY;
 
+    if (G.enemyShip) {
+      const g = this.add.graphics();
+      g.fillStyle(0x1a0808, 0.6);
+      g.fillEllipse(cx, cy, 600 * L.k, 340 * L.k);
+      g.fillStyle(0x3a1010, 1);
+      g.fillEllipse(cx, cy, 440 * L.k, 220 * L.k);
+      g.fillStyle(0x8a2020, 0.2);
+      g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
+      this.addTo('island', g);
+
+      this.txt('island', cx, cy - 136 * L.k, '🏴‍☠️', { fontSize: L.fs(48) });
+      this.txt('island', cx, cy - 30 * L.k, `${G.enemyShip.strength}⚔️`,
+        { fontSize: L.fs(40), color: '#ff6b6b' });
+
+      const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+      const bonusStr = this.shipBonusStr();
+      const totalStr = crewStr + bonusStr;
+      const winning = totalStr >= G.enemyShip.strength;
+      let strLabel = `Crew ${crewStr}⚔️`;
+      if (G.weapons > 0) strLabel += ` +🗡️${G.weapons * 3}`;
+      if (G.cannons > 0) strLabel += ` +💣${G.cannons}`;
+      strLabel += ` = ${totalStr}⚔️ vs ${G.enemyShip.strength}⚔️`;
+      this.txt('island', cx, L.Y_ISL_LBL, strLabel,
+        { fontSize: L.fs(22), color: winning ? '#66bb6a' : '#ff8a80' });
+      return;
+    }
+
     const g = this.add.graphics();
     g.fillStyle(0x0f2a40, 0.6);
     g.fillEllipse(cx, cy, 600 * L.k, 340 * L.k);
@@ -354,13 +483,21 @@ class GameScene extends Phaser.Scene {
 
     this.txt('island', cx, cy - 136 * L.k, G.island.emoji, { fontSize: L.fs(48) });
 
-    const bm = { wood: '2x 🪵', stone: '2x 🪨', gold: '2x 🪙' };
-    this.txt('island', cx, L.Y_ISL_LBL, `${G.island.name}: ${bm[G.island.bonus]}`,
+    let islDesc;
+    if (G.island.bonus) {
+      const bm = { wood: '2x 🪵', stone: '2x 🪨', gold: '2x 🪙' };
+      islDesc = bm[G.island.bonus];
+    } else if (G.island.extraSend) {
+      islDesc = '+1 pirate ashore';
+    } else if (G.island.bonusEnthusiasm) {
+      islDesc = '+' + G.island.bonusEnthusiasm + '☠️';
+    }
+    this.txt('island', cx, L.Y_ISL_LBL, `${G.island.name}: ${islDesc}`,
       { fontSize: L.fs(22), color: '#ffe082' });
 
     G.sent.forEach((hi, si) => {
       const p = G.hand[hi];
-      const px = cx + (si === 0 ? -50 : 50) * L.k;
+      const px = cx + this.sentOffsetX(si) * L.k;
       const spr = this.add.sprite(px, cy, 'pirates', TYPES[p.type].frame).setScale(L.SC);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
@@ -378,14 +515,17 @@ class GameScene extends Phaser.Scene {
     this.clearCt('phase');
     const L = this.L;
     let str = '', col = '#8090a0';
-    if (G.phase === 'sending') {
-      const r = 2 - G.sent.length;
+    if (G.phase === 'boarding') {
+      str = '⚔️ Boarding! Prepare for battle!';
+      col = '#ff8a80';
+    } else if (G.phase === 'sending') {
+      const r = this.maxSend() - G.sent.length;
       str = `Tap a pirate to send ashore (${r} left)`;
     } else if (G.phase === 'ship') {
       str = '⛵ Ship at work…';
       col = '#80cbc4';
     } else {
-      str = `Shop  ·  cunning: ☠️ ${G.cunning}`;
+      str = `Shop  ·  enthusiasm: ☠️ ${G.enthusiasm}`;
       col = '#ce93d8';
     }
     this.txt('phase', L.cx, L.Y_PHASE, str, { fontSize: L.fs(22), color: col });
@@ -417,10 +557,15 @@ class GameScene extends Phaser.Scene {
 
       this.txt('hand', x, L.Y_HLBL, def.name,
         { fontSize: L.fs(20), color: '#a0b0c0' });
-      this.txt('hand', x, L.Y_HLBL + 28 * L.k, '🏝️' + def.dI,
-        { fontSize: L.fs(18), color: '#7a9a6a' });
-      this.txt('hand', x, L.Y_HLBL + 54 * L.k, '⛵' + def.dS,
-        { fontSize: L.fs(18), color: '#6a8a9a' });
+      if (G.phase === 'boarding') {
+        this.txt('hand', x, L.Y_HLBL + 28 * L.k, (def.str || 0) + '⚔️',
+          { fontSize: L.fs(18), color: '#e57373' });
+      } else {
+        this.txt('hand', x, L.Y_HLBL + 28 * L.k, def.dI,
+          { fontSize: L.fs(18), color: '#7a9a6a' });
+        this.txt('hand', x, L.Y_HLBL + 54 * L.k, def.dS,
+          { fontSize: L.fs(18), color: '#6a8a9a' });
+      }
     });
   }
 
@@ -429,7 +574,9 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     if (G.busy) return;
 
-    if (G.phase === 'sending') {
+    if (G.phase === 'boarding') {
+      this.mkBtn('btn', L.cx, L.Y_BTN, 'Board! ⚔️', () => this.resolveBoarding());
+    } else if (G.phase === 'sending') {
       this.mkBtn('btn', L.cx, L.Y_BTN, 'End landing ⛵', () => this.endSending());
     } else if (G.phase === 'shopping') {
       this.mkBtn('btn', L.cx, L.Y_BTN, 'Next round →', () => this.endRound());
@@ -459,7 +606,7 @@ class GameScene extends Phaser.Scene {
 
     this.txt('shop', L.cx, L.Y_SHOP_L, 'Pirate Shop',
       { fontSize: L.fs(24), color: '#9070a0' });
-    this.txt('shop', L.cx, L.Y_SHOP_C, `Cunning: ☠️ ${G.cunning}`,
+    this.txt('shop', L.cx, L.Y_SHOP_C, `Enthusiasm: ☠️ ${G.enthusiasm}`,
       { fontSize: L.fs(22), color: '#ce93d8' });
 
     if (G.shopAnimating) return;
@@ -476,17 +623,19 @@ class GameScene extends Phaser.Scene {
       const spr = this.add.sprite(x, L.Y_SHOP_P, 'pirates', def.frame).setScale(L.SC);
       spr.setInteractive({ useHandCursor: true });
 
-      const canBuy = G.phase === 'shopping' && G.cunning >= def.cost;
+      const canBuy = G.phase === 'shopping' && G.enthusiasm >= def.cost;
 
       this.txt('shop', x, L.Y_SHOP_PR, `☠️${def.cost}`,
         { fontSize: L.fs(22), color: canBuy ? '#ce93d8' : '#504858' });
 
       this.txt('shop', x, L.Y_SHOP_NM, def.name,
         { fontSize: L.fs(20), color: '#a0b0c0' });
-      this.txt('shop', x, L.Y_SHOP_DI, '🏝️' + def.dI,
+      this.txt('shop', x, L.Y_SHOP_DI, def.dI,
         { fontSize: L.fs(18), color: '#7a9a6a' });
-      this.txt('shop', x, L.Y_SHOP_DS, '⛵' + def.dS,
+      this.txt('shop', x, L.Y_SHOP_DS, def.dS,
         { fontSize: L.fs(18), color: '#6a8a9a' });
+      this.txt('shop', x, L.Y_SHOP_ST, (def.str || 0) + '⚔️',
+        { fontSize: L.fs(18), color: '#e57373' });
 
       if (!canBuy) spr.setAlpha(G.phase === 'shopping' ? 0.45 : 0.75);
 
@@ -597,6 +746,7 @@ class GameScene extends Phaser.Scene {
     lines.push('─────────────');
     lines.push('🏝️ ' + def.dI);
     lines.push('⛵ ' + def.dS);
+    lines.push((def.str || 0) + '⚔️');
     if (def.cost !== null) {
       lines.push('');
       lines.push('Cost: ☠️' + def.cost);
