@@ -243,39 +243,87 @@ class GameScene extends Phaser.Scene {
     this.ct.tip.setVisible(false);
     this.renderAll();
 
-    const shipIdx = [];
+    this._shipQueue = [];
     for (let i = 0; i < G.hand.length; i++) {
-      if (!G.sent.includes(i)) shipIdx.push(i);
+      if (!G.sent.includes(i)) this._shipQueue.push(i);
     }
+    this._shipQueuePos = 0;
+    this.processNextShip();
+  }
 
-    const delay = 450;
-    shipIdx.forEach((hi, si) => {
-      this.time.delayedCall(delay * (si + 1), () => {
-        const L = this.L;
-        const r = this.resolveShip(G.hand[hi]);
-        const x = this.handX(hi);
-        if (r.ok) {
-          let msg = '';
-          if (r.pN > 0) {
-            const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
-            msg = '+' + r.pN + em;
-          }
-          if (r.weaponN) msg += (msg ? ' ' : '') + '+' + (r.weaponN > 1 ? r.weaponN : '') + '🗡️';
-          if (r.cannonN) msg += (msg ? ' ' : '') + '+' + (r.cannonN > 1 ? r.cannonN : '') + '💣';
-          if (!msg) msg = '✓';
-          this.float(x, L.Y_HAND - 40 * L.k, msg, '#80cbc4');
-        } else {
-          this.float(x, L.Y_HAND - 40 * L.k, '—', '#546e7a');
-        }
+  processNextShip() {
+    if (this._shipQueuePos >= this._shipQueue.length) {
+      this.time.delayedCall(200, () => {
+        G.phase = 'shopping';
+        G.busy = false;
         this.renderAll();
       });
-    });
+      return;
+    }
+    const hi = this._shipQueue[this._shipQueuePos];
+    this._shipQueuePos++;
 
-    this.time.delayedCall(delay * (shipIdx.length + 1) + 200, () => {
-      G.phase = 'shopping';
-      G.busy = false;
+    this.time.delayedCall(450, () => {
+      const pirate = G.hand[hi];
+      const def = TYPES[pirate.type];
+      const L = this.L;
+      const x = this.handX(hi);
+
+      if (def.ship.removeFromDeck) {
+        if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
+          this.float(x, L.Y_HAND - 40 * L.k, '—', '#546e7a');
+          this.renderAll();
+          this.processNextShip();
+          return;
+        }
+        const handIds = new Set(G.hand.map(p => p.id));
+        const targets = G.allCrew.filter(p => !handIds.has(p.id));
+        if (targets.length === 0) {
+          this.float(x, L.Y_HAND - 40 * L.k, 'No one to exile', '#ffa726');
+          this.renderAll();
+          this.processNextShip();
+          return;
+        }
+        if (def.ship.cRes) G.res[def.ship.cRes] -= def.ship.cN;
+        this.float(x, L.Y_HAND - 40 * L.k, 'Exile a pirate!', '#ff8a80');
+        G.phase = 'removing';
+        G.busy = false;
+        this.renderAll();
+        return;
+      }
+
+      const r = this.resolveShip(pirate);
+      if (r.ok) {
+        let msg = '';
+        if (r.pN > 0) {
+          const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
+          msg = '+' + r.pN + em;
+        }
+        if (r.weaponN) msg += (msg ? ' ' : '') + '+' + (r.weaponN > 1 ? r.weaponN : '') + '🗡️';
+        if (r.cannonN) msg += (msg ? ' ' : '') + '+' + (r.cannonN > 1 ? r.cannonN : '') + '💣';
+        if (!msg) msg = '✓';
+        this.float(x, L.Y_HAND - 40 * L.k, msg, '#80cbc4');
+      } else {
+        this.float(x, L.Y_HAND - 40 * L.k, '—', '#546e7a');
+      }
       this.renderAll();
+      this.processNextShip();
     });
+  }
+
+  completeRemoval(pirateId) {
+    G.allCrew = G.allCrew.filter(p => p.id !== pirateId);
+    G.deck = G.deck.filter(p => p.id !== pirateId);
+    G.discard = G.discard.filter(p => p.id !== pirateId);
+
+    const L = this.L;
+    this.float(L.cx, L.Y_CREW - 20 * L.k, '💀 Exiled!', '#ff8a80');
+
+    G.phase = 'ship';
+    G.busy = true;
+    this.ct.tip.setVisible(false);
+    this.renderAll();
+    this.processNextShip();
   }
 
   resolveShip(pirate) {
@@ -483,15 +531,32 @@ class GameScene extends Phaser.Scene {
       const cx = sx + i * sp;
       const spr = this.add.sprite(cx, L.Y_CREW, 'pirates', TYPES[p.type].frame)
         .setScale(L.SC_SM);
-      if (!handIds.has(p.id) && !deckIds.has(p.id)) spr.setTint(0x333333);
-      spr.setInteractive({ useHandCursor: true });
-      spr.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.showTip(p.type, cx, L.Y_CREW + 30 * L.k, { fromClick: true });
-      });
-      spr.on('pointerover', () => {
-        if (this.ct.tip.visible) this.showTip(p.type, cx, L.Y_CREW + 30 * L.k);
-      });
+
+      if (G.phase === 'removing') {
+        if (handIds.has(p.id)) {
+          spr.setAlpha(0.3);
+        } else {
+          spr.setTint(0xff6666);
+          spr.setInteractive({ useHandCursor: true });
+          spr.on('pointerover', () => spr.setScale(L.SC_SM + 1));
+          spr.on('pointerout', () => spr.setScale(L.SC_SM));
+          spr.on('pointerdown', (ptr) => {
+            ptr.event.stopPropagation();
+            this.completeRemoval(p.id);
+          });
+        }
+      } else {
+        if (!handIds.has(p.id) && !deckIds.has(p.id)) spr.setTint(0x333333);
+        spr.setInteractive({ useHandCursor: true });
+        spr.on('pointerdown', (ptr) => {
+          ptr.event.stopPropagation();
+          this.showTip(p.type, cx, L.Y_CREW + 30 * L.k, { fromClick: true });
+        });
+        spr.on('pointerover', () => {
+          if (this.ct.tip.visible) this.showTip(p.type, cx, L.Y_CREW + 30 * L.k);
+        });
+      }
+
       this.addTo('top', spr);
     });
 
@@ -585,6 +650,9 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'ship') {
       str = '⛵ Ship at work…';
       col = '#80cbc4';
+    } else if (G.phase === 'removing') {
+      str = '💀 Click a pirate above to exile';
+      col = '#ff8a80';
     } else {
       str = `Shop  ·  enthusiasm: ☠️ ${G.enthusiasm}`;
       col = '#ce93d8';

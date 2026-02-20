@@ -68,6 +68,13 @@ const TYPES = {
     cost: 4,
     dI: '—', dS: '→ 2☠️',
   },
+  cutthroat: {
+    name: 'Cutthroat', frame: 14, str: 3, canIsland: true,
+    island: { guaranteed: { res: 'enthusiasm', amt: 1 } },
+    ship:   { cRes: 'gold', cN: 2, removeFromDeck: true },
+    cost: 5,
+    dI: '→ 1☠️', dS: '2🪙 → exile pirate',
+  },
   quartermaster: {
     name: 'Quartermaster', frame: 13, str: 4, canIsland: true,
     island: { recall: 1 },
@@ -131,5 +138,5 @@ const TYPES = {
 const SHOP_POOL = [
   'woodsman', 'prospector', 'explorer',
   'masterLumberjack', 'masterMiner', 'masterAdventurer',
-  'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster',
+  'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
 ];
