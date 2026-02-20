@@ -21,9 +21,9 @@ const TYPES = {
   lumberjack: {
     name: 'Lumberjack', frame: 0, str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { cRes: 'wood', cN: 3, pRes: 'enthusiasm', pN: 0, prodWeapons: 2 },
+    ship:   { cRes: 'wood', cN: 3, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
     cost: null,
-    dI: '1🪵, reliable', dS: '3🪵 → 2🗡️',
+    dI: '1🪵, reliable', dS: '3🪵 → 3🗡️',
   },
   miner: {
     name: 'Miner', frame: 5, str: 1, canIsland: true,
@@ -64,9 +64,9 @@ const TYPES = {
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
     island: null,
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
-    cost: 4,
-    dI: '—', dS: '→ 2☠️',
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 3 },
+    cost: 5,
+    dI: '—', dS: '→ 3☠️',
   },
   cutthroat: {
     name: 'Cutthroat', frame: 14, str: 3, canIsland: true,

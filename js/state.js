@@ -5,13 +5,15 @@
 let uid = 0;
 function mkP(type) { return { id: uid++, type }; }
 
-function randomShopType() {
-  return Phaser.Utils.Array.GetRandom(SHOP_POOL);
+function randomShopType(round) {
+  const maxCost = round + 5;
+  const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
+  return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }
 
-function initialShop(n) {
+function initialShop(n, round) {
   const arr = [];
-  for (let i = 0; i < n; i++) arr.push(randomShopType());
+  for (let i = 0; i < n; i++) arr.push(randomShopType(round));
   return arr;
 }
 
@@ -40,7 +42,7 @@ function initState() {
     enemyShip: null,
     boardingCount: 0,
     gameOver: false,
-    shop: initialShop(4),
+    shop: initialShop(4, 0),
     shopAnimating: false,
     busy: false,
   };
