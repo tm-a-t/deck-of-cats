@@ -64,16 +64,16 @@ const TYPES = {
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
     island: null,
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 5 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 4,
-    dI: '—', dS: '→ 5☠️',
+    dI: '—', dS: '→ 2☠️',
   },
   quartermaster: {
     name: 'Quartermaster', frame: 13, str: 4, canIsland: true,
     island: { recall: 1 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
-    cost: 5,
-    dI: '↩ recall 1 pirate', dS: '→ 2☠️',
+    cost: 10,
+    dI: 'recall 1 pirate', dS: '→ 2☠️',
   },
   // ---- tier 2: solid mid-game (12-16☠️) ----
   woodsman: {
