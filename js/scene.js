@@ -72,7 +72,7 @@ class GameScene extends Phaser.Scene {
     if (G.round > 1) {
       const oldShop = [...G.shop];
       G.shop.shift();
-      G.shop.push(randomShopType());
+      G.shop.push(randomShopType(G.round));
       G.shopAnimating = true;
       this.renderAll();
       this.animateShopTransition(oldShop, 0, 'round');
@@ -375,7 +375,7 @@ class GameScene extends Phaser.Scene {
     G.discard.push(p);
     const oldShop = [...G.shop];
     G.shop.splice(si, 1);
-    G.shop.push(randomShopType());
+    G.shop.push(randomShopType(G.round));
     this.float(L.cx, L.Y_SHOP_P - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
     this.ct.tip.setVisible(false);
     G.shopAnimating = true;
