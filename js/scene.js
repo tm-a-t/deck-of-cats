@@ -154,6 +154,36 @@ class GameScene extends Phaser.Scene {
   resolveIsland(pirate) {
     const def = TYPES[pirate.type];
     const isl = G.island;
+
+    if (def.island.recall) {
+      const currentIdx = G.sent[G.sent.length - 1];
+      const candidates = G.sent.filter(idx => idx !== currentIdx);
+      const n = Math.min(def.island.recall, candidates.length);
+      for (let i = 0; i < n; i++) {
+        const recIdx = candidates[candidates.length - 1 - i];
+        G.sent = G.sent.filter(idx => idx !== recIdx);
+      }
+      return { ok: n > 0, recall: n };
+    }
+
+    if (def.island.guaranteed) {
+      const g = def.island.guaranteed;
+      if (g.res === 'enthusiasm') G.enthusiasm += g.amt;
+      else G.res[g.res] = (G.res[g.res] || 0) + g.amt;
+      return { ok: true, res: g.res, n: g.amt };
+    }
+
+    if (def.island.multi) {
+      const items = [];
+      for (const m of def.island.multi) {
+        let amt = m.amt;
+        if (isl.bonus === m.res) amt *= 2;
+        G.res[m.res] += amt;
+        items.push({ res: m.res, n: amt });
+      }
+      return { ok: true, items };
+    }
+
     let chance = def.island.chance;
     let amt = def.island.amt;
     const tgt = def.island.res;
@@ -183,6 +213,19 @@ class GameScene extends Phaser.Scene {
 
   showIslandResult(r, x) {
     const L = this.L;
+    if (r.recall !== undefined) {
+      if (r.ok) {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, '↩ Recalled!', '#80cbc4');
+      } else {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, 'No one to recall', '#ffa726');
+      }
+      return;
+    }
+    if (r.items) {
+      const msg = r.items.map(i => '+' + i.n + RES_EMOJI[i.res]).join(' ');
+      this.float(x, L.Y_ISL_CY - 80 * L.k, msg, '#66bb6a');
+      return;
+    }
     const em = RES_EMOJI[r.res] || '🗺️';
     if (r.ok) {
       this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.n + em, '#66bb6a');
@@ -212,10 +255,14 @@ class GameScene extends Phaser.Scene {
         const r = this.resolveShip(G.hand[hi]);
         const x = this.handX(hi);
         if (r.ok) {
-          const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
-          let msg = '+' + r.pN + em;
-          if (r.weapon) msg += ' +🗡️';
-          if (r.cannon) msg += ' +💣';
+          let msg = '';
+          if (r.pN > 0) {
+            const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
+            msg = '+' + r.pN + em;
+          }
+          if (r.weaponN) msg += (msg ? ' ' : '') + '+' + (r.weaponN > 1 ? r.weaponN : '') + '🗡️';
+          if (r.cannonN) msg += (msg ? ' ' : '') + '+' + (r.cannonN > 1 ? r.cannonN : '') + '💣';
+          if (!msg) msg = '✓';
           this.float(x, L.Y_HAND - 40 * L.k, msg, '#80cbc4');
         } else {
           this.float(x, L.Y_HAND - 40 * L.k, '—', '#546e7a');
@@ -233,19 +280,33 @@ class GameScene extends Phaser.Scene {
 
   resolveShip(pirate) {
     const s = TYPES[pirate.type].ship;
+    if (s.costs) {
+      for (const c of s.costs) {
+        if ((G.res[c.res] || 0) < c.n) return { ok: false };
+      }
+      for (const c of s.costs) G.res[c.res] -= c.n;
+      const weaponN = s.prodWeapons || 0;
+      const cannonN = s.prodCannons || 0;
+      G.weapons += weaponN;
+      G.cannons += cannonN;
+      if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
+      else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN, cannonN };
+    }
     if (!s.cRes) {
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else G.res[s.pRes] += s.pN;
-      return { ok: true, pRes: s.pRes, pN: s.pN };
+      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN: 0, cannonN: 0 };
     }
     if ((G.res[s.cRes] || 0) >= s.cN) {
       G.res[s.cRes] -= s.cN;
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else G.res[s.pRes] += s.pN;
-      let weapon = false, cannon = false;
-      if (s.cRes === 'wood')  { G.weapons++; weapon = true; }
-      if (s.cRes === 'stone') { G.cannons++; cannon = true; }
-      return { ok: true, pRes: s.pRes, pN: s.pN, weapon, cannon };
+      const weaponN = s.prodWeapons || 0;
+      const cannonN = s.prodCannons || 0;
+      G.weapons += weaponN;
+      G.cannons += cannonN;
+      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN, cannonN };
     }
     return { ok: false };
   }
@@ -285,7 +346,7 @@ class GameScene extends Phaser.Scene {
   }
 
   shipBonusStr() {
-    return G.weapons * 3 + G.cannons;
+    return G.weapons + G.cannons;
   }
 
   resolveBoarding() {
@@ -464,7 +525,7 @@ class GameScene extends Phaser.Scene {
       const totalStr = crewStr + bonusStr;
       const winning = totalStr >= G.enemyShip.strength;
       let strLabel = `Crew ${crewStr}⚔️`;
-      if (G.weapons > 0) strLabel += ` +🗡️${G.weapons * 3}`;
+      if (G.weapons > 0) strLabel += ` +🗡️${G.weapons}`;
       if (G.cannons > 0) strLabel += ` +💣${G.cannons}`;
       strLabel += ` = ${totalStr}⚔️ vs ${G.enemyShip.strength}⚔️`;
       this.txt('island', cx, L.Y_ISL_LBL, strLabel,
