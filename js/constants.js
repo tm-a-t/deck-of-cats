@@ -50,16 +50,16 @@ const TYPES = {
   carpenter: {
     name: 'Carpenter', frame: 2, str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95 },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 3, prodWeapons: 3 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 3, prodWeapons: 3 },
     cost: 3,
-    dI: '1🪵, safe', dS: '1🪵 → 3🗡️+3☠️',
+    dI: '1🪵, safe', dS: '2🪵 → 3🗡️+3☠️',
   },
   stonemason: {
     name: 'Stonemason', frame: 7, str: 1, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95 },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3, prodCannons: 1 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 3, prodCannons: 1 },
     cost: 3,
-    dI: '1🪨, safe', dS: '1🪨 → 💣+3☠️',
+    dI: '1🪨, safe', dS: '2🪨 → 💣+3☠️',
   },
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
