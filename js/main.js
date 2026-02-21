@@ -5,11 +5,11 @@
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  pixelArt: true,
   roundPixels: true,
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    zoom: 1 / window.devicePixelRatio,
   },
   scene: GameScene,
 });

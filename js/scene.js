@@ -12,6 +12,7 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
+    this.textures.get('pirates').setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
 
