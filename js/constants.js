@@ -21,16 +21,16 @@ const TYPES = {
   lumberjack: {
     name: 'Lumberjack', frame: 0, str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    ship:   { cRes: 'wood', cN: 3, pRes: 'enthusiasm', pN: 2 },
     cost: null,
-    dI: '1🪵, reliable', dS: '2🪵 → 3🗡️',
+    dI: '1🪵, reliable', dS: '3🪵 → 2☠️',
   },
   miner: {
     name: 'Miner', frame: 5, str: 1, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9 },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 0, prodCannons: 1 },
+    ship:   { cRes: 'stone', cN: 3, pRes: 'enthusiasm', pN: 0, prodCannons: 1 },
     cost: null,
-    dI: '1🪨, reliable', dS: '2🪨 → 1💣',
+    dI: '1🪨, reliable', dS: '3🪨 → 1💣',
   },
   adventurer: {
     name: 'Adventurer', frame: 10, str: 1, canIsland: true,

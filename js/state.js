@@ -6,7 +6,7 @@ let uid = 0;
 function mkP(type) { return { id: uid++, type }; }
 
 function randomShopType(round) {
-  const maxCost = round + 5;
+  const maxCost = Math.max(3, round);
   const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
   return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }
@@ -21,9 +21,8 @@ let G = {};
 
 function initState() {
   const crew = [];
-  for (let i = 0; i < 3; i++) crew.push(mkP('lumberjack'));
-  for (let i = 0; i < 3; i++) crew.push(mkP('miner'));
-  for (let i = 0; i < 2; i++) crew.push(mkP('adventurer'));
+  for (let i = 0; i < 4; i++) crew.push(mkP('lumberjack'));
+  for (let i = 0; i < 4; i++) crew.push(mkP('miner'));
   for (let i = 0; i < 2; i++) crew.push(mkP('slacker'));
 
   G = {
