@@ -61,6 +61,34 @@ const TYPES = {
     cost: 3,
     dI: '1🪨, safe', dS: '2🪨 → 💣+3☠️',
   },
+  brute: {
+    name: 'Brute', frame: 9, str: 2, canIsland: true,
+    island: { res: 'stone', amt: 1, chance: 0.9 },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2 },
+    cost: 3,
+    dI: '1🪨, risky', dS: '1🪨 → 2☠️',
+  },
+  deckhand: {
+    name: 'Deckhand', frame: 19, str: 1, canIsland: true,
+    island: { res: 'stone', amt: 1, chance: 0.9 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapons: 1 },
+    cost: 3,
+    dI: '1🪨, risky', dS: '→ 1🗡️+1☠️',
+  },
+  cannoneer: {
+    name: 'Cannoneer', frame: 17, str: 0, canIsland: true,
+    island: { res: 'wood', amt: 1, chance: 0.9 },
+    ship:   { costs: [{ res: 'stone', n: 1 }, { res: 'wood', n: 1 }], pN: 0, prodCannons: 2 },
+    cost: 4,
+    dI: '1🪵, risky', dS: '1🪨+1🪵 → 2💣',
+  },
+  blacksmith: {
+    name: 'Blacksmith', frame: 18, str: 2, canIsland: true,
+    island: { res: 'wood', amt: 1, chance: 0.9 },
+    ship:   { costWeapons: 2, prodCannons: 1 },
+    cost: 4,
+    dI: '1🪵, risky', dS: '2🗡️ → 1💣',
+  },
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
     island: null,
@@ -139,4 +167,5 @@ const SHOP_POOL = [
   'woodsman', 'prospector', 'explorer',
   'masterLumberjack', 'masterMiner', 'masterAdventurer',
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
+  'brute', 'deckhand', 'cannoneer', 'blacksmith',
 ];

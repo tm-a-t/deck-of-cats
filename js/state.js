@@ -6,7 +6,7 @@ let uid = 0;
 function mkP(type) { return { id: uid++, type }; }
 
 function randomShopType(round) {
-  const maxCost = Math.max(3, round);
+  const maxCost = Math.max(4, round);
   const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
   return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }

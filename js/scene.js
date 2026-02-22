@@ -342,10 +342,23 @@ class GameScene extends Phaser.Scene {
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
       return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN, cannonN };
     }
+    if (s.costWeapons) {
+      if (G.weapons < s.costWeapons) return { ok: false };
+      G.weapons -= s.costWeapons;
+      const cannonN = s.prodCannons || 0;
+      G.cannons += cannonN;
+      if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
+      else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN: 0, cannonN };
+    }
     if (!s.cRes) {
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
-      else G.res[s.pRes] += s.pN;
-      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN: 0, cannonN: 0 };
+      else if (s.pRes) G.res[s.pRes] += s.pN;
+      const weaponN = s.prodWeapons || 0;
+      const cannonN = s.prodCannons || 0;
+      G.weapons += weaponN;
+      G.cannons += cannonN;
+      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN, cannonN };
     }
     if ((G.res[s.cRes] || 0) >= s.cN) {
       G.res[s.cRes] -= s.cN;
