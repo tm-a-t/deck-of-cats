@@ -174,6 +174,18 @@ class GameScene extends Phaser.Scene {
       return { ok: true, res: g.res, n: g.amt };
     }
 
+    if (def.island.convert) {
+      const c = def.island.convert;
+      if ((G.res[c.cRes] || 0) < c.cN) {
+        return { ok: false, convert: true, need: c.cRes, needN: c.cN };
+      }
+      G.res[c.cRes] -= c.cN;
+      let amt = c.pN;
+      if (isl.bonus === c.pRes) amt *= 2;
+      G.res[c.pRes] += amt;
+      return { ok: true, convert: true, cRes: c.cRes, cN: c.cN, res: c.pRes, n: amt };
+    }
+
     if (def.island.multi) {
       const items = [];
       for (const m of def.island.multi) {
@@ -219,6 +231,16 @@ class GameScene extends Phaser.Scene {
         this.float(x, L.Y_ISL_CY - 80 * L.k, '↩ Recalled!', '#80cbc4');
       } else {
         this.float(x, L.Y_ISL_CY - 80 * L.k, 'No one to recall', '#ffa726');
+      }
+      return;
+    }
+    if (r.convert) {
+      if (r.ok) {
+        this.float(x, L.Y_ISL_CY - 80 * L.k,
+          '-' + r.cN + RES_EMOJI[r.cRes] + ' +' + r.n + RES_EMOJI[r.res], '#66bb6a');
+      } else {
+        this.float(x, L.Y_ISL_CY - 80 * L.k,
+          'Need ' + r.needN + RES_EMOJI[r.need], '#ffa726');
       }
       return;
     }

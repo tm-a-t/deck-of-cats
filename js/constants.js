@@ -76,11 +76,11 @@ const TYPES = {
     dI: '1🪨, risky', dS: '→ 1🗡️+1☠️',
   },
   cannoneer: {
-    name: 'Cannoneer', frame: 17, str: 0, canIsland: true,
+    name: 'Cannoneer', frame: 17, str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { costs: [{ res: 'stone', n: 1 }, { res: 'wood', n: 1 }], pN: 0, prodCannons: 2 },
+    ship:   { costs: [{ res: 'stone', n: 2 }, { res: 'wood', n: 2 }], pN: 0, prodCannons: 2 },
     cost: 4,
-    dI: '1🪵, risky', dS: '1🪨+1🪵 → 2💣',
+    dI: '1🪵, risky', dS: '2🪨+2🪵 → 2💣',
   },
   blacksmith: {
     name: 'Blacksmith', frame: 18, str: 2, canIsland: true,
@@ -111,6 +111,13 @@ const TYPES = {
     dI: 'recall 1 pirate', dS: '→ 2☠️',
   },
   // ---- tier 2: solid mid-game (12-16☠️) ----
+  trader: {
+    name: 'Trader', frame: 3, str: 1, canIsland: true,
+    island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 } },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 4 },
+    cost: 7,
+    dI: '3🪵 → 3🪨, safe', dS: '1🪨 → 4☠️',
+  },
   woodsman: {
     name: 'Woodsman', frame: 4, str: 2, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
@@ -167,5 +174,5 @@ const SHOP_POOL = [
   'woodsman', 'prospector', 'explorer',
   'masterLumberjack', 'masterMiner', 'masterAdventurer',
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
-  'brute', 'deckhand', 'cannoneer', 'blacksmith',
+  'brute', 'deckhand', 'cannoneer', 'blacksmith', 'trader',
 ];
