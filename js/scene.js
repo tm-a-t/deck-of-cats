@@ -767,7 +767,7 @@ class GameScene extends Phaser.Scene {
       g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
       this.addTo('island', g);
 
-      this.txt('island', cx, cy - 100 * L.k, '🏴‍☠️', { fontSize: L.fs(72) });
+      this.txt('island', cx, cy - 120 * L.k, '🏴‍☠️', { fontSize: L.fsPx(56) });
       this.txt('island', cx, cy - 30 * L.k, `${G.enemyShip.strength}⚔️`,
         { fontSize: L.fs(40), color: '#ff6b6b' });
 
@@ -791,7 +791,7 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0x113252, 1);
       g.fillEllipse(cx, cy + 10 * L.k, 540 * L.k, 250 * L.k);
       this.addTo('island', g);
-      this.txt('island', cx, cy - 100 * L.k, '🌊', { fontSize: L.fs(72) });
+      this.txt('island', cx, cy - 120 * L.k, '🌊', { fontSize: L.fsPx(56) });
       this.txt('island', cx, L.Y_ISL_LBL, 'Open sea',
         { fontSize: L.fs(22), color: '#9fc3e0' });
       return;
@@ -800,13 +800,11 @@ class GameScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillStyle(0x0f2a40, 1);
     g.fillEllipse(cx, cy, 600 * L.k, 340 * L.k);
-    g.fillStyle(0xe8c840, 1);
-    g.fillEllipse(cx, cy, 440 * L.k, 220 * L.k);
     g.fillStyle(G.island.accent, 1);
-    g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
+    g.fillEllipse(cx, cy, 440 * L.k, 220 * L.k);
     this.addTo('island', g);
 
-    this.txt('island', cx, cy - 100 * L.k, G.island.emoji, { fontSize: L.fs(72) });
+    this.txt('island', cx, cy - 120 * L.k, G.island.emoji, { fontSize: L.fsPx(56) });
 
     let islDesc;
     if (G.island.bonus) {
@@ -919,7 +917,7 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'sending') {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
-      this.mkBtn('btn', x, y, 'Hire and continue', () => this.openShopModal(), {
+      this.mkBtn('btn', x, y, 'Hire and go', () => this.openShopModal(), {
         ...right, bg: '#3a2a48', hoverBg: '#55406b', color: '#e0c8f0',
       });
     }

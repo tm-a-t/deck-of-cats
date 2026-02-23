@@ -30,6 +30,7 @@ function computeLayout(w, h) {
     SC_SM: Math.max(2, Math.round(5 * k)),
     UI_FS: uiFontPx,
     fs: () => uiFontPx,
+    fsPx: (px) => Math.max(10, Math.round(px * k)) + 'px',
 
     // Modal map layout
     MAP_MODAL_W:    Math.min(w - 60 * k, 760 * k),

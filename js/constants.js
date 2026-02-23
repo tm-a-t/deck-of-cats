@@ -10,7 +10,7 @@ const ISLANDS = [
   { name: 'Forest Island',    emoji: '🌲', bonus: 'wood',  accent: 0x3a7a30 },
   { name: 'Rocky Island',     emoji: '⛰️',  bonus: 'stone', accent: 0x707070 },
   { name: 'Treasure Island',  emoji: '💎', bonus: 'gold',  accent: 0xc8a020 },
-  { name: 'Port Island',      emoji: '⚓', bonus: null, extraSend: 1, accent: 0x3070a0 },
+  { name: 'Port Island',      emoji: '⚓', bonus: null, extraSend: 1, accent: 0x8b5e3c },
   { name: 'Skull Island',     emoji: '💀', bonus: null, bonusEnthusiasm: 2, accent: 0x8a2040 },
 ];
 
