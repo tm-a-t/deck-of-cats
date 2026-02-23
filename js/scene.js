@@ -866,6 +866,11 @@ class GameScene extends Phaser.Scene {
     this.clearCt('hand');
     const L = this.L;
 
+    const dv = this.add.graphics();
+    dv.lineStyle(2, 0x1e3040);
+    dv.lineBetween(40, L.Y_DIV2, L.W - 40, L.Y_DIV2);
+    this.addTo('hand', dv);
+
     G.hand.forEach((p, i) => {
       if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
       const def = TYPES[p.type];
