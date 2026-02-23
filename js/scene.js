@@ -922,9 +922,20 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'sending') {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
-      this.mkBtn('btn', x, y, 'Hire and go', () => this.openShopModal(), {
-        ...right, bg: '#3a2a48', hoverBg: '#55406b', color: '#e0c8f0',
-      });
+      const canBuyAny = G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
+      if (canBuyAny) {
+        this.mkBtn('btn', x, y, 'Hire', () => this.openShopModal(), {
+          ...right, bg: '#3a2a48', hoverBg: '#55406b', color: '#e0c8f0',
+        });
+      } else {
+        this.mkBtn('btn', x, y, 'Next round', () => {
+          if (G.shop.length) {
+            G.shop.shift();
+            G.shop.push(randomShopType(G.round + 1));
+          }
+          this.prepareNextRound();
+        }, right);
+      }
     }
   }
 
