@@ -330,6 +330,7 @@ class GameScene extends Phaser.Scene {
           const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
           msg = '+' + r.pN + em;
         }
+        if (r.extraEnthusiasm) msg += (msg ? ' ' : '') + '+' + r.extraEnthusiasm + '☠️';
         if (r.weaponN) msg += (msg ? ' ' : '') + '+' + (r.weaponN > 1 ? r.weaponN : '') + '🗡️';
         if (r.cannonN) msg += (msg ? ' ' : '') + '+' + (r.cannonN > 1 ? r.cannonN : '') + '💣';
         if (!msg) msg = '✓';
@@ -379,14 +380,16 @@ class GameScene extends Phaser.Scene {
       G.cannons += cannonN;
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
-      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN: 0, cannonN };
+      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponN: 0, cannonN };
     }
     if (s.costCannons) {
       if (G.cannons < s.costCannons) return { ok: false };
       G.cannons -= s.costCannons;
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
-      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN: 0, cannonN: 0 };
+      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponN: 0, cannonN: 0 };
     }
     if (!s.cRes) {
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
