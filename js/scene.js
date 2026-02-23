@@ -43,56 +43,15 @@ class GameScene extends Phaser.Scene {
       if (G.round > 0 && !G.shopAnimating) this.renderAll();
     });
 
-    initState();
     this.startRound();
   }
 
   // ──────────── GAME FLOW ────────────
 
   startRound() {
-    G.round++;
-    G.sent = [];
-    G.enthusiasm = 0;
-    G.busy = false;
-
-    const isBoarding = G.round % 5 === 0;
-    if (isBoarding) {
-      G.boardingCount++;
-      G.phase = 'boarding';
-      G.island = null;
-      G.enemyShip = { strength: 5 * G.boardingCount };
-    } else {
-      G.phase = 'sending';
-      G.island = Phaser.Utils.Array.GetRandom(ISLANDS);
-      G.enemyShip = null;
-      if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
-    }
-
-    G.hand = this.drawCards(5);
-
-    if (G.round > 1) {
-      const oldShop = [...G.shop];
-      G.shop.shift();
-      G.shop.push(randomShopType(G.round));
-      G.shopAnimating = true;
-      this.renderAll();
-      this.animateShopTransition(oldShop, 0, 'round');
-    } else {
-      this.renderAll();
-    }
-  }
-
-  drawCards(n) {
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      if (G.deck.length === 0) {
-        if (G.discard.length === 0) break;
-        G.deck = Phaser.Utils.Array.Shuffle([...G.discard]);
-        G.discard = [];
-      }
-      out.push(G.deck.pop());
-    }
-    return out;
+    // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
+    // are all set by MapScene.selectMapNode() before transitioning here.
+    this.renderAll();
   }
 
   maxSend() {
@@ -444,7 +403,8 @@ class GameScene extends Phaser.Scene {
     G.sent = [];
     G.enthusiasm = 0;
     this.ct.tip.setVisible(false);
-    this.startRound();
+    G.hand = drawCards(5);
+    this.scene.start('map');
   }
 
   shipBonusStr() {
@@ -469,7 +429,14 @@ class GameScene extends Phaser.Scene {
         G.discard.push(...G.hand);
         G.hand = [];
         this.ct.tip.setVisible(false);
-        this.startRound();
+
+        if (G.map.currentLayer >= MAP_LAYERS - 1) {
+          this.showVictory();
+          return;
+        }
+
+        G.hand = drawCards(5);
+        this.scene.start('map');
       });
     } else {
       this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
@@ -512,7 +479,49 @@ class GameScene extends Phaser.Scene {
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
       initState();
-      this.startRound();
+      this.scene.start('map');
+    });
+    this.addTo('gameover', btn);
+  }
+
+  showVictory() {
+    this.clearCt('gameover');
+    const L = this.L;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.82);
+    overlay.fillRect(0, 0, L.W, L.H);
+    this.addTo('gameover', overlay);
+
+    this.txt('gameover', L.cx, L.H * 0.28, '🏆 VICTORY! 🏆',
+      { fontSize: L.fs(48), color: '#ffd740' });
+    this.txt('gameover', L.cx, L.H * 0.36,
+      'You conquered all 10 enemy ships!',
+      { fontSize: L.fs(26), color: '#b0b8c8' });
+    this.txt('gameover', L.cx, L.H * 0.42,
+      `${G.round} rounds  ·  Crew of ${G.allCrew.length}`,
+      { fontSize: L.fs(24), color: '#a0d0a0' });
+
+    let inv = '';
+    ['wood', 'stone', 'gold'].forEach(r => {
+      if (G.res[r] > 0) inv += ` ${G.res[r]}${RES_EMOJI[r]}`;
+    });
+    if (G.cannons > 0) inv += ` ${G.cannons}💣`;
+    if (inv) {
+      this.txt('gameover', L.cx, L.H * 0.48, 'Final stash:' + inv,
+        { fontSize: L.fs(22), color: '#80cbc4' });
+    }
+
+    const btn = this.add.text(L.cx, L.H * 0.58, '[ Play Again ]', {
+      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
+      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
+    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    btn.on('pointerdown', () => {
+      this.clearCt('gameover');
+      initState();
+      this.scene.start('map');
     });
     this.addTo('gameover', btn);
   }
