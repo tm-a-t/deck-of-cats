@@ -32,5 +32,15 @@ function computeLayout(w, h) {
     SC:    Math.max(3, Math.round(10 * k)),
     SC_SM: Math.max(2, Math.round(5 * k)),
     fs: (px) => Math.max(10, Math.round(px * k)) + 'px',
+
+    // Map scene layout
+    MAP_TOP:        180 * k,
+    MAP_HAND_Y:     940 * k,
+    MAP_HAND_LBL:   1005 * k,
+    MAP_HAND_BTM:   1440 * k,
+    MAP_NODE_R:     22 * k,
+    MAP_LAYER_SP:   100 * k,
+    MAP_NODE_FS:    28 * k,
+    MAP_SHIP_R:     30 * k,
   };
 }

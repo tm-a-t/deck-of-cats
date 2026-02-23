@@ -11,5 +11,5 @@ new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
     zoom: 1 / window.devicePixelRatio,
   },
-  scene: GameScene,
+  scene: [MapScene, GameScene],
 });

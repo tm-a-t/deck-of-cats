@@ -19,6 +19,19 @@ function initialShop(n, round) {
 
 let G = {};
 
+function drawCards(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    if (G.deck.length === 0) {
+      if (G.discard.length === 0) break;
+      G.deck = Phaser.Utils.Array.Shuffle([...G.discard]);
+      G.discard = [];
+    }
+    out.push(G.deck.pop());
+  }
+  return out;
+}
+
 function initState() {
   const crew = [];
   for (let i = 0; i < 4; i++) crew.push(mkP('lumberjack'));
@@ -35,7 +48,7 @@ function initState() {
     cannons: 0,
     enthusiasm: 0,
     round: 0,
-    phase: 'sending',
+    phase: 'map',
     sent: [],
     island: null,
     enemyShip: null,
@@ -44,5 +57,8 @@ function initState() {
     shop: initialShop(4, 0),
     shopAnimating: false,
     busy: false,
+    map: generateMap(),
   };
+
+  G.hand = drawCards(5);
 }
