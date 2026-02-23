@@ -15,6 +15,7 @@ class MapScene extends Phaser.Scene {
     this.textures.get('pirates').setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this.L = computeLayout(this.scale.width, this.scale.height);
+    this._closing = false;
 
     this.modal = this.computeModal();
     this.modalLayer = this.add.container(0, 0).setDepth(20);
@@ -26,10 +27,41 @@ class MapScene extends Phaser.Scene {
     this.renderHeader();
     this.setupScroll();
     this.scrollToCurrentLayer(false);
+    this.animateOpen();
 
     this.scale.on('resize', (gameSize) => {
       this.L = computeLayout(gameSize.width, gameSize.height);
       this.scene.restart();
+    });
+  }
+
+  animateOpen() {
+    const offset = 30 * this.L.k;
+    [this.modalLayer, this.mapGfx, this.uiLayer].forEach(c => {
+      const origY = c.y;
+      c.setAlpha(0).setY(origY + offset);
+      this.tweens.add({
+        targets: c,
+        alpha: 1, y: origY,
+        duration: 140,
+        ease: 'Cubic.easeOut',
+      });
+    });
+  }
+
+  closeModal() {
+    if (this._closing) return;
+    this._closing = true;
+    this.input.enabled = false;
+    const offset = 30 * this.L.k;
+    [this.modalLayer, this.mapGfx, this.uiLayer].forEach((c, i) => {
+      this.tweens.add({
+        targets: c,
+        alpha: 0, y: c.y + offset,
+        duration: 100,
+        ease: 'Cubic.easeIn',
+        onComplete: i === 0 ? () => this.scene.stop() : undefined,
+      });
     });
   }
 
@@ -62,7 +94,7 @@ class MapScene extends Phaser.Scene {
     blocker.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
       if (ptr.x >= m.x && ptr.x <= m.x + m.w && ptr.y >= m.y && ptr.y <= m.y + m.h) return;
-      this.scene.stop();
+      this.closeModal();
     });
     this.modalLayer.add(blocker);
 
@@ -315,7 +347,7 @@ class MapScene extends Phaser.Scene {
     close.on('pointerout', () => close.setStyle({ color: '#483818' }));
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
-      this.scene.stop();
+      this.closeModal();
     });
     this.uiLayer.add(close);
   }
@@ -417,7 +449,7 @@ class MapScene extends Phaser.Scene {
     if (game && game.scene && game.scene.isActive()) {
       game.applyMapNodeSelection(nodeId);
     }
-    this.scene.stop();
+    this.closeModal();
   }
 
   // ──────────── HELPERS ────────────

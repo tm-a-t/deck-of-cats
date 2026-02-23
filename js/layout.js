@@ -10,7 +10,7 @@ function computeLayout(w, h) {
   const narrowContentShiftY = narrowHandSplit ? 120 * k : 0;
   const uiFontPx = Math.max(14, Math.round(24 * k)) + 'px';
   const centerY = h * 0.43;
-  const handY = h - 280 * k;
+  const handY = h - 240 * k;
   return {
     W: w, H: h, k,
     cx: w / 2,
