@@ -16,6 +16,8 @@ const ISLANDS = [
 
 // ────────────────── PIRATE DEFINITIONS ──────────────────
 
+const DEFAULT_FRAME = 15; // Deck Boy texture — fallback for pirates without unique art
+
 const TYPES = {
   // ---- starter ----
   lumberjack: {
@@ -51,36 +53,36 @@ const TYPES = {
     name: 'Carpenter', frame: 2, str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95 },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 3, prodWeapons: 3 },
-    cost: 3,
+    cost: 4,
     dI: '1🪵, safe', dS: '2🪵 → 3🗡️+3☠️',
   },
   stonemason: {
     name: 'Stonemason', frame: 7, str: 1, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95 },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 3, prodCannons: 1 },
-    cost: 3,
+    cost: 4,
     dI: '1🪨, safe', dS: '2🪨 → 💣+3☠️',
   },
   brute: {
     name: 'Brute', frame: 9, str: 2, canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9 },
+    island: { res: 'wood', amt: 1, chance: 0.9 },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
-    dI: '1🪨, risky', dS: '1🪨 → 2☠️',
+    dI: '1🪵, risky', dS: '1🪨 → 2☠️',
+  },
+  scrapper: {
+    name: 'Scrapper', frame: DEFAULT_FRAME, str: 2, canIsland: true,
+    island: { guaranteed: { weapons: 1 } },
+    ship:   { costCannons: 1, pRes: 'stone', pN: 3 },
+    cost: 3,
+    dI: '1🗡️, safe', dS: '1💣 → 3🪨',
   },
   deckhand: {
-    name: 'Deckhand', frame: 19, str: 1, canIsland: true,
+    name: 'Deckhand', frame: DEFAULT_FRAME, str: 1, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapons: 1 },
     cost: 3,
     dI: '1🪨, risky', dS: '→ 1🗡️+1☠️',
-  },
-  cannoneer: {
-    name: 'Cannoneer', frame: 17, str: 1, canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { costs: [{ res: 'stone', n: 2 }, { res: 'wood', n: 2 }], pN: 0, prodCannons: 2 },
-    cost: 4,
-    dI: '1🪵, risky', dS: '2🪨+2🪵 → 2💣',
   },
   blacksmith: {
     name: 'Blacksmith', frame: 18, str: 2, canIsland: true,
@@ -112,7 +114,7 @@ const TYPES = {
   },
   // ---- tier 2: solid mid-game (12-16☠️) ----
   trader: {
-    name: 'Trader', frame: 3, str: 1, canIsland: true,
+    name: 'Trader', frame: DEFAULT_FRAME, str: 1, canIsland: true,
     island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 } },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 4 },
     cost: 7,
@@ -174,5 +176,5 @@ const SHOP_POOL = [
   'woodsman', 'prospector', 'explorer',
   'masterLumberjack', 'masterMiner', 'masterAdventurer',
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
-  'brute', 'deckhand', 'cannoneer', 'blacksmith', 'trader',
+  'brute', 'deckhand', 'blacksmith', 'trader', 'scrapper',
 ];

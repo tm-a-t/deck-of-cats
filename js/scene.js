@@ -120,6 +120,14 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (def.island.convert) {
+      const c = def.island.convert;
+      if ((G.res[c.cRes] || 0) < c.cN) {
+        this.float(this.handX(idx), L.Y_HAND - 40 * L.k, "Can't go!", '#ff8a80');
+        return;
+      }
+    }
+
     G.busy = true;
     G.sent.push(idx);
 
@@ -169,6 +177,10 @@ class GameScene extends Phaser.Scene {
 
     if (def.island.guaranteed) {
       const g = def.island.guaranteed;
+      if (g.weapons) {
+        G.weapons += g.weapons;
+        return { ok: true, weapons: g.weapons };
+      }
       if (g.res === 'enthusiasm') G.enthusiasm += g.amt;
       else G.res[g.res] = (G.res[g.res] || 0) + g.amt;
       return { ok: true, res: g.res, n: g.amt };
@@ -176,9 +188,6 @@ class GameScene extends Phaser.Scene {
 
     if (def.island.convert) {
       const c = def.island.convert;
-      if ((G.res[c.cRes] || 0) < c.cN) {
-        return { ok: false, convert: true, need: c.cRes, needN: c.cN };
-      }
       G.res[c.cRes] -= c.cN;
       let amt = c.pN;
       if (isl.bonus === c.pRes) amt *= 2;
@@ -235,13 +244,12 @@ class GameScene extends Phaser.Scene {
       return;
     }
     if (r.convert) {
-      if (r.ok) {
-        this.float(x, L.Y_ISL_CY - 80 * L.k,
-          '-' + r.cN + RES_EMOJI[r.cRes] + ' +' + r.n + RES_EMOJI[r.res], '#66bb6a');
-      } else {
-        this.float(x, L.Y_ISL_CY - 80 * L.k,
-          'Need ' + r.needN + RES_EMOJI[r.need], '#ffa726');
-      }
+      this.float(x, L.Y_ISL_CY - 80 * L.k,
+        '-' + r.cN + RES_EMOJI[r.cRes] + ' +' + r.n + RES_EMOJI[r.res], '#66bb6a');
+      return;
+    }
+    if (r.weapons) {
+      this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.weapons + '🗡️', '#66bb6a');
       return;
     }
     if (r.items) {
@@ -372,6 +380,13 @@ class GameScene extends Phaser.Scene {
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
       return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN: 0, cannonN };
+    }
+    if (s.costCannons) {
+      if (G.cannons < s.costCannons) return { ok: false };
+      G.cannons -= s.costCannons;
+      if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
+      else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN: 0, cannonN: 0 };
     }
     if (!s.cRes) {
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
@@ -709,7 +724,9 @@ class GameScene extends Phaser.Scene {
 
       if (G.phase === 'sending' && !G.busy) {
         spr.setInteractive({ useHandCursor: true });
-        if (!def.canIsland) spr.setAlpha(0.55);
+        const cantConvert = def.island && def.island.convert &&
+          (G.res[def.island.convert.cRes] || 0) < def.island.convert.cN;
+        if (!def.canIsland || cantConvert) spr.setAlpha(0.55);
         spr.on('pointerover', () => spr.setScale(L.SC + 1));
         spr.on('pointerout', () => spr.setScale(L.SC));
         spr.on('pointerdown', (ptr) => {
