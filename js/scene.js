@@ -570,7 +570,7 @@ class GameScene extends Phaser.Scene {
     this.txt('top', L.cx, L.Y_INV, inv,
       { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
 
-    const crew = G.allCrew;
+    const crew = [...G.allCrew].sort((a, b) => a.type < b.type ? -1 : a.type > b.type ? 1 : 0);
     const maxSp = 44 * L.k;
     const sp = Math.min(maxSp, (L.W - 80) / Math.max(crew.length, 1));
     const sx = L.cx - ((crew.length - 1) * sp) / 2;
