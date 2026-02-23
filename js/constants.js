@@ -73,9 +73,9 @@ const TYPES = {
   scrapper: {
     name: 'Scrapper', frame: DEFAULT_FRAME, str: 2, canIsland: true,
     island: { guaranteed: { weapons: 1 } },
-    ship:   { costCannons: 1, pRes: 'stone', pN: 3 },
+    ship:   { costCannons: 1, pRes: 'stone', pN: 3, extraEnthusiasm: 2 },
     cost: 3,
-    dI: '1🗡️, safe', dS: '1💣 → 3🪨',
+    dI: '1🗡️, safe', dS: '1💣 → 3🪨+2☠️',
   },
   deckhand: {
     name: 'Deckhand', frame: DEFAULT_FRAME, str: 1, canIsland: true,
@@ -87,9 +87,9 @@ const TYPES = {
   blacksmith: {
     name: 'Blacksmith', frame: 18, str: 2, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { costWeapons: 2, prodCannons: 1 },
+    ship:   { costWeapons: 2, prodCannons: 1, extraEnthusiasm: 2 },
     cost: 4,
-    dI: '1🪵, risky', dS: '2🗡️ → 1💣',
+    dI: '1🪵, risky', dS: '2🗡️ → 1💣+2☠️',
   },
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
