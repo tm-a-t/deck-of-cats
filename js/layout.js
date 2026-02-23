@@ -5,41 +5,40 @@
 const REF_H = 1440;
 
 function computeLayout(w, h) {
-  const k = h / REF_H;
+  const k = (h / REF_H) * 1.15;
+  const narrowHandSplit = w <= 760;
+  const narrowContentShiftY = narrowHandSplit ? 120 * k : 0;
+  const uiFontPx = Math.max(14, Math.round(24 * k)) + 'px';
+  const centerY = h * 0.43;
+  const handY = h - 280 * k;
   return {
     W: w, H: h, k,
     cx: w / 2,
-    Y_ROUND:   30 * k,
-    Y_INV:     75 * k,
-    Y_CREW:    130 * k,
-    Y_DIV1:    175 * k,
-    Y_ISL_CY:  370 * k,
-    Y_ISL_LBL: 500 * k,
-    Y_PHASE:   555 * k,
-    Y_HAND:    680 * k,
-    Y_HLBL:    745 * k,
-    Y_BTN:     890 * k,
-    Y_DIV2:    955 * k,
-    Y_SHOP_L:  985 * k,
-    Y_SHOP_C:  1030 * k,
-    Y_SHOP_P:  1130 * k,
-    Y_SHOP_PR: 1200 * k,
-    Y_SHOP_NM: 1240 * k,
-    Y_SHOP_DI: 1264 * k,
-    Y_SHOP_DS: 1290 * k,
-    Y_SHOP_ST: 1316 * k,
-    Y_SHOP_BT: 1360 * k,
+    Y_ROUND:   24 * k,
+    Y_INV:     66 * k,
+    Y_CREW:    116 * k,
+    Y_SHOP:    156 * k,
+    Y_DIV1:    198 * k,
+    Y_ISL_CY:  centerY - narrowContentShiftY,
+    Y_ISL_LBL: centerY + 140 * k - narrowContentShiftY,
+    Y_PHASE:   centerY + 194 * k - narrowContentShiftY,
+    Y_HAND:    handY - 60 * k,
+    Y_HLBL:    handY - 60 * k + 54 * k,
+    Y_NAV:     h - 50 * k,
+    NARROW_HAND_SPLIT: narrowHandSplit,
     SC:    Math.max(3, Math.round(10 * k)),
     SC_SM: Math.max(2, Math.round(5 * k)),
-    fs: (px) => Math.max(10, Math.round(px * k)) + 'px',
+    UI_FS: uiFontPx,
+    fs: () => uiFontPx,
 
-    // Map scene layout
-    MAP_TOP:        180 * k,
-    MAP_HAND_Y:     940 * k,
-    MAP_HAND_LBL:   1005 * k,
-    MAP_HAND_BTM:   1440 * k,
+    // Modal map layout
+    MAP_MODAL_W:    Math.min(w - 60 * k, 760 * k),
+    MAP_MODAL_H:    Math.min(h - 250 * k, 860 * k),
+    MAP_MODAL_PAD:  24 * k,
+    MAP_HEAD_H:     84 * k,
+    MAP_FOOT_H:     40 * k,
     MAP_NODE_R:     22 * k,
-    MAP_LAYER_SP:   100 * k,
+    MAP_LAYER_SP:   95 * k,
     MAP_NODE_FS:    28 * k,
     MAP_SHIP_R:     30 * k,
   };

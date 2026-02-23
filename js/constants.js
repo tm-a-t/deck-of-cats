@@ -66,9 +66,9 @@ const TYPES = {
   brute: {
     name: 'Brute', frame: 9, str: 2, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2 },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 3,
-    dI: '1🪵, risky', dS: '1🪨 → 2☠️',
+    dI: '1🪵, risky', dS: '1🪨 → 3☠️',
   },
   scrapper: {
     name: 'Scrapper', frame: DEFAULT_FRAME, str: 2, canIsland: true,
@@ -87,9 +87,9 @@ const TYPES = {
   blacksmith: {
     name: 'Blacksmith', frame: 18, str: 2, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9 },
-    ship:   { costWeapons: 2, prodCannons: 1, extraEnthusiasm: 2 },
+    ship:   { costWeapons: 2, prodCannons: 1, extraEnthusiasm: 3 },
     cost: 4,
-    dI: '1🪵, risky', dS: '2🗡️ → 1💣+2☠️',
+    dI: '1🪵, risky', dS: '2🗡️ → 1💣+3☠️',
   },
   bosun: {
     name: 'Bosun', frame: 16, str: 1, canIsland: false,
