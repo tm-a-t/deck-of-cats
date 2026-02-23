@@ -16,9 +16,12 @@ function generateMap() {
       layers.push([{ id: nextId++, type: 'ship', strength: 5 * shipNumber, conns: [] }]);
     } else {
       const count = 2 + Math.floor(Math.random() * 2); // 2-3 nodes
+      const available = (li < 9)
+        ? ISLANDS.map((isl, i) => i).filter(i => i !== 2 && i !== 4)
+        : ISLANDS.map((_, i) => i);
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
-        const islandIdx = Math.floor(Math.random() * ISLANDS.length);
+        const islandIdx = available[Math.floor(Math.random() * available.length)];
         layer.push({ id: nextId++, type: 'island', islandIdx, conns: [] });
       }
       layers.push(layer);

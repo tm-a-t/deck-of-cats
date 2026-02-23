@@ -22,6 +22,7 @@ function computeLayout(w, h) {
     Y_ISL_CY:  centerY - narrowContentShiftY,
     Y_ISL_LBL: centerY + 140 * k - narrowContentShiftY,
     Y_PHASE:   centerY + 194 * k - narrowContentShiftY,
+    Y_DIV2:    handY - 136 * k - (narrowHandSplit ? 200 * k : 0),
     Y_HAND:    handY - 60 * k,
     Y_HLBL:    handY - 60 * k + 54 * k,
     Y_NAV:     h - 50 * k,
