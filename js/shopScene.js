@@ -8,12 +8,38 @@ class ShopScene extends Phaser.Scene {
   create() {
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+    this._closing = false;
     this.modalLayer = this.add.container(0, 0).setDepth(40);
     this.renderModal();
+    this.animateOpen();
 
     this.scale.on('resize', (gameSize) => {
       this.L = computeLayout(gameSize.width, gameSize.height);
       this.scene.restart();
+    });
+  }
+
+  animateOpen() {
+    const offset = 30 * this.L.k;
+    this.modalLayer.setAlpha(0).setY(offset);
+    this.tweens.add({
+      targets: this.modalLayer,
+      alpha: 1, y: 0,
+      duration: 140,
+      ease: 'Cubic.easeOut',
+    });
+  }
+
+  closeModal() {
+    if (this._closing) return;
+    this._closing = true;
+    this.input.enabled = false;
+    this.tweens.add({
+      targets: this.modalLayer,
+      alpha: 0, y: 30 * this.L.k,
+      duration: 100,
+      ease: 'Cubic.easeIn',
+      onComplete: () => this.scene.stop(),
     });
   }
 
@@ -51,7 +77,7 @@ class ShopScene extends Phaser.Scene {
     blocker.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
       if (ptr.x >= m.x && ptr.x <= m.x + m.w && ptr.y >= m.y && ptr.y <= m.y + m.h) return;
-      this.scene.stop();
+      this.closeModal();
     });
     this.modalLayer.add(blocker);
 
@@ -75,7 +101,7 @@ class ShopScene extends Phaser.Scene {
     close.on('pointerout', () => close.setStyle({ color: '#483818' }));
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
-      this.scene.stop();
+      this.closeModal();
     });
     this.modalLayer.add(close);
 
@@ -162,7 +188,7 @@ class ShopScene extends Phaser.Scene {
     if (oldShop.length === 0) {
       const game = this.scene.get('game');
       game.prepareNextRound();
-      this.scene.stop();
+      this.closeModal();
       return;
     }
 
@@ -171,7 +197,7 @@ class ShopScene extends Phaser.Scene {
 
     const game = this.scene.get('game');
     game.prepareNextRound();
-    this.scene.stop();
+    this.closeModal();
   }
 
   animateBuyTransition(shopIdx, modal) {

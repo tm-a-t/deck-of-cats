@@ -624,9 +624,9 @@ class GameScene extends Phaser.Scene {
       };
     }
 
-    const topCount = 2;
+    const topCount = 3;
     const topRow = idx < topCount;
-    const rowN = topRow ? topCount : 3;
+    const rowN = topRow ? topCount : 2;
     const rowIdx = topRow ? idx : idx - topCount;
     const sp = Math.min(210 * L.k, (L.W - 80) / Math.max(rowN - 1, 1));
     const y = topRow ? (L.Y_HAND - 200 * L.k) : L.Y_HAND;
@@ -767,7 +767,7 @@ class GameScene extends Phaser.Scene {
       g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
       this.addTo('island', g);
 
-      this.txt('island', cx, cy - 136 * L.k, '🏴‍☠️', { fontSize: L.fs(48) });
+      this.txt('island', cx, cy - 100 * L.k, '🏴‍☠️', { fontSize: L.fs(72) });
       this.txt('island', cx, cy - 30 * L.k, `${G.enemyShip.strength}⚔️`,
         { fontSize: L.fs(40), color: '#ff6b6b' });
 
@@ -791,7 +791,7 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0x113252, 1);
       g.fillEllipse(cx, cy + 10 * L.k, 540 * L.k, 250 * L.k);
       this.addTo('island', g);
-      this.txt('island', cx, cy - 136 * L.k, '🌊', { fontSize: L.fs(48) });
+      this.txt('island', cx, cy - 100 * L.k, '🌊', { fontSize: L.fs(72) });
       this.txt('island', cx, L.Y_ISL_LBL, 'Open sea',
         { fontSize: L.fs(22), color: '#9fc3e0' });
       return;
@@ -806,7 +806,7 @@ class GameScene extends Phaser.Scene {
     g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
     this.addTo('island', g);
 
-    this.txt('island', cx, cy - 136 * L.k, G.island.emoji, { fontSize: L.fs(48) });
+    this.txt('island', cx, cy - 100 * L.k, G.island.emoji, { fontSize: L.fs(72) });
 
     let islDesc;
     if (G.island.bonus) {
@@ -840,7 +840,7 @@ class GameScene extends Phaser.Scene {
   renderPhase() {
     this.clearCt('phase');
     const L = this.L;
-    const statusY = L.Y_ISL_LBL + 44 * L.k;
+    const statusY = L.Y_ISL_LBL + 30 * L.k;
     let str = '', col = '#8090a0';
     if (G.phase === 'boarding') {
       str = 'Boarding! Prepare for battle!';
@@ -919,7 +919,7 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'sending') {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
-      this.mkBtn('btn', x, y, 'Continue', () => this.openShopModal(), {
+      this.mkBtn('btn', x, y, 'Hire and continue', () => this.openShopModal(), {
         ...right, bg: '#3a2a48', hoverBg: '#55406b', color: '#e0c8f0',
       });
     }
