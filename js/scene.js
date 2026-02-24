@@ -109,9 +109,7 @@ class GameScene extends Phaser.Scene {
       this.applyMapNodeSelection(available[0]);
       return;
     }
-    if (available.length > 1) {
-      this.time.delayedCall(20, () => this.openMapModal());
-    }
+    if (available.length === 0) return;
   }
 
   openMapModal() {
@@ -844,7 +842,7 @@ class GameScene extends Phaser.Scene {
       str = 'Boarding! Prepare for battle!';
       col = '#ff8a80';
     } else if (G.phase === 'map') {
-      str = 'Choose the next destination';
+      str = 'Choose the destination on the map';
       col = '#9fc3e0';
     } else if (G.phase === 'sending') {
       const r = this.maxSend() - G.sent.length;
@@ -856,8 +854,9 @@ class GameScene extends Phaser.Scene {
       str = 'Click a pirate above to exile';
       col = '#ff8a80';
     } else {
-      str = `Shop  ·  enthusiasm: ☠️ ${G.enthusiasm}`;
-      col = '#ce93d8';
+      const canHire = G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
+      str = canHire ? 'You can hire new crew' : 'Not enough ☠️ to hire';
+      col = canHire ? '#ce93d8' : '#8090a0';
     }
     this.txt('phase', L.cx, statusY, str, { fontSize: L.fs(22), color: col });
   }
@@ -922,20 +921,13 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'sending') {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
-      const canBuyAny = G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
-      if (canBuyAny) {
-        this.mkBtn('btn', x, y, 'Hire', () => this.openShopModal(), {
-          ...right, bg: '#3a2a48', hoverBg: '#55406b', color: '#e0c8f0',
-        });
-      } else {
-        this.mkBtn('btn', x, y, 'Next round', () => {
-          if (G.shop.length) {
-            G.shop.shift();
-            G.shop.push(randomShopType(G.round + 1));
-          }
-          this.prepareNextRound();
-        }, right);
-      }
+      this.mkBtn('btn', x, y, 'Next round', () => {
+        if (G.shop.length) {
+          G.shop.shift();
+          G.shop.push(randomShopType(G.round + 1));
+        }
+        this.prepareNextRound();
+      }, right);
     }
   }
 
@@ -965,7 +957,9 @@ class GameScene extends Phaser.Scene {
       disabledColor: '#5a6570',
     });
 
-    this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, 'Shop', () => {
+    const canBuyAny = G.phase === 'shopping' && G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
+    const shopLabel = canBuyAny ? 'Shop <<<' : 'Shop';
+    this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
       this.openShopModal();
     }, {
       ...leftOpts,

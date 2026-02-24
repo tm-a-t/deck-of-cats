@@ -162,42 +162,6 @@ class ShopScene extends Phaser.Scene {
         this.modalLayer.add(buy);
       }
     });
-
-    if (canBuyNow) {
-      const nextBtn = this.add.text(L.W - 20 * L.k, L.Y_NAV, 'Next round →', {
-        fontFamily: 'monospace',
-        fontSize: L.fs(24),
-        color: '#f0e8d0',
-        backgroundColor: '#4a3a24',
-        padding: { x: 32, y: 16 },
-      }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }).setDepth(50);
-      nextBtn.on('pointerover', () => nextBtn.setStyle({ backgroundColor: '#5f4a2c' }));
-      nextBtn.on('pointerout', () => nextBtn.setStyle({ backgroundColor: '#4a3a24' }));
-      nextBtn.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.animateNextRoundTransition(m);
-      });
-      this.modalLayer.add(nextBtn);
-    }
-  }
-
-  animateNextRoundTransition(modal) {
-    if (G.shopAnimating || G.phase !== 'shopping' || G.busy) return;
-    const L = this.L;
-    const oldShop = [...G.shop];
-    if (oldShop.length === 0) {
-      const game = this.scene.get('game');
-      game.prepareNextRound();
-      this.closeModal();
-      return;
-    }
-
-    G.shop.shift();
-    G.shop.push(randomShopType(G.round + 1));
-
-    const game = this.scene.get('game');
-    game.prepareNextRound();
-    this.closeModal();
   }
 
   animateBuyTransition(shopIdx, modal) {
