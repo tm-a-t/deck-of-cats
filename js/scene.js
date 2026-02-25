@@ -956,7 +956,7 @@ class GameScene extends Phaser.Scene {
       if (this._sendingToIsland.has(hi)) return;
       const p = G.hand[hi];
       const px = cx + this.sentOffsetX(si) * L.k;
-      const spr = addCatSprite(this, px, cy, p.type).setScale(L.SC);
+      const spr = addIdleCatSprite(this, px, cy, p.type, L.SC, si);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
@@ -1047,11 +1047,12 @@ class GameScene extends Phaser.Scene {
       const x = handPos.x;
       const y = handPos.y;
 
-      const spr = addCatSprite(this, x, y, p.type).setScale(L.SC);
+      const spr = addIdleCatSprite(this, x, y, p.type, L.SC, i);
+
       if (i === tutorialTargetIdx) {
         this.tweens.add({
           targets: spr,
-          y: y - 14 * L.k,
+          y: spr.y - 14 * L.k,
           duration: 420,
           yoyo: true,
           repeat: -1,
@@ -1064,8 +1065,15 @@ class GameScene extends Phaser.Scene {
         const cantConvert = def.island && def.island.convert &&
           (G.res[def.island.convert.cRes] || 0) < def.island.convert.cN;
         if (!def.canIsland || cantConvert) spr.setAlpha(1);
-        spr.on('pointerover', () => spr.setScale(L.SC + 1));
-        spr.on('pointerout', () => spr.setScale(L.SC));
+        spr.on('pointerover', () => { this.tweens.killTweensOf(spr); spr.setScale(L.SC + 1); });
+        spr.on('pointerout', () => {
+          spr.setScale(L.SC);
+          this.tweens.add({
+            targets: spr, scaleY: L.SC * 1.06,
+            duration: 650 + i * 60, yoyo: true, repeat: -1,
+            ease: 'Sine.easeInOut',
+          });
+        });
         spr.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
           this.sendToIsland(i);
