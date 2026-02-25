@@ -126,7 +126,7 @@ class ShopScene extends Phaser.Scene {
       const pos = this.shopPos(i, G.shop.length, m);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
 
-      const spr = addIdleCatSprite(this, pos.x, pos.y, type, L.SC, i);
+      const spr = addCatSprite(this, pos.x, pos.y, type).setScale(L.SC);
       this.modalLayer.add(spr);
 
       this.modalLayer.add(this.add.text(pos.x, pos.y - 92 * L.k, `☠️${def.cost}`, {
