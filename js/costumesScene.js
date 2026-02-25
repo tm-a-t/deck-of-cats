@@ -125,6 +125,22 @@ function addCatSprite(scene, x, y, typeKey) {
   return scene.add.image(x, y, catTexKey(typeKey));
 }
 
+function addIdleCatSprite(scene, x, y, typeKey, scale, idx) {
+  const botY = y + (CATS_PX / 2) * scale;
+  const spr = addCatSprite(scene, x, botY, typeKey)
+    .setScale(scale).setOrigin(0.5, 1);
+  scene.tweens.add({
+    targets: spr,
+    scaleY: scale * 1.08,
+    duration: 650 + idx * 60,
+    yoyo: true,
+    repeat: -1,
+    ease: 'Sine.easeInOut',
+    delay: idx * 130,
+  });
+  return spr;
+}
+
 // ============================================================
 //   Costumes Gallery Scene
 // ============================================================
