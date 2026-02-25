@@ -15,7 +15,7 @@ class GameScene extends Phaser.Scene {
     this.textures.get('pirates').setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
-    if (!G.map) initState();
+    if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
 
     this.ct = {};
     ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'gameover'].forEach(k => {
@@ -46,10 +46,14 @@ class GameScene extends Phaser.Scene {
     });
 
     this.startRound();
-    if (G.phase === 'map') this.enterMapPhase();
+    if (!this.isTutorial() && G.phase === 'map') this.enterMapPhase();
   }
 
   // ──────────── GAME FLOW ────────────
+
+  isTutorial() {
+    return !!(G.tutorial && G.tutorial.active);
+  }
 
   startRound() {
     // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
@@ -99,6 +103,7 @@ class GameScene extends Phaser.Scene {
   }
 
   enterMapPhase() {
+    if (this.isTutorial()) return;
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
@@ -113,6 +118,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openMapModal() {
+    if (this.isTutorial()) return;
     if (this.scene.isActive('map')) return;
     this.scene.launch('map');
     this.scene.bringToTop('map');
@@ -126,6 +132,7 @@ class GameScene extends Phaser.Scene {
 
   maxSend() {
     if (!G.island) return 0;
+    if (G.island.maxSend != null) return G.island.maxSend;
     return 2 + (G.island.extraSend || 0);
   }
 
@@ -302,6 +309,11 @@ class GameScene extends Phaser.Scene {
 
   endSending() {
     if (G.phase !== 'sending') return;
+    if (this.isTutorial() && G.tutorial.step === 'landing' && G.sent.length < 1) {
+      const L = this.L;
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Send 1 pirate first', '#ffa726');
+      return;
+    }
     G.phase = 'ship';
     G.busy = true;
     this.ct.tip.setVisible(false);
@@ -319,6 +331,9 @@ class GameScene extends Phaser.Scene {
     if (this._shipQueuePos >= this._shipQueue.length) {
       this.time.delayedCall(200, () => {
         G.phase = 'shopping';
+        if (this.isTutorial() && G.tutorial.step === 'landing') {
+          G.tutorial.step = 'shop';
+        }
         G.busy = false;
         this.renderAll();
       });
@@ -461,6 +476,9 @@ class GameScene extends Phaser.Scene {
     const p = mkP(type);
     G.allCrew.push(p);
     G.discard.push(p);
+    if (this.isTutorial() && type === G.tutorial.recommendedType) {
+      G.tutorial.recommendedBought = true;
+    }
     G.shop.splice(si, 1);
     G.shop.push(randomShopType(G.round));
     if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
@@ -490,6 +508,10 @@ class GameScene extends Phaser.Scene {
   }
 
   resolveBoarding() {
+    if (this.isTutorial()) {
+      this.resolveTutorialBoarding();
+      return;
+    }
     if (G.phase !== 'boarding' || G.busy) return;
     G.busy = true;
     this.ct.tip.setVisible(false);
@@ -525,6 +547,116 @@ class GameScene extends Phaser.Scene {
         this.showGameOver();
       });
     }
+  }
+
+  startTutorialBoss1() {
+    if (!this.isTutorial()) return;
+    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+
+    const recommended = G.allCrew.find(p => p.type === G.tutorial.recommendedType);
+    const rest = G.allCrew.filter(p => !recommended || p.id !== recommended.id);
+    const scriptedHand = [...(recommended ? [recommended] : []), ...rest].slice(0, 5);
+    if (scriptedHand.length === 5) G.hand = scriptedHand;
+
+    G.round = 2;
+    G.phase = 'boarding';
+    G.island = null;
+    G.sent = [];
+    G.enthusiasm = 0;
+    G.busy = false;
+    this._sendingToIsland.clear();
+    this.ct.tip.setVisible(false);
+
+    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+    const totalStr = crewStr + this.shipBonusStr();
+    const strength = Math.max(1, totalStr - 1);
+    G.enemyShip = { strength };
+    G.tutorial.step = 'boss1';
+    G.tutorial.boss1Strength = strength;
+    this.renderAll();
+  }
+
+  startTutorialBoss2() {
+    if (!this.isTutorial()) return;
+    G.round = 3;
+    G.phase = 'boarding';
+    G.island = null;
+    G.sent = [];
+    G.enthusiasm = 0;
+    G.busy = false;
+    this._sendingToIsland.clear();
+    this.ct.tip.setVisible(false);
+
+    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+    const totalStr = crewStr + this.shipBonusStr();
+    const strength = totalStr + 4;
+    G.enemyShip = { strength };
+    G.tutorial.step = 'boss2';
+    G.tutorial.boss2Strength = strength;
+    this.renderAll();
+  }
+
+  resolveTutorialBoarding() {
+    if (G.phase !== 'boarding' || G.busy) return;
+    G.busy = true;
+    this.ct.tip.setVisible(false);
+    const L = this.L;
+
+    if (G.tutorial.step === 'boss1') {
+      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
+      this.time.delayedCall(1000, () => {
+        G.weapons = 0;
+        G.busy = false;
+        this.startTutorialBoss2();
+      });
+      return;
+    }
+
+    this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
+    this.time.delayedCall(1200, () => {
+      G.weapons = 0;
+      G.phase = 'tutorialOutro';
+      G.busy = true;
+      this.renderAll();
+      this.showTutorialOutro();
+    });
+  }
+
+  showTutorialOutro() {
+    this.clearCt('gameover');
+    const L = this.L;
+
+    const overlay = this.add.rectangle(0, 0, L.W, L.H, 0x000000, 1)
+      .setOrigin(0, 0)
+      .setInteractive();
+    overlay.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+    });
+    this.addTo('gameover', overlay);
+
+    this.txt('gameover', L.cx, L.H * 0.28, 'Tutorial Complete',
+      { fontSize: L.fs(44), color: '#ffd740' });
+    this.txt('gameover', L.cx, L.H * 0.38,
+      'The second boss is stronger than this training crew.',
+      { fontSize: L.fs(24), color: '#b0b8c8' });
+    this.txt('gameover', L.cx, L.H * 0.44,
+      'Build a stronger deck in the real run to beat it.',
+      { fontSize: L.fs(24), color: '#a0d0a0' });
+
+    const btn = this.add.text(L.cx, L.H * 0.56, '[ Start Real Game ]', {
+      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
+      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
+    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    btn.on('pointerdown', () => {
+      this.clearCt('gameover');
+      this.scene.stop('map');
+      this.scene.stop('shopModal');
+      initState();
+      this.scene.restart();
+    });
+    this.addTo('gameover', btn);
   }
 
   showGameOver() {
@@ -810,10 +942,15 @@ class GameScene extends Phaser.Scene {
       islDesc = bm[G.island.bonus];
     } else if (G.island.extraSend) {
       islDesc = '+1 pirate ashore';
+    } else if (G.island.maxSend != null) {
+      islDesc = `max ${G.island.maxSend} ashore`;
     } else if (G.island.bonusEnthusiasm) {
       islDesc = '+' + G.island.bonusEnthusiasm + '☠️';
+    } else if (G.island.tutorialDesc) {
+      islDesc = G.island.tutorialDesc;
     }
-    this.txt('island', cx, L.Y_ISL_LBL, `${G.island.name}: ${islDesc}`,
+    const islandLine = islDesc ? `${G.island.name}: ${islDesc}` : G.island.name;
+    this.txt('island', cx, L.Y_ISL_LBL, islandLine,
       { fontSize: L.fs(22), color: '#ffe082' });
 
     G.sent.forEach((hi, si) => {
@@ -838,6 +975,28 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const statusY = L.Y_ISL_LBL + 30 * L.k;
     let str = '', col = '#8090a0';
+
+    if (this.isTutorial()) {
+      if (G.tutorial.step === 'landing') {
+        str = 'Tutorial: send one pirate to the island';
+        col = '#9fc3e0';
+      } else if (G.tutorial.step === 'shop' && !G.tutorial.recommendedBought) {
+        str = 'Tutorial tip: buy Carpenter for 4☠️ in Shop';
+        col = '#ce93d8';
+      } else if (G.tutorial.step === 'shop') {
+        str = 'Good choice. Press Next round for Boss #1';
+        col = '#80cbc4';
+      } else if (G.tutorial.step === 'boss1') {
+        str = 'Boss #1 is winnable. Press Board!';
+        col = '#66bb6a';
+      } else if (G.tutorial.step === 'boss2') {
+        str = 'Boss #2 is too strong. Press Board!';
+        col = '#ff8a80';
+      }
+      this.txt('phase', L.cx, statusY, str, { fontSize: L.fs(22), color: col });
+      return;
+    }
+
     if (G.phase === 'boarding') {
       str = 'Boarding! Prepare for battle!';
       col = '#ff8a80';
@@ -870,6 +1029,18 @@ class GameScene extends Phaser.Scene {
     dv.lineBetween(40, L.Y_DIV2, L.W - 40, L.Y_DIV2);
     this.addTo('hand', dv);
 
+    const tutorialTargetIdx = (this.isTutorial() && G.tutorial.step === 'landing' && G.phase === 'sending')
+      ? G.hand.findIndex((hp, hi) => {
+        if (G.sent.includes(hi) || this._sendingToIsland.has(hi)) return false;
+        const hd = TYPES[hp.type];
+        if (!hd.canIsland) return false;
+        if (hd.island && hd.island.convert) {
+          return (G.res[hd.island.convert.cRes] || 0) >= hd.island.convert.cN;
+        }
+        return true;
+      })
+      : -1;
+
     G.hand.forEach((p, i) => {
       if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
       const def = TYPES[p.type];
@@ -878,6 +1049,16 @@ class GameScene extends Phaser.Scene {
       const y = handPos.y;
 
       const spr = this.add.sprite(x, y, 'pirates', def.frame).setScale(L.SC);
+      if (i === tutorialTargetIdx) {
+        this.tweens.add({
+          targets: spr,
+          y: y - 14 * L.k,
+          duration: 420,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
 
       if (G.phase === 'sending' && !G.busy) {
         spr.setInteractive({ useHandCursor: true });
@@ -922,6 +1103,14 @@ class GameScene extends Phaser.Scene {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
       this.mkBtn('btn', x, y, 'Next round', () => {
+        if (this.isTutorial()) {
+          if (!G.tutorial.recommendedBought) {
+            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Buy Carpenter for 4☠️ first', '#ffa726');
+            return;
+          }
+          this.startTutorialBoss1();
+          return;
+        }
         if (G.shop.length) {
           G.shop.shift();
           G.shop.push(randomShopType(G.round + 1));
@@ -935,13 +1124,13 @@ class GameScene extends Phaser.Scene {
     this.clearCt('nav');
     const L = this.L;
 
-    const mapEnabled = true;
-    const shopEnabled = !G.busy;
+    const mapEnabled = !this.isTutorial();
+    const shopEnabled = !G.busy && (!this.isTutorial() || G.phase === 'shopping');
     const left = 20 * L.k;
     const gap = 12 * L.k;
     const leftOpts = { originX: 0 };
 
-    const mapHighlight = G.phase === 'map' && getAvailableNodes(G.map).length > 1;
+    const mapHighlight = mapEnabled && G.phase === 'map' && getAvailableNodes(G.map).length > 1;
     const mapLabel = mapHighlight ? '> Map <' : 'Map';
     const mapBtn = this.mkBtn('nav', left, L.Y_NAV, mapLabel, () => {
       if (!mapEnabled) {

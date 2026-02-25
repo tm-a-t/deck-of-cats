@@ -58,6 +58,55 @@ function initState() {
     shopAnimating: false,
     busy: false,
     map: generateMap(),
+    tutorial: null,
+  };
+
+  G.hand = drawCards(5);
+}
+
+function initTutorialState() {
+  const crew = [
+    mkP('tutorialForager'),
+    mkP('tutorialSwabbie'),
+    mkP('tutorialSwabbie'),
+    mkP('tutorialSwabbie'),
+    mkP('tutorialSwabbie'),
+  ];
+
+  G = {
+    allCrew: [...crew],
+    deck: Phaser.Utils.Array.Shuffle([...crew]),
+    discard: [],
+    hand: [],
+    res: { wood: 0, stone: 0, gold: 0, map: 0 },
+    weapons: 0,
+    cannons: 0,
+    enthusiasm: 0,
+    round: 1,
+    phase: 'sending',
+    sent: [],
+    island: {
+      name: 'Training Cove',
+      emoji: '🏝️',
+      accent: 0x4b7d42,
+      maxSend: 1,
+      tutorialDesc: 'only 1 pirate can land',
+    },
+    enemyShip: null,
+    boardingCount: 0,
+    gameOver: false,
+    shop: ['carpenter', 'quartermaster', 'masterLumberjack', 'masterAdventurer'],
+    shopAnimating: false,
+    busy: false,
+    map: null,
+    tutorial: {
+      active: true,
+      step: 'landing',
+      recommendedType: 'carpenter',
+      recommendedBought: false,
+      boss1Strength: 0,
+      boss2Strength: 0,
+    },
   };
 
   G.hand = drawCards(5);

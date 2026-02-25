@@ -48,6 +48,21 @@ const TYPES = {
     cost: null,
     dI: '—', dS: '→ 1☠️',
   },
+  // ---- tutorial-only pirates ----
+  tutorialForager: {
+    name: 'Trail Forager', frame: DEFAULT_FRAME, str: 1, canIsland: true,
+    island: { guaranteed: { res: 'wood', amt: 1 } },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 1 },
+    cost: null,
+    dI: '→ 1🪵', dS: '1🪵 → 1☠️',
+  },
+  tutorialSwabbie: {
+    name: 'Deck Swabbie', frame: DEFAULT_FRAME, str: 1, canIsland: false,
+    island: null,
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1 },
+    cost: null,
+    dI: '—', dS: '→ 1☠️',
+  },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
     name: 'Carpenter', frame: 2, str: 1, canIsland: true,
