@@ -6,13 +6,13 @@ class MapScene extends Phaser.Scene {
   constructor() { super('map'); }
 
   preload() {
-    this.load.spritesheet('pirates', 'assets/pirates.png', {
-      frameWidth: 8, frameHeight: 8, spacing: 2, margin: 0,
-    });
+    if (!this.textures.exists('catsImg')) {
+      this.load.image('catsImg', 'assets/cats.png');
+    }
   }
 
   create() {
-    this.textures.get('pirates').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    ensureCatTextures(this);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this.L = computeLayout(this.scale.width, this.scale.height);
     this._closing = false;

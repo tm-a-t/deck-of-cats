@@ -6,6 +6,7 @@ class ShopScene extends Phaser.Scene {
   constructor() { super('shopModal'); }
 
   create() {
+    ensureCatTextures(this);
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this._closing = false;
@@ -125,7 +126,7 @@ class ShopScene extends Phaser.Scene {
       const pos = this.shopPos(i, G.shop.length, m);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
 
-      const spr = this.add.sprite(pos.x, pos.y, 'pirates', def.frame).setScale(L.SC);
+      const spr = addCatSprite(this, pos.x, pos.y, type).setScale(L.SC);
       this.modalLayer.add(spr);
 
       this.modalLayer.add(this.add.text(pos.x, pos.y - 92 * L.k, `☠️${def.cost}`, {
@@ -192,7 +193,7 @@ class ShopScene extends Phaser.Scene {
     const ghosts = [];
     oldShop.forEach((t, i) => {
       const p = this.shopPos(i, oldN, modal);
-      const spr = this.add.sprite(p.x, p.y, 'pirates', TYPES[t].frame)
+      const spr = addCatSprite(this, p.x, p.y, t)
         .setScale(L.SC).setDepth(80);
       this.modalLayer.add(spr);
       ghosts.push(spr);
@@ -225,7 +226,7 @@ class ShopScene extends Phaser.Scene {
 
     const newType = G.shop[newN - 1];
     const lastNewPos = this.shopPos(newN - 1, newN, modal);
-    const newGhost = this.add.sprite(modal.x + modal.w + 90 * L.k, lastNewPos.y, 'pirates', TYPES[newType].frame)
+    const newGhost = addCatSprite(this, modal.x + modal.w + 90 * L.k, lastNewPos.y, newType)
       .setScale(L.SC).setDepth(80);
     this.modalLayer.add(newGhost);
     this.tweens.add({

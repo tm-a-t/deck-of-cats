@@ -6,13 +6,13 @@ class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
 
   preload() {
-    this.load.spritesheet('pirates', 'assets/pirates.png', {
-      frameWidth: 8, frameHeight: 8, spacing: 2, margin: 0,
-    });
+    if (!this.textures.exists('catsImg')) {
+      this.load.image('catsImg', 'assets/cats.png');
+    }
   }
 
   create() {
-    this.textures.get('pirates').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    ensureCatTextures(this);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
     if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
@@ -175,7 +175,7 @@ class GameScene extends Phaser.Scene {
     const toX = L.cx + this.sentOffsetX(G.sent.length - 1) * L.k;
     const toY = L.Y_ISL_CY;
 
-    const ghost = this.add.sprite(fromX, fromY, 'pirates', def.frame)
+    const ghost = addCatSprite(this, fromX, fromY, p.type)
       .setScale(L.SC).setDepth(60);
 
     this.tweens.add({
@@ -821,7 +821,7 @@ class GameScene extends Phaser.Scene {
 
     crew.forEach((p, i) => {
       const cx = sx + i * sp;
-      const spr = this.add.sprite(cx, L.Y_CREW, 'pirates', TYPES[p.type].frame)
+      const spr = addCatSprite(this, cx, L.Y_CREW, p.type)
         .setScale(L.SC_SM);
 
       if (G.phase === 'removing') {
@@ -870,8 +870,7 @@ class GameScene extends Phaser.Scene {
 
     const shopSx = shopLeft + shopLabel.width + (shop.length > 0 ? shopGap + shopIconW / 2 : 0);
     shop.forEach((type, i) => {
-      const frame = TYPES[type].frame;
-      const spr = this.add.sprite(shopSx + i * shopSp, L.Y_SHOP, 'pirates', frame)
+      const spr = addCatSprite(this, shopSx + i * shopSp, L.Y_SHOP, type)
         .setScale(L.SC_SM);
       this.addTo('top', spr);
     });
@@ -957,7 +956,7 @@ class GameScene extends Phaser.Scene {
       if (this._sendingToIsland.has(hi)) return;
       const p = G.hand[hi];
       const px = cx + this.sentOffsetX(si) * L.k;
-      const spr = this.add.sprite(px, cy, 'pirates', TYPES[p.type].frame).setScale(L.SC);
+      const spr = addCatSprite(this, px, cy, p.type).setScale(L.SC);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
@@ -1048,7 +1047,7 @@ class GameScene extends Phaser.Scene {
       const x = handPos.x;
       const y = handPos.y;
 
-      const spr = this.add.sprite(x, y, 'pirates', def.frame).setScale(L.SC);
+      const spr = addCatSprite(this, x, y, p.type).setScale(L.SC);
       if (i === tutorialTargetIdx) {
         this.tweens.add({
           targets: spr,
