@@ -45,7 +45,7 @@ function initState() {
     hand: [],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
     weapons: 0,
-    cannons: 0,
+    cannons: 1,
     enthusiasm: 0,
     round: 0,
     phase: 'map',

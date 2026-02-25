@@ -1131,7 +1131,7 @@ class GameScene extends Phaser.Scene {
     const leftOpts = { originX: 0 };
 
     const mapHighlight = mapEnabled && G.phase === 'map' && getAvailableNodes(G.map).length > 1;
-    const mapLabel = mapHighlight ? '> Map <' : 'Map';
+    const mapLabel = mapHighlight ? 'Map (!)' : 'Map';
     const mapBtn = this.mkBtn('nav', left, L.Y_NAV, mapLabel, () => {
       if (!mapEnabled) {
         this.float(L.cx, L.Y_NAV - 40 * L.k, 'Map is available between rounds', '#8090a0');
@@ -1149,7 +1149,7 @@ class GameScene extends Phaser.Scene {
     });
 
     const canBuyAny = G.phase === 'shopping' && G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
-    const shopLabel = canBuyAny ? '> Shop <' : 'Shop';
+    const shopLabel = canBuyAny ? 'Shop (!)' : 'Shop';
     this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
       this.openShopModal();
     }, {

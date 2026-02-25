@@ -88,9 +88,9 @@ const TYPES = {
   scrapper: {
     name: 'Scrapper', frame: DEFAULT_FRAME, str: 2, canIsland: true,
     island: { guaranteed: { weapons: 1 } },
-    ship:   { costCannons: 1, pRes: 'stone', pN: 3, extraEnthusiasm: 2 },
+    ship:   { costCannons: 1, pRes: 'stone', pN: 3, extraEnthusiasm: 3 },
     cost: 3,
-    dI: '1🗡️, safe', dS: '1💣 → 3🪨+2☠️',
+    dI: '1🗡️, safe', dS: '1💣 → 3🪨+3☠️',
   },
   deckhand: {
     name: 'Deckhand', frame: DEFAULT_FRAME, str: 1, canIsland: true,
