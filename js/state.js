@@ -34,9 +34,8 @@ function drawCards(n) {
 
 function initState() {
   const crew = [];
-  for (let i = 0; i < 4; i++) crew.push(mkP('lumberjack'));
-  for (let i = 0; i < 4; i++) crew.push(mkP('miner'));
-  for (let i = 0; i < 2; i++) crew.push(mkP('slacker'));
+  for (let i = 0; i < 5; i++) crew.push(mkP('lumberjack'));
+  for (let i = 0; i < 5; i++) crew.push(mkP('miner'));
 
   G = {
     allCrew: [...crew],
@@ -95,7 +94,7 @@ function initTutorialState() {
     enemyShip: null,
     boardingCount: 0,
     gameOver: false,
-    shop: ['carpenter', 'quartermaster', 'masterLumberjack', 'masterAdventurer'],
+    shop: ['carpenter', 'quartermaster', 'masterLumberjack', 'masterMiner'],
     shopAnimating: false,
     busy: false,
     map: null,

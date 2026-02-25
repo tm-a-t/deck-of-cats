@@ -1207,7 +1207,7 @@ class GameScene extends Phaser.Scene {
       lines.push('');
       lines.push('Cost: ☠️' + def.cost);
     }
-    if (type === 'adventurer' || type === 'masterAdventurer' || type === 'smuggler') {
+    if (type === 'smuggler') {
       if (G.res.map > 0) {
         lines.push('🗺️ Map: +30% gold chance');
       }

@@ -15,7 +15,7 @@ function generateMap() {
       const shipNumber = (li + 1) / 5;
       layers.push([{ id: nextId++, type: 'ship', strength: 5 * shipNumber, conns: [] }]);
     } else {
-      const count = 2 + Math.floor(Math.random() * 2); // 2-3 nodes
+      const count = (li < 9) ? 1 : 2 + Math.floor(Math.random() * 2);
       const available = (li < 9)
         ? ISLANDS.map((isl, i) => i).filter(i => i !== 2 && i !== 4)
         : ISLANDS.map((_, i) => i);
