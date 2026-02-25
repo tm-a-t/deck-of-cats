@@ -66,6 +66,11 @@ class MenuScene extends Phaser.Scene {
       hoverBg: '#553d5f',
       color: '#e4d1f8',
     });
+    this.mkBtn(L.cx, startY + gap * 3, 'All Pirates', () => this.scene.start('allPirates'), {
+      bg: '#42352b',
+      hoverBg: '#5f4d35',
+      color: '#f8ddd1',
+    });
 
     const hint = this.add.text(L.cx, L.H * 0.82,
       'Hire pirates, arm your ship, and win boardings',
