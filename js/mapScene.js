@@ -9,6 +9,9 @@ class MapScene extends Phaser.Scene {
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
+    if (!this.textures.exists('notcatsImg')) {
+      this.load.image('notcatsImg', 'assets/notcats.png');
+    }
   }
 
   create() {

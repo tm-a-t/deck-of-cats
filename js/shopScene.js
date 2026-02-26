@@ -11,6 +11,19 @@ class ShopScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this._closing = false;
     this.modalLayer = this.add.container(0, 0).setDepth(40);
+    this.tipLayer = this.add.container(0, 0).setDepth(50).setVisible(false);
+    this._tipRect = null;
+    this._tipJustOpened = false;
+
+    this.input.on('pointerdown', (ptr) => {
+      if (this._tipJustOpened) { this._tipJustOpened = false; return; }
+      if (this.tipLayer.visible) {
+        if (!this._tipRect || !this._tipRect.contains(ptr.x, ptr.y)) {
+          this.tipLayer.setVisible(false);
+        }
+      }
+    });
+
     this.renderModal();
     this.animateOpen();
 
@@ -70,6 +83,7 @@ class ShopScene extends Phaser.Scene {
 
   renderModal() {
     this.modalLayer.removeAll(true);
+    if (this.tipLayer) this.tipLayer.setVisible(false);
     const L = this.L;
     const m = this.computeModal();
 
@@ -127,6 +141,14 @@ class ShopScene extends Phaser.Scene {
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
 
       const spr = addCatSprite(this, pos.x, pos.y, type).setScale(L.SC);
+      spr.setInteractive({ useHandCursor: true });
+      spr.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        this.showTip(type, pos.x, pos.y - 100 * L.k, { fromClick: true, shopIdx: i });
+      });
+      spr.on('pointerover', () => {
+        if (this.tipLayer.visible) this.showTip(type, pos.x, pos.y - 100 * L.k, { shopIdx: i });
+      });
       this.modalLayer.add(spr);
 
       this.modalLayer.add(this.add.text(pos.x, pos.y - 92 * L.k, `☠️${def.cost}`, {
@@ -163,6 +185,68 @@ class ShopScene extends Phaser.Scene {
         this.modalLayer.add(buy);
       }
     });
+  }
+
+  showTip(type, tx, ty, opts = {}) {
+    const L = this.L;
+    if (opts.fromClick) this._tipJustOpened = true;
+    this.tipLayer.removeAll(true);
+    const def = TYPES[type];
+    const lines = [
+      def.name, '─────────────',
+      '🏝️ ' + def.dI, '⛵ ' + def.dS,
+      (def.str || 0) + '⚔️',
+    ];
+    if (def.cost !== null) { lines.push(''); lines.push('Cost: ☠️' + def.cost); }
+    const body = lines.join('\n');
+
+    const tipFs = L.fs(22);
+    const tmp = this.add.text(0, -999, body, {
+      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6,
+    });
+    const tw = tmp.width, th = tmp.height;
+    tmp.destroy();
+
+    const pad = 20;
+    const bw = tw + pad * 2, bh = th + pad * 2;
+    let bx = tx - bw / 2;
+    let by = ty - bh - 16;
+    if (bx < 8) bx = 8;
+    if (bx + bw > L.W - 8) bx = L.W - bw - 8;
+    if (by < 8) by = ty + 60;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x101828, 1);
+    bg.fillRoundedRect(bx, by, bw, bh, 10);
+    bg.lineStyle(2, 0x304860);
+    bg.strokeRoundedRect(bx, by, bw, bh, 10);
+    this.tipLayer.add(bg);
+
+    this.tipLayer.add(this.add.text(bx + pad, by + pad, body, {
+      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6,
+    }));
+
+    let extraH = 0;
+    const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
+    if (opts.shopIdx != null && canBuyNow && G.enthusiasm >= def.cost) {
+      const btnY = by + bh + 8;
+      const bb = this.add.text(bx + bw / 2, btnY, 'Buy', {
+        fontFamily: 'monospace', fontSize: L.fs(22), color: '#a0d8a0',
+        backgroundColor: '#1a3a28', padding: { x: 20, y: 10 },
+      }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
+      bb.on('pointerover', () => bb.setStyle({ backgroundColor: '#2a5a38' }));
+      bb.on('pointerout', () => bb.setStyle({ backgroundColor: '#1a3a28' }));
+      bb.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        this.tipLayer.setVisible(false);
+        this.animateBuyTransition(opts.shopIdx, this.computeModal());
+      });
+      this.tipLayer.add(bb);
+      extraH = 60;
+    }
+
+    this._tipRect = new Phaser.Geom.Rectangle(bx, by, bw, bh + extraH);
+    this.tipLayer.setVisible(true);
   }
 
   animateBuyTransition(shopIdx, modal) {

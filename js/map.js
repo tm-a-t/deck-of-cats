@@ -13,7 +13,7 @@ function generateMap() {
 
     if (isShip) {
       const shipNumber = (li + 1) / 5;
-      layers.push([{ id: nextId++, type: 'ship', strength: 5 * shipNumber, conns: [] }]);
+      layers.push([{ id: nextId++, type: 'ship', strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2), conns: [] }]);
     } else {
       const count = (li < 9) ? 1 : 2 + Math.floor(Math.random() * 2);
       const available = (li < 9)

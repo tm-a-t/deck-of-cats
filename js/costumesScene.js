@@ -2,8 +2,9 @@
    PIRATES — Cat Costume Generator & Costumes Scene
    ============================================================ */
 
-const CATS_COLS = 7;
-const CATS_PX   = 10;
+const CATS_COLS    = 7;
+const CATS_PX      = 10;
+const NOTCATS_COLS = 2;
 
 const FUR_ORIG_P = [0xf7, 0xb2, 0x6b];
 const FUR_ORIG_S = [0xc0, 0x88, 0x4e];
@@ -112,11 +113,27 @@ function composeCatTexture(scene, cat, key) {
 
 function catTexKey(typeKey) { return 'cat_' + typeKey; }
 
+function composeCustomSkinTexture(scene, frame, key) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = CATS_PX;
+  const ctx = canvas.getContext('2d');
+  const src = scene.textures.get('notcatsImg').getSourceImage();
+  const sx = (frame % NOTCATS_COLS) * CATS_PX;
+  const sy = Math.floor(frame / NOTCATS_COLS) * CATS_PX;
+  ctx.drawImage(src, sx, sy, CATS_PX, CATS_PX, 0, 0, CATS_PX, CATS_PX);
+  scene.textures.addCanvas(key, canvas);
+  scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+}
+
 function ensureCatTextures(scene) {
   for (const k in TYPES) {
     const key = catTexKey(k);
     if (!scene.textures.exists(key)) {
-      composeCatTexture(scene, decodeCat(TYPES[k].cat), key);
+      if (TYPES[k].customSkin != null) {
+        composeCustomSkinTexture(scene, TYPES[k].customSkin, key);
+      } else {
+        composeCatTexture(scene, decodeCat(TYPES[k].cat), key);
+      }
     }
   }
 }
@@ -135,6 +152,9 @@ class CostumesScene extends Phaser.Scene {
   preload() {
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
+    }
+    if (!this.textures.exists('notcatsImg')) {
+      this.load.image('notcatsImg', 'assets/notcats.png');
     }
   }
 
@@ -192,7 +212,7 @@ class CostumesScene extends Phaser.Scene {
     const catSc  = Math.max(3, Math.round(8 * L.k));
     const catPx  = CATS_PX * catSc;
     const padX   = 20 * L.k;
-    const padY   = 56 * L.k;
+    const padY   = 68 * L.k;
     const cellW  = catPx + padX;
     const cellH  = catPx + padY;
     const gridTop = 150 * L.k;
@@ -220,13 +240,15 @@ class CostumesScene extends Phaser.Scene {
       const frames = [1, cat.body, cat.weapon, cat.clothes, cat.eyes];
       if (cat.accessory !== null) frames.push(cat.accessory);
 
-      const lbl = this.add.text(cx, cy + catPx / 2 + 6 * L.k, frames.join(', '), {
+      const half = Math.ceil(frames.length / 2);
+      const lblText = frames.slice(0, half).join(', ') + '\n' + frames.slice(half).join(', ');
+      const lbl = this.add.text(cx, cy + catPx / 2 + 6 * L.k, lblText, {
         fontFamily: 'monospace', fontSize: L.fsPx(12),
         color: '#8da0b3', align: 'center',
       }).setOrigin(0.5, 0);
       this.root.add(lbl);
 
-      const furLbl = this.add.text(cx, cy + catPx / 2 + 22 * L.k, cat.fur.name, {
+      const furLbl = this.add.text(cx, cy + catPx / 2 + 32 * L.k, cat.fur.name, {
         fontFamily: 'monospace', fontSize: L.fsPx(10),
         color: '#6a7a8a', align: 'center',
       }).setOrigin(0.5, 0);
