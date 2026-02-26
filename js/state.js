@@ -6,7 +6,7 @@ let uid = 0;
 function mkP(type) { return { id: uid++, type }; }
 
 function randomShopType(round) {
-  const maxCost = Math.max(4, round);
+  const maxCost = Math.max(3, round);
   const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
   return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }
@@ -44,7 +44,7 @@ function initState() {
     hand: [],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
     weapons: 0,
-    cannons: 1,
+    cannons: 0,
     enthusiasm: 0,
     round: 0,
     phase: 'map',

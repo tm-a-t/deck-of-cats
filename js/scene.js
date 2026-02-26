@@ -9,6 +9,9 @@ class GameScene extends Phaser.Scene {
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
+    if (!this.textures.exists('notcatsImg')) {
+      this.load.image('notcatsImg', 'assets/notcats.png');
+    }
   }
 
   create() {
@@ -811,7 +814,12 @@ class GameScene extends Phaser.Scene {
     this.txt('top', L.cx, L.Y_INV, inv,
       { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
 
-    const crew = [...G.allCrew].sort((a, b) => a.type < b.type ? -1 : a.type > b.type ? 1 : 0);
+    const crew = [...G.allCrew].sort((a, b) => {
+      const ca = TYPES[a.type].cost ?? -1;
+      const cb = TYPES[b.type].cost ?? -1;
+      if (ca !== cb) return ca - cb;
+      return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
+    });
     const maxSp = 44 * L.k;
     const sp = Math.min(maxSp, (L.W - 80) / Math.max(crew.length, 1));
     const sx = L.cx - ((crew.length - 1) * sp) / 2;
@@ -838,7 +846,7 @@ class GameScene extends Phaser.Scene {
           });
         }
       } else {
-        if (!handIds.has(p.id) && !deckIds.has(p.id)) spr.setTint(0x333333);
+        if (!deckIds.has(p.id)) spr.setTint(0x333333);
         spr.setInteractive({ useHandCursor: true });
         spr.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
@@ -870,8 +878,17 @@ class GameScene extends Phaser.Scene {
 
     const shopSx = shopLeft + shopLabel.width + (shop.length > 0 ? shopGap + shopIconW / 2 : 0);
     shop.forEach((type, i) => {
-      const spr = addCatSprite(this, shopSx + i * shopSp, L.Y_SHOP, type)
+      const cx = shopSx + i * shopSp;
+      const spr = addCatSprite(this, cx, L.Y_SHOP, type)
         .setScale(L.SC_SM);
+      spr.setInteractive({ useHandCursor: true });
+      spr.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        this.showTip(type, cx, L.Y_SHOP + 30 * L.k, { fromClick: true });
+      });
+      spr.on('pointerover', () => {
+        if (this.ct.tip.visible) this.showTip(type, cx, L.Y_SHOP + 30 * L.k);
+      });
       this.addTo('top', spr);
     });
 
