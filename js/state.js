@@ -5,6 +5,26 @@
 let uid = 0;
 function mkP(type) { return { id: uid++, type }; }
 
+function getStreak() {
+  const key = 'pirates_streak';
+  const today = new Date().toISOString().slice(0, 10);
+  let data;
+  try { data = JSON.parse(localStorage.getItem(key)); } catch (_) {}
+  if (!data || !data.lastDate) {
+    data = { streak: 1, lastDate: today };
+  } else if (data.lastDate === today) {
+    // already counted today
+  } else {
+    const last = new Date(data.lastDate + 'T00:00:00');
+    const now = new Date(today + 'T00:00:00');
+    const diffDays = Math.round((now - last) / 86400000);
+    data.streak = diffDays === 1 ? data.streak + 1 : 1;
+    data.lastDate = today;
+  }
+  localStorage.setItem(key, JSON.stringify(data));
+  return data.streak;
+}
+
 function randomShopType(round) {
   const maxCost = Math.max(3, round);
   const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
