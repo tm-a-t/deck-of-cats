@@ -478,7 +478,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm -= def.cost;
     const p = mkP(type);
     G.allCrew.push(p);
-    G.discard.push(p);
+    G.deck.push(p);
     if (this.isTutorial() && type === G.tutorial.recommendedType) {
       G.tutorial.recommendedBought = true;
     }
