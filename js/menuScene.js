@@ -72,6 +72,15 @@ class MenuScene extends Phaser.Scene {
       color: '#f8ddd1',
     });
 
+    const streak = getStreak();
+    const streakLabel = `Streak: ${streak} day${streak !== 1 ? 's' : ''}`;
+    const streakTxt = this.add.text(L.cx, L.H * 0.44, streakLabel, {
+      fontFamily: 'monospace',
+      fontSize: L.fsPx(22),
+      color: streak >= 7 ? '#ffd740' : streak >= 3 ? '#ffab40' : '#8da0b3',
+    }).setOrigin(0.5);
+    this.root.add(streakTxt);
+
     const hint = this.add.text(L.cx, L.H * 0.82,
       'Hire pirates, arm your ship, and win boardings',
       {
