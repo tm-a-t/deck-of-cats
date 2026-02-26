@@ -12,6 +12,7 @@ const ISLANDS = [
   { name: 'Treasure Island',  emoji: '💎', bonus: 'gold',  accent: 0xc8a020 },
   { name: 'Port Island',      emoji: '⚓', bonus: null, extraSend: 1, accent: 0x8b5e3c },
   { name: 'Skull Island',     emoji: '💀', bonus: null, bonusEnthusiasm: 2, accent: 0x8a2040 },
+  { name: 'Siren Island',    emoji: '🧜', bonus: null, sacrifice: true, accent: 0x6a2080 },
 ];
 
 // ────────────────── PIRATE DEFINITIONS ──────────────────
@@ -67,17 +68,17 @@ const TYPES = {
   },
   brute: {
     name: 'Brute', cat: [3,26,39,19,0,3], str: 2, canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9 },
+    island: { guaranteed: { weapons: 1 } },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
-    dI: '1🪵, risky', dS: '1🪨 → 3☠️',
+    dI: '→ 1🗡️', dS: '1🪨 → 3☠️',
   },
   scrapper: {
     name: 'Scrapper', cat: [15,27,46,16,0,6], str: 2, canIsland: true,
     island: { guaranteed: { weapons: 2 } },
     ship:   { costCannons: 1, pRes: 'stone', pN: 4, extraEnthusiasm: 3 },
     cost: 4,
-    dI: '2🗡️, safe', dS: '1💣 → 4🪨+3☠️',
+    dI: '2🗡️', dS: '1💣 → 4🪨+3☠️',
   },
   deckhand: {
     name: 'Deckhand', cat: [4,34,40,16,0,6], str: 1, canIsland: true,

@@ -16,9 +16,10 @@ function generateMap() {
       layers.push([{ id: nextId++, type: 'ship', strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2), conns: [] }]);
     } else {
       const count = (li < 9) ? 1 : 2 + Math.floor(Math.random() * 2);
+      const allowSacrifice = li >= 15 && Math.random() < 0.5;
       const available = (li < 9)
-        ? ISLANDS.map((isl, i) => i).filter(i => i !== 2 && i !== 4)
-        : ISLANDS.map((_, i) => i);
+        ? ISLANDS.map((isl, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
+        : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];

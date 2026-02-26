@@ -28,6 +28,7 @@ class GameScene extends Phaser.Scene {
     this.ct.fx.setDepth(50);
     this.ct.gameover.setDepth(200);
     this._sendingToIsland = new Set();
+    this._sacrificedIds = new Set();
 
     this._tipRect = null;
     this._tipJustOpened = false;
@@ -87,6 +88,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm = 0;
     G.busy = false;
     this._sendingToIsland.clear();
+    this._sacrificedIds.clear();
     this.ct.tip.setVisible(false);
 
     if (node.type === 'ship') {
@@ -189,9 +191,15 @@ class GameScene extends Phaser.Scene {
         this._sendingToIsland.delete(idx);
         const result = this.resolveIsland(p);
         this.showIslandResult(result, toX);
+
+        const isSacrifice = G.island && G.island.sacrifice;
+        if (isSacrifice) {
+          this.sacrificePirate(p, toX);
+        }
+
         this.renderAll();
 
-        this.time.delayedCall(500, () => {
+        this.time.delayedCall(isSacrifice ? 900 : 500, () => {
           G.busy = false;
           if (G.sent.length >= this.maxSend()) {
             this.endSending();
@@ -274,6 +282,17 @@ class GameScene extends Phaser.Scene {
     if (isl.bonus === alt) altAmt *= 2;
     G.res[alt] += altAmt;
     return { ok: false, res: alt, n: altAmt };
+  }
+
+  sacrificePirate(pirate, x) {
+    G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
+    G.deck = G.deck.filter(p => p.id !== pirate.id);
+    G.discard = G.discard.filter(p => p.id !== pirate.id);
+    this._sacrificedIds.add(pirate.id);
+    const L = this.L;
+    this.time.delayedCall(400, () => {
+      this.float(x, L.Y_ISL_CY - 50 * L.k, '💀 Lost!', '#c060ff');
+    });
   }
 
   showIslandResult(r, x) {
@@ -496,7 +515,8 @@ class GameScene extends Phaser.Scene {
 
   prepareNextRound() {
     if (G.phase !== 'shopping') return;
-    G.discard.push(...G.hand);
+    const allCrewIds = new Set(G.allCrew.map(p => p.id));
+    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id)));
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
@@ -962,6 +982,8 @@ class GameScene extends Phaser.Scene {
       islDesc = `max ${G.island.maxSend} ashore`;
     } else if (G.island.bonusEnthusiasm) {
       islDesc = '+' + G.island.bonusEnthusiasm + '☠️';
+    } else if (G.island.sacrifice) {
+      islDesc = 'pirates lost forever';
     } else if (G.island.tutorialDesc) {
       islDesc = G.island.tutorialDesc;
     }
@@ -974,6 +996,7 @@ class GameScene extends Phaser.Scene {
       const p = G.hand[hi];
       const px = cx + this.sentOffsetX(si) * L.k;
       const spr = addCatSprite(this, px, cy, p.type).setScale(L.SC);
+      if (this._sacrificedIds.has(p.id)) spr.setAlpha(0.35);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
