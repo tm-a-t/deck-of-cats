@@ -26,7 +26,7 @@ function getStreak() {
 }
 
 function randomShopType(round) {
-  const maxCost = Math.max(3, round);
+  const maxCost = Math.max(3, round + 1);
   const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
   return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }

@@ -55,16 +55,16 @@ const TYPES = {
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], str: 1, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95 },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 3, prodWeapons: 3 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapons: 3 },
     cost: 3,
-    dI: '1🪵, safe', dS: '2🪵 → 3🗡️+3☠️',
+    dI: '1🪵, safe', dS: '2🪵 → 3🗡️+2☠️',
   },
   stonemason: {
     name: 'Stonemason', cat: [5,23,39,16,0,2], str: 1, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95 },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 3, prodCannons: 1 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodCannons: 1 },
     cost: 3,
-    dI: '1🪨, safe', dS: '2🪨 → 💣+3☠️',
+    dI: '1🪨, safe', dS: '2🪨 → 💣+2☠️',
   },
   brute: {
     name: 'Brute', cat: [3,26,39,19,0,3], str: 2, canIsland: true,
@@ -72,6 +72,34 @@ const TYPES = {
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
     dI: '→ 1🗡️', dS: '1🪨 → 3☠️',
+  },
+  whittler: {
+    name: 'Whittler', cat: [1,6,42,34,16,0], str: 1, canIsland: true,
+    island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    cost: 2,
+    dI: '→ 2☠️', dS: '1🪵 → 3🗡️',
+  },
+  corsair: {
+    name: 'Corsair', cat: [1,8,42,27,16,8], str: 1, canIsland: true,
+    island: { guaranteed: { weapons: 2 } },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
+    cost: 2,
+    dI: '→ 2🗡️', dS: '→ 2☠️',
+  },
+  privateer: {
+    name: 'Privateer', cat: [1,12,45,27,16,4], str: 2, canIsland: true,
+    island: { res: 'gold', amt: 1, chance: 0.45 },
+    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 6 },
+    cost: 3,
+    dI: '1🪙, very risky', dS: '2🪙 → 6🗡️+4☠️',
+  },
+  herald: {
+    name: 'Herald', cat: [1,7,39,32,16,2], str: 2, canIsland: true,
+    island: { guaranteed: { res: 'enthusiasm', amt: 3 } },
+    ship:   null,
+    cost: 2,
+    dI: '→ 3☠️', dS: '—',
   },
   scrapper: {
     name: 'Scrapper', cat: [15,27,46,16,0,6], str: 2, canIsland: true,
@@ -173,4 +201,5 @@ const SHOP_POOL = [
   'masterLumberjack', 'masterMiner',
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
   'brute', 'deckhand', 'blacksmith', 'trader', 'scrapper',
+  'whittler', 'corsair', 'privateer', 'herald',
 ];
