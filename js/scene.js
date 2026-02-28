@@ -880,7 +880,7 @@ class GameScene extends Phaser.Scene {
     });
     const invParts = [];
     if (resIcons) invParts.push(resIcons);
-    invParts.push(`☠️${G.enthusiasm}`);
+    if (G.enthusiasm > 0) invParts.push(`☠️${G.enthusiasm}`);
     if (G.weapons > 0) invParts.push(`🗡️${G.weapons}`);
     if (G.cannons > 0) invParts.push(`💣${G.cannons}`);
     const inv = invParts.join('  ') || '—';
