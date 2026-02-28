@@ -823,28 +823,43 @@ class GameScene extends Phaser.Scene {
 
   // ──────────── HELPERS ────────────
 
-  handPos(idx) {
+  handPos(idx, visible = null) {
     const L = this.L;
-    const n = G.hand.length;
-    const splitRows = L.NARROW_HAND_SPLIT && n === 5;
+    const handVisible = visible || this.visibleHandIndices();
+    const visualIdx = handVisible.indexOf(idx);
+    if (visualIdx < 0) {
+      return { x: L.cx, y: L.Y_HAND };
+    }
+
+    const n = handVisible.length;
+    const splitRows = L.NARROW_HAND_SPLIT && n > 4;
     if (!splitRows) {
       const sp = Math.min(210 * L.k, (L.W - 40) / Math.max(n - 1, 1));
       return {
-        x: L.cx - ((n - 1) * sp) / 2 + idx * sp,
+        x: L.cx - ((n - 1) * sp) / 2 + visualIdx * sp,
         y: L.Y_HAND,
       };
     }
 
-    const topCount = 3;
-    const topRow = idx < topCount;
-    const rowN = topRow ? topCount : 2;
-    const rowIdx = topRow ? idx : idx - topCount;
+    const topCount = Math.ceil(n / 2);
+    const topRow = visualIdx < topCount;
+    const rowN = topRow ? topCount : (n - topCount);
+    const rowIdx = topRow ? visualIdx : visualIdx - topCount;
     const sp = Math.min(210 * L.k, (L.W - 80) / Math.max(rowN - 1, 1));
     const y = topRow ? (L.Y_HAND - 200 * L.k) : L.Y_HAND;
     return {
       x: L.cx - ((rowN - 1) * sp) / 2 + rowIdx * sp,
       y,
     };
+  }
+
+  visibleHandIndices() {
+    const out = [];
+    for (let i = 0; i < G.hand.length; i++) {
+      if (G.sent.includes(i) || this._sendingToIsland.has(i)) continue;
+      out.push(i);
+    }
+    return out;
   }
 
   handX(idx) {
@@ -1120,6 +1135,7 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     this.clearCt('hand');
     const L = this.L;
+    const visible = this.visibleHandIndices();
 
     const dv = this.add.graphics();
     dv.lineStyle(2, 0x1e3040);
@@ -1127,21 +1143,21 @@ class GameScene extends Phaser.Scene {
     this.addTo('hand', dv);
 
     const tutorialTargetIdx = (this.isTutorial() && G.tutorial.step === 'landing' && G.phase === 'sending')
-      ? G.hand.findIndex((hp, hi) => {
-        if (G.sent.includes(hi) || this._sendingToIsland.has(hi)) return false;
+      ? (visible.find(hi => {
+        const hp = G.hand[hi];
         const hd = TYPES[hp.type];
         if (!hd.canIsland) return false;
         if (hd.island && hd.island.convert) {
           return (G.res[hd.island.convert.cRes] || 0) >= hd.island.convert.cN;
         }
         return true;
-      })
+      }) ?? -1)
       : -1;
 
-    G.hand.forEach((p, i) => {
-      if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
+    visible.forEach((i) => {
+      const p = G.hand[i];
       const def = TYPES[p.type];
-      const handPos = this.handPos(i);
+      const handPos = this.handPos(i, visible);
       const x = handPos.x;
       const y = handPos.y;
 
