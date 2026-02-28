@@ -226,6 +226,27 @@ class GameScene extends Phaser.Scene {
       return { ok: n > 0, recall: n };
     }
 
+    if (def.island.exileSent) {
+      const currentIdx = G.sent[G.sent.length - 1];
+      const candidates = G.sent.filter(idx => idx !== currentIdx);
+      if (candidates.length > 0) {
+        const targetIdx = candidates[candidates.length - 1];
+        const target = G.hand[targetIdx];
+        G.allCrew = G.allCrew.filter(p => p.id !== target.id);
+        G.deck = G.deck.filter(p => p.id !== target.id);
+        G.discard = G.discard.filter(p => p.id !== target.id);
+        this._sacrificedIds.add(target.id);
+        return { ok: true, exileSent: true, name: TYPES[target.type].name };
+      }
+      return { ok: false, exileSent: true };
+    }
+
+    if (def.island.draw) {
+      const drawn = drawCards(def.island.draw);
+      G.hand.push(...drawn);
+      return { ok: drawn.length > 0, drawn: drawn.length };
+    }
+
     if (def.island.guaranteed) {
       const g = def.island.guaranteed;
       if (g.weapons) {
@@ -267,21 +288,24 @@ class GameScene extends Phaser.Scene {
     }
     if (isl.bonus === tgt) amt *= 2;
 
+    const islBonusE = def.island.bonusEnthusiasm || 0;
+    if (islBonusE) G.enthusiasm += islBonusE;
+
     if (Math.random() < chance) {
       G.res[tgt] += amt;
-      return { ok: true, res: tgt, n: amt };
+      return { ok: true, res: tgt, n: amt, bonusEnthusiasm: islBonusE };
     }
 
     if (Math.random() < 0.01) {
       G.res.map++;
-      return { ok: false, res: 'map', n: 1 };
+      return { ok: false, res: 'map', n: 1, bonusEnthusiasm: islBonusE };
     }
     const others = ['wood', 'stone', 'gold'].filter(r => r !== tgt);
     const alt = Phaser.Utils.Array.GetRandom(others);
     let altAmt = 1;
     if (isl.bonus === alt) altAmt *= 2;
     G.res[alt] += altAmt;
-    return { ok: false, res: alt, n: altAmt };
+    return { ok: false, res: alt, n: altAmt, bonusEnthusiasm: islBonusE };
   }
 
   sacrificePirate(pirate, x) {
@@ -305,6 +329,22 @@ class GameScene extends Phaser.Scene {
       }
       return;
     }
+    if (r.exileSent) {
+      if (r.ok) {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, '💀 Exiled ' + r.name + '!', '#ff8a80');
+      } else {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, 'No one to exile', '#ffa726');
+      }
+      return;
+    }
+    if (r.drawn !== undefined) {
+      if (r.ok) {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, '+1 pirate to hand!', '#80cbc4');
+      } else {
+        this.float(x, L.Y_ISL_CY - 80 * L.k, 'Deck empty', '#ffa726');
+      }
+      return;
+    }
     if (r.convert) {
       this.float(x, L.Y_ISL_CY - 80 * L.k,
         '-' + r.cN + RES_EMOJI[r.cRes] + ' +' + r.n + RES_EMOJI[r.res], '#66bb6a');
@@ -320,12 +360,13 @@ class GameScene extends Phaser.Scene {
       return;
     }
     const em = RES_EMOJI[r.res] || '🗺️';
+    const eBonus = r.bonusEnthusiasm ? ' +' + r.bonusEnthusiasm + '☠️' : '';
     if (r.ok) {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.n + em, '#66bb6a');
+      this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.n + em + eBonus, '#66bb6a');
     } else if (r.res === 'map') {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, '+🗺️!', '#ffd54f');
+      this.float(x, L.Y_ISL_CY - 80 * L.k, '+🗺️!' + eBonus, '#ffd54f');
     } else {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, 'Miss +' + r.n + em, '#ffa726');
+      this.float(x, L.Y_ISL_CY - 80 * L.k, 'Miss +' + r.n + em + eBonus, '#ffa726');
     }
   }
 
@@ -370,6 +411,16 @@ class GameScene extends Phaser.Scene {
       const L = this.L;
       const handPos = this.handPos(hi);
       const x = handPos.x;
+
+      if (def.ship && def.ship.removeSelf) {
+        G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
+        G.deck = G.deck.filter(p => p.id !== pirate.id);
+        G.discard = G.discard.filter(p => p.id !== pirate.id);
+        this.float(x, handPos.y - 40 * L.k, '💀 Lost!', '#c060ff');
+        this.renderAll();
+        this.processNextShip();
+        return;
+      }
 
       if (def.ship.removeFromDeck) {
         if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {

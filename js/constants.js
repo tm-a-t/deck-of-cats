@@ -194,6 +194,50 @@ const TYPES = {
     cost: 13,
     dI: '2🪨, reliable', dS: '2🪨 → 3💣+4☠️',
   },
+  // ---- special: get-lost pirates (removeSelf on ship) ----
+  raider: {
+    name: 'Raider', cat: [0,31,38,19,0,3], str: 2, canIsland: true,
+    island: { guaranteed: { weapons: 3 } },
+    ship:   { removeSelf: true },
+    cost: 4,
+    dI: '→ 3🗡️', dS: 'get lost',
+  },
+  profiteer: {
+    name: 'Profiteer', cat: [9,33,46,16,0,7], str: 1, canIsland: true,
+    island: { convert: { cRes: 'gold', cN: 1, pRes: 'gold', pN: 2 } },
+    ship:   { removeSelf: true },
+    cost: 5,
+    dI: '1🪙 → 2🪙', dS: 'get lost',
+  },
+  drifter: {
+    name: 'Drifter', cat: [14,37,42,16,0,0], str: 0, canIsland: true,
+    island: { guaranteed: { res: 'wood', amt: 2 } },
+    ship:   { removeSelf: true },
+    cost: 6,
+    dI: '→ 2🪵', dS: 'get lost',
+  },
+  // ---- special: utility ----
+  marooner: {
+    name: 'Marooner', cat: [6,28,43,17,20,4], str: 0, canIsland: true,
+    island: { exileSent: true },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    cost: 6,
+    dI: 'exile previous', dS: '→ 3🗡️',
+  },
+  lookout: {
+    name: 'Lookout', cat: [2,35,40,32,16,1], str: 0, canIsland: true,
+    island: { draw: 1 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    cost: 4,
+    dI: 'draw 1 pirate', dS: '1🪵 → 3🗡️',
+  },
+  survivalist: {
+    name: 'Survivalist', cat: [0,23,44,16,0,8], str: 2, canIsland: true,
+    island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
+    cost: 3,
+    dI: '1🪵 risky +2☠️', dS: '→ 2☠️',
+  },
 };
 
 const SHOP_POOL = [
@@ -202,4 +246,5 @@ const SHOP_POOL = [
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
   'brute', 'deckhand', 'blacksmith', 'trader', 'scrapper',
   'whittler', 'corsair', 'privateer', 'herald',
+  'raider', 'profiteer', 'drifter', 'marooner', 'lookout', 'survivalist',
 ];
