@@ -422,7 +422,7 @@ class GameScene extends Phaser.Scene {
         return;
       }
 
-      if (def.ship.removeFromDeck) {
+      if (def.ship && def.ship.removeFromDeck) {
         if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
           this.float(x, handPos.y - 40 * L.k, '—', '#546e7a');
           this.renderAll();
@@ -442,6 +442,13 @@ class GameScene extends Phaser.Scene {
         G.phase = 'removing';
         G.busy = false;
         this.renderAll();
+        return;
+      }
+
+      if (!def.ship) {
+        this.float(x, handPos.y - 40 * L.k, '—', '#546e7a');
+        this.renderAll();
+        this.processNextShip();
         return;
       }
 
