@@ -3,23 +3,51 @@
    ============================================================ */
 
 const MAP_LAYERS = 50;
+const EARLY_SEGMENTS = 3;
+const EARLY_PATHS = 3;
+const STEPS_PER_SEGMENT = 4;
+const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
 
 function generateMap() {
   const layers = [];
   let nextId = 0;
 
-  for (let li = 0; li < MAP_LAYERS; li++) {
-    const isShip = (li + 1) % 5 === 0;
+  // Early game: 3 non-intersecting paths of 4 islands before each battle
+  for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
+    for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
+      const li = seg * (STEPS_PER_SEGMENT + 1) + step;
+      const available = (li < 9)
+        ? ISLANDS.map((_, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
+        : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice);
+      const layer = [];
+      for (let pi = 0; pi < EARLY_PATHS; pi++) {
+        const islandIdx = available[Math.floor(Math.random() * available.length)];
+        layer.push({ id: nextId++, type: 'island', islandIdx, conns: [] });
+      }
+      layers.push(layer);
+    }
+    const shipNumber = seg + 1;
+    layers.push([{
+      id: nextId++, type: 'ship',
+      strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2),
+      conns: [],
+    }]);
+  }
 
+  // Remaining layers: existing logic
+  for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS; li++) {
+    const isShip = (li + 1) % 5 === 0;
     if (isShip) {
       const shipNumber = (li + 1) / 5;
-      layers.push([{ id: nextId++, type: 'ship', strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2), conns: [] }]);
+      layers.push([{
+        id: nextId++, type: 'ship',
+        strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2),
+        conns: [],
+      }]);
     } else {
-      const count = (li < 9) ? 1 : 2 + Math.floor(Math.random() * 2);
+      const count = 2 + Math.floor(Math.random() * 2);
       const allowSacrifice = li >= 15 && Math.random() < 0.5;
-      const available = (li < 9)
-        ? ISLANDS.map((isl, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
-        : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
+      const available = ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];
@@ -29,19 +57,39 @@ function generateMap() {
     }
   }
 
-  for (let li = 0; li < MAP_LAYERS - 1; li++) {
+  // Connections: early segments — straight non-intersecting paths
+  for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
+    const base = seg * (STEPS_PER_SEGMENT + 1);
+    for (let step = 0; step < STEPS_PER_SEGMENT - 1; step++) {
+      const cur = layers[base + step];
+      const nxt = layers[base + step + 1];
+      for (let pi = 0; pi < EARLY_PATHS; pi++) {
+        cur[pi].conns = [nxt[pi].id];
+      }
+    }
+    const lastIslands = layers[base + STEPS_PER_SEGMENT - 1];
+    const battle = layers[base + STEPS_PER_SEGMENT];
+    for (const node of lastIslands) {
+      node.conns = [battle[0].id];
+    }
+    const nextBase = base + STEPS_PER_SEGMENT + 1;
+    if (nextBase < layers.length) {
+      battle[0].conns = layers[nextBase].map(n => n.id);
+    }
+  }
+
+  // Connections: remaining layers
+  for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS - 1; li++) {
     const cur = layers[li];
     const nxt = layers[li + 1];
     const nextIsShip = nxt.length === 1 && nxt[0].type === 'ship';
     const prevIsShip = cur.length === 1 && cur[0].type === 'ship';
 
     if (nextIsShip) {
-      // All nodes converge to the single ship
       for (const node of cur) {
         node.conns = [nxt[0].id];
       }
     } else if (prevIsShip) {
-      // Ship fans out to all next-layer nodes
       cur[0].conns = nxt.map(n => n.id);
     } else {
       assignConnections(cur, nxt);
