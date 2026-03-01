@@ -156,7 +156,8 @@ class GameScene extends Phaser.Scene {
     const def = TYPES[p.type];
     const L = this.L;
 
-    const handPos = this.handPos(idx);
+    const visibleHand = this.visibleHandIndices();
+    const handPos = this.handDisplayPos(idx, visibleHand);
     if (!def.canIsland) {
       this.float(handPos.x, handPos.y - 40 * L.k, "Can't go!", '#ff8a80');
       return;
@@ -409,7 +410,8 @@ class GameScene extends Phaser.Scene {
       const pirate = G.hand[hi];
       const def = TYPES[pirate.type];
       const L = this.L;
-      const handPos = this.handPos(hi);
+      const visibleHand = this.visibleHandIndices();
+      const handPos = this.handDisplayPos(hi, visibleHand);
       const x = handPos.x;
 
       if (def.ship && def.ship.removeSelf) {
@@ -823,9 +825,25 @@ class GameScene extends Phaser.Scene {
 
   // ──────────── HELPERS ────────────
 
-  handPos(idx) {
+  visibleHandIndices() {
+    const sent = new Set(G.sent);
+    const out = [];
+    for (let i = 0; i < G.hand.length; i++) {
+      if (sent.has(i) || this._sendingToIsland.has(i)) continue;
+      out.push(i);
+    }
+    return out;
+  }
+
+  handDisplayPos(handIdx, visibleHand = null) {
+    const list = visibleHand || this.visibleHandIndices();
+    const displayIdx = list.indexOf(handIdx);
+    if (displayIdx >= 0) return this.handPos(displayIdx, list.length);
+    return this.handPos(handIdx, G.hand.length);
+  }
+
+  handPos(idx, n = G.hand.length) {
     const L = this.L;
-    const n = G.hand.length;
     const splitRows = L.NARROW_HAND_SPLIT && n === 5;
     if (!splitRows) {
       const sp = Math.min(210 * L.k, (L.W - 40) / Math.max(n - 1, 1));
@@ -848,7 +866,7 @@ class GameScene extends Phaser.Scene {
   }
 
   handX(idx) {
-    return this.handPos(idx).x;
+    return this.handDisplayPos(idx).x;
   }
 
   clearCt(k) { this.ct[k].removeAll(true); }
@@ -1122,6 +1140,7 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     this.clearCt('hand');
     const L = this.L;
+    const visibleHand = this.visibleHandIndices();
 
     const dv = this.add.graphics();
     dv.lineStyle(2, 0x1e3040);
@@ -1140,15 +1159,15 @@ class GameScene extends Phaser.Scene {
       })
       : -1;
 
-    G.hand.forEach((p, i) => {
-      if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
+    visibleHand.forEach((handIdx, visibleIdx) => {
+      const p = G.hand[handIdx];
       const def = TYPES[p.type];
-      const handPos = this.handPos(i);
+      const handPos = this.handPos(visibleIdx, visibleHand.length);
       const x = handPos.x;
       const y = handPos.y;
 
       const spr = addCatSprite(this, x, y, p.type).setScale(L.SC);
-      if (i === tutorialTargetIdx) {
+      if (handIdx === tutorialTargetIdx) {
         this.tweens.add({
           targets: spr,
           y: y - 14 * L.k,
@@ -1168,7 +1187,7 @@ class GameScene extends Phaser.Scene {
         spr.on('pointerout', () => spr.setScale(L.SC));
         spr.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
-          this.sendToIsland(i);
+          this.sendToIsland(handIdx);
         });
       }
 
