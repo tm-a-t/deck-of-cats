@@ -196,7 +196,7 @@ const TYPES = {
   },
   // ---- special: get-lost pirates (removeSelf on ship) ----
   raider: {
-    name: 'Raider', cat: [0,31,38,19,0,3], str: 2, canIsland: true,
+    name: 'Raider', cat: [1,15,44,26,19,3], str: 2, canIsland: true,
     island: { guaranteed: { weapons: 3 } },
     ship:   { removeSelf: true },
     cost: 4,
@@ -232,7 +232,7 @@ const TYPES = {
     dI: 'draw 1 pirate', dS: '1🪵 → 3🗡️',
   },
   survivalist: {
-    name: 'Survivalist', cat: [0,23,44,16,0,8], str: 2, canIsland: true,
+    name: 'Survivalist', cat: [1,15,45,28,16,8], str: 2, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
