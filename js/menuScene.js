@@ -42,6 +42,17 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.root.add(sub);
 
+    const author = this.add.text(L.cx, L.H * 0.34, 'автор илюха', {
+      fontFamily: 'monospace',
+      fontSize: L.fsPx(24),
+      color: '#e7d4a9',
+      stroke: '#2a1d0f',
+      strokeThickness: 4,
+      padding: { x: 14, y: 6 },
+      backgroundColor: '#202433',
+    }).setOrigin(0.5);
+    this.root.add(author);
+
     const ship = this.add.text(L.cx, L.H * 0.38, '🚢 ☠️ ⚓', {
       fontFamily: 'monospace',
       fontSize: L.fsPx(40),

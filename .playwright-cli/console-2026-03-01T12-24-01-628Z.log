@@ -1,0 +1,4 @@
+Total messages: 2 (Errors: 1, Warnings: 0)
+
+[LOG] %c %c %c %c %c Phaser v3.60.0 (WebGL | Web Audio) %c https://phaser.io background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent @ https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js:0
+[ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:4173/favicon.ico:0
