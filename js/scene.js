@@ -823,24 +823,41 @@ class GameScene extends Phaser.Scene {
 
   // ──────────── HELPERS ────────────
 
+  visibleHandIndices() {
+    const hidden = new Set(G.sent);
+    this._sendingToIsland.forEach(idx => hidden.add(idx));
+    const out = [];
+    for (let i = 0; i < G.hand.length; i++) {
+      if (!hidden.has(i)) out.push(i);
+    }
+    return out;
+  }
+
   handPos(idx) {
     const L = this.L;
-    const n = G.hand.length;
-    const splitRows = L.NARROW_HAND_SPLIT && n === 5;
+    const visible = this.visibleHandIndices();
+    const n = visible.length || G.hand.length;
+    if (n <= 0) return { x: L.cx, y: L.Y_HAND };
+
+    const visibleIdx = visible.indexOf(idx);
+    const rawSlotIdx = visibleIdx >= 0 ? visibleIdx : idx;
+    const slotIdx = Math.max(0, Math.min(rawSlotIdx, n - 1));
+    const splitRows = L.NARROW_HAND_SPLIT && n >= 5;
     if (!splitRows) {
       const sp = Math.min(210 * L.k, (L.W - 40) / Math.max(n - 1, 1));
       return {
-        x: L.cx - ((n - 1) * sp) / 2 + idx * sp,
+        x: L.cx - ((n - 1) * sp) / 2 + slotIdx * sp,
         y: L.Y_HAND,
       };
     }
 
-    const topCount = 3;
-    const topRow = idx < topCount;
-    const rowN = topRow ? topCount : 2;
-    const rowIdx = topRow ? idx : idx - topCount;
+    const topCount = Math.ceil(n / 2);
+    const bottomCount = n - topCount;
+    const topRow = bottomCount === 0 || slotIdx < topCount;
+    const rowN = topRow ? topCount : bottomCount;
+    const rowIdx = topRow ? slotIdx : slotIdx - topCount;
     const sp = Math.min(210 * L.k, (L.W - 80) / Math.max(rowN - 1, 1));
-    const y = topRow ? (L.Y_HAND - 200 * L.k) : L.Y_HAND;
+    const y = topRow && bottomCount > 0 ? (L.Y_HAND - 200 * L.k) : L.Y_HAND;
     return {
       x: L.cx - ((rowN - 1) * sp) / 2 + rowIdx * sp,
       y,
