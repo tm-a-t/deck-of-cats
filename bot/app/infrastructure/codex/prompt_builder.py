@@ -42,6 +42,10 @@ class CodexPromptBuilder:
             Validation requirements:
             - Verify implementation completeness against task request.
             - Run relevant tests/checks, including browser checks when applicable.
+            - Before any browser check, read and follow this guide exactly:
+              bot/docs/codex-playwright-validation-guide.md
+            - Use fail-fast behavior: avoid long exploratory loops and stop after repeated tool-syntax errors.
+            - If environment/tooling blocks validation (network/DNS/tool missing), return FAIL quickly with exact command/error.
             - Return the final answer strictly in the format below.
 
             RESULT: PASS|FAIL

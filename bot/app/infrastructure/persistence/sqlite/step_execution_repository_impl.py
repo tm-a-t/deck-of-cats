@@ -143,3 +143,22 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
             ),
         ).fetchone()
         return int(row[0])
+
+    def get_latest_error_payload(self, task_id: str) -> str | None:
+        row = self._conn.execute(
+            """
+            SELECT error_payload
+            FROM step_executions
+            WHERE task_id = ?
+              AND COALESCE(error_payload, '') <> ''
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        payload = row[0]
+        if not isinstance(payload, str):
+            return None
+        return payload

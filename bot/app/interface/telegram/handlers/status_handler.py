@@ -32,6 +32,8 @@ from app.shared.enums import TaskStatus
 from app.shared.errors import AppError
 from app.shared.security import CallbackSigner
 
+LOG_CHUNK_SIZE = 3500
+
 
 def build_router(
     list_active_use_case: ListActiveTasksUseCase,
@@ -41,6 +43,30 @@ def build_router(
     decision_ttl_seconds: int,
 ) -> Router:
     router = Router(name="status")
+
+    def _chunk_text(text: str, max_len: int = LOG_CHUNK_SIZE) -> list[str]:
+        normalized = text.strip()
+        if not normalized:
+            return [""]
+        if len(normalized) <= max_len:
+            return [normalized]
+
+        chunks: list[str] = []
+        remaining = normalized
+        while remaining:
+            if len(remaining) <= max_len:
+                chunks.append(remaining)
+                break
+
+            split_at = remaining.rfind("\n", 0, max_len)
+            if split_at < max_len // 2:
+                split_at = remaining.rfind(" ", 0, max_len)
+            if split_at <= 0:
+                split_at = max_len
+
+            chunks.append(remaining[:split_at].rstrip())
+            remaining = remaining[split_at:].lstrip("\n ")
+        return chunks
 
     def _is_not_modified_error(exc: TelegramBadRequest) -> bool:
         return "message is not modified" in str(exc).lower()
@@ -248,9 +274,18 @@ def build_router(
             return
 
         if action == "logs":
-            log_text = task.last_error or "Подробные логи пока не сохранены. Используй статус и step-уведомления."
+            with uow_factory() as tx:
+                current = tx.tasks.get(task.id)
+                if current is not None:
+                    task = current
+                latest_payload = tx.step_executions.get_latest_error_payload(task.id)
+
+            log_text = latest_payload or task.last_error or "Подробные логи пока не сохранены. Используй статус и step-уведомления."
             if callback.message is not None:
-                await callback.message.answer(f"🧾 {task.public_id}\n{log_text}")
+                chunks = _chunk_text(log_text)
+                for index, chunk in enumerate(chunks):
+                    suffix = "" if index == 0 else " (продолжение)"
+                    await callback.message.answer(f"🧾 {task.public_id}{suffix}\n{chunk}")
             await callback.answer("Показал детали")
             return
 
