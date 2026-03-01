@@ -4,3 +4,5 @@
 /bot/runtime/
 /bot/deck_of_cats_telegram_dev_bot.egg-info/
 .playwright-cli/
+/sim/.venv/
+/sim/ml/checkpoints/
