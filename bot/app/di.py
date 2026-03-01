@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from aiogram import Bot
+
+from app.application.orchestrators.dev_cycle_orchestrator import DevCycleOrchestrator
+from app.application.ports.unit_of_work import UnitOfWork
+from app.application.use_cases.accept_merge_decision import AcceptMergeDecisionUseCase
+from app.application.use_cases.list_active_tasks import ListActiveTasksUseCase
+from app.application.use_cases.request_task_status import RequestTaskStatusUseCase
+from app.application.use_cases.submit_change_request import SubmitChangeRequestUseCase
+from app.application.workflows.dev_cycle_workflow import DevCycleWorkflow
+from app.application.workflows.steps.codex_implement_step import CodexImplementStep
+from app.application.workflows.steps.codex_validate_step import CodexValidateStep
+from app.application.workflows.steps.decision_step import DecisionStep
+from app.application.workflows.steps.preview_step import PreviewStep
+from app.application.workflows.steps.pr_step import PrStep
+from app.infrastructure.codex.codex_cli_adapter import CodexCliAdapter
+from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
+from app.infrastructure.codex.result_parser import CodexResultParser
+from app.infrastructure.execution.process_runner import ProcessRunner
+from app.infrastructure.execution.sandbox_runner import SandboxRunner
+from app.infrastructure.execution.worktree_manager import WorktreeManager
+from app.infrastructure.notifier.telegram_notifier import TelegramNotifier
+from app.infrastructure.persistence.sqlite.lock_repository_impl import SQLiteLockRepository
+from app.infrastructure.persistence.sqlite.models import init_db
+from app.infrastructure.persistence.sqlite.uow import SqliteUnitOfWork
+from app.infrastructure.preview.netlify_query_adapter import NetlifyQueryAdapter
+from app.infrastructure.vcs.github_branch_adapter import GithubBranchAdapter
+from app.infrastructure.vcs.github_merge_adapter import GithubMergeAdapter
+from app.infrastructure.vcs.github_pr_adapter import GithubPullRequestAdapter
+from app.settings import Settings
+from app.shared.enums import StepName
+from app.shared.security import CallbackSigner
+
+
+@dataclass
+class UseCases:
+    submit_change_request: SubmitChangeRequestUseCase
+    request_task_status: RequestTaskStatusUseCase
+    list_active_tasks: ListActiveTasksUseCase
+    accept_merge_decision: AcceptMergeDecisionUseCase
+
+
+@dataclass
+class Container:
+    settings: Settings
+    bot: Bot
+    callback_signer: CallbackSigner
+    uow_factory: Callable[[], UnitOfWork]
+    orchestrator: DevCycleOrchestrator
+    use_cases: UseCases
+
+
+
+def build_container(settings: Settings) -> Container:
+    bot = Bot(token=settings.telegram_bot_token)
+    callback_signer = CallbackSigner(settings.telegram_bot_token)
+
+    process_runner = ProcessRunner()
+    sandbox_runner = SandboxRunner()
+    worktree_manager = WorktreeManager(settings.repo_path, settings.default_base_branch)
+
+    db_path = Path(settings.bot_db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    uow_factory = lambda: SqliteUnitOfWork(str(db_path))
+    lock_conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    init_db(lock_conn)
+    lock_port = SQLiteLockRepository(lock_conn)
+
+    notifier = TelegramNotifier(bot, callback_signer)
+
+    codex_adapter = CodexCliAdapter(
+        runner=process_runner,
+        worktree_manager=worktree_manager,
+        prompt_builder=CodexPromptBuilder(),
+        result_parser=CodexResultParser(),
+        timeout_seconds=settings.bot_step_timeout_seconds,
+        codex_executable=settings.codex_cli_executable,
+    )
+
+    branch_port = GithubBranchAdapter(
+        runner=sandbox_runner,
+        worktree_manager=worktree_manager,
+        timeout_seconds=settings.bot_step_timeout_seconds,
+    )
+    pr_port = GithubPullRequestAdapter(
+        owner=settings.github_owner,
+        repo=settings.github_repo,
+        token=settings.github_token,
+        api_base_url=settings.github_api_base_url,
+        remote_name=settings.github_remote_name,
+        base_branch=settings.default_base_branch,
+        git_author_name=settings.git_author_name,
+        git_author_email=settings.git_author_email,
+        dry_run=settings.bot_dry_run,
+        runner=sandbox_runner,
+        worktree_manager=worktree_manager,
+        timeout_seconds=settings.bot_step_timeout_seconds,
+    )
+    merge_port = GithubMergeAdapter(
+        owner=settings.github_owner,
+        repo=settings.github_repo,
+        token=settings.github_token,
+        api_base_url=settings.github_api_base_url,
+        merge_method=settings.github_merge_method,
+        dry_run=settings.bot_dry_run,
+        timeout_seconds=settings.bot_step_timeout_seconds,
+    )
+    preview_port = NetlifyQueryAdapter(
+        poll_interval_seconds=settings.bot_poll_interval_seconds,
+        owner=settings.github_owner,
+        repo=settings.github_repo,
+        token=settings.github_token,
+        api_base_url=settings.github_api_base_url,
+    )
+
+    workflow = DevCycleWorkflow()
+    steps = {
+        StepName.CODEX_IMPLEMENT: CodexImplementStep(codex_adapter),
+        StepName.CODEX_VALIDATE: CodexValidateStep(codex_adapter),
+        StepName.PR: PrStep(branch_port, pr_port),
+        StepName.PREVIEW: PreviewStep(preview_port, timeout_seconds=settings.bot_step_timeout_seconds),
+        StepName.DECISION: DecisionStep(),
+    }
+
+    orchestrator = DevCycleOrchestrator(
+        uow_factory=uow_factory,
+        workflow=workflow,
+        steps=steps,
+        lock_port=lock_port,
+        notifier=notifier,
+        max_retries=settings.bot_max_retries,
+        decision_ttl_seconds=settings.bot_decision_ttl_seconds,
+    )
+
+    use_cases = UseCases(
+        submit_change_request=SubmitChangeRequestUseCase(
+            uow_factory=uow_factory,
+            notifier=notifier,
+            orchestrator=orchestrator,
+            auto_start=settings.bot_auto_start_tasks,
+        ),
+        request_task_status=RequestTaskStatusUseCase(uow_factory=uow_factory),
+        list_active_tasks=ListActiveTasksUseCase(uow_factory=uow_factory),
+        accept_merge_decision=AcceptMergeDecisionUseCase(
+            uow_factory=uow_factory,
+            merge_port=merge_port,
+            notifier=notifier,
+        ),
+    )
+
+    return Container(
+        settings=settings,
+        bot=bot,
+        callback_signer=callback_signer,
+        uow_factory=uow_factory,
+        orchestrator=orchestrator,
+        use_cases=use_cases,
+    )
