@@ -85,7 +85,8 @@ class GameScene extends Phaser.Scene {
 
     G.round++;
     G.sent = [];
-    G.enthusiasm = 0;
+    // First round starts with baseline enthusiasm.
+    G.enthusiasm = G.round === 1 ? 2 : 0;
     G.busy = false;
     this._sendingToIsland.clear();
     this._sacrificedIds.clear();
