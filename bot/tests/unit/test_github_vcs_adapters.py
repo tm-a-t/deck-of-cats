@@ -17,13 +17,15 @@ from app.infrastructure.vcs.github_pr_adapter import GithubPullRequestAdapter
 pytestmark = pytest.mark.asyncio
 
 
-def _task() -> TaskAggregate:
+def _task(*, username: str | None = None, display_name: str | None = None) -> TaskAggregate:
     return TaskAggregate.create(
         task_id="33333333-3333-3333-3333-333333333333",
         author_id=1,
         title="Add feature",
         body="Implement feature details",
         correlation_id="corr-1",
+        author_username=username,
+        author_display_name=display_name,
     )
 
 
@@ -71,8 +73,9 @@ async def test_github_pr_adapter_dry_run_runs_git_and_returns_compare_url() -> N
     pr = await adapter.create_pr(_task(), "bot/task-33333333")
 
     assert pr.url.endswith("/compare/bot/task-33333333?expand=1")
+    assert not any(cmd.startswith("git config user.") for cmd in runner.commands)
     assert not any(cmd.startswith("git push --set-upstream origin") for cmd in runner.commands)
-    assert any(cmd.startswith("git commit -m") for cmd in runner.commands)
+    assert any("git -c user.name=" in cmd and " -c user.email=" in cmd and " commit -m " in cmd for cmd in runner.commands)
 
 
 async def test_github_pr_adapter_creates_pr_via_api(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,13 +118,60 @@ async def test_github_pr_adapter_creates_pr_via_api(monkeypatch: pytest.MonkeyPa
         timeout_seconds=30,
     )
 
-    pr = await adapter.create_pr(_task(), "bot/task-33333333")
+    pr = await adapter.create_pr(_task(username="Lyisha"), "bot/task-33333333")
 
     assert pr.number == 17
     assert pr.url == "https://github.com/octo/deck/pull/17"
     assert _FakeAsyncClient.post_calls[0][0] == "https://api.github.com/repos/octo/deck/pulls"
     assert _FakeAsyncClient.post_calls[0][2]["head"] == "bot/task-33333333"
+    assert _FakeAsyncClient.post_calls[0][2]["body"].endswith("Запрос от t.me/Lyisha")
     assert any(cmd.startswith("git push --set-upstream origin") for cmd in runner.commands)
+
+
+async def test_github_pr_adapter_uses_display_name_when_username_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeAsyncClient:
+        post_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
+
+        def __init__(self, timeout: httpx.Timeout) -> None:
+            _ = timeout
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            _ = exc_type, exc, tb
+            return False
+
+        async def post(self, url: str, headers: dict[str, str], json: dict[str, str]) -> httpx.Response:
+            self.post_calls.append((url, headers, json))
+            return _http_response(
+                method="POST",
+                status_code=201,
+                payload={"number": 17, "html_url": "https://github.com/octo/deck/pull/17", "state": "open"},
+            )
+
+    monkeypatch.setattr(pr_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    adapter = GithubPullRequestAdapter(
+        owner="octo",
+        repo="deck",
+        token="token",
+        api_base_url="https://api.github.com",
+        remote_name="origin",
+        base_branch="master",
+        git_author_name="Codex Bot",
+        git_author_email="codex@example.com",
+        dry_run=False,
+        runner=_FakeRunner(staged_returncode=0),
+        worktree_manager=_FakeWorktreeManager(),
+        timeout_seconds=30,
+    )
+
+    await adapter.create_pr(_task(display_name="Ivan Petrov"), "bot/task-33333333")
+
+    assert _FakeAsyncClient.post_calls[0][2]["body"].endswith("Запрос от Ivan Petrov")
 
 
 async def test_github_pr_adapter_returns_existing_open_pr_on_422(monkeypatch: pytest.MonkeyPatch) -> None:

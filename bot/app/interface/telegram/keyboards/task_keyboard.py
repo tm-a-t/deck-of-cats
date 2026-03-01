@@ -39,11 +39,13 @@ def build_task_card_keyboard(task: TaskAggregate) -> InlineKeyboardMarkup:
         ]
     ]
 
-    if task.status in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}:
+    if task.status in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED, TaskStatus.FAILED}:
         rows.append([InlineKeyboardButton(text="▶️ Запустить", callback_data=f"task|{task.public_id}|run")])
 
     if task.status == TaskStatus.AWAITING_DECISION:
         rows.append([InlineKeyboardButton(text="⚖️ Решение", callback_data=f"task|{task.public_id}|decision")])
+    if task.status == TaskStatus.AWAITING_REWORK_INPUT:
+        rows.append([InlineKeyboardButton(text="📝 Отправить правки", callback_data=f"task|{task.public_id}|rework")])
 
     if task.pr_url:
         rows.append([InlineKeyboardButton(text="🔗 Открыть PR", url=task.pr_url)])

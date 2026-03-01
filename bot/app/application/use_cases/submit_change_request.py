@@ -24,15 +24,29 @@ class SubmitChangeRequestUseCase:
     orchestrator: DevCycleOrchestrator | None = None
     auto_start: bool = False
 
-    async def execute(self, author_id: int, title: str, body: str) -> str:
+    async def execute(
+        self,
+        author_id: int,
+        title: str,
+        body: str,
+        author_username: str | None = None,
+        author_display_name: str | None = None,
+    ) -> str:
+        normalized_body = " ".join(body.split()).strip()
+        if not normalized_body:
+            raise ValueError("Task body is required")
+
+        normalized_title = " ".join(title.split()).strip() or self._derive_title(normalized_body)
         task_id = TaskId.new().value
         correlation_id = CorrelationId.new().value
         task = TaskAggregate.create(
             task_id=task_id,
             author_id=author_id,
-            title=title,
-            body=body,
+            title=normalized_title,
+            body=normalized_body,
             correlation_id=correlation_id,
+            author_username=author_username,
+            author_display_name=author_display_name,
         )
 
         with self.uow_factory() as uow:
@@ -54,3 +68,9 @@ class SubmitChangeRequestUseCase:
             logger.info("Task scheduled for immediate run task_id=%s", task.id)
             asyncio.create_task(self.orchestrator.run_task(task.id))
         return task.id
+
+    @staticmethod
+    def _derive_title(body: str, limit: int = 64) -> str:
+        if len(body) <= limit:
+            return body
+        return body[: limit - 1].rstrip() + "…"

@@ -41,5 +41,4 @@ class ProcessRunner:
             returncode=proc.returncode,
             stdout=out.decode("utf-8", errors="replace"),
             stderr=err.decode("utf-8", errors="replace"),
-            timed_out=False,
         )

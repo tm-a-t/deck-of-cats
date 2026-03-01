@@ -20,8 +20,7 @@ class TelegramNotifier:
             text=(
                 f"🆕 Задача создана: {task.public_id}\n"
                 f"{task.title}\n"
-                "Открой карточку: /task "
-                f"{task.public_id}"
+                "Открой «📂 Открытые задачи» и выбери карточку."
             ),
         )
 
@@ -53,6 +52,8 @@ class TelegramNotifier:
             status_line = f"🛑 Задача {task.public_id} закрыта"
         elif task.status == TaskStatus.AWAITING_DECISION:
             status_line = f"⏳ Задача {task.public_id} ждёт решения"
+        elif task.status == TaskStatus.AWAITING_REWORK_INPUT:
+            status_line = f"📝 Задача {task.public_id} ждёт ваших правок"
         elif task.status == TaskStatus.RETRY_SCHEDULED:
             status_line = f"🔁 Задача {task.public_id} поставлена на повтор"
         elif task.status in {TaskStatus.FAILED, TaskStatus.DEAD_LETTER}:

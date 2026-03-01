@@ -9,14 +9,15 @@ from aiogram import Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram import F
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from app.application.orchestrators.dev_cycle_orchestrator import DevCycleOrchestrator
 from app.application.ports.unit_of_work import UnitOfWork
 from app.application.use_cases.list_active_tasks import ListActiveTasksUseCase
-from app.application.use_cases.request_task_status import RequestTaskStatusUseCase
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.domain.events.domain_events import DomainEvent
+from app.interface.telegram.fsm.states import TaskStates
 from app.interface.telegram.keyboards.decision_keyboard import build_decision_request_keyboard
 from app.interface.telegram.keyboards.task_keyboard import (
     build_task_card_keyboard,
@@ -33,7 +34,6 @@ from app.shared.security import CallbackSigner
 
 
 def build_router(
-    request_status_use_case: RequestTaskStatusUseCase,
     list_active_use_case: ListActiveTasksUseCase,
     uow_factory: Callable[[], UnitOfWork],
     orchestrator: DevCycleOrchestrator,
@@ -59,21 +59,23 @@ def build_router(
         )
 
     async def _edit_or_send_task_card(callback: CallbackQuery, task: TaskAggregate) -> None:
-        if callback.message is not None:
-            try:
-                await callback.message.edit_text(
-                    render_task_card(task),
-                    reply_markup=build_task_card_keyboard(task),
-                )
-                return
-            except TelegramBadRequest as exc:
-                if _is_not_modified_error(exc):
-                    return
-        if callback.message is not None:
-            await callback.message.answer(
+        if callback.message is None:
+            return
+
+        try:
+            await callback.message.edit_text(
                 render_task_card(task),
                 reply_markup=build_task_card_keyboard(task),
             )
+            return
+        except TelegramBadRequest as exc:
+            if _is_not_modified_error(exc):
+                return
+
+        await callback.message.answer(
+            render_task_card(task),
+            reply_markup=build_task_card_keyboard(task),
+        )
 
     @router.message(Command("status"))
     async def status(message: Message) -> None:
@@ -142,9 +144,6 @@ def build_router(
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("tasks|")))
     async def on_tasks_page(callback: CallbackQuery) -> None:
-        if not callback.data:
-            await callback.answer("Invalid action", show_alert=True)
-            return
         parts = callback.data.split("|")
         if len(parts) != 2:
             await callback.answer("Invalid pagination payload", show_alert=True)
@@ -194,10 +193,7 @@ def build_router(
         await callback.answer("Обновлено")
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("task|")))
-    async def on_task_callback(callback: CallbackQuery) -> None:
-        if not callback.data:
-            await callback.answer("Invalid action", show_alert=True)
-            return
+    async def on_task_callback(callback: CallbackQuery, state: FSMContext) -> None:
         parts = callback.data.split("|")
         if len(parts) != 3:
             await callback.answer("Invalid action payload", show_alert=True)
@@ -214,10 +210,36 @@ def build_router(
             await callback.answer("Обновлено")
             return
 
-        if action == "run":
-            if task.status not in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}:
-                await callback.answer("Запуск доступен только для NEW/RETRY", show_alert=True)
+        if action == "rework":
+            if task.status != TaskStatus.AWAITING_REWORK_INPUT:
+                await callback.answer("Правки доступны только в AWAITING_REWORK_INPUT", show_alert=True)
                 return
+            await state.set_state(TaskStates.awaiting_rework_feedback)
+            await state.update_data(task_id=task.id, public_id=task.public_id)
+            if callback.message is not None:
+                await callback.message.answer(
+                    f"Напиши, что исправить для {task.public_id}.\n"
+                    "Я добавлю это в историю правок текущего PR и запущу доработку.",
+                )
+            await callback.answer("Жду текст правок")
+            return
+
+        if action == "run":
+            if task.status not in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED, TaskStatus.FAILED}:
+                await callback.answer("Запуск доступен только для NEW/RETRY/FAILED", show_alert=True)
+                return
+            if task.status == TaskStatus.FAILED:
+                with uow_factory() as tx:
+                    current = tx.tasks.get(task.id)
+                    if current is None:
+                        await callback.answer("Task not found", show_alert=True)
+                        return
+                    current.schedule_retry("Manual retry requested from FAILED status")
+                    tx.tasks.update(current)
+                    for event in current.pull_events():
+                        if isinstance(event, DomainEvent):
+                            tx.outbox.enqueue(event.aggregate_id, event.event_type, event.payload)
+                    tx.commit()
             asyncio.create_task(orchestrator.run_task(task.id))
             await callback.answer("Запуск поставлен в очередь")
             task_after = _resolve_task(public_id)

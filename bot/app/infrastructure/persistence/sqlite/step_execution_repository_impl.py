@@ -124,8 +124,6 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
             """,
             (task_id, step.value),
         ).fetchone()
-        if row is None:
-            return 0
         return int(row[0])
 
     def count_failed_attempts(self, task_id: str, step: StepName) -> int:
@@ -144,6 +142,4 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
                 StepExecutionStatus.RETRY_SCHEDULED.value,
             ),
         ).fetchone()
-        if row is None:
-            return 0
         return int(row[0])

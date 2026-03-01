@@ -11,6 +11,7 @@ STATUS_LABELS: dict[TaskStatus, str] = {
     TaskStatus.PR_CREATING: "RUNNING",
     TaskStatus.AWAITING_PREVIEW: "WAITING",
     TaskStatus.AWAITING_DECISION: "WAITING_DECISION",
+    TaskStatus.AWAITING_REWORK_INPUT: "WAITING_REWORK",
     TaskStatus.DECISION_APPLYING: "RUNNING",
     TaskStatus.MERGED: "DONE",
     TaskStatus.CLOSED: "CLOSED",
@@ -27,6 +28,7 @@ CURRENT_STEP_LABELS: dict[TaskStatus, str] = {
     TaskStatus.PR_CREATING: "создание PR",
     TaskStatus.AWAITING_PREVIEW: "ожидание preview",
     TaskStatus.AWAITING_DECISION: "ожидание решения",
+    TaskStatus.AWAITING_REWORK_INPUT: "ожидание ваших правок",
     TaskStatus.DECISION_APPLYING: "применение решения",
     TaskStatus.MERGED: "завершено (merged)",
     TaskStatus.CLOSED: "завершено (closed)",
@@ -67,4 +69,3 @@ def render_task_card(task: TaskAggregate) -> str:
         lines.append(f"Ошибка: {short_title(task.last_error, limit=180)}")
     lines.append(f"Обновлено: {task.updated_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     return "\n".join(lines)
-

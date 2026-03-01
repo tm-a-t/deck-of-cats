@@ -76,21 +76,25 @@ class NetlifyQueryAdapter:
             )
 
         bodies = self._extract_bodies(issue_response.json()) + self._extract_bodies(review_response.json())
-        return self._pick_preview_url(bodies)
+        return self._pick_preview_url(bodies, pr_number=pr_number)
 
     @classmethod
-    def _pick_preview_url(cls, bodies: list[str]) -> str | None:
-        candidates: list[str] = []
+    def _pick_preview_url(cls, bodies: list[str], pr_number: int) -> str | None:
         for body in reversed(bodies):
             for match in cls._URL_RE.findall(body):
                 url = match.rstrip(".,;:!?)")
-                normalized = cls._normalize_preview_url(url)
-                if "netlify" in url.lower():
-                    return normalized
-                candidates.append(normalized)
-        if candidates:
-            return candidates[0]
+                if cls._is_expected_netlify_preview_url(url, pr_number=pr_number):
+                    return cls._normalize_preview_url(url)
         return None
+
+    @staticmethod
+    def _is_expected_netlify_preview_url(url: str, pr_number: int) -> bool:
+        parsed = urlsplit(url)
+        host = (parsed.netloc or "").lower()
+        if not host.endswith(".netlify.app"):
+            return False
+        expected_prefix = f"deploy-preview-{pr_number}--"
+        return host.startswith(expected_prefix)
 
     @staticmethod
     def _normalize_preview_url(url: str) -> str:

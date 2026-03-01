@@ -18,7 +18,6 @@ def build_app_dispatcher(container: Container) -> Dispatcher:
     dispatcher.include_router(build_task_router(container.use_cases.submit_change_request))
     dispatcher.include_router(
         build_status_router(
-            container.use_cases.request_task_status,
             container.use_cases.list_active_tasks,
             container.uow_factory,
             container.orchestrator,
@@ -29,6 +28,7 @@ def build_app_dispatcher(container: Container) -> Dispatcher:
     dispatcher.include_router(
         build_decision_router(
             container.use_cases.accept_merge_decision,
+            container.orchestrator,
             container.uow_factory,
             container.callback_signer,
         )

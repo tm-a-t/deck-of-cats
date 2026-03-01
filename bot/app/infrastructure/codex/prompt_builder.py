@@ -18,6 +18,7 @@ class CodexPromptBuilder:
             Requirements:
             - Make code changes directly in the repo.
             - Keep existing behavior intact unless task requires changes.
+            - If request includes "Rework history:", treat it as mandatory incremental fixes for the same PR.
             - Run relevant local checks for touched code.
             - Return the final answer strictly in the format below.
 

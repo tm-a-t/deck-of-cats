@@ -23,6 +23,7 @@ class AcceptMergeDecisionUseCase:
     uow_factory: Callable[[], UnitOfWork]
     merge_port: MergePort
     notifier: NotifierPort
+    worktree_cleanup: Callable[[str], None] | None = None
 
     async def execute(self, task_id: str, decision: MergeDecision, decision_token: str) -> None:
         logger.info("Decision received task_id=%s decision=%s", task_id, decision.value)
@@ -50,23 +51,22 @@ class AcceptMergeDecisionUseCase:
             logger.info("Decision applying started task_id=%s decision=%s", task_id, decision.value)
 
         side_effect_error: Exception | None = None
-        side_effect_task = None
         with self.uow_factory() as uow:
-            task = uow.tasks.get(task_id)
-            if task is None:
+            side_effect_task = uow.tasks.get(task_id)
+            if side_effect_task is None:
                 raise NotFoundError(f"Task {task_id} not found")
-            side_effect_task = task
-
-        if side_effect_task is None:
-            raise NotFoundError(f"Task {task_id} not found")
 
         try:
             if decision == MergeDecision.MERGE:
                 logger.info("Merging PR task_id=%s pr_number=%s", task_id, side_effect_task.pr_number)
                 await self.merge_port.merge_pr(side_effect_task)
-            else:
+            elif decision == MergeDecision.CLOSE:
                 logger.info("Closing PR task_id=%s pr_number=%s", task_id, side_effect_task.pr_number)
                 await self.merge_port.close_pr(side_effect_task)
+            elif decision == MergeDecision.RERUN_TESTS:
+                logger.info("Rework requested by user task_id=%s", task_id)
+            else:
+                raise InvalidTransitionError(f"Unsupported decision: {decision}")
         except Exception as exc:  # pragma: no cover - defensive boundary
             side_effect_error = exc
             logger.exception("Decision side effect failed task_id=%s decision=%s", task_id, decision.value)
@@ -91,6 +91,12 @@ class AcceptMergeDecisionUseCase:
 
         if side_effect_error is not None:
             raise side_effect_error
+
+        if decision in {MergeDecision.MERGE, MergeDecision.CLOSE} and self.worktree_cleanup is not None:
+            try:
+                self.worktree_cleanup(task.id)
+            except Exception:  # pragma: no cover - cleanup should not break finalization
+                logger.exception("Worktree cleanup failed task_id=%s", task.id)
 
         logger.info("Decision applied successfully task_id=%s decision=%s", task_id, decision.value)
         await self.notifier.notify_task_finished(task)

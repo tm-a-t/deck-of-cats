@@ -81,6 +81,18 @@ async def test_pick_preview_url_strips_netlify_path_and_query() -> None:
         "Build ready: https://deploy-preview-3--pirate-islands.netlify.app/index.html?from=pr#top",
     ]
 
-    preview_url = NetlifyQueryAdapter._pick_preview_url(bodies)
+    preview_url = NetlifyQueryAdapter._pick_preview_url(bodies, pr_number=3)
 
     assert preview_url == "https://deploy-preview-3--pirate-islands.netlify.app"
+
+
+async def test_pick_preview_url_rejects_non_matching_links() -> None:
+    bodies = [
+        "Random: https://example.com/some-page",
+        "Another: https://my-site.netlify.app",
+        "Wrong PR: https://deploy-preview-5--pirate-islands.netlify.app",
+    ]
+
+    preview_url = NetlifyQueryAdapter._pick_preview_url(bodies, pr_number=3)
+
+    assert preview_url is None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.application.workflows.dev_cycle_workflow import DevCycleWorkflow
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.shared.enums import StepName
+from app.shared.enums import StepName, TaskStatus
 
 
 def _task() -> TaskAggregate:
@@ -36,3 +36,13 @@ def test_awaiting_decision_without_token_requests_decision_step() -> None:
 
     step = workflow.next_step(task)
     assert step == StepName.DECISION
+
+
+def test_awaiting_rework_input_does_not_autostart_step() -> None:
+    workflow = DevCycleWorkflow()
+    task = _task()
+    task.status = TaskStatus.AWAITING_REWORK_INPUT
+
+    step = workflow.next_step(task)
+
+    assert step is None

@@ -154,6 +154,7 @@ def build_container(settings: Settings) -> Container:
             uow_factory=uow_factory,
             merge_port=merge_port,
             notifier=notifier,
+            worktree_cleanup=worktree_manager.cleanup,
         ),
     )
 

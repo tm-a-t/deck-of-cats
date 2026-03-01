@@ -12,8 +12,10 @@ def build_decision_request_keyboard(
 ) -> InlineKeyboardMarkup:
     merge_payload = f"{public_id}|merge|{token}|ask"
     close_payload = f"{public_id}|close|{token}|ask"
+    rework_payload = f"{public_id}|rerun_tests|{token}|ask"
     merge_sig = callback_signer.sign(merge_payload)
     close_sig = callback_signer.sign(close_payload)
+    rework_sig = callback_signer.sign(rework_payload)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -25,7 +27,13 @@ def build_decision_request_keyboard(
                     text="❌ Принять close",
                     callback_data=f"dec|{public_id}|close|{token}|{close_sig}|ask",
                 ),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🛠️ Есть правки",
+                    callback_data=f"dec|{public_id}|rerun_tests|{token}|{rework_sig}|ask",
+                )
+            ],
         ]
     )
 
@@ -36,6 +44,11 @@ def build_decision_confirm_keyboard(
     token: str,
     callback_signer: CallbackSigner,
 ) -> InlineKeyboardMarkup:
+    decision_label = {
+        "merge": "merge",
+        "close": "close",
+        "rerun_tests": "доработку",
+    }.get(decision, decision)
     confirm_payload = f"{public_id}|{decision}|{token}|do"
     cancel_payload = f"{public_id}|cancel|{token}|do"
     confirm_sig = callback_signer.sign(confirm_payload)
@@ -44,7 +57,7 @@ def build_decision_confirm_keyboard(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"Подтвердить {decision}",
+                    text=f"Подтвердить {decision_label}",
                     callback_data=f"dec|{public_id}|{decision}|{token}|{confirm_sig}|do",
                 ),
             ],
@@ -56,4 +69,3 @@ def build_decision_confirm_keyboard(
             ],
         ]
     )
-

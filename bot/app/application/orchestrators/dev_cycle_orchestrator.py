@@ -204,7 +204,10 @@ class DevCycleOrchestrator:
                 )
             else:
                 failed_attempts = uow.step_executions.count_failed_attempts(task.id, step_name) + 1
-                if failed_attempts >= self._max_retries:
+                if self._is_environment_failure(summary=summary, details=details):
+                    task.fail(summary)
+                    status = StepExecutionStatus.FAILED
+                elif failed_attempts >= self._max_retries:
                     task.mark_dead_letter(summary)
                     status = StepExecutionStatus.FAILED
                 else:
@@ -258,3 +261,23 @@ class DevCycleOrchestrator:
             if not acquired:
                 logger.warning("Lock heartbeat lost lock_key=%s owner=%s", lock_key, owner)
                 return
+
+    @staticmethod
+    def _is_environment_failure(summary: str, details: str) -> bool:
+        text = f"{summary}\n{details}".lower()
+        markers = (
+            "net::err",
+            "no internet",
+            "internet disconnected",
+            "dns",
+            "name resolution",
+            "temporary failure in name resolution",
+            "connection refused",
+            "network is unreachable",
+            "timed out",
+            "timeout exceeded",
+            "econnrefused",
+            "enotfound",
+            "eai_again",
+        )
+        return any(marker in text for marker in markers)

@@ -13,7 +13,6 @@ class DecisionStep(StepHandler):
     name = StepName.DECISION
 
     async def execute(self, task: TaskAggregate) -> StepResult:
-        _ = task
         token = secrets.token_urlsafe(8)
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
         return StepResult(

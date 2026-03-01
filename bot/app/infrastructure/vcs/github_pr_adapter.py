@@ -49,16 +49,6 @@ class GithubPullRequestAdapter:
             cwd=worktree_path,
             op_name="git checkout",
         )
-        await self._run_git_or_raise(
-            command=f"git config user.name {shlex.quote(self._git_author_name)}",
-            cwd=worktree_path,
-            op_name="git config user.name",
-        )
-        await self._run_git_or_raise(
-            command=f"git config user.email {shlex.quote(self._git_author_email)}",
-            cwd=worktree_path,
-            op_name="git config user.email",
-        )
         await self._run_git_or_raise(command="git add -A", cwd=worktree_path, op_name="git add")
 
         staged_check = await self._runner.run(
@@ -74,7 +64,11 @@ class GithubPullRequestAdapter:
         if staged_check.returncode == 1:
             commit_title = task.title.strip() or task.id
             commit_result = await self._runner.run(
-                command=f"git commit -m {shlex.quote(f'bot: {commit_title}')}",
+                command=(
+                    f"git -c user.name={shlex.quote(self._git_author_name)} "
+                    f"-c user.email={shlex.quote(self._git_author_email)} "
+                    f"commit -m {shlex.quote(f'bot: {commit_title}')}"
+                ),
                 cwd=worktree_path,
                 timeout_seconds=self._timeout_seconds,
             )
@@ -107,7 +101,7 @@ class GithubPullRequestAdapter:
         url = f"{self._api_base_url}/repos/{self._owner}/{self._repo}/pulls"
         payload = {
             "title": task.title,
-            "body": task.body,
+            "body": self._build_pr_body(task),
             "head": branch_name,
             "base": self._base_branch,
         }
@@ -204,3 +198,27 @@ class GithubPullRequestAdapter:
             "Authorization": f"Bearer {self._token}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+
+    def _build_pr_body(self, task: TaskAggregate) -> str:
+        base_body = task.body.strip()
+        requester_line = self._build_requester_line(task)
+        if not requester_line:
+            return base_body
+        if requester_line in base_body:
+            return base_body
+        if not base_body:
+            return requester_line
+        return f"{base_body}\n\n---\n{requester_line}"
+
+    @staticmethod
+    def _build_requester_line(task: TaskAggregate) -> str:
+        username = (task.author_username or "").strip()
+        if username:
+            normalized = username[1:] if username.startswith("@") else username
+            if normalized:
+                return f"Запрос от t.me/{normalized}"
+
+        display_name = (task.author_display_name or "").strip()
+        if display_name:
+            return f"Запрос от {display_name}"
+        return ""

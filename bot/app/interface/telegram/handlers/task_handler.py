@@ -23,7 +23,6 @@ SYSTEM_MENU_TEXTS = {
     OPEN_TASKS_BUTTON,
     HELP_BUTTON,
     MENU_BUTTON,
-    CANCEL_BUTTON,
     NEW_TASK_BUTTON,
 }
 SYSTEM_MENU_COMMANDS = ("/tasks", "/active", "/status", "/task", "/start", "/help", "/new")
@@ -44,15 +43,25 @@ def _is_system_menu_input(text: str) -> bool:
     return any(_is_command_message(lowered, command) for command in SYSTEM_MENU_COMMANDS)
 
 
+def _derive_title_from_body(body: str, limit: int = 64) -> str:
+    normalized = " ".join(body.split()).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1].rstrip() + "…"
+
+
 def build_router(submit_use_case: SubmitChangeRequestUseCase) -> Router:
     router = Router(name="task")
 
     async def _create_task(message: Message, title: str, body: str) -> None:
+        user = message.from_user
         try:
             task_id = await submit_use_case.execute(
-                author_id=message.from_user.id if message.from_user else 0,
+                author_id=user.id if user else 0,
                 title=title,
                 body=body,
+                author_username=user.username if user else None,
+                author_display_name=user.full_name if user else None,
             )
         except Exception as exc:  # pragma: no cover - transport-level safeguard
             await message.answer(f"Failed to submit task: {exc}")
@@ -67,9 +76,9 @@ def build_router(submit_use_case: SubmitChangeRequestUseCase) -> Router:
 
     async def _start_new_flow(message: Message, state: FSMContext) -> None:
         await state.clear()
-        await state.set_state(TaskStates.awaiting_title)
+        await state.set_state(TaskStates.awaiting_task_text)
         await message.answer(
-            "Введи заголовок задачи (шаг 1/2).",
+            "Введи описание задачи (шаг 1/1). Заголовок не нужен.",
             reply_markup=build_main_menu_keyboard(include_cancel=True),
         )
 
@@ -90,33 +99,31 @@ def build_router(submit_use_case: SubmitChangeRequestUseCase) -> Router:
 
         # Fast-path /new <title>|<body> should always reset stale FSM session.
         await state.clear()
-        if "|" not in payload:
-            await message.answer("Формат: /new <title> | <task text> или просто /new для пошагового режима.")
+        if "|" in payload:
+            left, right = [part.strip() for part in payload.split("|", 1)]
+            body = right or left
+        else:
+            body = payload.strip()
+
+        if not body:
+            await message.answer("Нужно описание задачи. Формат: /new <task text>.")
             return
 
-        title, body = [part.strip() for part in payload.split("|", 1)]
-        if not title or not body:
-            await message.answer("Both title and body are required")
-            return
-
+        title = _derive_title_from_body(body)
         await _create_task(message, title=title, body=body)
 
     @router.message(TaskStates.awaiting_title)
     async def receive_title(message: Message, state: FSMContext) -> None:
-        title = (message.text or "").strip()
-        if title == CANCEL_BUTTON:
+        text = (message.text or "").strip()
+        if text == CANCEL_BUTTON:
             await state.clear()
             await message.answer("Создание задачи отменено.", reply_markup=build_main_menu_keyboard())
             return
-        if _is_system_menu_input(title):
+        if _is_system_menu_input(text):
             await state.clear()
             raise SkipHandler()
-        if not title:
-            await message.answer("Заголовок не должен быть пустым. Введи заголовок (шаг 1/2).")
-            return
-        await state.update_data(title=title)
         await state.set_state(TaskStates.awaiting_task_text)
-        await message.answer("Теперь введи описание задачи (шаг 2/2).")
+        await message.answer("Заголовок больше не нужен. Введи описание задачи.")
 
     @router.message(TaskStates.awaiting_task_text)
     async def receive_body(message: Message, state: FSMContext) -> None:
@@ -129,15 +136,10 @@ def build_router(submit_use_case: SubmitChangeRequestUseCase) -> Router:
             await state.clear()
             raise SkipHandler()
         if not body:
-            await message.answer("Описание не должно быть пустым. Введи описание (шаг 2/2).")
-            return
-        data = await state.get_data()
-        title = str(data.get("title", "")).strip()
-        if not title:
-            await state.clear()
-            await message.answer("Сессия создания сброшена. Используй /new снова.")
+            await message.answer("Описание не должно быть пустым. Введи описание задачи.")
             return
 
+        title = _derive_title_from_body(body)
         await _create_task(message, title=title, body=body)
         await state.clear()
 

@@ -17,6 +17,7 @@ from app.shared.time import utcnow
 
 TERMINAL_STATUSES = {TaskStatus.MERGED, TaskStatus.CLOSED, TaskStatus.DEAD_LETTER}
 EXPECTED_HEAD_SHA_FRAGMENT_KEY = "bot_expected_head_sha"
+REWORK_HISTORY_HEADER = "Rework history:"
 
 
 @dataclass
@@ -27,6 +28,8 @@ class TaskAggregate:
     title: str
     body: str
     correlation_id: str
+    author_username: str | None = None
+    author_display_name: str | None = None
     status: TaskStatus = TaskStatus.NEW
     version: int = 0
     pr_url: str | None = None
@@ -47,12 +50,16 @@ class TaskAggregate:
         title: str,
         body: str,
         correlation_id: str,
+        author_username: str | None = None,
+        author_display_name: str | None = None,
     ) -> "TaskAggregate":
         public_id = cls.derive_public_id(task_id)
         task = cls(
             id=task_id,
             public_id=public_id,
             author_id=author_id,
+            author_username=author_username,
+            author_display_name=author_display_name,
             title=title,
             body=body,
             correlation_id=correlation_id,
@@ -169,7 +176,29 @@ class TaskAggregate:
             self.decision_token_hash = None
             self.decision_expires_at = None
             return
+        if decision == MergeDecision.RERUN_TESTS:
+            self.last_error = "Requested rework by user decision"
+            self._set_status(TaskStatus.AWAITING_REWORK_INPUT)
+            self.decision_token_hash = None
+            self.decision_expires_at = None
+            return
         raise InvalidTransitionError(f"Unsupported decision: {decision}")
+
+    def apply_rework_feedback(self, feedback: str) -> None:
+        self._ensure({TaskStatus.AWAITING_REWORK_INPUT}, "apply_rework_feedback")
+        normalized_feedback = " ".join(feedback.split()).strip()
+        if not normalized_feedback:
+            raise InvalidTransitionError("Rework feedback cannot be empty")
+
+        timestamp = utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        body = self.body.rstrip()
+        if REWORK_HISTORY_HEADER not in body:
+            body = f"{body}\n\n{REWORK_HISTORY_HEADER}"
+        body = f"{body}\n- [{timestamp} UTC] {normalized_feedback}"
+
+        self.body = body
+        self.last_error = f"Rework requested: {normalized_feedback}"
+        self._set_status(TaskStatus.RETRY_SCHEDULED)
 
     def rollback_decision_applying(self, reason: str) -> None:
         self._ensure({TaskStatus.DECISION_APPLYING}, "rollback_decision_applying")
