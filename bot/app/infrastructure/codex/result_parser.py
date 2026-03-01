@@ -60,8 +60,9 @@ class CodexResultParser:
                 if not path:
                     raise CodexResultParseError("CHANGED_FILES entries must be non-empty")
                 changed_files.append(path)
-        elif len(block) != 3:
-            raise CodexResultParseError("Unexpected lines after DETAILS for validate result")
+
+            if raw_result == "PASS" and not changed_files:
+                raise CodexResultParseError("PASS implement result must include non-empty CHANGED_FILES")
 
         return ParsedCodexResult(
             ok=raw_result == "PASS",

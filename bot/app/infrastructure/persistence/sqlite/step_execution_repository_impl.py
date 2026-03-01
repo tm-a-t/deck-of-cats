@@ -53,8 +53,20 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
         }:
             ended_at = to_iso(utcnow())
 
-        self._conn.execute(
-            """
+        if status == StepExecutionStatus.RUNNING:
+            self._demote_other_running_attempts(task_id=task_id, step=step, attempt=attempt)
+
+        params = (
+            status.value,
+            ended_at,
+            log_path,
+            error_code,
+            error_payload,
+            task_id,
+            step.value,
+            attempt,
+        )
+        query = """
             UPDATE step_executions
             SET
                 status = ?,
@@ -63,15 +75,42 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
                 error_code = ?,
                 error_payload = ?
             WHERE task_id = ? AND step = ? AND attempt = ?
+            """
+        try:
+            self._conn.execute(query, params)
+        except sqlite3.IntegrityError:
+            if status != StepExecutionStatus.RUNNING:
+                raise
+            self._demote_other_running_attempts(task_id=task_id, step=step, attempt=attempt)
+            try:
+                self._conn.execute(query, params)
+            except sqlite3.IntegrityError as exc:
+                raise RuntimeError(
+                    f"Failed to enforce single RUNNING attempt for task_id={task_id} step={step.value}"
+                ) from exc
+
+    def _demote_other_running_attempts(self, task_id: str, step: StepName, attempt: int) -> None:
+        self._conn.execute(
+            """
+            UPDATE step_executions
+            SET
+                status = ?,
+                ended_at = COALESCE(ended_at, started_at),
+                error_code = COALESCE(error_code, ?),
+                error_payload = COALESCE(error_payload, ?)
+            WHERE
+                task_id = ?
+                AND step = ?
+                AND status = ?
+                AND attempt <> ?
             """,
             (
-                status.value,
-                ended_at,
-                log_path,
-                error_code,
-                error_payload,
+                StepExecutionStatus.RETRY_SCHEDULED.value,
+                "RUNNING_INVARIANT_REPAIRED",
+                "Auto-repaired duplicate RUNNING attempt before setting a new RUNNING one",
                 task_id,
                 step.value,
+                StepExecutionStatus.RUNNING.value,
                 attempt,
             ),
         )
@@ -84,6 +123,26 @@ class SQLiteStepExecutionRepository(StepExecutionRepository):
             WHERE task_id = ? AND step = ?
             """,
             (task_id, step.value),
+        ).fetchone()
+        if row is None:
+            return 0
+        return int(row[0])
+
+    def count_failed_attempts(self, task_id: str, step: StepName) -> int:
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM step_executions
+            WHERE task_id = ?
+              AND step = ?
+              AND status IN (?, ?)
+            """,
+            (
+                task_id,
+                step.value,
+                StepExecutionStatus.FAILED.value,
+                StepExecutionStatus.RETRY_SCHEDULED.value,
+            ),
         ).fetchone()
         if row is None:
             return 0

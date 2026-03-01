@@ -19,10 +19,12 @@ class RequestTaskStatusUseCase:
 
             return {
                 "task_id": task.id,
+                "public_id": task.public_id,
                 "title": task.title,
                 "status": task.status.value,
                 "pr_url": task.pr_url,
                 "preview_url": task.preview_url,
                 "last_error": task.last_error,
                 "version": task.version,
+                "updated_at": task.updated_at.isoformat(),
             }

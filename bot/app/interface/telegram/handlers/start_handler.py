@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+
+from app.interface.telegram.keyboards.main_menu_keyboard import (
+    HELP_BUTTON,
+    MENU_BUTTON,
+    build_main_menu_keyboard,
+)
 
 
 def build_router() -> Router:
@@ -12,23 +18,31 @@ def build_router() -> Router:
     async def start(message: Message) -> None:
         await message.answer(
             "Dev bot ready.\n"
-            "Commands:\n"
-            "/new <title> | <task text>\n"
-            "/status <task_id>\n"
-            "/active\n"
-            "/help"
+            "Работаем через кнопки внизу.\n"
+            "1) Нажми «➕ Новая задача»\n"
+            "2) Заполни шаги\n"
+            "3) Нажми «📂 Открытые задачи» для карточек",
+            reply_markup=build_main_menu_keyboard(),
         )
 
     @router.message(Command("help"))
+    @router.message(F.text == HELP_BUTTON)
     async def help_cmd(message: Message) -> None:
         await message.answer(
-            "Usage:\n"
-            "/new <title> | <task text>\n"
-            "Example:\n"
-            "/new Add sum utility | Create sum.py with sum_two(a, b)\n\n"
-            "/status <task_id> - show current task status\n"
-            "/active - list active tasks\n"
-            "Merge/Close is handled by inline buttons when decision is required."
+            "Как пользоваться:\n"
+            "• «➕ Новая задача» — пошаговое создание\n"
+            "• «📂 Открытые задачи» — список и карточки\n"
+            "• В карточке: «Обновить», «Логи», «Запустить», «Решение»\n"
+            "• Merge/Close делается кнопками через подтверждение\n\n"
+            "Slash-команды оставлены только как fallback.",
+            reply_markup=build_main_menu_keyboard(),
+        )
+
+    @router.message(F.text == MENU_BUTTON)
+    async def menu(message: Message) -> None:
+        await message.answer(
+            "Главное меню. Выбери действие кнопкой ниже.",
+            reply_markup=build_main_menu_keyboard(),
         )
 
     return router

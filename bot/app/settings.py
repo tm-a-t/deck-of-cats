@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     bot_db_path: str = Field(default="bot/runtime/dev_bot.sqlite3", alias="BOT_DB_PATH")
     bot_log_level: str = Field(default="INFO", alias="BOT_LOG_LEVEL")
-    bot_poll_interval_seconds: int = Field(default=10, alias="BOT_POLL_INTERVAL_SECONDS")
+    bot_poll_interval_seconds: int = Field(default=10, ge=1, alias="BOT_POLL_INTERVAL_SECONDS")
     bot_decision_ttl_seconds: int = Field(default=3600, alias="BOT_DECISION_TTL_SECONDS")
     bot_max_retries: int = Field(default=3, alias="BOT_MAX_RETRIES")
     bot_step_timeout_seconds: int = Field(default=300, alias="BOT_STEP_TIMEOUT_SECONDS")
@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     git_author_email: str = Field(default="codex-bot@example.com", alias="GIT_AUTHOR_EMAIL")
 
     codex_cli_executable: str = Field(default="codex", alias="CODEX_CLI_EXECUTABLE")
+    codex_cli_sandbox_mode: str = Field(default="workspace-write", alias="CODEX_CLI_SANDBOX_MODE")
+    codex_cli_approval_policy: str = Field(default="never", alias="CODEX_CLI_APPROVAL_POLICY")
 
     @cached_property
     def allowed_user_ids(self) -> set[int]:

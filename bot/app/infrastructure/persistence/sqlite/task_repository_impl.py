@@ -17,13 +17,14 @@ class SQLiteTaskRepository(TaskRepository):
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, author_id, title, body, correlation_id, status, version,
+                id, public_id, author_id, title, body, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
+                task.public_id,
                 task.author_id,
                 task.title,
                 task.body,
@@ -45,7 +46,7 @@ class SQLiteTaskRepository(TaskRepository):
         row = self._conn.execute(
             """
             SELECT
-                id, author_id, title, body, correlation_id, status, version,
+                id, public_id, author_id, title, body, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
             FROM tasks
@@ -59,20 +60,21 @@ class SQLiteTaskRepository(TaskRepository):
 
         return TaskAggregate(
             id=row[0],
-            author_id=row[1],
-            title=row[2],
-            body=row[3],
-            correlation_id=row[4],
-            status=TaskStatus(row[5]),
-            version=row[6],
-            pr_url=row[7],
-            pr_number=row[8],
-            preview_url=row[9],
-            decision_token_hash=row[10],
-            decision_expires_at=_dt(row[11]),
-            last_error=row[12],
-            created_at=_dt(row[13]) or datetime.utcnow(),
-            updated_at=_dt(row[14]) or datetime.utcnow(),
+            public_id=row[1] or TaskAggregate.derive_public_id(row[0]),
+            author_id=row[2],
+            title=row[3],
+            body=row[4],
+            correlation_id=row[5],
+            status=TaskStatus(row[6]),
+            version=row[7],
+            pr_url=row[8],
+            pr_number=row[9],
+            preview_url=row[10],
+            decision_token_hash=row[11],
+            decision_expires_at=_dt(row[12]),
+            last_error=row[13],
+            created_at=_dt(row[14]) or datetime.utcnow(),
+            updated_at=_dt(row[15]) or datetime.utcnow(),
         )
 
     def update(self, task: TaskAggregate) -> None:
@@ -83,6 +85,7 @@ class SQLiteTaskRepository(TaskRepository):
             SET
                 title = ?,
                 body = ?,
+                public_id = ?,
                 status = ?,
                 version = ?,
                 pr_url = ?,
@@ -97,6 +100,7 @@ class SQLiteTaskRepository(TaskRepository):
             (
                 task.title,
                 task.body,
+                task.public_id,
                 task.status.value,
                 task.version,
                 task.pr_url,
@@ -125,8 +129,15 @@ class SQLiteTaskRepository(TaskRepository):
 
     def find_by_short_id(self, short_id: str) -> TaskAggregate | None:
         row = self._conn.execute(
-            "SELECT id FROM tasks WHERE id LIKE ? ORDER BY created_at DESC LIMIT 1",
-            (f"{short_id}%",),
+            """
+            SELECT id
+            FROM tasks
+            WHERE lower(public_id) = lower(?)
+               OR id LIKE ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (short_id, f"{short_id}%"),
         ).fetchone()
         if row is None:
             return None

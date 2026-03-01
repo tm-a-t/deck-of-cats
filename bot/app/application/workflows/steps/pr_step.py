@@ -18,9 +18,12 @@ class PrStep(StepHandler):
     async def execute(self, task: TaskAggregate) -> StepResult:
         branch_name = await self._branch_port.prepare_branch(task.id)
         pr = await self._pr_port.create_pr(task, branch_name)
+        metadata: dict[str, str | int] = {"pr_number": pr.number, "pr_url": pr.url}
+        if pr.head_sha:
+            metadata["pr_head_sha"] = pr.head_sha
         return StepResult(
             ok=True,
             summary="PR created",
             details=pr.url,
-            metadata={"pr_number": pr.number, "pr_url": pr.url},
+            metadata=metadata,
         )

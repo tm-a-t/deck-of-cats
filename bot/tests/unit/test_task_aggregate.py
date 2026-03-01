@@ -23,5 +23,6 @@ def test_task_aggregate_happy_path() -> None:
     task.finalize_decision(MergeDecision.CLOSE)
 
     assert task.status == TaskStatus.CLOSED
+    assert task.public_id == "T-11111111"
     assert task.pr_number == 1
     assert task.preview_url is not None

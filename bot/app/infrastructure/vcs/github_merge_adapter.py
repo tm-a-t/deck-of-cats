@@ -37,6 +37,9 @@ class GithubMergeAdapter:
             "merge_method": self._merge_method,
             "commit_title": f"bot: {task.title.strip() or task.id}",
         }
+        expected_head_sha = TaskAggregate.extract_expected_head_sha(task.pr_url)
+        if expected_head_sha:
+            payload["sha"] = expected_head_sha
 
         timeout = httpx.Timeout(self._timeout_seconds)
         try:

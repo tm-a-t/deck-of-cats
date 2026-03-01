@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
+from app.interface.telegram.keyboards.decision_keyboard import build_decision_request_keyboard
+from app.interface.telegram.presenters.task_card import render_task_card
+from app.shared.enums import TaskStatus
 from app.shared.security import CallbackSigner
 
 
@@ -15,43 +17,28 @@ class TelegramNotifier:
     async def notify_task_started(self, task: TaskAggregate) -> None:
         await self._bot.send_message(
             chat_id=task.author_id,
-            text=f"Task created: {task.id}\n{task.title}",
+            text=(
+                f"🆕 Задача создана: {task.public_id}\n"
+                f"{task.title}\n"
+                "Открой карточку: /task "
+                f"{task.public_id}"
+            ),
         )
 
     async def notify_step_result(self, task: TaskAggregate, step: str, message: str) -> None:
         await self._bot.send_message(
             chat_id=task.author_id,
-            text=f"[{step}] {message or 'completed'}",
+            text=f"[{task.public_id}] {step}: {message or 'completed'}",
         )
 
     async def notify_decision_required(self, task: TaskAggregate, token: str) -> None:
-        short_id = task.id[:8]
-
-        merge_payload = f"{short_id}|merge|{token}"
-        close_payload = f"{short_id}|close|{token}"
-        merge_sig = self._callback_signer.sign(merge_payload)
-        close_sig = self._callback_signer.sign(close_payload)
-
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="Merge PR",
-                        callback_data=f"dec|{short_id}|merge|{token}|{merge_sig}",
-                    ),
-                    InlineKeyboardButton(
-                        text="Close PR",
-                        callback_data=f"dec|{short_id}|close|{token}|{close_sig}",
-                    ),
-                ]
-            ]
-        )
+        keyboard = build_decision_request_keyboard(task.public_id, token, self._callback_signer)
 
         await self._bot.send_message(
             chat_id=task.author_id,
             text=(
-                "Decision required\n"
-                f"Task: {task.id}\n"
+                "Требуется решение по PR\n"
+                f"Задача: {task.public_id}\n"
                 f"PR: {task.pr_url or '-'}\n"
                 f"Preview: {task.preview_url or '-'}"
             ),
@@ -59,7 +46,19 @@ class TelegramNotifier:
         )
 
     async def notify_task_finished(self, task: TaskAggregate) -> None:
+        status_line = f"ℹ️ Статус задачи {task.public_id}: {task.status.value}"
+        if task.status == TaskStatus.MERGED:
+            status_line = f"✅ Задача {task.public_id} завершена (merged)"
+        elif task.status == TaskStatus.CLOSED:
+            status_line = f"🛑 Задача {task.public_id} закрыта"
+        elif task.status == TaskStatus.AWAITING_DECISION:
+            status_line = f"⏳ Задача {task.public_id} ждёт решения"
+        elif task.status == TaskStatus.RETRY_SCHEDULED:
+            status_line = f"🔁 Задача {task.public_id} поставлена на повтор"
+        elif task.status in {TaskStatus.FAILED, TaskStatus.DEAD_LETTER}:
+            status_line = f"❌ Задача {task.public_id} завершилась ошибкой"
+
         await self._bot.send_message(
             chat_id=task.author_id,
-            text=f"Task {task.id} finished with status {task.status.value}",
+            text=f"{status_line}\n{render_task_card(task)}",
         )

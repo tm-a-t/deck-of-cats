@@ -32,3 +32,7 @@ class StepExecutionRepository(ABC):
     @abstractmethod
     def get_last_attempt(self, task_id: str, step: StepName) -> int:
         raise NotImplementedError
+
+    @abstractmethod
+    def count_failed_attempts(self, task_id: str, step: StepName) -> int:
+        raise NotImplementedError

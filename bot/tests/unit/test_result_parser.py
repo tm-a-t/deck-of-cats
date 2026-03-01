@@ -66,3 +66,35 @@ def test_parse_validate_rejects_invalid_result() -> None:
             DETAILS: Invalid result value
             """
         )
+
+
+def test_parse_implement_pass_requires_non_empty_changed_files() -> None:
+    parser = CodexResultParser()
+
+    with pytest.raises(CodexResultParseError):
+        parser.parse_implement(
+            """
+            RESULT: PASS
+            SUMMARY: Done
+            DETAILS: No files listed
+            CHANGED_FILES:
+            """
+        )
+
+
+def test_parse_validate_ignores_trailing_lines_after_details() -> None:
+    parser = CodexResultParser()
+
+    parsed = parser.parse_validate(
+        """
+        RESULT: PASS
+        SUMMARY: Validation completed
+        DETAILS: Checks passed
+        EXTRA: this should be ignored
+        some trailing line
+        """
+    )
+
+    assert parsed.ok is True
+    assert parsed.summary == "Validation completed"
+    assert parsed.details == "Checks passed"

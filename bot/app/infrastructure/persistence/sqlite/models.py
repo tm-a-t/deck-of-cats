@@ -7,6 +7,7 @@ PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
+    public_id TEXT,
     author_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
@@ -103,4 +104,59 @@ CREATE TABLE IF NOT EXISTS locks (
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    _ensure_tasks_public_id(conn)
+    _ensure_single_running_attempt(conn)
     conn.commit()
+
+
+def _ensure_tasks_public_id(conn: sqlite3.Connection) -> None:
+    columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
+    column_names = {str(row[1]) for row in columns}
+    if "public_id" not in column_names:
+        conn.execute("ALTER TABLE tasks ADD COLUMN public_id TEXT")
+
+    conn.execute(
+        """
+        UPDATE tasks
+        SET public_id = 'T-' || UPPER(SUBSTR(REPLACE(id, '-', ''), 1, 8))
+        WHERE COALESCE(public_id, '') = ''
+        """
+    )
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_tasks_public_id ON tasks(public_id)")
+
+
+def _ensure_single_running_attempt(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        UPDATE step_executions AS current
+        SET
+            status = 'RETRY_SCHEDULED',
+            ended_at = COALESCE(current.ended_at, current.started_at),
+            error_code = COALESCE(current.error_code, 'RUNNING_INVARIANT_REPAIRED'),
+            error_payload = COALESCE(
+                current.error_payload,
+                'Auto-repaired duplicate RUNNING attempt during migration'
+            )
+        WHERE
+            current.status = 'RUNNING'
+            AND EXISTS (
+                SELECT 1
+                FROM step_executions AS newer
+                WHERE
+                    newer.task_id = current.task_id
+                    AND newer.step = current.step
+                    AND newer.status = 'RUNNING'
+                    AND (
+                        newer.attempt > current.attempt
+                        OR (newer.attempt = current.attempt AND newer.id > current.id)
+                    )
+            )
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_step_running_single
+        ON step_executions(task_id, step)
+        WHERE status = 'RUNNING'
+        """
+    )

@@ -14,15 +14,13 @@ async def _main() -> None:
     settings = Settings()
     configure_logging(settings.bot_log_level)
     logger.info(
-        "Worker startup enabled=%s poll_interval=%ss",
-        settings.bot_enable_worker_loop,
+        "Worker startup poll_interval=%ss configured_enabled=%s",
         settings.bot_poll_interval_seconds,
+        settings.bot_enable_worker_loop,
     )
-    container = build_container(settings)
-
     if not settings.bot_enable_worker_loop:
-        logger.info("Worker loop is disabled by BOT_ENABLE_WORKER_LOOP=false")
-        return
+        logger.warning("BOT_ENABLE_WORKER_LOOP=false is ignored in main_worker entrypoint; loop will run")
+    container = build_container(settings)
 
     while True:
         with container.uow_factory() as uow:

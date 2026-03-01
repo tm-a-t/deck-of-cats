@@ -82,6 +82,8 @@ def build_container(settings: Settings) -> Container:
         result_parser=CodexResultParser(),
         timeout_seconds=settings.bot_step_timeout_seconds,
         codex_executable=settings.codex_cli_executable,
+        sandbox_mode=settings.codex_cli_sandbox_mode,
+        approval_policy=settings.codex_cli_approval_policy,
     )
 
     branch_port = GithubBranchAdapter(

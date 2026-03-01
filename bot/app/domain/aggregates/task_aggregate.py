@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from string import hexdigits
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.domain.events.domain_events import (
     MergeDecisionRequested,
@@ -14,11 +16,13 @@ from app.shared.time import utcnow
 
 
 TERMINAL_STATUSES = {TaskStatus.MERGED, TaskStatus.CLOSED, TaskStatus.DEAD_LETTER}
+EXPECTED_HEAD_SHA_FRAGMENT_KEY = "bot_expected_head_sha"
 
 
 @dataclass
 class TaskAggregate:
     id: str
+    public_id: str
     author_id: int
     title: str
     body: str
@@ -44,8 +48,10 @@ class TaskAggregate:
         body: str,
         correlation_id: str,
     ) -> "TaskAggregate":
+        public_id = cls.derive_public_id(task_id)
         task = cls(
             id=task_id,
+            public_id=public_id,
             author_id=author_id,
             title=title,
             body=body,
@@ -55,10 +61,15 @@ class TaskAggregate:
             TaskCreated(
                 aggregate_id=task.id,
                 event_type="TaskCreated",
-                payload={"title": task.title, "author_id": task.author_id},
+                payload={"title": task.title, "author_id": task.author_id, "public_id": task.public_id},
             )
         )
         return task
+
+    @staticmethod
+    def derive_public_id(task_id: str) -> str:
+        compact = task_id.replace("-", "").upper()
+        return f"T-{compact[:8]}"
 
     @property
     def events(self) -> list[object]:
@@ -118,10 +129,17 @@ class TaskAggregate:
         self.preview_url = preview_url
         self._set_status(TaskStatus.AWAITING_DECISION)
 
-    def request_decision(self, token_hash: str, ttl_seconds: int) -> None:
+    def request_decision(
+        self,
+        token_hash: str,
+        ttl_seconds: int,
+        expected_merge_head_sha: str | None = None,
+    ) -> None:
         self._ensure({TaskStatus.AWAITING_DECISION}, "request_decision")
         self.decision_token_hash = token_hash
         self.decision_expires_at = utcnow() + timedelta(seconds=ttl_seconds)
+        if expected_merge_head_sha:
+            self.pr_url = self.attach_expected_head_sha(self.pr_url, expected_merge_head_sha)
         self.version += 1
         self.updated_at = utcnow()
         self._events.append(
@@ -178,3 +196,28 @@ class TaskAggregate:
 
     def is_terminal(self) -> bool:
         return self.status in TERMINAL_STATUSES
+
+    @classmethod
+    def attach_expected_head_sha(cls, pr_url: str | None, head_sha: str) -> str | None:
+        if not pr_url or not cls._is_git_sha(head_sha):
+            return pr_url
+        parts = urlsplit(pr_url)
+        fragment = dict(parse_qsl(parts.fragment, keep_blank_values=True))
+        fragment[EXPECTED_HEAD_SHA_FRAGMENT_KEY] = head_sha
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, urlencode(fragment)))
+
+    @classmethod
+    def extract_expected_head_sha(cls, pr_url: str | None) -> str | None:
+        if not pr_url:
+            return None
+        fragment = dict(parse_qsl(urlsplit(pr_url).fragment, keep_blank_values=True))
+        value = fragment.get(EXPECTED_HEAD_SHA_FRAGMENT_KEY, "").strip()
+        if not value or not cls._is_git_sha(value):
+            return None
+        return value
+
+    @staticmethod
+    def _is_git_sha(value: str) -> bool:
+        if not (7 <= len(value) <= 64):
+            return False
+        return all(char in hexdigits for char in value)

@@ -9,3 +9,4 @@ class PullRequest:
     number: int
     url: str
     state: str
+    head_sha: str | None = None

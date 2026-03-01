@@ -133,8 +133,11 @@ class DevCycleOrchestrator:
                     await self._notifier.notify_decision_required(final_state, token)
                     return
 
-                if final_state.status in {
-                    TaskStatus.AWAITING_DECISION,
+                should_wait_for_user_decision = (
+                    final_state.status == TaskStatus.AWAITING_DECISION
+                    and final_state.decision_token_hash is not None
+                )
+                if should_wait_for_user_decision or final_state.status in {
                     TaskStatus.RETRY_SCHEDULED,
                     TaskStatus.FAILED,
                     TaskStatus.DEAD_LETTER,
@@ -200,7 +203,8 @@ class DevCycleOrchestrator:
                     error_payload=details,
                 )
             else:
-                if attempt >= self._max_retries:
+                failed_attempts = uow.step_executions.count_failed_attempts(task.id, step_name) + 1
+                if failed_attempts >= self._max_retries:
                     task.mark_dead_letter(summary)
                     status = StepExecutionStatus.FAILED
                 else:

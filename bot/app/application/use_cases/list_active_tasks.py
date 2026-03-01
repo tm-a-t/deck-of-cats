@@ -16,8 +16,10 @@ class ListActiveTasksUseCase:
             return [
                 {
                     "task_id": task.id,
+                    "public_id": task.public_id,
                     "title": task.title,
                     "status": task.status.value,
+                    "updated_at": task.updated_at.isoformat(),
                 }
                 for task in tasks
             ]

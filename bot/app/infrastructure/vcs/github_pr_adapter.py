@@ -91,6 +91,7 @@ class GithubPullRequestAdapter:
                 number=fallback_number,
                 url=fallback_url,
                 state="open",
+                head_sha=None,
             )
 
         self._ensure_github_config()
@@ -182,14 +183,20 @@ class GithubPullRequestAdapter:
         fallback_url: str,
     ) -> PullRequest:
         if not isinstance(payload, dict):
-            return PullRequest(provider="github", number=fallback_number, url=fallback_url, state="open")
+            return PullRequest(provider="github", number=fallback_number, url=fallback_url, state="open", head_sha=None)
         number_raw = payload.get("number", fallback_number)
         state_raw = payload.get("state", "open")
         url_raw = payload.get("html_url", fallback_url)
+        head = payload.get("head")
+        head_sha: str | None = None
+        if isinstance(head, dict):
+            raw_sha = head.get("sha")
+            if isinstance(raw_sha, str) and raw_sha.strip():
+                head_sha = raw_sha.strip()
         number = int(number_raw) if isinstance(number_raw, (int, str)) and str(number_raw).isdigit() else fallback_number
         url = url_raw if isinstance(url_raw, str) and url_raw else fallback_url
         state = state_raw if isinstance(state_raw, str) and state_raw else "open"
-        return PullRequest(provider="github", number=number, url=url, state=state)
+        return PullRequest(provider="github", number=number, url=url, state=state, head_sha=head_sha)
 
     def _github_headers(self) -> dict[str, str]:
         return {
