@@ -1,3 +1,6 @@
 .idea/
 /bot/.env
 /bot/.venv/
+/bot/runtime/
+/bot/deck_of_cats_telegram_dev_bot.egg-info/
+.playwright-cli/
