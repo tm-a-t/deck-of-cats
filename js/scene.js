@@ -881,14 +881,16 @@ class GameScene extends Phaser.Scene {
       `Round ${G.round}`,
       { fontSize: L.fs(26) });
 
-    let inv = '';
+    let resIcons = '';
     ['wood', 'stone', 'gold', 'map'].forEach(r => {
-      for (let i = 0; i < Math.min(G.res[r], 30); i++) inv += RES_EMOJI[r];
+      for (let i = 0; i < Math.min(G.res[r], 30); i++) resIcons += RES_EMOJI[r];
     });
-    if (G.enthusiasm > 0) for (let i = 0; i < Math.min(G.enthusiasm, 20); i++) inv += '☠️';
-    if (G.weapons > 0) inv += `  🗡️${G.weapons}`;
-    if (G.cannons > 0) inv += `  💣${G.cannons}`;
-    if (!inv) inv = '—';
+    const invParts = [];
+    if (resIcons) invParts.push(resIcons);
+    if (G.enthusiasm > 0) invParts.push(`☠️${G.enthusiasm}`);
+    if (G.weapons > 0) invParts.push(`🗡️${G.weapons}`);
+    if (G.cannons > 0) invParts.push(`💣${G.cannons}`);
+    const inv = invParts.join('  ') || '—';
     this.txt('top', L.cx, L.Y_INV, inv,
       { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
 
