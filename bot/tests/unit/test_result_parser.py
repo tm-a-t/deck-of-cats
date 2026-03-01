@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import pytest
+
+from app.infrastructure.codex.result_parser import CodexResultParseError, CodexResultParser
+
+
+def test_parse_validate_success() -> None:
+    parser = CodexResultParser()
+
+    parsed = parser.parse_validate(
+        """
+        RESULT: PASS
+        SUMMARY: Validation completed
+        DETAILS: All checks are green
+        """
+    )
+
+    assert parsed.ok is True
+    assert parsed.summary == "Validation completed"
+    assert parsed.details == "All checks are green"
+    assert parsed.changed_files is None
+
+
+def test_parse_implement_success_with_changed_files() -> None:
+    parser = CodexResultParser()
+
+    parsed = parser.parse_implement(
+        """
+        RESULT: PASS
+        SUMMARY: Implementation done
+        DETAILS: Added codex workflow
+        CHANGED_FILES:
+        - app/di.py
+        - app/shared/enums.py
+        """
+    )
+
+    assert parsed.ok is True
+    assert parsed.summary == "Implementation done"
+    assert parsed.details == "Added codex workflow"
+    assert parsed.changed_files == ["app/di.py", "app/shared/enums.py"]
+
+
+def test_parse_implement_requires_changed_files_block() -> None:
+    parser = CodexResultParser()
+
+    with pytest.raises(CodexResultParseError):
+        parser.parse_implement(
+            """
+            RESULT: PASS
+            SUMMARY: Done
+            DETAILS: Changed files omitted
+            """
+        )
+
+
+def test_parse_validate_rejects_invalid_result() -> None:
+    parser = CodexResultParser()
+
+    with pytest.raises(CodexResultParseError):
+        parser.parse_validate(
+            """
+            RESULT: MAYBE
+            SUMMARY: Unknown
+            DETAILS: Invalid result value
+            """
+        )

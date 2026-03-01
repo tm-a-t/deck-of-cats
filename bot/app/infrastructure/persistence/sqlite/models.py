@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import sqlite3
+
+SCHEMA_SQL = """
+PRAGMA journal_mode=WAL;
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    author_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    pr_url TEXT,
+    pr_number INTEGER,
+    preview_url TEXT,
+    decision_token_hash TEXT,
+    decision_expires_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS step_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    step TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    next_retry_at TEXT,
+    lock_until TEXT,
+    locked_by TEXT,
+    error_code TEXT,
+    error_payload TEXT,
+    log_path TEXT,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_step_attempt
+ON step_executions(task_id, step, attempt);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_step_idempotency
+ON step_executions(idempotency_key);
+
+CREATE TABLE IF NOT EXISTS pull_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    pr_number INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(provider, pr_number)
+);
+
+CREATE TABLE IF NOT EXISTS preview_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    url TEXT NOT NULL,
+    ready_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    decision TEXT NOT NULL,
+    decision_token_hash TEXT,
+    expires_at TEXT,
+    decided_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    aggregate_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    published_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS inbox_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    external_event_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    UNIQUE(provider, external_event_id)
+);
+
+CREATE TABLE IF NOT EXISTS locks (
+    key TEXT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    lock_until TEXT NOT NULL
+);
+"""
+
+
+def init_db(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA_SQL)
+    conn.commit()
