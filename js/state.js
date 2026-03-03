@@ -118,8 +118,8 @@ function initTutorialState() {
       blockedIslandRefs: ['L2', 'M2'],
       shop: [],
       hints: {
-        sending: 'send 2 pirates to island',
-        shopping: 'press Next turn',
+        sending: 'Send 2 pirates for resources',
+        shopping: 'Tap Next turn',
       },
     },
     {
@@ -133,9 +133,9 @@ function initTutorialState() {
       blockedIslandRefs: ['L3', 'M3'],
       shop: [],
       hints: {
-        sending: 'send 2 pirates to island',
-        ship: 'Lucky roll: expected loot delivered.',
-        shopping: 'press Next turn',
+        sending: 'Send 2 pirates for resources',
+        ship: 'Nice! You got the expected loot.',
+        shopping: 'Tap Next turn',
       },
     },
     {
@@ -153,8 +153,8 @@ function initTutorialState() {
       shop: ['tutorialAdmiralBlackpowder'],
       requireFeaturedPurchase: true,
       hints: {
-        sending: 'send 2 pirates to island',
-        shopping: `buy ${featuredName} (5☠️)`,
+        sending: 'Send 2 pirates for resources',
+        shopping: 'Buy a pirate to strengthen your deck',
       },
     },
     {
@@ -173,9 +173,9 @@ function initTutorialState() {
       forcedMismatch: { cardRef: 'L3', res: 'gold', n: 1, targetRes: 'wood' },
       shop: [],
       hints: {
-        sending: `send 2 pirates; keep ${featuredName} on ship`,
-        ship: `${featuredName}: 1🪙 -> +3💣`,
-        shopping: 'press Next turn',
+        sending: 'Send 2 pirates; keep your new pirate on ship',
+        ship: 'Use ship skills from your bought pirate',
+        shopping: 'Tap Next turn',
       },
     },
     {
@@ -185,7 +185,7 @@ function initTutorialState() {
       shop: [],
       enemyShip: { strength: 9 },
       hints: {
-        boarding: 'board now: 10⚔️ vs 9⚔️',
+        boarding: 'Tap Board (10⚔️ vs 9⚔️)',
       },
     },
   ];
@@ -207,7 +207,7 @@ function initTutorialState() {
     cardRef: 'L3',
     expected: { res: 'wood', amt: 1 },
     actual: { res: 'gold', amt: 1 },
-    lore: 'Unexpected loot can happen on any island.',
+    lore: 'Sometimes pirates bring different loot on any island.',
   };
 
   const initialDrawTopToBottom = ['L1', 'M1', 'L2', 'M2', 'S1', 'S2', 'S3', 'L3', 'M3'];

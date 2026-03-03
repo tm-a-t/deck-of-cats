@@ -21,11 +21,12 @@ class GameScene extends Phaser.Scene {
     if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
 
     this.ct = {};
-    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'tutorial', 'gameover'].forEach(k => {
+    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
       this.ct[k] = this.add.container(0, 0);
     });
     this.ct.tip.setDepth(100).setVisible(false);
     this.ct.fx.setDepth(50);
+    this.ct.tutorialHint.setDepth(170).setVisible(false);
     this.ct.tutorial.setDepth(180).setVisible(false);
     this.ct.gameover.setDepth(200);
     this._sendingToIsland = new Set();
@@ -34,6 +35,7 @@ class GameScene extends Phaser.Scene {
     this._tipRect = null;
     this._tipJustOpened = false;
     this._tutorialPopupOpen = false;
+    this._tutorialHintTimer = null;
     this.input.on('pointerdown', (ptr) => {
       if (this._tipJustOpened) {
         this._tipJustOpened = false;
@@ -103,60 +105,54 @@ class GameScene extends Phaser.Scene {
   }
 
   tutorialPopupCopy(id) {
-    const featured = this.tutorialFeaturedName();
     const map = {
       turn1_start: {
-        title: 'Landing Basics',
+        title: 'How to Win',
         body: [
-          'Turn flow: Send -> Ship -> Shop.',
-          'Action now: send exactly 2 pirates to island.',
-          'Unsent pirates resolve ship effects after sending.',
-          'Current island bonus: x2 🪵.',
+          'Goal: build a stronger deck and win boarding on turn 5.',
+          'Right now focus on resources: 🪵 wood and 🪨 stone.',
+          'Sent pirates use top effect; ship pirates use bottom effect.',
+          'Buying pirates in shop makes future turns stronger.',
+          'Send 2 pirates.',
         ],
       },
       turn2_start: {
-        title: 'Resource Odds',
+        title: 'Resource Run',
         body: [
-          'Island outcomes have reliability tiers:',
-          'Safe: 100% expected result.',
-          'Reliable: usually expected result (about 90-95%).',
-          'Risky: expected result can fail often.',
-          'Current island bonus: x2 🪨.',
+          'Keep collecting resources for the shop.',
+          'This turn is great for stone: x2 🪨.',
+          'Send 2 pirates.',
         ],
       },
       turn3_shop: {
-        title: 'Featured Pirate',
+        title: 'Deck Upgrade',
         body: [
-          'Shop has one card this turn.',
-          `${featured}: cost 5☠️, strength 3⚔️.`,
-          'Ship effect: 1🪙 -> +3💣.',
-          'Required action: buy now.',
-          'Next turn this pirate must stay on ship.',
+          'Shop is how you get stronger.',
+          'Each bought pirate improves your future turns.',
+          'Buy the pirate in shop to continue.',
         ],
       },
       turn4_start: {
-        title: 'Pirates Are Pirates',
+        title: 'Ship Setup',
         body: [
-          'Before this turn, island results matched expectations.',
-          'Core rule: on any island, loot can differ from request.',
-          'Action now: send 2 pirates; keep featured pirate on ship.',
+          'Keep your new pirate on ship this turn.',
+          'Send 2 other pirates to island.',
         ],
       },
       turn4_mismatch: {
-        title: 'Unexpected Loot',
+        title: 'Mismatch Happened',
         body: [
-          'Requested: +1🪵',
-          'Delivered: +1🪙',
-          'This is a global island rule, not a special island event.',
-          'Next ship step uses this 1🪙 for Admiral effect.',
+          'Expected 🪵, got 🪙.',
+          'No bug: this can happen on any island.',
+          'Now use that 🪙 on ship.',
         ],
       },
       turn5_start: {
-        title: 'Boarding Finish',
+        title: 'Final Boarding',
         body: [
           'Boarding power = crew ⚔️ + cannons 💣.',
-          'Current check: 7⚔️ crew + 3💣 = 10 vs boss 9.',
-          'Action now: press Board.',
+          'If your power is at least enemy power, you win.',
+          'Tap Board.',
         ],
       },
     };
@@ -189,11 +185,141 @@ class GameScene extends Phaser.Scene {
     this.clearCt('tutorial');
   }
 
+  tutorialHintCopy(id) {
+    const map = {
+      turn3_shop_hint: {
+        title: 'Shop = Stronger Deck',
+        body: [
+          'Buying pirates is your long-term power.',
+          'Stronger deck means easier resource turns and fights.',
+          'Buy the pirate in shop.',
+        ],
+        autoHideMs: 8000,
+      },
+      turn4_mismatch_hint: {
+        title: 'Mismatch Happened',
+        body: [
+          'Expected 🪵, got 🪙.',
+          'This is normal on any island.',
+          'Now use that 🪙 on ship.',
+        ],
+        autoHideMs: 8000,
+      },
+      turn5_boarding_hint: {
+        title: 'Final Boarding',
+        body: [
+          'Power = crew ⚔️ + cannons 💣.',
+          'If your power is at least enemy power, you win.',
+          'Tap Board.',
+        ],
+        autoHideMs: 8000,
+      },
+    };
+    return map[id] || null;
+  }
+
+  tutorialHintSeen(id) {
+    const tut = this.tutorialState();
+    if (!tut) return false;
+    if (!tut.runtime || typeof tut.runtime !== 'object') tut.runtime = {};
+    if (!tut.runtime.hintSeen || typeof tut.runtime.hintSeen !== 'object') {
+      tut.runtime.hintSeen = {};
+    }
+    return !!tut.runtime.hintSeen[id];
+  }
+
+  markTutorialHintSeen(id) {
+    const tut = this.tutorialState();
+    if (!tut) return;
+    if (!tut.runtime || typeof tut.runtime !== 'object') tut.runtime = {};
+    if (!tut.runtime.hintSeen || typeof tut.runtime.hintSeen !== 'object') {
+      tut.runtime.hintSeen = {};
+    }
+    tut.runtime.hintSeen[id] = true;
+  }
+
+  closeTutorialHint() {
+    if (this._tutorialHintTimer) {
+      this._tutorialHintTimer.remove(false);
+      this._tutorialHintTimer = null;
+    }
+    this.ct.tutorialHint.setVisible(false);
+    this.clearCt('tutorialHint');
+  }
+
+  showTutorialHint(id) {
+    if (!this.isTutorial() || this.tutorialHintSeen(id) || this.isTutorialPopupOpen()) return;
+    const copy = this.tutorialHintCopy(id);
+    if (!copy) return;
+
+    this.markTutorialHintSeen(id);
+    this.closeTutorialHint();
+    this.ct.tutorialHint.setVisible(true);
+
+    const L = this.L;
+    const w = Math.min(820 * L.k, L.W - 44 * L.k);
+    const h = Math.min(230 * L.k, L.H * 0.3);
+    const x = L.cx - w / 2;
+    const y = 28 * L.k;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x112336, 0.96);
+    bg.fillRoundedRect(x, y, w, h, 16 * L.k);
+    bg.lineStyle(3 * L.k, 0x5f91b6, 1);
+    bg.strokeRoundedRect(x, y, w, h, 16 * L.k);
+    this.addTo('tutorialHint', bg);
+
+    const title = this.add.text(x + 22 * L.k, y + 16 * L.k, copy.title, {
+      fontFamily: 'monospace',
+      fontSize: L.fs(24),
+      color: '#ffe082',
+    }).setOrigin(0, 0);
+    this.addTo('tutorialHint', title);
+
+    const body = this.add.text(x + 22 * L.k, y + 56 * L.k, copy.body.join('\n'), {
+      fontFamily: 'monospace',
+      fontSize: L.fs(20),
+      color: '#d6e5f3',
+      lineSpacing: 10 * L.k,
+      wordWrap: { width: w - 84 * L.k },
+    }).setOrigin(0, 0);
+    this.addTo('tutorialHint', body);
+
+    const close = this.add.text(x + w - 14 * L.k, y + 12 * L.k, '✕', {
+      fontFamily: 'monospace',
+      fontSize: L.fs(22),
+      color: '#8eb3cf',
+      backgroundColor: '#112336',
+      padding: { x: 6 * L.k, y: 3 * L.k },
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    close.on('pointerover', () => close.setStyle({ color: '#c1d8ea' }));
+    close.on('pointerout', () => close.setStyle({ color: '#8eb3cf' }));
+    close.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      this.closeTutorialHint();
+    });
+    this.addTo('tutorialHint', close);
+
+    this.ct.tutorialHint.setAlpha(0);
+    this.tweens.add({
+      targets: this.ct.tutorialHint,
+      alpha: 1,
+      duration: 140,
+      ease: 'Cubic.easeOut',
+    });
+
+    const autoHideMs = Math.max(2500, copy.autoHideMs || 7000);
+    this._tutorialHintTimer = this.time.delayedCall(autoHideMs, () => {
+      this.closeTutorialHint();
+    });
+  }
+
   showTutorialPopup(id) {
     if (!this.isTutorial() || this.isTutorialPopupOpen() || this.tutorialPopupSeen(id)) return;
     const copy = this.tutorialPopupCopy(id);
     if (!copy) return;
 
+    this.closeTutorialHint();
     this.markTutorialPopupSeen(id);
     this._tutorialPopupOpen = true;
     this.clearCt('tutorial');
@@ -239,14 +365,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0, 0);
     this.addTo('tutorial', body);
 
-    const footer = this.add.text(L.cx, y + h - 120 * L.k, 'Tutorial Slide', {
-      fontFamily: 'monospace',
-      fontSize: L.fs(16),
-      color: '#90a4bb',
-    }).setOrigin(0.5, 0);
-    this.addTo('tutorial', footer);
-
-    const btn = this.add.text(L.cx, y + h - 72 * L.k, '[ Continue ]', {
+    const btn = this.add.text(L.cx, y + h - 72 * L.k, '[ Got it ]', {
       fontFamily: 'monospace',
       fontSize: L.fs(24),
       color: '#d9f1db',
@@ -267,9 +386,7 @@ class GameScene extends Phaser.Scene {
   maybeShowTurnStartTutorialPopup(turnNo = this.getTutorialCurrentTurn()) {
     if (!this.isTutorial()) return;
     if (turnNo === 1 && G.phase === 'sending') this.showTutorialPopup('turn1_start');
-    if (turnNo === 2 && G.phase === 'sending') this.showTutorialPopup('turn2_start');
-    if (turnNo === 4 && G.phase === 'sending') this.showTutorialPopup('turn4_start');
-    if (turnNo === 5 && G.phase === 'boarding') this.showTutorialPopup('turn5_start');
+    if (turnNo === 5 && G.phase === 'boarding') this.showTutorialHint('turn5_boarding_hint');
   }
 
   getTutorialTurnCount() {
@@ -315,7 +432,7 @@ class GameScene extends Phaser.Scene {
     return turn.requiredSent != null ? turn.requiredSent : 2;
   }
 
-  makeTutorialIsland(desc = 'send 2 pirates ashore') {
+  makeTutorialIsland(desc = 'send 2 pirates here') {
     return {
       name: 'Training Cove',
       emoji: '🏝️',
@@ -345,52 +462,52 @@ class GameScene extends Phaser.Scene {
       {
         round: 1,
         phase: 'sending',
-        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        island: this.makeTutorialIsland('send exactly 2 pirates here'),
         handRefs: ['L1', 'L2', 'S1', 'S2', 'S3'],
         shop: [],
         requiredSent: 2,
         hints: {
-          sending: 'send 2 pirates to the island',
-          shopping: 'press Next turn',
+          sending: 'Send 2 pirates',
+          shopping: 'Tap Next turn',
         },
       },
       {
         round: 2,
         phase: 'sending',
-        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        island: this.makeTutorialIsland('send exactly 2 pirates here'),
         handRefs: ['L1', 'L3', 'S1', 'S2', 'S3'],
         shop: [],
         requiredSent: 2,
         hints: {
-          sending: 'send 2 pirates to the island',
-          shopping: 'press Next turn',
+          sending: 'Send 2 pirates',
+          shopping: 'Tap Next turn',
         },
       },
       {
         round: 3,
         phase: 'sending',
-        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        island: this.makeTutorialIsland('send exactly 2 pirates here'),
         handRefs: ['L2', 'L3', 'S1', 'S2', 'S3'],
         shop: [featuredType],
         requiredSent: 2,
         requireFeaturedPurchase: true,
         hints: {
-          sending: 'send 2 pirates to the island',
-          shopping: `buy featured pirate: ${featuredName}`,
+          sending: 'Send 2 pirates',
+          shopping: `Buy ${featuredName}`,
         },
       },
       {
         round: 4,
         phase: 'sending',
-        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        island: this.makeTutorialIsland('send exactly 2 pirates here'),
         handRefs: ['L1', 'L3', featuredRef, 'S1', 'S2'],
         shop: [],
         requiredSent: 2,
         blockedIslandRefs: [featuredRef],
         forcedMismatch: { cardRef: 'L3', res: 'gold', n: 1, targetRes: 'wood' },
         hints: {
-          sending: `send 2 pirates; keep ${featuredName} on ship`,
-          shopping: 'press Next turn',
+          sending: `Send 2 pirates; keep ${featuredName} on ship`,
+          shopping: 'Tap Next turn',
         },
       },
       {
@@ -400,7 +517,7 @@ class GameScene extends Phaser.Scene {
         shop: [],
         enemyShip: { strength: 4 },
         hints: {
-          boarding: 'final fight: press Board!',
+          boarding: 'Tap Board',
         },
       },
     ];
@@ -608,6 +725,7 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.clear();
     this._sacrificedIds.clear();
     this.ct.tip.setVisible(false);
+    this.closeTutorialHint();
 
     if (Array.isArray(turn.shop)) {
       G.shop = turn.shop.map(type => this.tutorialResolveType(type, tut.featured.type));
@@ -627,7 +745,7 @@ class GameScene extends Phaser.Scene {
       G.island = null;
       G.boardingCount = Math.max(G.boardingCount || 0, 1);
     } else {
-      const island = turn.island || this.makeTutorialIsland(`send ${requiredSent} pirates ashore`);
+      const island = turn.island || this.makeTutorialIsland(`send ${requiredSent} pirates here`);
       G.island = {
         name: island.name || 'Training Cove',
         emoji: island.emoji || '🏝️',
@@ -637,7 +755,7 @@ class GameScene extends Phaser.Scene {
         maxSend: island.maxSend != null ? island.maxSend : requiredSent,
         bonusEnthusiasm: island.bonusEnthusiasm || 0,
         sacrifice: !!island.sacrifice,
-        tutorialDesc: island.tutorialDesc || `send ${requiredSent} pirates ashore`,
+        tutorialDesc: island.tutorialDesc || `send ${requiredSent} pirates here`,
       };
       G.enemyShip = null;
       if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
@@ -761,7 +879,7 @@ class GameScene extends Phaser.Scene {
 
     const handPos = this.handPos(idx);
     if (this.isTutorial() && this.isTutorialIslandBlockedPirate(p)) {
-      this.float(handPos.x, handPos.y - 40 * L.k, 'Use on ship!', '#ffca28');
+      this.float(handPos.x, handPos.y - 40 * L.k, 'Keep this pirate on ship', '#ffca28');
       return;
     }
     if (!def.canIsland) {
@@ -825,7 +943,7 @@ class GameScene extends Phaser.Scene {
     const forcedMismatch = this.tutorialForcedMismatchForPirate(pirate, def, tutorialTurn);
     if (forcedMismatch) {
       G.res[forcedMismatch.res] = (G.res[forcedMismatch.res] || 0) + forcedMismatch.n;
-      this.showTutorialPopup('turn4_mismatch');
+      this.showTutorialHint('turn4_mismatch_hint');
       return { ok: false, res: forcedMismatch.res, n: forcedMismatch.n };
     }
 
@@ -1001,7 +1119,7 @@ class GameScene extends Phaser.Scene {
       const requiredSent = this.tutorialRequiredSent(this.getTutorialTurn());
       if (G.sent.length < requiredSent) {
         const L = this.L;
-        this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Send ${requiredSent} pirates first`, '#ffa726');
+        this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Send ${requiredSent} pirates to continue`, '#ffa726');
         return;
       }
     }
@@ -1034,7 +1152,7 @@ class GameScene extends Phaser.Scene {
         G.busy = false;
         this.renderAll();
         if (this.isTutorial() && this.getTutorialCurrentTurn() === 3) {
-          this.showTutorialPopup('turn3_shop');
+          this.showTutorialHint('turn3_shop_hint');
         }
       });
       return;
@@ -1869,7 +1987,7 @@ class GameScene extends Phaser.Scene {
           const turn = this.getTutorialTurn();
           const needFeatured = !!(turn && turn.requireFeaturedPurchase);
           if (needFeatured && !(G.tutorial.featured && G.tutorial.featured.bought)) {
-            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Buy ${this.tutorialFeaturedName()} first`, '#ffa726');
+            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Buy ${this.tutorialFeaturedName()} to continue`, '#ffa726');
             return;
           }
           this.prepareNextRound();
