@@ -18,7 +18,7 @@ class GameScene extends Phaser.Scene {
     ensureCatTextures(this);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
-    if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
+    if (!G.map && !(G.tutorial && G.tutorial.active)) initTutorialState();
 
     this.ct = {};
     ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
@@ -63,7 +63,6 @@ class GameScene extends Phaser.Scene {
     });
 
     this.startRound();
-    if (!this.isTutorial() && G.phase === 'map') this.enterMapPhase();
   }
 
   // ──────────── GAME FLOW ────────────
@@ -107,12 +106,11 @@ class GameScene extends Phaser.Scene {
   tutorialPopupCopy(id) {
     const map = {
       turn1_start: {
-        title: 'How to Win',
+        title: "Captain's Log",
         body: [
-          'Goal: build a stronger deck and win boarding on turn 5.',
-          'Right now focus on resources: 🪵 wood and 🪨 stone.',
-          'Sent pirates use top effect; ship pirates use bottom effect.',
-          'Buying pirates in shop makes future turns stronger.',
+          'A rich run begins with brave landings.',
+          'Send pirates ashore to gather loot and strengthen your crew.',
+          'All gained resources appear in the top bar.',
           'Send 2 pirates.',
         ],
       },
@@ -143,15 +141,16 @@ class GameScene extends Phaser.Scene {
         title: 'Mismatch Happened',
         body: [
           'Expected 🪵, got 🪙.',
-          'No bug: this can happen on any island.',
+          'Pirates are unruly; check the chance near the card.',
           'Now use that 🪙 on ship.',
         ],
       },
       turn5_start: {
         title: 'Final Boarding',
         body: [
-          'Boarding power = crew ⚔️ + cannons 💣.',
-          'If your power is at least enemy power, you win.',
+          '💣 add power and stay after battle.',
+          '🗡️ add power, but are spent after battle.',
+          'Now: 💣0, 🗡️0.',
           'Tap Board.',
         ],
       },
@@ -196,11 +195,28 @@ class GameScene extends Phaser.Scene {
         ],
         autoHideMs: 8000,
       },
+      turn1_first_send_resources: {
+        title: 'Loot Added',
+        body: [
+          'Your pirate brought back loot.',
+          'All gained resources are tracked in the top bar.',
+          'Watch 🪵 🪨 🪙 and ☠️ there.',
+        ],
+        autoHideMs: 7000,
+      },
+      turn1_end_landing_ship_effect: {
+        title: 'Ship Effects',
+        body: [
+          'Now ship pirates start acting.',
+          'Pirates left on ship use their bottom effect.',
+        ],
+        autoHideMs: 7000,
+      },
       turn4_mismatch_hint: {
         title: 'Mismatch Happened',
         body: [
           'Expected 🪵, got 🪙.',
-          'This is normal on any island.',
+          'Pirates are unruly; check the chance near the card.',
           'Now use that 🪙 on ship.',
         ],
         autoHideMs: 8000,
@@ -208,8 +224,9 @@ class GameScene extends Phaser.Scene {
       turn5_boarding_hint: {
         title: 'Final Boarding',
         body: [
-          'Power = crew ⚔️ + cannons 💣.',
-          'If your power is at least enemy power, you win.',
+          '💣 add power and stay after battle.',
+          '🗡️ add power, but are spent after battle.',
+          'Now: 💣0, 🗡️0.',
           'Tap Board.',
         ],
         autoHideMs: 8000,
@@ -772,8 +789,6 @@ class GameScene extends Phaser.Scene {
   }
 
   startRound() {
-    // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
-    // are all set by MapScene.selectMapNode() before transitioning here.
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStart();
     }
@@ -782,7 +797,13 @@ class GameScene extends Phaser.Scene {
       this.applyTutorialTurn(this.getTutorialCurrentTurn(), { deferRender: true });
     }
     this.renderAll();
-    if (this.isTutorial()) this.maybeShowTurnStartTutorialPopup();
+    if (this.isTutorial()) {
+      this.maybeShowTurnStartTutorialPopup();
+      return;
+    }
+    if (G.phase === 'map') {
+      this.enterMapPhase();
+    }
   }
 
   applyMapNodeSelection(nodeId) {
@@ -832,20 +853,16 @@ class GameScene extends Phaser.Scene {
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
-    this.renderAll();
-
     const available = getAvailableNodes(G.map);
-    if (available.length === 1) {
+    if (available.length > 0) {
       this.applyMapNodeSelection(available[0]);
       return;
     }
+    this.renderAll();
   }
 
   openMapModal() {
-    if (this.isTutorial()) return;
-    if (this.scene.isActive('map')) return;
-    this.scene.launch('map');
-    this.scene.bringToTop('map');
+    return;
   }
 
   openShopModal() {
@@ -853,6 +870,17 @@ class GameScene extends Phaser.Scene {
     if (this.scene.isActive('shopModal')) return;
     this.scene.launch('shopModal');
     this.scene.bringToTop('shopModal');
+  }
+
+  openPauseMenu() {
+    if (this.scene.isActive('pauseMenu')) return;
+    if (window.PokiBridge) window.PokiBridge.gameplayStop();
+    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+    if (this.scene.isActive('map')) this.scene.stop('map');
+    this.ct.tip.setVisible(false);
+    this.scene.launch('pauseMenu');
+    this.scene.bringToTop('pauseMenu');
+    this.scene.pause('game');
   }
 
   maxSend() {
@@ -897,6 +925,9 @@ class GameScene extends Phaser.Scene {
 
     G.busy = true;
     G.sent.push(idx);
+    if (this.isTutorial() && this.getTutorialCurrentTurn() === 1 && G.sent.length === 1) {
+      this.showTutorialHint('turn1_first_send_resources');
+    }
     this._sendingToIsland.add(idx);
     this.renderAll();
 
@@ -926,8 +957,10 @@ class GameScene extends Phaser.Scene {
 
         this.time.delayedCall(isSacrifice ? 900 : 500, () => {
           G.busy = false;
+          const allowAutoEnd = !(this.isTutorial() && this.getTutorialCurrentTurn() === 1);
           if (G.sent.length >= this.maxSend()) {
-            this.endSending();
+            if (allowAutoEnd) this.endSending('auto');
+            else this.renderAll();
           } else {
             this.renderAll();
           }
@@ -1112,7 +1145,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  endSending() {
+  endSending(source = 'manual') {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending') return;
     if (this.isTutorial()) {
@@ -1127,6 +1160,9 @@ class GameScene extends Phaser.Scene {
     G.busy = true;
     this.ct.tip.setVisible(false);
     this.renderAll();
+    if (this.isTutorial() && this.getTutorialCurrentTurn() === 1 && source === 'manual') {
+      this.showTutorialHint('turn1_end_landing_ship_effect');
+    }
 
     this._shipQueue = [];
     for (let i = 0; i < G.hand.length; i++) {
@@ -1396,12 +1432,6 @@ class GameScene extends Phaser.Scene {
         G.discard.push(...G.hand);
         G.hand = [];
         this.ct.tip.setVisible(false);
-
-        if (G.map.currentLayer >= MAP_LAYERS - 1) {
-          this.showVictory();
-          return;
-        }
-
         G.hand = drawCards(5);
         this.enterMapPhase();
       });
@@ -1446,6 +1476,31 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  startEndlessRun() {
+    this.clearCt('gameover');
+    this.closeTutorialPopup();
+    this.closeTutorialHint();
+    this.scene.stop('map');
+    this.scene.stop('shopModal');
+    initState();
+    this.startRound();
+  }
+
+  restartCurrentRun() {
+    this.clearCt('gameover');
+    this.closeTutorialPopup();
+    this.closeTutorialHint();
+    this.ct.tip.setVisible(false);
+    this.scene.stop('map');
+    this.scene.stop('shopModal');
+    if (this.isTutorial()) {
+      initTutorialState();
+    } else {
+      initState();
+    }
+    this.startRound();
+  }
+
   showTutorialOutro() {
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStop();
@@ -1464,24 +1519,20 @@ class GameScene extends Phaser.Scene {
     this.txt('gameover', L.cx, L.H * 0.28, 'Tutorial Complete',
       { fontSize: L.fs(44), color: '#ffd740' });
     this.txt('gameover', L.cx, L.H * 0.38,
-      'You won the scripted boarding fight on turn 5.',
+      'You won the boarding fight on turn 5.',
       { fontSize: L.fs(24), color: '#b0b8c8' });
     this.txt('gameover', L.cx, L.H * 0.44,
-      'Start a real run and build your own deck.',
+      'Press continue to start a real run.',
       { fontSize: L.fs(24), color: '#a0d0a0' });
 
-    const btn = this.add.text(L.cx, L.H * 0.56, '[ Start Real Game ]', {
+    const btn = this.add.text(L.cx, L.H * 0.56, '[ Continue ]', {
       fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
       backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
     btn.on('pointerdown', () => {
-      this.clearCt('gameover');
-      this.scene.stop('map');
-      this.scene.stop('shopModal');
-      initState();
-      this.scene.restart();
+      this.startEndlessRun();
     });
     this.addTo('gameover', btn);
   }
@@ -1757,6 +1808,21 @@ class GameScene extends Phaser.Scene {
     dv.lineStyle(2, 0x1e3040);
     dv.lineBetween(40, L.Y_DIV1, L.W - 40, L.Y_DIV1);
     this.addTo('top', dv);
+
+    const menuBtn = this.add.text(L.W - 16 * L.k, 14 * L.k, 'Menu', {
+      fontFamily: 'monospace',
+      fontSize: L.fs(20),
+      color: '#d0d8f0',
+      backgroundColor: '#2b3f52',
+      padding: { x: 14 * L.k, y: 7 * L.k },
+    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    menuBtn.on('pointerover', () => menuBtn.setStyle({ backgroundColor: '#35536f' }));
+    menuBtn.on('pointerout', () => menuBtn.setStyle({ backgroundColor: '#2b3f52' }));
+    menuBtn.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      this.openPauseMenu();
+    });
+    this.addTo('top', menuBtn);
   }
 
   renderIsland() {
@@ -2005,34 +2071,13 @@ class GameScene extends Phaser.Scene {
   renderNav() {
     this.clearCt('nav');
     const L = this.L;
-
-    const mapEnabled = !this.isTutorial();
     const shopEnabled = !G.busy && (!this.isTutorial() || G.phase === 'shopping');
     const left = 20 * L.k;
-    const gap = 12 * L.k;
     const leftOpts = { originX: 0 };
-
-    const mapHighlight = mapEnabled && G.phase === 'map' && getAvailableNodes(G.map).length > 1;
-    const mapLabel = mapHighlight ? 'Map (!)' : 'Map';
-    const mapBtn = this.mkBtn('nav', left, L.Y_NAV, mapLabel, () => {
-      if (!mapEnabled) {
-        this.float(L.cx, L.Y_NAV - 40 * L.k, 'Map is available between rounds', '#8090a0');
-        return;
-      }
-      this.openMapModal();
-    }, {
-      ...leftOpts,
-      enabled: mapEnabled,
-      bg: '#2b3f52',
-      hoverBg: '#35536f',
-      disabledBg: '#1a2630',
-      color: '#c0d8f0',
-      disabledColor: '#5a6570',
-    });
 
     const canBuyAny = G.phase === 'shopping' && G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
     const shopLabel = canBuyAny ? 'Shop (!)' : 'Shop';
-    this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
+    this.mkBtn('nav', left, L.Y_NAV, shopLabel, () => {
       this.openShopModal();
     }, {
       ...leftOpts,

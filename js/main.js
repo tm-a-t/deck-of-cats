@@ -41,7 +41,7 @@ const phaserGame = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
     zoom: 1 / window.devicePixelRatio,
   },
-  scene: [MenuScene, GameScene, MapScene, ShopScene, CostumesScene, AllPiratesScene],
+  scene: [GameScene, MapScene, ShopScene, PauseScene, MenuScene, CostumesScene, AllPiratesScene],
 });
 
 if (typeof window !== 'undefined') {
