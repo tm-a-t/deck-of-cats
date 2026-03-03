@@ -29,7 +29,7 @@ function generateMap() {
     const shipNumber = seg + 1;
     layers.push([{
       id: nextId++, type: 'ship',
-      strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2),
+      strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
       conns: [],
     }]);
   }
@@ -41,7 +41,7 @@ function generateMap() {
       const shipNumber = (li + 1) / 5;
       layers.push([{
         id: nextId++, type: 'ship',
-        strength: Math.trunc(Math.pow(shipNumber, 1.39) * 4 + 2),
+        strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
         conns: [],
       }]);
     } else {

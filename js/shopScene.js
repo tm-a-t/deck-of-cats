@@ -195,6 +195,7 @@ class ShopScene extends Phaser.Scene {
       const def = TYPES[type];
       const pos = this.shopPos(i, G.shop.length, m);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
+      const cardTextShiftY = 24 * L.k;
 
       const spr = addCatSprite(this, pos.x, pos.y, type);
       spr.setScale(L.SC);
@@ -211,21 +212,21 @@ class ShopScene extends Phaser.Scene {
       this.modalLayer.add(this.add.text(pos.x, pos.y - 92 * L.k, `☠️${def.cost}`, {
         fontFamily: 'monospace', fontSize: L.fs(20), color: canBuy ? '#6f2a82' : '#8a7a8a',
       }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 56 * L.k, def.name, {
+      this.modalLayer.add(this.add.text(pos.x, pos.y + 56 * L.k + cardTextShiftY, def.name, {
         fontFamily: 'monospace', fontSize: L.fs(18), color: '#3f4f60',
       }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 86 * L.k, def.dI, {
+      this.modalLayer.add(this.add.text(pos.x, pos.y + 86 * L.k + cardTextShiftY, def.dI, {
         fontFamily: 'monospace', fontSize: L.fs(16), color: '#5a7a4a',
       }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 116 * L.k, def.dS, {
+      this.modalLayer.add(this.add.text(pos.x, pos.y + 116 * L.k + cardTextShiftY, def.dS, {
         fontFamily: 'monospace', fontSize: L.fs(16), color: '#4a6f7a',
       }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 146 * L.k, (def.str || 0) + '⚔️', {
+      this.modalLayer.add(this.add.text(pos.x, pos.y + 146 * L.k + cardTextShiftY, (def.str || 0) + '⚔️', {
         fontFamily: 'monospace', fontSize: L.fs(16), color: '#a05a5a',
       }).setOrigin(0.5, 0));
 
       if (canBuy) {
-        const buy = this.add.text(pos.x, pos.y + 186 * L.k, '[ buy ]', {
+        const buy = this.add.text(pos.x, pos.y + 186 * L.k + cardTextShiftY, '[ buy ]', {
           fontFamily: 'monospace',
           fontSize: L.fs(20),
           color: '#d7f0d7',

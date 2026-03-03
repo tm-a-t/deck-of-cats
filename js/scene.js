@@ -1766,8 +1766,7 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     this.clearCt('hand');
     const L = this.L;
-    const HAND_NAME_FONT_SIZE = L.fs(30);
-    const HAND_INFO_FONT_SIZE = L.fs(26);
+    const HAND_TEXT_FONT_SIZE = L.fs(30);
     const HAND_TEXT_LINE2_OFFSET = 38 * L.k;
     const HAND_TEXT_LINE3_OFFSET = 74 * L.k;
 
@@ -1837,15 +1836,15 @@ class GameScene extends Phaser.Scene {
       const topTextOffset = (L.IS_MOBILE && isTopSplitRow) ? 10 * L.k : 18 * L.k;
       const textTopY = y + 5 * L.SC + topTextOffset;
       this.txt('hand', textX, textTopY, def.name,
-        { fontSize: HAND_NAME_FONT_SIZE, color: '#a0b0c0' });
+        { fontSize: HAND_TEXT_FONT_SIZE, color: '#a0b0c0' });
       if (G.phase === 'boarding') {
         this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, (def.str || 0) + '⚔️',
-          { fontSize: HAND_INFO_FONT_SIZE, color: '#e57373' });
+          { fontSize: HAND_TEXT_FONT_SIZE, color: '#e57373' });
       } else {
         this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, def.dI,
-          { fontSize: HAND_INFO_FONT_SIZE, color: '#7a9a6a' });
+          { fontSize: HAND_TEXT_FONT_SIZE, color: '#7a9a6a' });
         this.txt('hand', textX, textTopY + HAND_TEXT_LINE3_OFFSET, def.dS,
-          { fontSize: HAND_INFO_FONT_SIZE, color: '#6a8a9a' });
+          { fontSize: HAND_TEXT_FONT_SIZE, color: '#6a8a9a' });
       }
     });
   }

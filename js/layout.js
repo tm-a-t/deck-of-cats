@@ -6,6 +6,7 @@ const REF_W = 960;
 const REF_H = 1440;
 const UI_SCALE_BOOST = 1.20;
 const CHARACTER_SCALE_BOOST = 1.45;
+const BASE_TEXT_SIZE_FROM_PIRATES = 30;
 
 function resolveViewportSize(fallbackW, fallbackH) {
   let w = fallbackW || 0;
@@ -38,7 +39,7 @@ function computeLayout(w, h) {
   const narrowContentShiftY = isMobile ? 120 * k : 0;
   const handBaseOffset = isMobile ? 380 : 240;
   const navBaseOffset = 50;
-  const uiFontPx = (24 * k) + 'px';
+  const uniformFontPx = (BASE_TEXT_SIZE_FROM_PIRATES * k) + 'px';
   const centerY = h * 0.43;
   const handY = h - handBaseOffset * k;
   const yPhase = centerY + 194 * k - narrowContentShiftY;
@@ -63,9 +64,9 @@ function computeLayout(w, h) {
     NARROW_HAND_SPLIT: isMobile,
     SC:    10 * k * CHARACTER_SCALE_BOOST,
     SC_SM: 5 * k * CHARACTER_SCALE_BOOST,
-    UI_FS: uiFontPx,
-    fs: (px) => (px == null ? uiFontPx : (px * k) + 'px'),
-    fsPx: (px) => (px * k) + 'px',
+    UI_FS: uniformFontPx,
+    fs: () => uniformFontPx,
+    fsPx: () => uniformFontPx,
 
     // Modal map layout
     MAP_MODAL_W:    Math.min(w - 60 * k, 760 * k),
