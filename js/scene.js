@@ -150,7 +150,7 @@ class GameScene extends Phaser.Scene {
         body: [
           '💣 add power and stay after battle.',
           '🗡️ add power, but are spent after battle.',
-          'Now: 💣0, 🗡️0.',
+          'Now: 💣3, 🗡️0.',
           'Tap Board.',
         ],
       },
@@ -226,7 +226,7 @@ class GameScene extends Phaser.Scene {
         body: [
           '💣 add power and stay after battle.',
           '🗡️ add power, but are spent after battle.',
-          'Now: 💣0, 🗡️0.',
+          'Now: 💣3, 🗡️0.',
           'Tap Board.',
         ],
         autoHideMs: 8000,
