@@ -32,9 +32,13 @@ class MapScene extends Phaser.Scene {
     this.scrollToCurrentLayer(false);
     this.animateOpen();
 
-    this.scale.on('resize', (gameSize) => {
-      this.L = computeLayout(gameSize.width, gameSize.height);
+    this._onResize = () => {
+      this.L = computeLayout(this.scale.width, this.scale.height);
       this.scene.restart();
+    };
+    this.scale.on('resize', this._onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this._onResize);
     });
   }
 
@@ -344,7 +348,7 @@ class MapScene extends Phaser.Scene {
       fontSize: L.fs(24),
       color: '#483818',
       backgroundColor: '#d9c9a2',
-      padding: { x: 8, y: 4 },
+      padding: { x: 8 * L.k, y: 4 * L.k },
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.on('pointerover', () => close.setStyle({ color: '#7a3118' }));
     close.on('pointerout', () => close.setStyle({ color: '#483818' }));

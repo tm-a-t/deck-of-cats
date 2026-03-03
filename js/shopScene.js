@@ -14,6 +14,10 @@ class ShopScene extends Phaser.Scene {
     this.tipLayer = this.add.container(0, 0).setDepth(50).setVisible(false);
     this._tipRect = null;
     this._tipJustOpened = false;
+    this._featuredTicker = null;
+    this._featuredTickerLabel = null;
+    this._featuredTickerLines = [];
+    this._featuredTickerIdx = 0;
 
     this.input.on('pointerdown', (ptr) => {
       if (this._tipJustOpened) { this._tipJustOpened = false; return; }
@@ -27,9 +31,13 @@ class ShopScene extends Phaser.Scene {
     this.renderModal();
     this.animateOpen();
 
-    this.scale.on('resize', (gameSize) => {
-      this.L = computeLayout(gameSize.width, gameSize.height);
+    this._onResize = () => {
+      this.L = computeLayout(this.scale.width, this.scale.height);
       this.scene.restart();
+    };
+    this.scale.on('resize', this._onResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this._onResize);
     });
   }
 
@@ -46,6 +54,7 @@ class ShopScene extends Phaser.Scene {
 
   closeModal() {
     if (this._closing) return;
+    this.stopFeaturedTicker();
     this._closing = true;
     this.input.enabled = false;
     this.tweens.add({
@@ -81,7 +90,54 @@ class ShopScene extends Phaser.Scene {
     return { x, y };
   }
 
+  stopFeaturedTicker() {
+    if (this._featuredTicker) {
+      this._featuredTicker.remove(false);
+      this._featuredTicker = null;
+    }
+    this._featuredTickerLabel = null;
+    this._featuredTickerLines = [];
+    this._featuredTickerIdx = 0;
+  }
+
+  startFeaturedTicker(modal, def) {
+    const L = this.L;
+    const lines = [
+      `Featured: ${def.name}`,
+      `Island: ${def.dI}`,
+      `Ship: ${def.dS}`,
+      `Power: ${(def.str || 0)}⚔️`,
+      `Cost: ☠️${def.cost}`,
+    ];
+
+    const tickerY = modal.y + modal.h - 70 * L.k;
+    const label = this.add.text(modal.x + modal.w / 2, tickerY, lines[0], {
+      fontFamily: 'monospace',
+      fontSize: L.fs(18),
+      color: '#3e2f12',
+      align: 'center',
+      wordWrap: { width: modal.w - 60 * L.k },
+    }).setOrigin(0.5);
+    this.modalLayer.add(label);
+
+    this._featuredTickerLabel = label;
+    this._featuredTickerLines = lines;
+    this._featuredTickerIdx = 0;
+
+    if (lines.length <= 1) return;
+    this._featuredTicker = this.time.addEvent({
+      delay: 1700,
+      loop: true,
+      callback: () => {
+        if (!this._featuredTickerLabel || !this._featuredTickerLabel.active) return;
+        this._featuredTickerIdx = (this._featuredTickerIdx + 1) % this._featuredTickerLines.length;
+        this._featuredTickerLabel.setText(this._featuredTickerLines[this._featuredTickerIdx]);
+      },
+    });
+  }
+
   renderModal() {
+    this.stopFeaturedTicker();
     this.modalLayer.removeAll(true);
     if (this.tipLayer) this.tipLayer.setVisible(false);
     const L = this.L;
@@ -110,7 +166,7 @@ class ShopScene extends Phaser.Scene {
 
     const close = this.add.text(m.x + m.w - 18 * L.k, m.y + 12 * L.k, '✕', {
       fontFamily: 'monospace', fontSize: L.fs(24), color: '#483818',
-      backgroundColor: '#e0d4b1', padding: { x: 8, y: 4 },
+      backgroundColor: '#e0d4b1', padding: { x: 8 * L.k, y: 4 * L.k },
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.on('pointerover', () => close.setStyle({ color: '#7a3118' }));
     close.on('pointerout', () => close.setStyle({ color: '#483818' }));
@@ -140,7 +196,8 @@ class ShopScene extends Phaser.Scene {
       const pos = this.shopPos(i, G.shop.length, m);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
 
-      const spr = addCatSprite(this, pos.x, pos.y, type).setScale(L.SC);
+      const spr = addCatSprite(this, pos.x, pos.y, type);
+      spr.setScale(L.SC);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
@@ -173,7 +230,7 @@ class ShopScene extends Phaser.Scene {
           fontSize: L.fs(20),
           color: '#d7f0d7',
           backgroundColor: '#275a32',
-          padding: { x: 12, y: 6 },
+          padding: { x: 12 * L.k, y: 6 * L.k },
         }).setOrigin(0.5, 0);
         buy.setInteractive({ useHandCursor: true });
         buy.on('pointerover', () => buy.setStyle({ backgroundColor: '#357542' }));
@@ -185,6 +242,12 @@ class ShopScene extends Phaser.Scene {
         this.modalLayer.add(buy);
       }
     });
+
+    if (G.tutorial && G.tutorial.active && G.shop.length === 1) {
+      const featuredType = G.shop[0];
+      const featuredDef = TYPES[featuredType];
+      if (featuredDef) this.startFeaturedTicker(m, featuredDef);
+    }
   }
 
   showTip(type, tx, ty, opts = {}) {
@@ -202,37 +265,37 @@ class ShopScene extends Phaser.Scene {
 
     const tipFs = L.fs(22);
     const tmp = this.add.text(0, -999, body, {
-      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6,
+      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6 * L.k,
     });
     const tw = tmp.width, th = tmp.height;
     tmp.destroy();
 
-    const pad = 20;
+    const pad = 20 * L.k;
     const bw = tw + pad * 2, bh = th + pad * 2;
     let bx = tx - bw / 2;
-    let by = ty - bh - 16;
-    if (bx < 8) bx = 8;
-    if (bx + bw > L.W - 8) bx = L.W - bw - 8;
-    if (by < 8) by = ty + 60;
+    let by = ty - bh - 16 * L.k;
+    if (bx < 8 * L.k) bx = 8 * L.k;
+    if (bx + bw > L.W - 8 * L.k) bx = L.W - bw - 8 * L.k;
+    if (by < 8 * L.k) by = ty + 60 * L.k;
 
     const bg = this.add.graphics();
     bg.fillStyle(0x101828, 1);
-    bg.fillRoundedRect(bx, by, bw, bh, 10);
-    bg.lineStyle(2, 0x304860);
-    bg.strokeRoundedRect(bx, by, bw, bh, 10);
+    bg.fillRoundedRect(bx, by, bw, bh, 10 * L.k);
+    bg.lineStyle(2 * L.k, 0x304860);
+    bg.strokeRoundedRect(bx, by, bw, bh, 10 * L.k);
     this.tipLayer.add(bg);
 
     this.tipLayer.add(this.add.text(bx + pad, by + pad, body, {
-      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6,
+      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6 * L.k,
     }));
 
     let extraH = 0;
     const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
     if (opts.shopIdx != null && canBuyNow && G.enthusiasm >= def.cost) {
-      const btnY = by + bh + 8;
+      const btnY = by + bh + 8 * L.k;
       const bb = this.add.text(bx + bw / 2, btnY, 'Buy', {
         fontFamily: 'monospace', fontSize: L.fs(22), color: '#a0d8a0',
-        backgroundColor: '#1a3a28', padding: { x: 20, y: 10 },
+        backgroundColor: '#1a3a28', padding: { x: 20 * L.k, y: 10 * L.k },
       }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
       bb.on('pointerover', () => bb.setStyle({ backgroundColor: '#2a5a38' }));
       bb.on('pointerout', () => bb.setStyle({ backgroundColor: '#1a3a28' }));
@@ -242,7 +305,7 @@ class ShopScene extends Phaser.Scene {
         this.animateBuyTransition(opts.shopIdx, this.computeModal());
       });
       this.tipLayer.add(bb);
-      extraH = 60;
+      extraH = 60 * L.k;
     }
 
     this._tipRect = new Phaser.Geom.Rectangle(bx, by, bw, bh + extraH);
@@ -273,17 +336,17 @@ class ShopScene extends Phaser.Scene {
     this.modalLayer.add(rowMask);
 
     const dur = 340;
-    const newN = oldN;
     const ghosts = [];
     oldShop.forEach((t, i) => {
       const p = this.shopPos(i, oldN, modal);
-      const spr = addCatSprite(this, p.x, p.y, t)
-        .setScale(L.SC).setDepth(80);
+      const spr = addCatSprite(this, p.x, p.y, t);
+      spr.setScale(L.SC).setDepth(80);
       this.modalLayer.add(spr);
       ghosts.push(spr);
     });
 
     game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
+    const newN = G.shop.length;
 
     const removed = ghosts[shopIdx];
     this.tweens.add({
@@ -297,6 +360,7 @@ class ShopScene extends Phaser.Scene {
     let ni = 0;
     for (let i = 0; i < oldN; i++) {
       if (i === shopIdx) continue;
+      if (ni >= newN) break;
       const tp = this.shopPos(ni, newN, modal);
       this.tweens.add({
         targets: ghosts[i],
@@ -308,22 +372,26 @@ class ShopScene extends Phaser.Scene {
       ni++;
     }
 
-    const newType = G.shop[newN - 1];
-    const lastNewPos = this.shopPos(newN - 1, newN, modal);
-    const newGhost = addCatSprite(this, modal.x + modal.w + 90 * L.k, lastNewPos.y, newType)
-      .setScale(L.SC).setDepth(80);
-    this.modalLayer.add(newGhost);
-    this.tweens.add({
-      targets: newGhost,
-      x: lastNewPos.x,
-      duration: dur,
-      ease: 'Power2',
-      delay: 30,
-    });
+    let newGhost = null;
+    const hasIncoming = newN > (oldN - 1);
+    if (hasIncoming) {
+      const newType = G.shop[newN - 1];
+      const lastNewPos = this.shopPos(newN - 1, newN, modal);
+      newGhost = addCatSprite(this, modal.x + modal.w + 90 * L.k, lastNewPos.y, newType);
+      newGhost.setScale(L.SC).setDepth(80);
+      this.modalLayer.add(newGhost);
+      this.tweens.add({
+        targets: newGhost,
+        x: lastNewPos.x,
+        duration: dur,
+        ease: 'Power2',
+        delay: 30,
+      });
+    }
 
     this.time.delayedCall(dur + 100, () => {
       ghosts.forEach(g => g.destroy());
-      newGhost.destroy();
+      if (newGhost) newGhost.destroy();
       rowMask.destroy();
       G.shopAnimating = false;
       game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!', '#66bb6a');

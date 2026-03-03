@@ -72,7 +72,7 @@ class AllPiratesScene extends Phaser.Scene {
       const lines = this._pirateLines(def);
       const tmpTxt = this.add.text(0, -9999, def.name + '\n' + lines.join('\n'), {
         fontFamily: 'monospace', fontSize: fs,
-        lineSpacing: 4, wordWrap: { width: textW },
+        lineSpacing: 4 * L.k, wordWrap: { width: textW },
       });
       const textH = tmpTxt.height;
       tmpTxt.destroy();
@@ -82,7 +82,8 @@ class AllPiratesScene extends Phaser.Scene {
 
       const sprX = cardLeft + cardPadX + sprSize / 2;
       const sprY = y + cardPadY + sprSize / 2;
-      const spr = addCatSprite(this, sprX, sprY, key).setScale(sprSc);
+      const spr = addCatSprite(this, sprX, sprY, key);
+      spr.setScale(sprSc);
       this.root.add(spr);
 
       const nameTxt = this.add.text(textX, y + cardPadY, def.name, {
@@ -92,7 +93,7 @@ class AllPiratesScene extends Phaser.Scene {
 
       const infoTxt = this.add.text(textX, y + cardPadY + nameTxt.height + 4 * L.k, lines.join('\n'), {
         fontFamily: 'monospace', fontSize: fs, color: '#b0b8c8',
-        lineSpacing: 4, wordWrap: { width: textW },
+        lineSpacing: 4 * L.k, wordWrap: { width: textW },
       }).setOrigin(0, 0);
       this.root.add(infoTxt);
 
@@ -145,7 +146,7 @@ class AllPiratesScene extends Phaser.Scene {
     const btn = this.add.text(x, y, label, {
       fontFamily: 'monospace', fontSize: L.fsPx(22),
       color: opts.color || '#d1e4f8',
-      backgroundColor: bg, padding: { x: 24, y: 12 },
+      backgroundColor: bg, padding: { x: 24 * L.k, y: 12 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: bg }));

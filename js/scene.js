@@ -21,17 +21,19 @@ class GameScene extends Phaser.Scene {
     if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
 
     this.ct = {};
-    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'gameover'].forEach(k => {
+    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'tutorial', 'gameover'].forEach(k => {
       this.ct[k] = this.add.container(0, 0);
     });
     this.ct.tip.setDepth(100).setVisible(false);
     this.ct.fx.setDepth(50);
+    this.ct.tutorial.setDepth(180).setVisible(false);
     this.ct.gameover.setDepth(200);
     this._sendingToIsland = new Set();
     this._sacrificedIds = new Set();
 
     this._tipRect = null;
     this._tipJustOpened = false;
+    this._tutorialPopupOpen = false;
     this.input.on('pointerdown', (ptr) => {
       if (this._tipJustOpened) {
         this._tipJustOpened = false;
@@ -44,9 +46,18 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    this.scale.on('resize', (gameSize) => {
-      this.L = computeLayout(gameSize.width, gameSize.height);
-      if (G.round > 0 && !G.shopAnimating) this.renderAll();
+    this._onResize = () => {
+      this.L = computeLayout(this.scale.width, this.scale.height);
+      if (!G.shopAnimating) this.renderAll();
+    };
+    this.scale.on('resize', this._onResize);
+
+    if (window.PokiBridge) {
+      window.PokiBridge.markGameReady();
+    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off('resize', this._onResize);
+      if (window.PokiBridge) window.PokiBridge.gameplayStop();
     });
 
     this.startRound();
@@ -59,10 +70,601 @@ class GameScene extends Phaser.Scene {
     return !!(G.tutorial && G.tutorial.active);
   }
 
+  tutorialState() {
+    if (!this.isTutorial()) return null;
+    if (!G.tutorial) G.tutorial = { active: true };
+    return G.tutorial;
+  }
+
+  tutorialResolveType(type, fallback = 'carpenter') {
+    if (type && TYPES[type]) return type;
+    if (fallback && TYPES[fallback]) return fallback;
+    const keys = Object.keys(TYPES);
+    return keys.length ? keys[0] : null;
+  }
+
+  tutorialFeaturedRef() {
+    const tut = this.tutorialState();
+    if (!tut) return 'FEATURED';
+    return (tut.featured && tut.featured.cardRef) || 'FEATURED';
+  }
+
+  tutorialFeaturedName() {
+    const tut = this.tutorialState();
+    if (!tut) return 'Featured pirate';
+    if (tut.featured && tut.featured.label) return tut.featured.label;
+    const type = tut.featured && tut.featured.type;
+    if (type && TYPES[type]) return TYPES[type].name;
+    return 'Featured pirate';
+  }
+
+  isTutorialPopupOpen() {
+    return !!this._tutorialPopupOpen;
+  }
+
+  tutorialPopupCopy(id) {
+    const featured = this.tutorialFeaturedName();
+    const map = {
+      turn1_start: {
+        title: 'Landing Basics',
+        body: [
+          'Turn flow: Send -> Ship -> Shop.',
+          'Action now: send exactly 2 pirates to island.',
+          'Unsent pirates resolve ship effects after sending.',
+          'Current island bonus: x2 🪵.',
+        ],
+      },
+      turn2_start: {
+        title: 'Resource Odds',
+        body: [
+          'Island outcomes have reliability tiers:',
+          'Safe: 100% expected result.',
+          'Reliable: usually expected result (about 90-95%).',
+          'Risky: expected result can fail often.',
+          'Current island bonus: x2 🪨.',
+        ],
+      },
+      turn3_shop: {
+        title: 'Featured Pirate',
+        body: [
+          'Shop has one card this turn.',
+          `${featured}: cost 5☠️, strength 3⚔️.`,
+          'Ship effect: 1🪙 -> +3💣.',
+          'Required action: buy now.',
+          'Next turn this pirate must stay on ship.',
+        ],
+      },
+      turn4_start: {
+        title: 'Pirates Are Pirates',
+        body: [
+          'Before this turn, island results matched expectations.',
+          'Core rule: on any island, loot can differ from request.',
+          'Action now: send 2 pirates; keep featured pirate on ship.',
+        ],
+      },
+      turn4_mismatch: {
+        title: 'Unexpected Loot',
+        body: [
+          'Requested: +1🪵',
+          'Delivered: +1🪙',
+          'This is a global island rule, not a special island event.',
+          'Next ship step uses this 1🪙 for Admiral effect.',
+        ],
+      },
+      turn5_start: {
+        title: 'Boarding Finish',
+        body: [
+          'Boarding power = crew ⚔️ + cannons 💣.',
+          'Current check: 7⚔️ crew + 3💣 = 10 vs boss 9.',
+          'Action now: press Board.',
+        ],
+      },
+    };
+    return map[id] || null;
+  }
+
+  tutorialPopupSeen(id) {
+    const tut = this.tutorialState();
+    if (!tut) return false;
+    if (!tut.runtime || typeof tut.runtime !== 'object') tut.runtime = {};
+    if (!tut.runtime.popupSeen || typeof tut.runtime.popupSeen !== 'object') {
+      tut.runtime.popupSeen = {};
+    }
+    return !!tut.runtime.popupSeen[id];
+  }
+
+  markTutorialPopupSeen(id) {
+    const tut = this.tutorialState();
+    if (!tut) return;
+    if (!tut.runtime || typeof tut.runtime !== 'object') tut.runtime = {};
+    if (!tut.runtime.popupSeen || typeof tut.runtime.popupSeen !== 'object') {
+      tut.runtime.popupSeen = {};
+    }
+    tut.runtime.popupSeen[id] = true;
+  }
+
+  closeTutorialPopup() {
+    this._tutorialPopupOpen = false;
+    this.ct.tutorial.setVisible(false);
+    this.clearCt('tutorial');
+  }
+
+  showTutorialPopup(id) {
+    if (!this.isTutorial() || this.isTutorialPopupOpen() || this.tutorialPopupSeen(id)) return;
+    const copy = this.tutorialPopupCopy(id);
+    if (!copy) return;
+
+    this.markTutorialPopupSeen(id);
+    this._tutorialPopupOpen = true;
+    this.clearCt('tutorial');
+    this.ct.tutorial.setVisible(true);
+
+    const L = this.L;
+    const blocker = this.add.rectangle(0, 0, L.W, L.H, 0x000000, 0.48)
+      .setOrigin(0, 0)
+      .setInteractive();
+    blocker.on('pointerdown', (ptr) => ptr.event.stopPropagation());
+    this.addTo('tutorial', blocker);
+
+    const w = Math.min(760 * L.k, L.W - 60 * L.k);
+    const h = Math.min(520 * L.k, L.H - 120 * L.k);
+    const x = L.cx - w / 2;
+    const y = L.H * 0.22;
+
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x000000, 0.38);
+    shadow.fillRoundedRect(x + 8 * L.k, y + 10 * L.k, w, h, 22 * L.k);
+    this.addTo('tutorial', shadow);
+
+    const paper = this.add.graphics();
+    paper.fillStyle(0x1a2534, 1);
+    paper.fillRoundedRect(x, y, w, h, 22 * L.k);
+    paper.lineStyle(4, 0xd6b36d, 1);
+    paper.strokeRoundedRect(x, y, w, h, 22 * L.k);
+    this.addTo('tutorial', paper);
+
+    const title = this.add.text(L.cx, y + 24 * L.k, copy.title, {
+      fontFamily: 'monospace',
+      fontSize: L.fs(32),
+      color: '#ffd78a',
+    }).setOrigin(0.5, 0);
+    this.addTo('tutorial', title);
+
+    const body = this.add.text(x + 34 * L.k, y + 94 * L.k, copy.body.join('\n'), {
+      fontFamily: 'monospace',
+      fontSize: L.fs(22),
+      color: '#d8e2ef',
+      lineSpacing: 14 * L.k,
+      wordWrap: { width: w - 68 * L.k },
+    }).setOrigin(0, 0);
+    this.addTo('tutorial', body);
+
+    const footer = this.add.text(L.cx, y + h - 120 * L.k, 'Tutorial Slide', {
+      fontFamily: 'monospace',
+      fontSize: L.fs(16),
+      color: '#90a4bb',
+    }).setOrigin(0.5, 0);
+    this.addTo('tutorial', footer);
+
+    const btn = this.add.text(L.cx, y + h - 72 * L.k, '[ Continue ]', {
+      fontFamily: 'monospace',
+      fontSize: L.fs(24),
+      color: '#d9f1db',
+      backgroundColor: '#264f38',
+      padding: { x: 24 * L.k, y: 12 * L.k },
+    }).setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#35714e' }));
+    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#264f38' }));
+    btn.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      this.closeTutorialPopup();
+      this.renderAll();
+    });
+    this.addTo('tutorial', btn);
+  }
+
+  maybeShowTurnStartTutorialPopup(turnNo = this.getTutorialCurrentTurn()) {
+    if (!this.isTutorial()) return;
+    if (turnNo === 1 && G.phase === 'sending') this.showTutorialPopup('turn1_start');
+    if (turnNo === 2 && G.phase === 'sending') this.showTutorialPopup('turn2_start');
+    if (turnNo === 4 && G.phase === 'sending') this.showTutorialPopup('turn4_start');
+    if (turnNo === 5 && G.phase === 'boarding') this.showTutorialPopup('turn5_start');
+  }
+
+  getTutorialTurnCount() {
+    const tut = this.tutorialState();
+    if (!tut || !Array.isArray(tut.turns) || tut.turns.length === 0) return 0;
+    return tut.turns.length;
+  }
+
+  getTutorialCurrentTurn() {
+    const tut = this.tutorialState();
+    if (!tut) return 0;
+    const total = this.getTutorialTurnCount() || 5;
+    const cur = Phaser.Math.Clamp(tut.currentTurn || 1, 1, total);
+    tut.currentTurn = cur;
+    return cur;
+  }
+
+  getTutorialTurn(turnNo = this.getTutorialCurrentTurn()) {
+    const tut = this.tutorialState();
+    if (!tut || !Array.isArray(tut.turns) || tut.turns.length === 0) return null;
+    return tut.turns[turnNo - 1] || null;
+  }
+
+  getTutorialHandRefs(turn = this.getTutorialTurn()) {
+    if (!turn) return [];
+    if (Array.isArray(turn.handRefs)) {
+      return turn.handRefs.filter(Boolean);
+    }
+    if (Array.isArray(turn.hand)) {
+      return turn.hand
+        .map((entry) => {
+          if (typeof entry === 'string') return entry;
+          if (entry && typeof entry === 'object' && entry.ref) return entry.ref;
+          return null;
+        })
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  tutorialRequiredSent(turn = this.getTutorialTurn()) {
+    if (!turn) return 2;
+    return turn.requiredSent != null ? turn.requiredSent : 2;
+  }
+
+  makeTutorialIsland(desc = 'send 2 pirates ashore') {
+    return {
+      name: 'Training Cove',
+      emoji: '🏝️',
+      accent: 0x4b7d42,
+      maxSend: 2,
+      tutorialDesc: desc,
+    };
+  }
+
+  buildDefaultTutorialCards(featuredType, featuredRef) {
+    const gathererType = this.tutorialResolveType('tutorialForager', 'lumberjack');
+    const swabbieType = this.tutorialResolveType('tutorialSwabbie', 'bosun');
+    return {
+      L1: { type: gathererType },
+      L2: { type: gathererType },
+      L3: { type: gathererType },
+      S1: { type: swabbieType },
+      S2: { type: swabbieType },
+      S3: { type: swabbieType },
+      [featuredRef]: { type: featuredType },
+    };
+  }
+
+  buildDefaultTutorialTurns(featuredType, featuredRef) {
+    const featuredName = (TYPES[featuredType] && TYPES[featuredType].name) || 'Admiral';
+    return [
+      {
+        round: 1,
+        phase: 'sending',
+        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        handRefs: ['L1', 'L2', 'S1', 'S2', 'S3'],
+        shop: [],
+        requiredSent: 2,
+        hints: {
+          sending: 'send 2 pirates to the island',
+          shopping: 'press Next turn',
+        },
+      },
+      {
+        round: 2,
+        phase: 'sending',
+        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        handRefs: ['L1', 'L3', 'S1', 'S2', 'S3'],
+        shop: [],
+        requiredSent: 2,
+        hints: {
+          sending: 'send 2 pirates to the island',
+          shopping: 'press Next turn',
+        },
+      },
+      {
+        round: 3,
+        phase: 'sending',
+        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        handRefs: ['L2', 'L3', 'S1', 'S2', 'S3'],
+        shop: [featuredType],
+        requiredSent: 2,
+        requireFeaturedPurchase: true,
+        hints: {
+          sending: 'send 2 pirates to the island',
+          shopping: `buy featured pirate: ${featuredName}`,
+        },
+      },
+      {
+        round: 4,
+        phase: 'sending',
+        island: this.makeTutorialIsland('send exactly 2 pirates ashore'),
+        handRefs: ['L1', 'L3', featuredRef, 'S1', 'S2'],
+        shop: [],
+        requiredSent: 2,
+        blockedIslandRefs: [featuredRef],
+        forcedMismatch: { cardRef: 'L3', res: 'gold', n: 1, targetRes: 'wood' },
+        hints: {
+          sending: `send 2 pirates; keep ${featuredName} on ship`,
+          shopping: 'press Next turn',
+        },
+      },
+      {
+        round: 5,
+        phase: 'boarding',
+        handRefs: [featuredRef, 'L1', 'L2', 'L3', 'S1'],
+        shop: [],
+        enemyShip: { strength: 4 },
+        hints: {
+          boarding: 'final fight: press Board!',
+        },
+      },
+    ];
+  }
+
+  tutorialTypeForRef(ref, turn = null) {
+    const tut = this.tutorialState();
+    if (!tut) return null;
+
+    if (turn && Array.isArray(turn.hand)) {
+      for (const entry of turn.hand) {
+        if (entry && typeof entry === 'object' && entry.ref === ref && entry.type) {
+          return this.tutorialResolveType(entry.type, 'lumberjack');
+        }
+      }
+    }
+
+    if (turn && turn.cardTypes && turn.cardTypes[ref]) {
+      return this.tutorialResolveType(turn.cardTypes[ref], 'lumberjack');
+    }
+
+    if (tut.cards && tut.cards[ref] && tut.cards[ref].type) {
+      return this.tutorialResolveType(tut.cards[ref].type, 'lumberjack');
+    }
+
+    if (ref === this.tutorialFeaturedRef()) {
+      const featuredType = tut.featured && tut.featured.type;
+      return this.tutorialResolveType(featuredType, 'carpenter');
+    }
+
+    return null;
+  }
+
+  ensureTutorialPirateByRef(ref, turn = null) {
+    const tut = this.tutorialState();
+    if (!tut || !ref) return null;
+    if (!tut.cardRefs || typeof tut.cardRefs !== 'object') tut.cardRefs = {};
+
+    const featuredRef = this.tutorialFeaturedRef();
+    const allowCreateFeatured = !!(turn && turn.allowCreateFeatured);
+    if (ref === featuredRef && !allowCreateFeatured && !(tut.featured && tut.featured.bought)) {
+      return null;
+    }
+
+    const existingId = tut.cardRefs[ref];
+    if (existingId != null) {
+      const existing = G.allCrew.find(p => p.id === existingId);
+      if (existing) return existing;
+    }
+
+    const type = this.tutorialTypeForRef(ref, turn);
+    if (!type) return null;
+
+    const pirate = mkP(type);
+    G.allCrew.push(pirate);
+    G.deck.push(pirate);
+    tut.cardRefs[ref] = pirate.id;
+    return pirate;
+  }
+
+  tutorialCardRefByPirateId(pirateId) {
+    const tut = this.tutorialState();
+    if (!tut || !tut.cardRefs) return null;
+    const refs = Object.keys(tut.cardRefs);
+    for (const ref of refs) {
+      if (tut.cardRefs[ref] === pirateId) return ref;
+    }
+    return null;
+  }
+
+  tutorialBlockedIslandRefs(turn = this.getTutorialTurn(), turnNo = this.getTutorialCurrentTurn()) {
+    const out = new Set();
+    if (turn && Array.isArray(turn.blockedIslandRefs)) {
+      turn.blockedIslandRefs.forEach((ref) => out.add(ref));
+    }
+    if (turnNo === 4) out.add(this.tutorialFeaturedRef());
+    return out;
+  }
+
+  isTutorialIslandBlockedPirate(pirate, turn = this.getTutorialTurn(), turnNo = this.getTutorialCurrentTurn()) {
+    if (!this.isTutorial() || !pirate) return false;
+    const ref = this.tutorialCardRefByPirateId(pirate.id);
+    if (!ref) return false;
+    return this.tutorialBlockedIslandRefs(turn, turnNo).has(ref);
+  }
+
+  tutorialForcedMismatchForPirate(pirate, def, turn = this.getTutorialTurn()) {
+    if (!this.isTutorial() || !turn || !turn.forcedMismatch) return null;
+    const mismatch = turn.forcedMismatch;
+    const ref = this.tutorialCardRefByPirateId(pirate.id);
+    if (!ref || ref !== mismatch.cardRef) return null;
+    return {
+      res: mismatch.res || 'gold',
+      n: mismatch.n != null ? mismatch.n : 1,
+      targetRes: mismatch.targetRes || (def.island && def.island.res) || null,
+    };
+  }
+
+  ensureTutorialFlow() {
+    const tut = this.tutorialState();
+    if (!tut) return;
+
+    if (!tut.featured || typeof tut.featured !== 'object') tut.featured = {};
+    tut.featured.type = this.tutorialResolveType(
+      tut.featured.type || tut.recommendedType || 'carpenter',
+      'carpenter'
+    );
+    if (!tut.featured.label) {
+      tut.featured.label = (TYPES[tut.featured.type] && TYPES[tut.featured.type].name) || 'Admiral';
+    }
+    if (!tut.featured.cardRef) tut.featured.cardRef = 'FEATURED';
+    if (tut.featured.bought == null) tut.featured.bought = !!tut.recommendedBought;
+
+    const featuredRef = this.tutorialFeaturedRef();
+    if (!tut.cards || typeof tut.cards !== 'object') {
+      tut.cards = this.buildDefaultTutorialCards(tut.featured.type, featuredRef);
+    }
+    if (!tut.cards[featuredRef]) {
+      tut.cards[featuredRef] = { type: tut.featured.type };
+    } else {
+      tut.cards[featuredRef].type = this.tutorialResolveType(
+        tut.cards[featuredRef].type,
+        tut.featured.type
+      );
+    }
+
+    if (!Array.isArray(tut.turns) || tut.turns.length === 0) {
+      tut.turns = this.buildDefaultTutorialTurns(tut.featured.type, featuredRef);
+    }
+
+    if (!Number.isInteger(tut.currentTurn) || tut.currentTurn < 1) tut.currentTurn = 1;
+    tut.currentTurn = Phaser.Math.Clamp(tut.currentTurn, 1, tut.turns.length);
+
+    if (!tut.cardRefs || typeof tut.cardRefs !== 'object') tut.cardRefs = {};
+    if (!tut.flowInitialized) {
+      G.allCrew = [];
+      G.deck = [];
+      G.discard = [];
+      G.hand = [];
+      G.sent = [];
+      const refs = new Set();
+      Object.keys(tut.cards).forEach((ref) => {
+        if (ref !== featuredRef) refs.add(ref);
+      });
+      tut.turns.forEach((turn) => {
+        this.getTutorialHandRefs(turn).forEach((ref) => {
+          if (ref && ref !== featuredRef) refs.add(ref);
+        });
+      });
+      refs.forEach((ref) => {
+        this.ensureTutorialPirateByRef(ref, { allowCreateFeatured: true });
+      });
+      tut.flowInitialized = true;
+    }
+
+    if (tut.boughtPirateId && !tut.cardRefs[featuredRef]) {
+      tut.cardRefs[featuredRef] = tut.boughtPirateId;
+    }
+    if (tut.cardRefs[featuredRef]) {
+      tut.boughtPirateId = tut.cardRefs[featuredRef];
+      tut.featured.bought = true;
+      tut.featured.boughtPirateId = tut.cardRefs[featuredRef];
+    }
+
+    // Legacy sync fields for compatibility with old saves.
+    tut.recommendedType = tut.featured.type;
+    tut.recommendedBought = !!tut.featured.bought;
+  }
+
+  applyTutorialTurn(turnNo, opts = {}) {
+    const tut = this.tutorialState();
+    if (!tut) return;
+    this.ensureTutorialFlow();
+
+    const total = this.getTutorialTurnCount();
+    const cur = Phaser.Math.Clamp(turnNo, 1, total);
+    tut.currentTurn = cur;
+    const turn = this.getTutorialTurn(cur) || {};
+    const requiredSent = this.tutorialRequiredSent(turn);
+
+    const refs = this.getTutorialHandRefs(turn);
+    const hand = [];
+    refs.forEach((ref) => {
+      const pirate = this.ensureTutorialPirateByRef(ref, turn);
+      if (pirate) hand.push(pirate);
+    });
+    if (hand.length < 5) {
+      const handIds = new Set(hand.map(p => p.id));
+      const fallback = G.allCrew.filter(p => !handIds.has(p.id)).slice(0, 5 - hand.length);
+      hand.push(...fallback);
+    }
+
+    G.round = turn.round || cur;
+    G.sent = [];
+    G.busy = false;
+    G.enthusiasm = turn.startEnthusiasm || 0;
+    if (turn.startRes && typeof turn.startRes === 'object') {
+      ['wood', 'stone', 'gold', 'map'].forEach((resKey) => {
+        if (turn.startRes[resKey] != null) {
+          G.res[resKey] = turn.startRes[resKey];
+        }
+      });
+    }
+    G.shopAnimating = false;
+    this._sendingToIsland.clear();
+    this._sacrificedIds.clear();
+    this.ct.tip.setVisible(false);
+
+    if (Array.isArray(turn.shop)) {
+      G.shop = turn.shop.map(type => this.tutorialResolveType(type, tut.featured.type));
+    } else if (!Array.isArray(G.shop)) {
+      G.shop = [];
+    }
+
+    G.hand = hand.slice(0, 5);
+
+    const phase = turn.phase || (turn.enemyShip ? 'boarding' : 'sending');
+    G.phase = phase;
+    if (phase === 'boarding') {
+      const strength =
+        (turn.enemyShip && turn.enemyShip.strength != null) ? turn.enemyShip.strength :
+          (turn.enemyStrength != null ? turn.enemyStrength : Math.max(1, G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0) - 1));
+      G.enemyShip = { strength };
+      G.island = null;
+      G.boardingCount = Math.max(G.boardingCount || 0, 1);
+    } else {
+      const island = turn.island || this.makeTutorialIsland(`send ${requiredSent} pirates ashore`);
+      G.island = {
+        name: island.name || 'Training Cove',
+        emoji: island.emoji || '🏝️',
+        accent: island.accent != null ? island.accent : 0x4b7d42,
+        bonus: island.bonus || null,
+        extraSend: island.extraSend || 0,
+        maxSend: island.maxSend != null ? island.maxSend : requiredSent,
+        bonusEnthusiasm: island.bonusEnthusiasm || 0,
+        sacrifice: !!island.sacrifice,
+        tutorialDesc: island.tutorialDesc || `send ${requiredSent} pirates ashore`,
+      };
+      G.enemyShip = null;
+      if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+    }
+
+    if (this.scene.isActive('shopModal') && G.phase !== 'shopping') {
+      this.scene.stop('shopModal');
+    }
+
+    if (!opts.deferRender) {
+      this.renderAll();
+      this.maybeShowTurnStartTutorialPopup(cur);
+    }
+  }
+
   startRound() {
     // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
     // are all set by MapScene.selectMapNode() before transitioning here.
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStart();
+    }
+    if (this.isTutorial()) {
+      this.ensureTutorialFlow();
+      this.applyTutorialTurn(this.getTutorialCurrentTurn(), { deferRender: true });
+    }
     this.renderAll();
+    if (this.isTutorial()) this.maybeShowTurnStartTutorialPopup();
   }
 
   applyMapNodeSelection(nodeId) {
@@ -119,7 +721,6 @@ class GameScene extends Phaser.Scene {
       this.applyMapNodeSelection(available[0]);
       return;
     }
-    if (available.length === 0) return;
   }
 
   openMapModal() {
@@ -130,6 +731,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openShopModal() {
+    if (this.isTutorialPopupOpen()) return;
     if (this.scene.isActive('shopModal')) return;
     this.scene.launch('shopModal');
     this.scene.bringToTop('shopModal');
@@ -143,11 +745,12 @@ class GameScene extends Phaser.Scene {
 
   sentOffsetX(si) {
     const m = this.maxSend();
-    const sp = 100;
+    const sp = this.L && this.L.IS_MOBILE ? 130 : 110;
     return (si - (m - 1) / 2) * sp;
   }
 
   sendToIsland(idx) {
+    if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending' || G.busy) return;
     if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
 
@@ -157,6 +760,10 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
 
     const handPos = this.handPos(idx);
+    if (this.isTutorial() && this.isTutorialIslandBlockedPirate(p)) {
+      this.float(handPos.x, handPos.y - 40 * L.k, 'Use on ship!', '#ffca28');
+      return;
+    }
     if (!def.canIsland) {
       this.float(handPos.x, handPos.y - 40 * L.k, "Can't go!", '#ff8a80');
       return;
@@ -180,8 +787,8 @@ class GameScene extends Phaser.Scene {
     const toX = L.cx + this.sentOffsetX(G.sent.length - 1) * L.k;
     const toY = L.Y_ISL_CY;
 
-    const ghost = addCatSprite(this, fromX, fromY, p.type)
-      .setScale(L.SC).setDepth(60);
+    const ghost = addCatSprite(this, fromX, fromY, p.type);
+    ghost.setScale(L.SC).setDepth(60);
 
     this.tweens.add({
       targets: ghost, x: toX, y: toY,
@@ -214,6 +821,13 @@ class GameScene extends Phaser.Scene {
   resolveIsland(pirate) {
     const def = TYPES[pirate.type];
     const isl = G.island;
+    const tutorialTurn = this.isTutorial() ? this.getTutorialTurn() : null;
+    const forcedMismatch = this.tutorialForcedMismatchForPirate(pirate, def, tutorialTurn);
+    if (forcedMismatch) {
+      G.res[forcedMismatch.res] = (G.res[forcedMismatch.res] || 0) + forcedMismatch.n;
+      this.showTutorialPopup('turn4_mismatch');
+      return { ok: false, res: forcedMismatch.res, n: forcedMismatch.n };
+    }
 
     if (def.island.recall) {
       const currentIdx = G.sent[G.sent.length - 1];
@@ -276,6 +890,16 @@ class GameScene extends Phaser.Scene {
         items.push({ res: m.res, n: amt });
       }
       return { ok: true, items };
+    }
+
+    if (this.isTutorial() && this.getTutorialCurrentTurn() <= 4 && def.island.chance != null) {
+      let amt = def.island.amt;
+      const tgt = def.island.res;
+      if (isl.bonus === tgt) amt *= 2;
+      const islBonusE = def.island.bonusEnthusiasm || 0;
+      if (islBonusE) G.enthusiasm += islBonusE;
+      G.res[tgt] += amt;
+      return { ok: true, res: tgt, n: amt, bonusEnthusiasm: islBonusE };
     }
 
     let chance = def.island.chance;
@@ -371,11 +995,15 @@ class GameScene extends Phaser.Scene {
   }
 
   endSending() {
+    if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending') return;
-    if (this.isTutorial() && G.tutorial.step === 'landing' && G.sent.length < 1) {
-      const L = this.L;
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Send 1 pirate first', '#ffa726');
-      return;
+    if (this.isTutorial()) {
+      const requiredSent = this.tutorialRequiredSent(this.getTutorialTurn());
+      if (G.sent.length < requiredSent) {
+        const L = this.L;
+        this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Send ${requiredSent} pirates first`, '#ffa726');
+        return;
+      }
     }
     G.phase = 'ship';
     G.busy = true;
@@ -393,12 +1021,21 @@ class GameScene extends Phaser.Scene {
   processNextShip() {
     if (this._shipQueuePos >= this._shipQueue.length) {
       this.time.delayedCall(200, () => {
-        G.phase = 'shopping';
-        if (this.isTutorial() && G.tutorial.step === 'landing') {
-          G.tutorial.step = 'shop';
+        if (this.isTutorial()) {
+          const turn = this.getTutorialTurn();
+          if (turn && turn.requireFeaturedPurchase) {
+            const featuredType = this.tutorialResolveType(G.tutorial && G.tutorial.featured && G.tutorial.featured.type, 'carpenter');
+            const featuredDef = TYPES[featuredType];
+            const needed = featuredDef && featuredDef.cost != null ? featuredDef.cost : 0;
+            if (G.enthusiasm < needed) G.enthusiasm = needed;
+          }
         }
+        G.phase = 'shopping';
         G.busy = false;
         this.renderAll();
+        if (this.isTutorial() && this.getTutorialCurrentTurn() === 3) {
+          this.showTutorialPopup('turn3_shop');
+        }
       });
       return;
     }
@@ -543,6 +1180,7 @@ class GameScene extends Phaser.Scene {
   }
 
   buyPirate(si, opts = {}) {
+    if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'shopping' || G.busy || (!opts.ignoreAnimating && G.shopAnimating)) return;
     if (si >= G.shop.length) return;
     const L = this.L;
@@ -556,11 +1194,29 @@ class GameScene extends Phaser.Scene {
     const p = mkP(type);
     G.allCrew.push(p);
     G.deck.push(p);
-    if (this.isTutorial() && type === G.tutorial.recommendedType) {
-      G.tutorial.recommendedBought = true;
+
+    if (this.isTutorial()) {
+      this.ensureTutorialFlow();
+      const tut = this.tutorialState();
+      const featuredRef = this.tutorialFeaturedRef();
+      const featuredType = this.tutorialResolveType(tut.featured && tut.featured.type, type);
+      if (type === featuredType) {
+        tut.featured.bought = true;
+        tut.featured.boughtPirateId = p.id;
+        tut.boughtPirateId = p.id;
+        tut.boughtPirateRef = featuredRef;
+        if (!tut.cardRefs || typeof tut.cardRefs !== 'object') tut.cardRefs = {};
+        tut.cardRefs[featuredRef] = p.id;
+        if (!tut.cards || typeof tut.cards !== 'object') tut.cards = {};
+        tut.cards[featuredRef] = { type };
+      }
+      tut.recommendedBought = !!(tut.featured && tut.featured.bought);
     }
+
     G.shop.splice(si, 1);
-    G.shop.push(randomShopType(G.round));
+    if (!this.isTutorial()) {
+      G.shop.push(randomShopType(G.round));
+    }
     if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
     this.ct.tip.setVisible(false);
     G.shopAnimating = false;
@@ -572,7 +1228,18 @@ class GameScene extends Phaser.Scene {
   }
 
   prepareNextRound() {
+    if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'shopping') return;
+    if (this.isTutorial()) {
+      this.ensureTutorialFlow();
+      const tut = this.tutorialState();
+      const totalTurns = this.getTutorialTurnCount();
+      if (tut.currentTurn >= totalTurns) return;
+      if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+      tut.currentTurn += 1;
+      this.applyTutorialTurn(tut.currentTurn);
+      return;
+    }
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
     G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id)));
     G.hand = [];
@@ -589,6 +1256,7 @@ class GameScene extends Phaser.Scene {
   }
 
   resolveBoarding() {
+    if (this.isTutorialPopupOpen()) return;
     if (this.isTutorial()) {
       this.resolveTutorialBoarding();
       return;
@@ -630,65 +1298,23 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  startTutorialBoss1() {
-    if (!this.isTutorial()) return;
-    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
-
-    const recommended = G.allCrew.find(p => p.type === G.tutorial.recommendedType);
-    const rest = G.allCrew.filter(p => !recommended || p.id !== recommended.id);
-    const scriptedHand = [...(recommended ? [recommended] : []), ...rest].slice(0, 5);
-    if (scriptedHand.length === 5) G.hand = scriptedHand;
-
-    G.round = 2;
-    G.phase = 'boarding';
-    G.island = null;
-    G.sent = [];
-    G.enthusiasm = 0;
-    G.busy = false;
-    this._sendingToIsland.clear();
-    this.ct.tip.setVisible(false);
-
-    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-    const totalStr = crewStr + this.shipBonusStr();
-    const strength = Math.max(1, totalStr - 1);
-    G.enemyShip = { strength };
-    G.tutorial.step = 'boss1';
-    G.tutorial.boss1Strength = strength;
-    this.renderAll();
-  }
-
-  startTutorialBoss2() {
-    if (!this.isTutorial()) return;
-    G.round = 3;
-    G.phase = 'boarding';
-    G.island = null;
-    G.sent = [];
-    G.enthusiasm = 0;
-    G.busy = false;
-    this._sendingToIsland.clear();
-    this.ct.tip.setVisible(false);
-
-    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-    const totalStr = crewStr + this.shipBonusStr();
-    const strength = totalStr + 4;
-    G.enemyShip = { strength };
-    G.tutorial.step = 'boss2';
-    G.tutorial.boss2Strength = strength;
-    this.renderAll();
-  }
-
   resolveTutorialBoarding() {
     if (G.phase !== 'boarding' || G.busy) return;
     G.busy = true;
     this.ct.tip.setVisible(false);
     const L = this.L;
+    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
+    const totalStr = crewStr + this.shipBonusStr();
+    const shipStr = G.enemyShip ? G.enemyShip.strength : 0;
 
-    if (G.tutorial.step === 'boss1') {
+    if (totalStr >= shipStr) {
       this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
       this.time.delayedCall(1000, () => {
         G.weapons = 0;
-        G.busy = false;
-        this.startTutorialBoss2();
+        G.phase = 'tutorialOutro';
+        G.busy = true;
+        this.renderAll();
+        this.showTutorialOutro();
       });
       return;
     }
@@ -696,14 +1322,16 @@ class GameScene extends Phaser.Scene {
     this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
     this.time.delayedCall(1200, () => {
       G.weapons = 0;
-      G.phase = 'tutorialOutro';
-      G.busy = true;
+      G.busy = false;
       this.renderAll();
-      this.showTutorialOutro();
+      this.showGameOver();
     });
   }
 
   showTutorialOutro() {
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
     this.clearCt('gameover');
     const L = this.L;
 
@@ -718,15 +1346,15 @@ class GameScene extends Phaser.Scene {
     this.txt('gameover', L.cx, L.H * 0.28, 'Tutorial Complete',
       { fontSize: L.fs(44), color: '#ffd740' });
     this.txt('gameover', L.cx, L.H * 0.38,
-      'The second boss is stronger than this training crew.',
+      'You won the scripted boarding fight on turn 5.',
       { fontSize: L.fs(24), color: '#b0b8c8' });
     this.txt('gameover', L.cx, L.H * 0.44,
-      'Build a stronger deck in the real run to beat it.',
+      'Start a real run and build your own deck.',
       { fontSize: L.fs(24), color: '#a0d0a0' });
 
     const btn = this.add.text(L.cx, L.H * 0.56, '[ Start Real Game ]', {
       fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
@@ -741,6 +1369,9 @@ class GameScene extends Phaser.Scene {
   }
 
   showGameOver() {
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
     this.clearCt('gameover');
     const L = this.L;
 
@@ -763,7 +1394,7 @@ class GameScene extends Phaser.Scene {
 
     const btn = this.add.text(L.cx, L.H * 0.56, '[ Try Again ]', {
       fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
@@ -778,6 +1409,9 @@ class GameScene extends Phaser.Scene {
   }
 
   showVictory() {
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
     this.clearCt('gameover');
     const L = this.L;
 
@@ -807,7 +1441,7 @@ class GameScene extends Phaser.Scene {
 
     const btn = this.add.text(L.cx, L.H * 0.58, '[ Play Again ]', {
       fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40, y: 20 },
+      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
@@ -826,24 +1460,51 @@ class GameScene extends Phaser.Scene {
   handPos(idx) {
     const L = this.L;
     const n = G.hand.length;
-    const splitRows = L.NARROW_HAND_SPLIT && n === 5;
-    if (!splitRows) {
-      const sp = Math.min(210 * L.k, (L.W - 40) / Math.max(n - 1, 1));
+    const MOBILE_HAND_SHIFT_Y = L.IS_MOBILE ? 130 * L.k : 0;
+    const MAX_STEP = 240 * L.k;
+    const ROW_GAP = 250 * L.k;
+    const EDGE_PAD = 8 * L.k;
+    const ISLAND_HALF_H = 170 * L.k;
+    const baseHandY = L.Y_HAND + MOBILE_HAND_SHIFT_Y;
+    const topRowYCandidate = baseHandY - ROW_GAP;
+    const islandBottomY = L.Y_ISL_CY + ISLAND_HALF_H;
+    const spriteHalfW = 5 * L.SC;
+    const spriteHalfH = 5 * L.SC;
+    const minX = spriteHalfW + EDGE_PAD;
+    const maxX = L.W - minX;
+    const usableW = Math.max(0, maxX - minX);
+
+    const placeOnRow = (rowCount, rowIdx) => {
+      if (rowCount <= 1) return Phaser.Math.Clamp(L.cx, minX, maxX);
+      const stepFit = usableW / Math.max(rowCount - 1, 1);
+      const step = Math.min(MAX_STEP, stepFit);
+      const rowW = step * (rowCount - 1);
+      const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
+      return startX + rowIdx * step;
+    };
+
+    const safeTopRowY = islandBottomY + spriteHalfH + EDGE_PAD;
+    const topRowY = Math.max(topRowYCandidate, safeTopRowY);
+    const useSplitRows = L.NARROW_HAND_SPLIT && n >= 5;
+
+    if (!useSplitRows) {
       return {
-        x: L.cx - ((n - 1) * sp) / 2 + idx * sp,
-        y: L.Y_HAND,
+        x: placeOnRow(n, idx),
+        y: baseHandY,
+        row: 'single',
       };
     }
 
-    const topCount = 3;
-    const topRow = idx < topCount;
-    const rowN = topRow ? topCount : 2;
-    const rowIdx = topRow ? idx : idx - topCount;
-    const sp = Math.min(210 * L.k, (L.W - 80) / Math.max(rowN - 1, 1));
-    const y = topRow ? (L.Y_HAND - 200 * L.k) : L.Y_HAND;
+    const topCount = n === 5 ? 2 : Math.ceil(n / 2);
+    const bottomCount = Math.max(1, n - topCount);
+    const isTopRow = idx < topCount;
+    const rowCount = isTopRow ? topCount : bottomCount;
+    const rowIdx = isTopRow ? idx : idx - topCount;
+
     return {
-      x: L.cx - ((rowN - 1) * sp) / 2 + rowIdx * sp,
-      y,
+      x: placeOnRow(rowCount, rowIdx),
+      y: isTopRow ? topRowY : baseHandY,
+      row: isTopRow ? 'top' : 'bottom',
     };
   }
 
@@ -876,6 +1537,8 @@ class GameScene extends Phaser.Scene {
   renderTop() {
     this.clearCt('top');
     const L = this.L;
+    const topCrewScale = L.SC_SM * 0.86;
+    const topShopScale = L.SC_SM * 0.66;
 
     this.txt('top', L.cx, L.Y_ROUND,
       `Round ${G.round}`,
@@ -909,8 +1572,8 @@ class GameScene extends Phaser.Scene {
 
     crew.forEach((p, i) => {
       const cx = sx + i * sp;
-      const spr = addCatSprite(this, cx, L.Y_CREW, p.type)
-        .setScale(L.SC_SM);
+      const spr = addCatSprite(this, cx, L.Y_CREW, p.type);
+      spr.setScale(topCrewScale);
 
       if (G.phase === 'removing') {
         if (handIds.has(p.id)) {
@@ -918,8 +1581,8 @@ class GameScene extends Phaser.Scene {
         } else {
           spr.setTint(0xff6666);
           spr.setInteractive({ useHandCursor: true });
-          spr.on('pointerover', () => spr.setScale(L.SC_SM + 1));
-          spr.on('pointerout', () => spr.setScale(L.SC_SM));
+          spr.on('pointerover', () => spr.setScale(topCrewScale + 1));
+          spr.on('pointerout', () => spr.setScale(topCrewScale));
           spr.on('pointerdown', (ptr) => {
             ptr.event.stopPropagation();
             this.completeRemoval(p.id);
@@ -948,7 +1611,7 @@ class GameScene extends Phaser.Scene {
 
     const shop = G.shop.slice(0, 4);
     const shopSp = 56 * L.k;
-    const shopIconW = 8 * L.SC_SM;
+    const shopIconW = 8 * topShopScale;
     const shopGap = 16 * L.k;
     const shopIconsW = shop.length > 0 ? shopIconW + (shop.length - 1) * shopSp : 0;
     const shopBlockW = shopLabel.width + (shop.length > 0 ? shopGap + shopIconsW : 0);
@@ -959,8 +1622,8 @@ class GameScene extends Phaser.Scene {
     const shopSx = shopLeft + shopLabel.width + (shop.length > 0 ? shopGap + shopIconW / 2 : 0);
     shop.forEach((type, i) => {
       const cx = shopSx + i * shopSp;
-      const spr = addCatSprite(this, cx, L.Y_SHOP, type)
-        .setScale(L.SC_SM);
+      const spr = addCatSprite(this, cx, L.Y_SHOP, type);
+      spr.setScale(topShopScale);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
@@ -1055,7 +1718,8 @@ class GameScene extends Phaser.Scene {
       if (this._sendingToIsland.has(hi)) return;
       const p = G.hand[hi];
       const px = cx + this.sentOffsetX(si) * L.k;
-      const spr = addCatSprite(this, px, cy, p.type).setScale(L.SC);
+      const spr = addCatSprite(this, px, cy, p.type);
+      spr.setScale(L.SC);
       if (this._sacrificedIds.has(p.id)) spr.setAlpha(0.35);
       spr.setInteractive({ useHandCursor: true });
       spr.on('pointerdown', (ptr) => {
@@ -1073,28 +1737,8 @@ class GameScene extends Phaser.Scene {
     this.clearCt('phase');
     const L = this.L;
     const statusY = L.Y_ISL_LBL + 30 * L.k;
-    let str = '', col = '#8090a0';
-
-    if (this.isTutorial()) {
-      if (G.tutorial.step === 'landing') {
-        str = 'Tutorial: send one pirate to the island';
-        col = '#9fc3e0';
-      } else if (G.tutorial.step === 'shop' && !G.tutorial.recommendedBought) {
-        str = 'Tutorial tip: buy Carpenter for 4☠️ in Shop';
-        col = '#ce93d8';
-      } else if (G.tutorial.step === 'shop') {
-        str = 'Good choice. Press Next round for Boss #1';
-        col = '#80cbc4';
-      } else if (G.tutorial.step === 'boss1') {
-        str = 'Boss #1 is winnable. Press Board!';
-        col = '#66bb6a';
-      } else if (G.tutorial.step === 'boss2') {
-        str = 'Boss #2 is too strong. Press Board!';
-        col = '#ff8a80';
-      }
-      this.txt('phase', L.cx, statusY, str, { fontSize: L.fs(22), color: col });
-      return;
-    }
+    let str;
+    let col = '#8090a0';
 
     if (G.phase === 'boarding') {
       str = 'Boarding! Prepare for battle!';
@@ -1122,16 +1766,23 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     this.clearCt('hand');
     const L = this.L;
+    const HAND_NAME_FONT_SIZE = L.fs(30);
+    const HAND_INFO_FONT_SIZE = L.fs(26);
+    const HAND_TEXT_LINE2_OFFSET = 38 * L.k;
+    const HAND_TEXT_LINE3_OFFSET = 74 * L.k;
 
     const dv = this.add.graphics();
     dv.lineStyle(2, 0x1e3040);
     dv.lineBetween(40, L.Y_DIV2, L.W - 40, L.Y_DIV2);
     this.addTo('hand', dv);
 
-    const tutorialTargetIdx = (this.isTutorial() && G.tutorial.step === 'landing' && G.phase === 'sending')
+    const tutorialTurn = this.isTutorial() ? this.getTutorialTurn() : null;
+    const tutorialRequiredSent = this.isTutorial() ? this.tutorialRequiredSent(tutorialTurn) : 0;
+    const tutorialTargetIdx = (this.isTutorial() && G.phase === 'sending' && G.sent.length < tutorialRequiredSent)
       ? G.hand.findIndex((hp, hi) => {
         if (G.sent.includes(hi) || this._sendingToIsland.has(hi)) return false;
         const hd = TYPES[hp.type];
+        if (this.isTutorialIslandBlockedPirate(hp, tutorialTurn)) return false;
         if (!hd.canIsland) return false;
         if (hd.island && hd.island.convert) {
           return (G.res[hd.island.convert.cRes] || 0) >= hd.island.convert.cN;
@@ -1146,8 +1797,15 @@ class GameScene extends Phaser.Scene {
       const handPos = this.handPos(i);
       const x = handPos.x;
       const y = handPos.y;
+      const isTopSplitRow = handPos.row === 'top';
 
-      const spr = addCatSprite(this, x, y, p.type).setScale(L.SC);
+      const spr = addCatSprite(this, x, y, p.type);
+      spr.setScale(L.SC);
+      const tutorialBlocked = this.isTutorial() && G.phase === 'sending' &&
+        this.isTutorialIslandBlockedPirate(p, tutorialTurn);
+      if (tutorialBlocked) {
+        spr.setTint(0x8a8a8a);
+      }
       if (i === tutorialTargetIdx) {
         this.tweens.add({
           targets: spr,
@@ -1163,6 +1821,7 @@ class GameScene extends Phaser.Scene {
         spr.setInteractive({ useHandCursor: true });
         const cantConvert = def.island && def.island.convert &&
           (G.res[def.island.convert.cRes] || 0) < def.island.convert.cN;
+        if (tutorialBlocked) spr.setAlpha(0.8);
         if (!def.canIsland || cantConvert) spr.setAlpha(1);
         spr.on('pointerover', () => spr.setScale(L.SC + 1));
         spr.on('pointerout', () => spr.setScale(L.SC));
@@ -1174,16 +1833,19 @@ class GameScene extends Phaser.Scene {
 
       this.addTo('hand', spr);
 
-      this.txt('hand', x, y + 54 * L.k, def.name,
-        { fontSize: L.fs(20), color: '#a0b0c0' });
+      const textX = x;
+      const topTextOffset = (L.IS_MOBILE && isTopSplitRow) ? 10 * L.k : 18 * L.k;
+      const textTopY = y + 5 * L.SC + topTextOffset;
+      this.txt('hand', textX, textTopY, def.name,
+        { fontSize: HAND_NAME_FONT_SIZE, color: '#a0b0c0' });
       if (G.phase === 'boarding') {
-        this.txt('hand', x, y + 82 * L.k, (def.str || 0) + '⚔️',
-          { fontSize: L.fs(18), color: '#e57373' });
+        this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, (def.str || 0) + '⚔️',
+          { fontSize: HAND_INFO_FONT_SIZE, color: '#e57373' });
       } else {
-        this.txt('hand', x, y + 82 * L.k, def.dI,
-          { fontSize: L.fs(18), color: '#7a9a6a' });
-        this.txt('hand', x, y + 108 * L.k, def.dS,
-          { fontSize: L.fs(18), color: '#6a8a9a' });
+        this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, def.dI,
+          { fontSize: HAND_INFO_FONT_SIZE, color: '#7a9a6a' });
+        this.txt('hand', textX, textTopY + HAND_TEXT_LINE3_OFFSET, def.dS,
+          { fontSize: HAND_INFO_FONT_SIZE, color: '#6a8a9a' });
       }
     });
   }
@@ -1201,13 +1863,17 @@ class GameScene extends Phaser.Scene {
     } else if (G.phase === 'sending') {
       this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
     } else if (G.phase === 'shopping') {
-      this.mkBtn('btn', x, y, 'Next round', () => {
+      const nextLabel = this.isTutorial() ? 'Next turn' : 'Next round';
+      this.mkBtn('btn', x, y, nextLabel, () => {
         if (this.isTutorial()) {
-          if (!G.tutorial.recommendedBought) {
-            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Buy Carpenter for 4☠️ first', '#ffa726');
+          this.ensureTutorialFlow();
+          const turn = this.getTutorialTurn();
+          const needFeatured = !!(turn && turn.requireFeaturedPurchase);
+          if (needFeatured && !(G.tutorial.featured && G.tutorial.featured.bought)) {
+            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Buy ${this.tutorialFeaturedName()} first`, '#ffa726');
             return;
           }
-          this.startTutorialBoss1();
+          this.prepareNextRound();
           return;
         }
         if (G.shop.length) {
@@ -1272,7 +1938,7 @@ class GameScene extends Phaser.Scene {
     const disabledColor = opts.disabledColor || '#607080';
     const t = this.add.text(x, y, label, {
       fontFamily: 'monospace', fontSize: L.fs(24), color: enabled ? color : disabledColor,
-      backgroundColor: enabled ? bg : disabledBg, padding: { x: 32, y: 16 },
+      backgroundColor: enabled ? bg : disabledBg, padding: { x: 32 * L.k, y: 16 * L.k },
     }).setOrigin(opts.originX != null ? opts.originX : 0.5, 0.5);
     if (enabled) {
       t.setInteractive({ useHandCursor: true });
@@ -1316,38 +1982,38 @@ class GameScene extends Phaser.Scene {
 
     const tipFs = L.fs(22);
     const tmp = this.add.text(0, -999, body, {
-      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6,
+      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6 * L.k,
     });
     const tw = tmp.width, th = tmp.height;
     tmp.destroy();
 
-    const pad = 20;
+    const pad = 20 * L.k;
     const bw = tw + pad * 2, bh = th + pad * 2;
     let bx = tx - bw / 2;
-    let by = ty - bh - 16;
-    if (bx < 8) bx = 8;
-    if (bx + bw > L.W - 8) bx = L.W - bw - 8;
-    if (by < 8) by = ty + 60;
+    let by = ty - bh - 16 * L.k;
+    if (bx < 8 * L.k) bx = 8 * L.k;
+    if (bx + bw > L.W - 8 * L.k) bx = L.W - bw - 8 * L.k;
+    if (by < 8 * L.k) by = ty + 60 * L.k;
 
     const bg = this.add.graphics();
     bg.fillStyle(0x101828, 1);
-    bg.fillRoundedRect(bx, by, bw, bh, 10);
-    bg.lineStyle(2, 0x304860);
-    bg.strokeRoundedRect(bx, by, bw, bh, 10);
+    bg.fillRoundedRect(bx, by, bw, bh, 10 * L.k);
+    bg.lineStyle(2 * L.k, 0x304860);
+    bg.strokeRoundedRect(bx, by, bw, bh, 10 * L.k);
     this.addTo('tip', bg);
 
     const txt = this.add.text(bx + pad, by + pad, body, {
-      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6,
+      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6 * L.k,
     });
     this.addTo('tip', txt);
 
     let extraH = 0;
 
     if (opts.canSend && G.phase === 'sending' && !G.busy) {
-      const btnY = by + bh + 8;
+      const btnY = by + bh + 8 * L.k;
       const sb = this.add.text(bx + bw / 2, btnY, '🏝️ To island', {
         fontFamily: 'monospace', fontSize: L.fs(22), color: '#ffe0a0',
-        backgroundColor: '#4a3a10', padding: { x: 20, y: 10 },
+        backgroundColor: '#4a3a10', padding: { x: 20 * L.k, y: 10 * L.k },
       }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
       sb.on('pointerover', () => sb.setStyle({ backgroundColor: '#6a5a20' }));
       sb.on('pointerout', () => sb.setStyle({ backgroundColor: '#4a3a10' }));
@@ -1357,14 +2023,14 @@ class GameScene extends Phaser.Scene {
         this.sendToIsland(opts.handIdx);
       });
       this.addTo('tip', sb);
-      extraH = 60;
+      extraH = 60 * L.k;
     }
 
     if (opts.canBuy && G.phase === 'shopping') {
-      const btnY = by + bh + 8 + extraH;
+      const btnY = by + bh + 8 * L.k + extraH;
       const bb = this.add.text(bx + bw / 2, btnY, 'Buy', {
         fontFamily: 'monospace', fontSize: L.fs(22), color: '#a0d8a0',
-        backgroundColor: '#1a3a28', padding: { x: 20, y: 10 },
+        backgroundColor: '#1a3a28', padding: { x: 20 * L.k, y: 10 * L.k },
       }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
       bb.on('pointerover', () => bb.setStyle({ backgroundColor: '#2a5a38' }));
       bb.on('pointerout', () => bb.setStyle({ backgroundColor: '#1a3a28' }));
@@ -1373,7 +2039,7 @@ class GameScene extends Phaser.Scene {
         this.buyPirate(opts.shopIdx);
       });
       this.addTo('tip', bb);
-      extraH += 60;
+      extraH += 60 * L.k;
     }
 
     this._tipRect = new Phaser.Geom.Rectangle(bx, by, bw, bh + extraH);
@@ -1387,7 +2053,7 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const t = this.add.text(x, y, str, {
       fontFamily: 'monospace', fontSize: L.fs(28), color: col || '#fff',
-      stroke: '#000', strokeThickness: 4,
+      stroke: '#000', strokeThickness: 4 * L.k,
     }).setOrigin(0.5).setDepth(60);
     this.tweens.add({
       targets: t, y: y - 70 * L.k, alpha: 0,

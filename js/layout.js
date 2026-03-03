@@ -2,17 +2,51 @@
    PIRATES — Dynamic Layout
    ============================================================ */
 
+const REF_W = 960;
 const REF_H = 1440;
+const UI_SCALE_BOOST = 1.20;
+const CHARACTER_SCALE_BOOST = 1.45;
+
+function resolveViewportSize(fallbackW, fallbackH) {
+  let w = fallbackW || 0;
+  let h = fallbackH || 0;
+
+  if (typeof window !== 'undefined') {
+    if (window.innerWidth) w = window.innerWidth;
+    if (window.innerHeight) h = window.innerHeight;
+
+    const vv = window.visualViewport;
+    if (vv && vv.width && vv.height) {
+      const vvW = Math.round(vv.width);
+      const vvH = Math.round(vv.height);
+      w = Math.max(w, vvW);
+      h = Math.max(h, vvH);
+    }
+  }
+
+  return { w, h };
+}
+
+function isPortraitMobile(w, h) {
+  const vp = resolveViewportSize(w, h);
+  return vp.h > vp.w;
+}
 
 function computeLayout(w, h) {
-  const k = (h / REF_H) * 1.15;
-  const narrowHandSplit = w <= 760;
-  const narrowContentShiftY = narrowHandSplit ? 120 * k : 0;
-  const uiFontPx = Math.max(14, Math.round(24 * k)) + 'px';
+  const isMobile = isPortraitMobile(w, h);
+  const k = Math.min(w / REF_W, h / REF_H) * UI_SCALE_BOOST;
+  const narrowContentShiftY = isMobile ? 120 * k : 0;
+  const handBaseOffset = isMobile ? 380 : 240;
+  const navBaseOffset = 50;
+  const uiFontPx = (24 * k) + 'px';
   const centerY = h * 0.43;
-  const handY = h - 240 * k;
+  const handY = h - handBaseOffset * k;
+  const yPhase = centerY + 194 * k - narrowContentShiftY;
+  const yDiv2Raw = handY - 136 * k - (isMobile ? 200 * k : 0);
+  const yDiv2 = Math.max(yDiv2Raw, yPhase + 24 * k);
   return {
     W: w, H: h, k,
+    IS_MOBILE: isMobile,
     cx: w / 2,
     Y_ROUND:   24 * k,
     Y_INV:     66 * k,
@@ -21,17 +55,17 @@ function computeLayout(w, h) {
     Y_DIV1:    198 * k,
     Y_ISL_CY:  centerY - narrowContentShiftY,
     Y_ISL_LBL: centerY + 140 * k - narrowContentShiftY,
-    Y_PHASE:   centerY + 194 * k - narrowContentShiftY,
-    Y_DIV2:    handY - 136 * k - (narrowHandSplit ? 200 * k : 0),
+    Y_PHASE:   yPhase,
+    Y_DIV2:    yDiv2,
     Y_HAND:    handY - 60 * k,
     Y_HLBL:    handY - 60 * k + 54 * k,
-    Y_NAV:     h - 50 * k,
-    NARROW_HAND_SPLIT: narrowHandSplit,
-    SC:    Math.max(3, Math.round(10 * k)),
-    SC_SM: Math.max(2, Math.round(5 * k)),
+    Y_NAV:     h - navBaseOffset * k,
+    NARROW_HAND_SPLIT: isMobile,
+    SC:    10 * k * CHARACTER_SCALE_BOOST,
+    SC_SM: 5 * k * CHARACTER_SCALE_BOOST,
     UI_FS: uiFontPx,
-    fs: () => uiFontPx,
-    fsPx: (px) => Math.max(10, Math.round(px * k)) + 'px',
+    fs: (px) => (px == null ? uiFontPx : (px * k) + 'px'),
+    fsPx: (px) => (px * k) + 'px',
 
     // Modal map layout
     MAP_MODAL_W:    Math.min(w - 60 * k, 760 * k),

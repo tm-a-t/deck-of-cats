@@ -197,7 +197,7 @@ class CostumesScene extends Phaser.Scene {
 
     const title = this.add.text(L.cx, 40 * L.k, 'Pirate Cat Costumes', {
       fontFamily: 'monospace', fontSize: L.fsPx(48),
-      color: '#d7c08f', stroke: '#31220f', strokeThickness: 6,
+      color: '#d7c08f', stroke: '#31220f', strokeThickness: 6 * L.k,
     }).setOrigin(0.5);
     this.root.add(title);
 
@@ -234,7 +234,8 @@ class CostumesScene extends Phaser.Scene {
       const key = `_cat${i}`;
       this._composeTemp(cat, key);
 
-      const sp = this.add.image(cx, cy, key).setScale(catSc).setOrigin(0.5);
+      const sp = this.add.image(cx, cy, key);
+      sp.setScale(catSc).setOrigin(0.5);
       this.root.add(sp);
 
       const frames = [1, cat.body, cat.weapon, cat.clothes, cat.eyes];
@@ -263,7 +264,7 @@ class CostumesScene extends Phaser.Scene {
     const btn = this.add.text(x, y, label, {
       fontFamily: 'monospace', fontSize: L.fsPx(24),
       color: opts.color || '#d7f0d7',
-      backgroundColor: bg, padding: { x: 24, y: 12 },
+      backgroundColor: bg, padding: { x: 24 * L.k, y: 12 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
     btn.on('pointerout',  () => btn.setStyle({ backgroundColor: bg }));

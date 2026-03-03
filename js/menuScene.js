@@ -13,8 +13,8 @@ class MenuScene extends Phaser.Scene {
 
     this.renderMenu();
 
-    this._onResize = (gameSize) => {
-      this.L = computeLayout(gameSize.width, gameSize.height);
+    this._onResize = () => {
+      this.L = computeLayout(this.scale.width, this.scale.height);
       this.scene.restart();
     };
     this.scale.on('resize', this._onResize);
@@ -31,7 +31,7 @@ class MenuScene extends Phaser.Scene {
       fontSize: L.fsPx(72),
       color: '#d7c08f',
       stroke: '#31220f',
-      strokeThickness: 8,
+      strokeThickness: 8 * L.k,
     }).setOrigin(0.5);
     this.root.add(title);
 
@@ -133,7 +133,7 @@ class MenuScene extends Phaser.Scene {
       fontSize: L.fsPx(30),
       color,
       backgroundColor: bg,
-      padding: { x: 42, y: 18 },
+      padding: { x: 42 * L.k, y: 18 * L.k },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: bg }));

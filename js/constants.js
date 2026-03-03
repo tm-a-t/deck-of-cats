@@ -51,6 +51,13 @@ const TYPES = {
     cost: null,
     dI: '—', dS: '→ 1☠️',
   },
+  tutorialAdmiralBlackpowder: {
+    name: 'Admiral Blackpowder', cat: [9,33,46,16,0,7], str: 3, canIsland: false,
+    island: null,
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 0, prodCannons: 3 },
+    cost: 5,
+    dI: '—', dS: '1🪙 → 3💣',
+  },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], str: 1, canIsland: true,

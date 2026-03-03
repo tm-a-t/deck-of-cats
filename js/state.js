@@ -84,19 +84,144 @@ function initState() {
 }
 
 function initTutorialState() {
-  const crew = [
-    mkP('tutorialForager'),
-    mkP('tutorialSwabbie'),
-    mkP('tutorialSwabbie'),
-    mkP('tutorialSwabbie'),
-    mkP('tutorialSwabbie'),
+  const cards = {};
+  const mkTutorialCard = (ref, type) => {
+    const card = mkP(type);
+    card.ref = ref;
+    cards[ref] = card;
+    return card;
+  };
+
+  const L1 = mkTutorialCard('L1', 'lumberjack');
+  const L2 = mkTutorialCard('L2', 'lumberjack');
+  const L3 = mkTutorialCard('L3', 'lumberjack');
+  const M1 = mkTutorialCard('M1', 'miner');
+  const M2 = mkTutorialCard('M2', 'miner');
+  const M3 = mkTutorialCard('M3', 'miner');
+  const S1 = mkTutorialCard('S1', 'tutorialSwabbie');
+  const S2 = mkTutorialCard('S2', 'tutorialSwabbie');
+  const S3 = mkTutorialCard('S3', 'tutorialSwabbie');
+  cards.FEATURED = null;
+
+  const crew = [L1, L2, L3, M1, M2, M3, S1, S2, S3];
+  const featuredName = TYPES.tutorialAdmiralBlackpowder.name;
+
+  const turns = [
+    {
+      round: 1,
+      phase: 'sending',
+      requiredSent: 2,
+      island: {
+        ...ISLANDS[0],
+      },
+      handRefs: ['L1', 'M1', 'L2', 'M2', 'S1'],
+      blockedIslandRefs: ['L2', 'M2'],
+      shop: [],
+      hints: {
+        sending: 'send 2 pirates to island',
+        shopping: 'press Next turn',
+      },
+    },
+    {
+      round: 2,
+      phase: 'sending',
+      requiredSent: 2,
+      island: {
+        ...ISLANDS[1],
+      },
+      handRefs: ['L2', 'M2', 'L3', 'M3', 'S2'],
+      blockedIslandRefs: ['L3', 'M3'],
+      shop: [],
+      hints: {
+        sending: 'send 2 pirates to island',
+        ship: 'Lucky roll: expected loot delivered.',
+        shopping: 'press Next turn',
+      },
+    },
+    {
+      round: 3,
+      phase: 'sending',
+      requiredSent: 2,
+      island: {
+        name: 'Calm Atoll',
+        emoji: '🏝️',
+        bonus: null,
+        accent: 0x3f6d86,
+      },
+      handRefs: ['L1', 'M1', 'L3', 'M3', 'S3'],
+      blockedIslandRefs: ['L3', 'M3'],
+      shop: ['tutorialAdmiralBlackpowder'],
+      requireFeaturedPurchase: true,
+      hints: {
+        sending: 'send 2 pirates to island',
+        shopping: `buy ${featuredName} (5☠️)`,
+      },
+    },
+    {
+      round: 4,
+      phase: 'sending',
+      requiredSent: 2,
+      startRes: { gold: 0 },
+      island: {
+        name: 'Calm Atoll',
+        emoji: '🏝️',
+        bonus: null,
+        accent: 0x5e6b7d,
+      },
+      handRefs: ['FEATURED', 'S3', 'L3', 'M3', 'S1'],
+      blockedIslandRefs: ['FEATURED'],
+      forcedMismatch: { cardRef: 'L3', res: 'gold', n: 1, targetRes: 'wood' },
+      shop: [],
+      hints: {
+        sending: `send 2 pirates; keep ${featuredName} on ship`,
+        ship: `${featuredName}: 1🪙 -> +3💣`,
+        shopping: 'press Next turn',
+      },
+    },
+    {
+      round: 5,
+      phase: 'boarding',
+      handRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
+      shop: [],
+      enemyShip: { strength: 9 },
+      hints: {
+        boarding: 'board now: 10⚔️ vs 9⚔️',
+      },
+    },
   ];
+
+  const featured = {
+    ref: 'FEATURED',
+    cardRef: 'FEATURED',
+    type: 'tutorialAdmiralBlackpowder',
+    name: featuredName,
+    label: featuredName,
+    cost: TYPES.tutorialAdmiralBlackpowder.cost,
+    str: TYPES.tutorialAdmiralBlackpowder.str,
+    buyTurn: 3,
+    playTurn: 4,
+  };
+
+  const forcedMismatch = {
+    turn: 4,
+    cardRef: 'L3',
+    expected: { res: 'wood', amt: 1 },
+    actual: { res: 'gold', amt: 1 },
+    lore: 'Unexpected loot can happen on any island.',
+  };
+
+  const initialDrawTopToBottom = ['L1', 'M1', 'L2', 'M2', 'S1', 'S2', 'S3', 'L3', 'M3'];
+  const firstTurn = turns[0];
+  const firstHand = firstTurn.handRefs.map(ref => cards[ref]).filter(Boolean);
+  const firstHandRefs = new Set(firstTurn.handRefs);
+  const remainingTopToBottom = initialDrawTopToBottom.filter(ref => !firstHandRefs.has(ref));
+  const drawPile = [...remainingTopToBottom].reverse().map(ref => cards[ref]);
 
   G = {
     allCrew: [...crew],
-    deck: Phaser.Utils.Array.Shuffle([...crew]),
+    deck: drawPile,
     discard: [],
-    hand: [],
+    hand: firstHand,
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
     weapons: 0,
     cannons: 0,
@@ -104,29 +229,32 @@ function initTutorialState() {
     round: 1,
     phase: 'sending',
     sent: [],
-    island: {
-      name: 'Training Cove',
-      emoji: '🏝️',
-      accent: 0x4b7d42,
-      maxSend: 1,
-      tutorialDesc: 'only 1 pirate can land',
-    },
+    island: { ...firstTurn.island },
     enemyShip: null,
     boardingCount: 0,
     gameOver: false,
-    shop: ['carpenter', 'quartermaster', 'masterLumberjack', 'masterMiner'],
+    shop: [],
     shopAnimating: false,
     busy: false,
     map: null,
     tutorial: {
       active: true,
-      step: 'landing',
-      recommendedType: 'carpenter',
-      recommendedBought: false,
-      boss1Strength: 0,
-      boss2Strength: 0,
+      currentTurn: 1,
+      turns,
+      cards,
+      featured,
+      forcedMismatch,
+      runtime: {
+        featuredBought: false,
+        featuredPlayed: false,
+        mismatchApplied: false,
+        drawPlan: {
+          initialTopToBottom: initialDrawTopToBottom,
+          reshuffleA: ['S1', 'L1', 'M1', 'L2', 'M2'],
+          reshuffleB: ['S2', 'S3', 'L3', 'M3', 'S1'],
+          turn5HandRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
+        },
+      },
     },
   };
-
-  G.hand = drawCards(5);
 }
