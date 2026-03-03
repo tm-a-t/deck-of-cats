@@ -1,0 +1,1107 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Poki Documentation">
+      
+      
+        <meta name="author" content="Poki">
+      
+      
+        <link rel="canonical" href="https://sdk.poki.com/web-fit-test.html">
+      
+      <link rel="icon" href="img/favicon.png">
+      <meta name="generator" content="mkdocs-1.3.0, mkdocs-material-8.5.4">
+    
+    
+      
+        <title>Web Fit Test - Poki Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.80dcb947.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.cbb835fc.min.css">
+        
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="stylesheets/extra.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="" data-md-color-primary="none" data-md-color-accent="none">
+  
+    
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#web-fit-test" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="Poki Documentation" class="md-header__button md-logo" aria-label="Poki Documentation" data-md-component="logo">
+      
+  <img src="img/favicon.ico" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Poki Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Web Fit Test
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="Poki Documentation" class="md-nav__button md-logo" aria-label="Poki Documentation" data-md-component="logo">
+      
+  <img src="img/favicon.ico" alt="logo">
+
+    </a>
+    Poki Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_1" type="checkbox" id="__nav_1" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_1">
+          Level 0 - Welcome
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Level 0 - Welcome" data-md-level="1">
+        <label class="md-nav__title" for="__nav_1">
+          <span class="md-nav__icon md-icon"></span>
+          Level 0 - Welcome
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="index.html" class="md-nav__link">
+        Working With Poki
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="what-is-p4d.html" class="md-nav__link">
+        Poki For Developers
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="poki-inspector.html" class="md-nav__link">
+        Poki Inspector
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="localization.html" class="md-nav__link">
+        Building For Localization
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="poki-quality-guidelines.html" class="md-nav__link">
+        Quality Guidelines
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="working-with-ai.html" class="md-nav__link">
+        Working With AI
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="trends.html" class="md-nav__link">
+        Trends & Trend-Driven Content
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          Level 1 - Adding Your Game
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Level 1 - Adding Your Game" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Level 1 - Adding Your Game
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="new-requirements.html" class="md-nav__link">
+        Requirements
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="external-resources.html" class="md-nav__link">
+        External Resources
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="playtesting.html" class="md-nav__link">
+        Level 2 - Feedback & Playtesting
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="player-fit.html" class="md-nav__link">
+        Level 3 - Player Fit Test
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          Level 4 - Web Fit Test
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Level 4 - Web Fit Test" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          Level 4 - Web Fit Test
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Web Fit Test
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="web-fit-test.html" class="md-nav__link md-nav__link--active">
+        Web Fit Test
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-do-we-web-fit-test-games" class="md-nav__link">
+    Why do we Web Fit Test games?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-does-a-web-fit-test-work" class="md-nav__link">
+    How does a Web Fit Test work?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-do-i-need-to-do-to-unlock-web-fit-tests" class="md-nav__link">
+    What do I need to do to unlock Web Fit Tests?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#is-my-game-making-money-during-a-web-fit-test" class="md-nav__link">
+    Is my game making money during a Web Fit Test?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-do-we-test-for" class="md-nav__link">
+    What do we test for?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-interpret-the-test-results" class="md-nav__link">
+    How to interpret the test results?
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#my-game-finished-the-web-fit-test-what-now" class="md-nav__link">
+    My game finished the Web Fit Test, what now?
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="game-thumbnail.html" class="md-nav__link">
+        Game Thumbnail
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="web-fit-help.html" class="md-nav__link">
+        What To Do If My Game Doesn't Make It
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="final-review.html" class="md-nav__link">
+        Level 5 - Final Poki Review
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_7" type="checkbox" id="__nav_7" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7">
+          SDK Documentation
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="SDK Documentation" data-md-level="1">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          SDK Documentation
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="sdk-documentation.html" class="md-nav__link">
+        General Info
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="html5.html" class="md-nav__link">
+        HTML5
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="defold.html" class="md-nav__link">
+        Defold
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="unity.html" class="md-nav__link">
+        Unity
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="gamemaker.html" class="md-nav__link">
+        GameMaker
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="phaser.html" class="md-nav__link">
+        Phaser 3
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="godot.html" class="md-nav__link">
+        Godot
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cocos.html" class="md-nav__link">
+        Cocos
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="construct3.html" class="md-nav__link">
+        Construct 3
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="auds.html" class="md-nav__link">
+        AUDS
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_8" type="checkbox" id="__nav_8" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_8">
+          Bonus Level
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Bonus Level" data-md-level="1">
+        <label class="md-nav__title" for="__nav_8">
+          <span class="md-nav__icon md-icon"></span>
+          Bonus Level
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="bonus.html" class="md-nav__link">
+        Bonus Level
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="deals.html" class="md-nav__link">
+        Deal Types
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="releaseprocess.html" class="md-nav__link">
+        Release Process
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="game-promotion.html" class="md-nav__link">
+        How Does Poki Promote My Game
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="post-release-process.html" class="md-nav__link">
+        Post-Release Update
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="fullscreen.html" class="md-nav__link">
+        Fullscreen For Games
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="animated-thumbnails.html" class="md-nav__link">
+        Animated Thumbnails
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="ab-thumbnail-tests.html" class="md-nav__link">
+        A/B Thumbnail Tests
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="faq.html" class="md-nav__link">
+        FAQ
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="web-fit-test">Web Fit Test 🌐</h1>
+<p>During the Web Fit Test, your game is shown to around 10,000 players. Your game will be shown on a small set of category pages, where it will appear like a fully released game for the players on the platform.</p>
+<h2 id="why-do-we-web-fit-test-games"><a href="#why-do-we-web-fit-test-games">Why do we Web Fit Test games?</a></h2>
+<p>While the game is not promoted and not shown to Poki’s entire audience, this test provides an unbiased assessment of your game’s potential. The results of the Web Fit Test indicate whether there is a potential fit for your game with the Poki audience and where your game might fit within Poki’s categories.</p>
+<p>The Web Fit Test is also another tool to use for iteration. While it takes longer to perform than some of our earlier testing stages, the metrics from the test are from a substantial number of users and can tell you a lot about the fit of your game with the Poki audience. If your game does not pass the test right away, that’s okay! The metrics from the Web Fit Test will help you understand which parts of the game to improve on. If your game is scoring less strongly on some testing metrics, have a look at our <a href="web-fit-help.html"><strong>best practices</strong></a> to see what could be tweaked or improved about the experience and try again. As long as your game meets our <a href="poki-quality-guidelines.html"><strong>Quality Guidelines</strong></a>, you can request a Web Fit Test more than once, so feel free to try it out once your game is ready!</p>
+<hr />
+<h2 id="how-does-a-web-fit-test-work"><a href="#how-does-a-web-fit-test-work">How does a Web Fit Test work?</a></h2>
+<p>To create a balanced test, Poki adds the game to multiple categories that fit your game. You can suggest categories for the game to be tested under Settings -&gt; Suggested Categories on your game entry in Poki for Developers. We take these categories into account but also use our own judgment to help you find the best suited audience for the game. That leads us to sometimes place games in other or additional categories than the ones suggested in order to get the most balanced results.</p>
+<p>The Web Fit Test takes about 3-5 days to complete. This is dependent on how fast the needed amount of players can be reached. It’s good to note that when a test has started, it has to run its full course. Stopping a test after it has started is not possible. Found an important change or bug in your game after the test has started? No worries - you can always upload an additional version of your game while the test is running and send <a href="mailto:developersupport@poki.com">developersupport@poki.com</a> an email to ask to update the version that is being used.</p>
+<details>
+<summary>Special instructions for multiplayer games</summary>
+<br>
+Is your game a multiplayer game? Then there are a few extra things to consider before requesting a test. For starters, the traffic to your game during a Web Fit Test is limited, which can make filling up the game with enough players slightly more difficult. To help with this, we recommend the following:
+
+<li>If your game already has an existing playerbase, we’d recommend connecting to your existing servers for the test. That way enough players should be available during the test.</li>
+<li>If the above is not possible, we’d recommend adding bots to the game that can fill up open player spots.</li>
+<br>
+The Web Fit Test is still developing and improving to facilitate multiplayer games better.  If the above suggestions are not feasible right now for your game, we’d like to ask you to keep an eye on our  <a href="https://medium.com/poki" target="_blank"><strong>BLOG</strong></a> for further updates and try the test again once our multiplayer capabilities are further developed.
+</details>
+
+<hr />
+<h2 id="what-do-i-need-to-do-to-unlock-web-fit-tests"><a href="#what-do-i-need-to-do-to-unlock-web-fit-tests">What do I need to do to unlock Web Fit Tests?</a></h2>
+<p>In order to unlock the Web Fit Test for your game, you will first need to watch at least 5 playtest recordings in Level 2 and pass the Player Fit Test in Level 3. You also need to <a href="game-thumbnail.html"><strong>add a thumbnail</strong></a> to start this test. </p>
+<hr />
+<h2 id="is-my-game-making-money-during-a-web-fit-test"><a href="#is-my-game-making-money-during-a-web-fit-test">Is my game making money during a Web Fit Test?</a></h2>
+<p>While it’s important to consider how to monetize your game early in the development, the actual implementation of these events is not yet necessary during the Web Fit Test. Adding the commercialBreak() and rewardedBreak() event to your game can be saved for after the testing phases. </p>
+<p>Should you still want to add the monetization events to your game during Web Fit Test, then it’s good to know that when an ad is requested, one of our Poki placeholder ads will be displayed instead of a real one. Due to this, no revenue is made or shared during this testing stage. </p>
+<hr />
+<h2 id="what-do-we-test-for"><a href="#what-do-we-test-for">What do we test for?</a></h2>
+<p>During the Web Fit Test, three metrics are tracked. All three are equally important to your game&rsquo;s possible success on Poki. For all of these metrics, higher numbers are better.</p>
+<ul>
+<li>👆 <strong>Click-through Rate (CTR)</strong> - During the Web Fit Test, your game is shown on a small subset of category pages on Poki. The CTR measures how many players that visited those category pages clicked on the thumbnail for your game. With this metric, you can get an idea of how attractive your thumbnail is and how popular your game initially is to players. </li>
+<li>⏱️ <strong>Average Time on Page</strong> - This metric measures the average time players who reach your game stay on the page. It gives a good insight into how long players enjoy your game on average. </li>
+<li>% <strong>Conversion to Play</strong> - When you start a Web Fit Test, the gameplayStart() event from the <a href="sdk-documentation.html"><strong>Poki SDK</strong></a> should be implemented in your game already. With this metric, we measure how many players passed the first gameplayStart() event in your game. This gives insight into the startup process and onboarding of your game. On Poki, fast loading and quick onboarding are very important to the games overall performance, so it’s an important metric to keep in mind.</li>
+</ul>
+<hr />
+<h2 id="how-to-interpret-the-test-results"><a href="#how-to-interpret-the-test-results">How to interpret the test results?</a></h2>
+<p>Once the test is finished, you receive a performance review. It shows information about your game, an overview of the categories your game was tested in and the scores for the three testing metrics. Your scores show the performance of your game. Below the scores are benchmarks. These show the average performance of all games in the promoted categories. </p>
+<p><img alt="WebFitTestResults" src="img/web-fit.png" title="WebFitTestResults" /></p>
+<hr />
+<p>The performance of your game on the three metrics is scored on a scale of 0 to 5. This score is dependent on how well your game performed against the averages in the categories your game was tested in. These averages will be different for different categories. If your game scores a 3 or higher, that means your game scores on the same level or higher than the average game in the categories your game was tested in. </p>
+<p>To make this a bit more visual, let’s have a look at an example. Let’s say your game was tested in the <strong>Action</strong> and <strong>Adventure</strong> games categories. On average, games in these categories score:</p>
+<ul>
+<li>1.5% on CTR</li>
+<li>4 minutes Average Time on Page</li>
+<li>70% C2P</li>
+</ul>
+<p>During the test, if the performance of your game is equal to the numbers mentioned above, your game will score a 3 out of 5.</p>
+<hr />
+<h2 id="my-game-finished-the-web-fit-test-what-now"><a href="#my-game-finished-the-web-fit-test-what-now">My game finished the Web Fit Test, what now?</a></h2>
+<p>Depending on the result of your test, your game either moves on to the Final Poki Review or enters the next stage of iteration. Once the game enters the final review stages, the game will stay live on Poki until the Final Review is concluded but is not promoted or earning anything from in-game ads. This is so players who liked your game in the testing phases can still enjoy it! Let us know if this is an issue and we can remove the game completely while we discuss further.</p>
+<p>If your game did not pass the Web Fit Test this time, that’s not the end of your game&rsquo;s journey on Poki. Have a look at <a href="web-fit-help.html"><strong><em>&ldquo;What to do if my game does not make it?&rdquo;</em></strong></a> to see what can be done to improve your game’s fit for the platform. You are also welcome to try another Web Fit Test with a new version, by requesting one in your Poki for Developers dashboard. </p>
+<p>Passing the Web Fit Test means that your game shows a potential fit to be released on Poki - congrats! However, that does not mean that your game will be released on Poki right away. Now that we’ve established the possibility of a fit for your game on Poki, your game will be automatically submitted for the <a href="final-review.html"><strong>Final Poki Review</strong></a>. </p>
+<hr />
+<p><br></p>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+    <nav class="md-footer__inner md-grid" aria-label="Footer" >
+      
+        
+        <a href="player-fit.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Level 3 - Player Fit Test" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Level 3 - Player Fit Test
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="game-thumbnail.html" class="md-footer__link md-footer__link--next" aria-label="Next: Game Thumbnail" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Game Thumbnail
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    <a href="https://www.facebook.com/Poki" target="_blank" rel="noopener" title="Poki on Facebook" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M504 256C504 119 393 8 256 8S8 119 8 256c0 123.78 90.69 226.38 209.25 245V327.69h-63V256h63v-54.64c0-62.15 37-96.48 93.67-96.48 27.14 0 55.52 4.84 55.52 4.84v61h-31.28c-30.8 0-40.41 19.12-40.41 38.73V256h68.78l-11 71.69h-57.78V501C413.31 482.38 504 379.78 504 256z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://twitter.com/poki" target="_blank" rel="noopener" title="Poki on Twitter" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://www.youtube.com/poki" target="_blank" rel="noopener" title="Poki on YouTube" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M549.655 124.083c-6.281-23.65-24.787-42.276-48.284-48.597C458.781 64 288 64 288 64S117.22 64 74.629 75.486c-23.497 6.322-42.003 24.947-48.284 48.597-11.412 42.867-11.412 132.305-11.412 132.305s0 89.438 11.412 132.305c6.281 23.65 24.787 41.5 48.284 47.821C117.22 448 288 448 288 448s170.78 0 213.371-11.486c23.497-6.321 42.003-24.171 48.284-47.821 11.412-42.867 11.412-132.305 11.412-132.305s0-89.438-11.412-132.305zm-317.51 213.508V175.185l142.739 81.205-142.739 81.201z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://linkedin.com/company/poki/" target="_blank" rel="noopener" title="Poki on LinkedIn" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3zM135.4 416H69V202.2h66.5V416zm-33.2-243c-21.3 0-38.5-17.3-38.5-38.5S80.9 96 102.2 96c21.2 0 38.5 17.3 38.5 38.5 0 21.3-17.2 38.5-38.5 38.5zm282.1 243h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9V416z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://medium.com/poki" target="_blank" rel="noopener" title="Poki on Medium" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M180.5 74.262C80.813 74.262 0 155.633 0 256s80.819 181.738 180.5 181.738S361 356.373 361 256 280.191 74.262 180.5 74.262Zm288.25 10.646c-49.845 0-90.245 76.619-90.245 171.095s40.406 171.1 90.251 171.1 90.251-76.619 90.251-171.1H559c0-94.503-40.4-171.095-90.248-171.095Zm139.506 17.821c-17.526 0-31.735 68.628-31.735 153.274s14.2 153.274 31.735 153.274S640 340.631 640 256c0-84.649-14.215-153.271-31.742-153.271Z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": ".", "features": ["content.tabs.link", "toc.integrate"], "search": "assets/javascripts/workers/search.5bf1dace.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    
+    
+      <script src="assets/javascripts/bundle.078830c0.min.js"></script>
+      
+        <script src="scripts/extra.js"></script>
+      
+    
+  </body>
+</html>
