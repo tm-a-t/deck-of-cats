@@ -917,10 +917,10 @@ class GameScene extends Phaser.Scene {
     const toY = L.Y_ISL_CY;
 
     const ghost = addCatSprite(this, fromX, fromY, p.type);
-    ghost.setScale(L.SC).setDepth(60);
+    ghost.setScale(L.CARD_CAT_SC).setDepth(60);
 
     this.tweens.add({
-      targets: ghost, x: toX, y: toY,
+      targets: ghost, x: toX, y: toY, scale: L.SC,
       duration: 350, ease: 'Power2',
       onComplete: () => {
         ghost.destroy();
@@ -1638,26 +1638,10 @@ class GameScene extends Phaser.Scene {
   // ──────────── HELPERS ────────────
 
   handPos(idx) {
-    const L = this.L;
-    const n = G.hand.length;
-    const EDGE_PAD = 8 * L.k;
-    const MAX_STEP = 180 * L.k;
-    const spriteHalfW = 5 * L.SC;
-    const minX = spriteHalfW + EDGE_PAD;
-    const maxX = L.W - minX;
-    const usableW = Math.max(0, maxX - minX);
-
-    let x;
-    if (n <= 1) {
-      x = Phaser.Math.Clamp(L.cx, minX, maxX);
-    } else {
-      const stepFit = usableW / Math.max(n - 1, 1);
-      const step = Math.min(MAX_STEP, stepFit);
-      const rowW = step * (n - 1);
-      const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
-      x = startX + idx * step;
+    if (this._cardPositions && this._cardPositions[idx]) {
+      return this._cardPositions[idx];
     }
-    return { x, y: L.Y_HAND_CENTER };
+    return { x: this.L.cx, y: this.L.Y_HAND_CENTER };
   }
 
   shipRowPos(slotIdx, total) {
@@ -1684,6 +1668,110 @@ class GameScene extends Phaser.Scene {
 
   handX(idx) {
     return this.handPos(idx).x;
+  }
+
+  cardFanPos(vi, n) {
+    const L = this.L;
+    const CW = L.CARD_W;
+    const maxStep = CW * 0.75;
+    const edgePad = CW * 0.55;
+    const availW = L.W - edgePad * 2;
+    const step = n <= 1 ? 0 : Math.min(maxStep, availW / (n - 1));
+    const center = (n - 1) / 2;
+    const t = vi - center;
+    return {
+      x: L.cx + t * step,
+      y: L.Y_HAND_CENTER + t * t * 5 * L.k,
+      angle: t * 3,
+    };
+  }
+
+  createCardContainer(type) {
+    const L = this.L;
+    const CW = L.CARD_W;
+    const CH = L.CARD_H;
+    const def = TYPES[type];
+    const r = Math.max(4, CW * 0.07);
+    const bw = Math.max(2, CW * 0.028);
+
+    const ct = this.add.container(0, 0);
+    const g = this.add.graphics();
+
+    g.fillStyle(0x000000, 0.25);
+    g.fillRoundedRect(-CW / 2 + 3, -CH / 2 + 3, CW, CH, r);
+
+    g.fillStyle(0x5a4a2a, 1);
+    g.fillRoundedRect(-CW / 2, -CH / 2, CW, CH, r);
+
+    g.fillStyle(0x14243a, 1);
+    g.fillRoundedRect(-CW / 2 + bw, -CH / 2 + bw, CW - 2 * bw, CH - 2 * bw, r - 1);
+
+    const pad = bw * 2.5;
+    const portraitTop = -CH / 2 + pad;
+    const nameBarH = CH * 0.25;
+    const portraitH = CH - 2 * pad - nameBarH;
+
+    g.fillStyle(0x0e1a28, 1);
+    g.fillRoundedRect(-CW / 2 + pad, portraitTop, CW - 2 * pad, portraitH, 3);
+
+    const nameBarTop = portraitTop + portraitH;
+    g.fillStyle(0x0a1420, 1);
+    g.fillRect(-CW / 2 + pad, nameBarTop, CW - 2 * pad, nameBarH);
+
+    g.lineStyle(1, 0x4a6a8a, 0.5);
+    g.lineBetween(-CW / 2 + pad + 4, nameBarTop, CW / 2 - pad - 4, nameBarTop);
+
+    g.lineStyle(Math.max(1, bw * 0.6), 0x8a7a5a, 0.3);
+    g.strokeRoundedRect(-CW / 2 + pad - 1, -CH / 2 + pad - 1,
+      CW - 2 * (pad - 1), CH - 2 * (pad - 1), r - 2);
+
+    g.fillStyle(0xffffff, 0.03);
+    g.fillRoundedRect(-CW / 2 + bw, -CH / 2 + bw, CW - 2 * bw, CH * 0.12,
+      { tl: r - 1, tr: r - 1, bl: 0, br: 0 });
+
+    ct.add(g);
+
+    const catCenterY = portraitTop + portraitH * 0.5;
+    const spr = addCatSprite(this, 0, catCenterY, type);
+    spr.setScale(L.CARD_CAT_SC);
+    ct.add(spr);
+
+    const badgeR = Math.max(8, CW * 0.11);
+    const badgeX = -CW / 2 + pad + badgeR - 2;
+    const badgeY = -CH / 2 + pad + badgeR - 2;
+    const badge = this.add.graphics();
+    badge.fillStyle(0x8a2020, 1);
+    badge.fillCircle(badgeX, badgeY, badgeR);
+    badge.lineStyle(Math.max(1, bw * 0.5), 0xc04040, 0.8);
+    badge.strokeCircle(badgeX, badgeY, badgeR);
+    ct.add(badge);
+
+    const strText = this.add.text(badgeX, badgeY, '' + (def.str || 0), {
+      fontFamily: 'monospace',
+      fontSize: Math.max(8, CW * 0.13) + 'px',
+      color: '#ffdddd',
+    }).setOrigin(0.5, 0.5);
+    ct.add(strText);
+
+    const nameFS = Math.max(9, CW * 0.12);
+    const nameT = this.add.text(0, nameBarTop + nameBarH * 0.5, def.name, {
+      fontFamily: 'monospace',
+      fontSize: nameFS + 'px',
+      color: '#ffd78a',
+      align: 'center',
+      wordWrap: { width: CW - 4 * pad },
+    }).setOrigin(0.5, 0.5);
+    ct.add(nameT);
+
+    ct.setSize(CW, CH);
+    ct.setInteractive({
+      hitArea: new Phaser.Geom.Rectangle(-CW / 2, -CH / 2, CW, CH),
+      hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      useHandCursor: true,
+      draggable: false,
+    });
+
+    return ct;
   }
 
   clearCt(k) { this.ct[k].removeAll(true); }
@@ -1922,7 +2010,7 @@ class GameScene extends Phaser.Scene {
       col = '#9fc3e0';
     } else if (G.phase === 'sending') {
       const r = this.maxSend() - G.sent.length;
-      str = `Drag a pirate to island (${r} left)`;
+      str = `Drag a card to the island (${r} left)`;
     } else if (G.phase === 'ship') {
       str = 'Ship at work…';
       col = '#80cbc4';
@@ -1941,6 +2029,7 @@ class GameScene extends Phaser.Scene {
     this.clearCt('hand');
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
     this._handSprites = {};
+    this._cardPositions = {};
     const L = this.L;
 
     const tutorialTurn = this.isTutorial() ? this.getTutorialTurn() : null;
@@ -1958,52 +2047,106 @@ class GameScene extends Phaser.Scene {
       })
       : -1;
 
-    const isSending = G.phase === 'sending' && !G.busy;
+    const visibleCards = [];
     G.hand.forEach((p, i) => {
       if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
       if (this._shipMovedIndices && this._shipMovedIndices.has(i)) return;
       if (this._shipAnimatingIdx === i) return;
-      const def = TYPES[p.type];
-      const pos = this.handPos(i);
+      visibleCards.push({ p, i });
+    });
 
-      const spr = addCatSprite(this, pos.x, pos.y, p.type);
-      spr.setScale(L.SC);
-      spr.setInteractive({ useHandCursor: true, draggable: false });
-      spr.setData('handIdx', i);
-      this._handSprites[i] = spr;
+    const isSending = G.phase === 'sending' && !G.busy;
+    const n = visibleCards.length;
+    const CW = L.CARD_W;
+    const CH = L.CARD_H;
+    const cardR = Math.max(4, CW * 0.07);
+
+    visibleCards.forEach((vc, vi) => {
+      const { p, i } = vc;
+      const def = TYPES[p.type];
+      const pos = this.cardFanPos(vi, n);
+      this._cardPositions[i] = { x: pos.x, y: pos.y };
+
+      const card = this.createCardContainer(p.type);
+      card.setPosition(pos.x, pos.y);
+      card.setAngle(pos.angle);
+      card.setDepth(10 + vi);
+      card.setData('handIdx', i);
+      card.setData('visibleIdx', vi);
+      this._handSprites[i] = card;
 
       const tutorialBlocked = this.isTutorial() && G.phase === 'sending' &&
         this.isTutorialIslandBlockedPirate(p, tutorialTurn);
       if (tutorialBlocked) {
-        spr.setTint(0x8a8a8a);
-        spr.setAlpha(0.8);
+        card.setAlpha(0.6);
+      }
+
+      let canSend = def.canIsland;
+      if (canSend && def.island && def.island.convert) {
+        const c = def.island.convert;
+        canSend = (G.res[c.cRes] || 0) >= c.cN;
+      }
+      if (isSending && !tutorialBlocked && canSend) {
+        const glowG = this.add.graphics();
+        glowG.lineStyle(2 * L.k, 0x66bb6a, 0.45);
+        glowG.strokeRoundedRect(-CW / 2 - 2, -CH / 2 - 2, CW + 4, CH + 4, cardR + 1);
+        card.add(glowG);
       }
 
       if (i === tutorialTargetIdx) {
         this.tweens.add({
-          targets: spr, y: pos.y - 14 * L.k,
+          targets: card, y: pos.y - 20 * L.k,
           duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
       }
 
+      card.on('pointerover', () => {
+        if (card.getData('isDragging')) return;
+        this.tweens.killTweensOf(card);
+        this.ct.hand.bringToTop(card);
+        this.tweens.add({
+          targets: card,
+          y: pos.y - 30 * L.k,
+          angle: 0,
+          scaleX: 1.12, scaleY: 1.12,
+          duration: 180,
+          ease: 'Back.easeOut',
+        });
+        this.showTip(p.type, pos.x, pos.y - CH * 0.75, { fromClick: true });
+      });
+
+      card.on('pointerout', () => {
+        if (card.getData('isDragging')) return;
+        this.tweens.killTweensOf(card);
+        this.tweens.add({
+          targets: card,
+          y: pos.y,
+          angle: pos.angle,
+          scaleX: 1, scaleY: 1,
+          duration: 180,
+          ease: 'Sine.easeOut',
+        });
+      });
+
       if (isSending) {
-        this.input.setDraggable(spr, true);
+        this.input.setDraggable(card, true);
+        card._dragStartPos = { x: pos.x, y: pos.y };
+        card._dragMoved = false;
 
-        spr._dragStartPos = { x: pos.x, y: pos.y };
-        spr._dragMoved = false;
-
-        spr.on('dragstart', (pointer) => {
-          spr._dragMoved = false;
-          spr.setAlpha(0.3);
+        card.on('dragstart', (pointer) => {
+          card._dragMoved = false;
+          card.setData('isDragging', true);
+          card.setAlpha(0.3);
+          this.ct.hand.bringToTop(card);
           const ghost = addCatSprite(this, pointer.x, pointer.y, p.type);
-          ghost.setScale(L.SC).setDepth(80);
+          ghost.setScale(L.CARD_CAT_SC).setDepth(80);
           this._dragGhost = ghost;
           this.ct.tip.setPosition(0, 0);
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+          this.showTip(p.type, pos.x, pos.y - CH * 0.75, { fromClick: true });
           this._tipDragAnchor = { x: pos.x, y: pos.y };
         });
 
-        spr.on('drag', (pointer) => {
+        card.on('drag', (pointer) => {
           if (this._dragGhost) {
             this._dragGhost.setPosition(pointer.x, pointer.y);
           }
@@ -2014,42 +2157,43 @@ class GameScene extends Phaser.Scene {
             );
           }
           const dist = Phaser.Math.Distance.Between(
-            spr._dragStartPos.x, spr._dragStartPos.y, pointer.x, pointer.y
+            card._dragStartPos.x, card._dragStartPos.y, pointer.x, pointer.y
           );
-          if (dist > 10) spr._dragMoved = true;
+          if (dist > 10) card._dragMoved = true;
         });
 
-        spr.on('dragend', (pointer) => {
+        card.on('dragend', (pointer) => {
+          card.setData('isDragging', false);
           if (this._dragGhost) {
             this._dragGhost.destroy();
             this._dragGhost = null;
           }
           this.ct.tip.setPosition(0, 0);
           this._tipDragAnchor = null;
-          spr.setAlpha(tutorialBlocked ? 0.8 : 1);
+          card.setAlpha(tutorialBlocked ? 0.6 : 1);
 
-          if (spr._dragMoved && pointer.y < L.Y_HAND_CENTER) {
+          if (card._dragMoved && pointer.y < L.Y_HAND_CENTER) {
             this.sendToIsland(i, { x: pointer.x, y: pointer.y });
-          } else if (!spr._dragMoved) {
-            this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+          } else if (!card._dragMoved) {
+            this.showTip(p.type, pos.x, pos.y - CH * 0.75, { fromClick: true });
+          } else {
+            this.tweens.add({
+              targets: card,
+              y: pos.y, angle: pos.angle,
+              scaleX: 1, scaleY: 1,
+              duration: 200,
+              ease: 'Sine.easeOut',
+            });
           }
         });
       } else {
-        spr.on('pointerdown', (ptr) => {
+        card.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+          this.showTip(p.type, pos.x, pos.y - CH * 0.75, { fromClick: true });
         });
       }
 
-      spr.on('pointerover', () => {
-        spr.setScale(L.SC + 1);
-        if (this.ct.tip.visible) {
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC);
-        }
-      });
-      spr.on('pointerout', () => spr.setScale(L.SC));
-
-      this.addTo('hand', spr);
+      this.addTo('hand', card);
     });
 
     if (this._shipMovedIndices && this._shipMovedIndices.size > 0) {

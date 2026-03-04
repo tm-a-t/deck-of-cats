@@ -77,7 +77,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 - Top: round number, resource inventory, full crew display, shop preview.
 - Center: current island / enemy ship / open sea.
 - Below center: phase status text.
-- Lower: pirate hand (5 cards; 2 rows on screens ≤760px wide).
+- Lower: pirate hand displayed as a fan of cards; hover/tap to lift and see tooltip; drag to send to island.
 - Bottom: Map and Shop buttons (left), action button (right).
 - Modals (Map, Shop): close by clicking outside the paper area or ✕.
 
