@@ -5,8 +5,8 @@
    ============================================================ */
 
 const CARD = {
-  W: 160,
-  H: 260,
+  W: 190,
+  H: 300,
   RADIUS: 14,
   BORDER: 3,
   BG: 0x111e2e,
@@ -28,7 +28,27 @@ const CARD = {
 
   SHIP_GLOW: 0x80cbc4,
   SHIP_GLOW_ALPHA: 0.45,
+
+  NEIGHBOR_SPREAD: 36,
 };
+
+function measureWrappedHeight(ctx, text, maxW, lineH) {
+  if (ctx.measureText(text).width <= maxW) return lineH;
+  const words = text.split(' ');
+  let line = '';
+  let h = 0;
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      h += lineH;
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) h += lineH;
+  return h;
+}
 
 function buildCardTexture(scene, typeKey, L) {
   const k = L.k;
@@ -54,73 +74,79 @@ function buildCardTexture(scene, typeKey, L) {
   ctx.stroke();
 
   const def = TYPES[typeKey];
+  const nameFs = Math.max(13, Math.round(17 * k));
+  const statFs = Math.max(11, Math.round(14 * k));
+  const bodyFs = Math.max(10, Math.round(12 * k));
+  const pad = Math.round(cw * 0.08);
+  const maxTxtW = cw - pad * 2;
+  const margin = Math.round(ch * 0.045);
+  const sepGap = Math.round(bodyFs * 0.55);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+
+  const islText = def.dI || '—';
+  const shipText = def.dS || '—';
+
+  ctx.font = `${bodyFs}px monospace`;
+  const islH = measureWrappedHeight(ctx, islText, maxTxtW, bodyFs * 1.3);
+  const shipH = measureWrappedHeight(ctx, shipText, maxTxtW, bodyFs * 1.3);
+
+  const topSepY = margin + islH + sepGap;
+  const botSepY = ch - margin - shipH - sepGap;
+
+  // ── TOP: Island effect + separator ──
+  ctx.font = `${bodyFs}px monospace`;
+  ctx.fillStyle = '#c8e0c0';
+  drawWrappedReturn(ctx, islText, cw / 2, margin, maxTxtW, bodyFs * 1.3);
+
+  ctx.strokeStyle = 'rgba(58,90,122,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, topSepY);
+  ctx.lineTo(cw - pad, topSepY);
+  ctx.stroke();
+
+  // ── BOTTOM: separator + Ship effect ──
+  ctx.strokeStyle = 'rgba(58,90,122,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, botSepY);
+  ctx.lineTo(cw - pad, botSepY);
+  ctx.stroke();
+
+  ctx.font = `${bodyFs}px monospace`;
+  ctx.fillStyle = '#b0d0e0';
+  drawWrappedReturn(ctx, shipText, cw / 2, botSepY + sepGap, maxTxtW, bodyFs * 1.3);
+
+  // ── CENTER: Sprite + Name + Strength (vertically centered) ──
+  const sprSize = Math.round(Math.min(cw * 0.58, ch * 0.28));
+  const gapSprName = Math.round(nameFs * 0.7);
+  const gapNameStr = Math.round(nameFs * 1.3);
+  const blockH = sprSize + gapSprName + nameFs + gapNameStr + statFs;
+
+  const zoneTop = topSepY + sepGap;
+  const zoneBot = botSepY - sepGap;
+  const blockY = zoneTop + (zoneBot - zoneTop - blockH) / 2;
+
   const sprKey = catTexKey(typeKey);
   if (scene.textures.exists(sprKey)) {
     const img = scene.textures.get(sprKey).getSourceImage();
-    const sprSize = Math.round(Math.min(cw * 0.50, ch * 0.22));
     const sx = Math.round((cw - sprSize) / 2);
-    const sy = Math.round(ch * 0.04);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, sx, sy, sprSize, sprSize);
+    ctx.drawImage(img, sx, Math.round(blockY), sprSize, sprSize);
   }
 
-  const nameFs = Math.max(11, Math.round(14 * k));
-  const statFs = Math.max(9, Math.round(11 * k));
-  const labelFs = Math.max(8, Math.round(10 * k));
-  const bodyFs = Math.max(8, Math.round(10 * k));
-  const pad = Math.round(cw * 0.08);
-  const maxTxtW = cw - pad * 2;
-  ctx.textAlign = 'center';
-
+  const nameY = Math.round(blockY + sprSize + gapSprName);
   ctx.font = `bold ${nameFs}px monospace`;
   ctx.fillStyle = '#ffd78a';
-  ctx.fillText(def.name, cw / 2, ch * 0.30);
+  ctx.fillText(def.name, cw / 2, nameY);
 
+  const strY = Math.round(nameY + gapNameStr);
   ctx.font = `${statFs}px monospace`;
   ctx.fillStyle = '#a0b8c8';
   const strText = (def.str || 0) + ' ⚔️';
   const costText = def.cost != null ? '  ☠️' + def.cost : '';
-  ctx.fillText(strText + costText, cw / 2, ch * 0.36);
-
-  let divY = Math.round(ch * 0.40);
-  ctx.strokeStyle = 'rgba(58,90,122,0.5)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad, divY);
-  ctx.lineTo(cw - pad, divY);
-  ctx.stroke();
-
-  let cy = divY + Math.round(labelFs * 1.4);
-
-  ctx.font = `bold ${labelFs}px monospace`;
-  ctx.fillStyle = '#7a9a6a';
-  ctx.fillText('🏝️ Island', cw / 2, cy);
-  cy += Math.round(labelFs * 1.2);
-
-  ctx.font = `${bodyFs}px monospace`;
-  ctx.fillStyle = '#c8e0c0';
-  const islText = def.dI || '—';
-  cy = drawWrappedReturn(ctx, islText, cw / 2, cy, maxTxtW, bodyFs * 1.3);
-  cy += Math.round(labelFs * 0.8);
-
-  divY = cy;
-  ctx.strokeStyle = 'rgba(58,90,122,0.4)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad, divY);
-  ctx.lineTo(cw - pad, divY);
-  ctx.stroke();
-  cy += Math.round(labelFs * 1.2);
-
-  ctx.font = `bold ${labelFs}px monospace`;
-  ctx.fillStyle = '#6a8a9a';
-  ctx.fillText('⛵ Ship', cw / 2, cy);
-  cy += Math.round(labelFs * 1.2);
-
-  ctx.font = `${bodyFs}px monospace`;
-  ctx.fillStyle = '#b0d0e0';
-  const shipText = def.dS || '—';
-  drawWrappedReturn(ctx, shipText, cw / 2, cy, maxTxtW, bodyFs * 1.3);
+  ctx.fillText(strText + costText, cw / 2, strY);
 
   scene.textures.addCanvas(texKey, canvas);
   scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -258,12 +284,9 @@ class CardHand {
       ct.setRotation(slot.rotation);
       ct.setDepth(10 + slotI);
 
-      const isResolved = shipResolvedSet && shipResolvedSet.has(handIdx);
       if (isBlocked) {
         cardImg.setTint(0x8a8a8a);
         cardImg.setAlpha(0.7);
-      } else if (isResolved) {
-        cardImg.setAlpha(0.45);
       }
 
       const shadow = scene.add.graphics();
@@ -382,6 +405,71 @@ class CardHand {
     }
   }
 
+  showShipEffectOverlay(handIdx, msg, color) {
+    const card = this.cards.find(c => c.handIdx === handIdx);
+    if (!card) return;
+    const scene = this.scene;
+    const L = scene.L;
+    const k = L.k;
+    const cw = Math.round(CARD.W * k);
+    const ch = Math.round(CARD.H * k);
+    const r = Math.round(CARD.RADIUS * k);
+
+    if (card._shipEffectOverlay) {
+      card._shipEffectOverlay.destroy(true);
+      card._shipEffectOverlay = null;
+    }
+
+    const areaH = Math.round(ch * 0.24);
+    const top = ch / 2 - areaH;
+
+    const fontSize = Math.max(14, Math.round(17 * k));
+    const txt = scene.add.text(0, top + areaH / 2, msg, {
+      fontFamily: 'monospace',
+      fontSize: fontSize + 'px',
+      color: color || '#80cbc4',
+      stroke: '#000',
+      strokeThickness: Math.max(1, Math.round(2.5 * k)),
+    }).setOrigin(0.5);
+
+    const pad = Math.round(16 * k);
+    const bgW = txt.width + pad * 2;
+    const bgH = txt.height + Math.round(8 * k);
+    const bgY = top + areaH / 2 - bgH / 2;
+    const bg = scene.add.graphics();
+    bg.fillStyle(0x0e2028, 0.95);
+    bg.fillRoundedRect(-bgW / 2, bgY, bgW, bgH, Math.round(4 * k));
+
+    const overlay = scene.add.container(0, 0, [bg, txt]);
+    card.container.add(overlay);
+    card._shipEffectOverlay = overlay;
+
+    txt.setScale(0.75);
+    txt.setAlpha(0);
+    bg.setScale(0.75);
+    bg.setAlpha(0);
+    scene.tweens.add({
+      targets: [txt, bg],
+      scaleX: 1, scaleY: 1,
+      alpha: 1,
+      duration: 280,
+      ease: 'Back.easeOut',
+    });
+  }
+
+  hideShipEffectOverlay(handIdx) {
+    const card = this.cards.find(c => c.handIdx === handIdx);
+    if (!card || !card._shipEffectOverlay) return;
+    const overlay = card._shipEffectOverlay;
+    card._shipEffectOverlay = null;
+    this.scene.tweens.add({
+      targets: overlay,
+      alpha: 0,
+      scaleX: 0.85, scaleY: 0.85,
+      duration: 180,
+    });
+  }
+
   _setupDrag(cardData, onSendToIsland, L) {
     const scene = this.scene;
     const ct = cardData.container;
@@ -491,7 +579,30 @@ class CardHand {
   _updateIdle(L) {
     this._time += 0.03;
     const k = L.k;
+    const spread = CARD.NEIGHBOR_SPREAD * k;
+    const lerpSpeed = 0.18;
+
+    let elevIdx = -1;
+    for (let i = 0; i < this.cards.length; i++) {
+      const c = this.cards[i];
+      if (c.hovered || c.handIdx === this._shipHighlightedIdx) {
+        elevIdx = i;
+        break;
+      }
+    }
+
     this.cards.forEach((c, i) => {
+      // Spread neighbors toward/away from elevated card
+      let targetX = c.slot.x;
+      if (elevIdx >= 0 && i !== elevIdx && !c.dragging) {
+        const diff = i - elevIdx;
+        const dir = Math.sign(diff);
+        const dist = Math.abs(diff);
+        targetX = c.slot.x + dir * spread / dist;
+      }
+      c.container.x += (targetX - c.container.x) * lerpSpeed;
+      c.shadow.x += ((targetX + CARD.SHADOW_OFF * k) - c.shadow.x) * lerpSpeed;
+
       if (c.hovered || c.dragging) return;
       if (c.handIdx === this._shipHighlightedIdx) return;
       const phase = i * 1.3;
