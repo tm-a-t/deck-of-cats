@@ -1637,27 +1637,46 @@ class GameScene extends Phaser.Scene {
 
   // ──────────── HELPERS ────────────
 
-  handPos(idx) {
+  handCardMetrics() {
     const L = this.L;
-    const n = G.hand.length;
-    const EDGE_PAD = 8 * L.k;
-    const MAX_STEP = 180 * L.k;
-    const spriteHalfW = 5 * L.SC;
-    const minX = spriteHalfW + EDGE_PAD;
-    const maxX = L.W - minX;
-    const usableW = Math.max(0, maxX - minX);
+    const n = Math.max(G.hand.length, 1);
+    const cardW = Phaser.Math.Clamp(176 * L.k, 118 * L.k, Math.min(220 * L.k, L.W * 0.38));
+    const cardH = cardW * 1.42;
+    const desiredStep = cardW * 0.68;
+    const maxSpread = Math.max(cardW, L.W - 26 * L.k);
+    const step = n <= 1
+      ? 0
+      : Math.min(desiredStep, (maxSpread - cardW) / Math.max(n - 1, 1));
+    const spread = cardW + step * Math.max(n - 1, 0);
+    const startX = L.cx - spread / 2 + cardW / 2;
+    const centerY = L.Y_HAND_CENTER + 16 * L.k;
+    const fanLift = Math.min(38 * L.k, cardW * 0.22);
+    const maxAngleDeg = n <= 1 ? 0 : Math.min(15, 7 + n * 1.5);
+    return { n, cardW, cardH, step, startX, centerY, fanLift, maxAngleDeg };
+  }
 
-    let x;
-    if (n <= 1) {
-      x = Phaser.Math.Clamp(L.cx, minX, maxX);
-    } else {
-      const stepFit = usableW / Math.max(n - 1, 1);
-      const step = Math.min(MAX_STEP, stepFit);
-      const rowW = step * (n - 1);
-      const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
-      x = startX + idx * step;
-    }
-    return { x, y: L.Y_HAND_CENTER };
+  handCardPose(idx) {
+    const m = this.handCardMetrics();
+    const t = m.n <= 1 ? 0 : (idx / (m.n - 1)) * 2 - 1;
+    const x = m.startX + idx * m.step;
+    const y = m.centerY + Math.abs(t) * m.fanLift;
+    const rot = Phaser.Math.DegToRad(t * m.maxAngleDeg);
+    return { x, y, rot, t, m };
+  }
+
+  handPos(idx) {
+    const pose = this.handCardPose(idx);
+    return { x: pose.x, y: pose.y };
+  }
+
+  isPointerInIslandDropZone(pointer) {
+    if (!pointer) return false;
+    const L = this.L;
+    const dx = Math.abs(pointer.x - L.cx);
+    const dy = Math.abs(pointer.y - L.Y_ISL_CY);
+    const inIslandOval = dx <= 300 * L.k && dy <= 185 * L.k;
+    const liftedFromHand = pointer.y < L.Y_HAND_CENTER - 20 * L.k;
+    return inIslandOval || liftedFromHand;
   }
 
   shipRowPos(slotIdx, total) {
@@ -1939,8 +1958,6 @@ class GameScene extends Phaser.Scene {
 
   renderHand() {
     this.clearCt('hand');
-    if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
-    this._handSprites = {};
     const L = this.L;
 
     const tutorialTurn = this.isTutorial() ? this.getTutorialTurn() : null;
@@ -1959,97 +1976,231 @@ class GameScene extends Phaser.Scene {
       : -1;
 
     const isSending = G.phase === 'sending' && !G.busy;
+    const metrics = this.handCardMetrics();
     G.hand.forEach((p, i) => {
       if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
       if (this._shipMovedIndices && this._shipMovedIndices.has(i)) return;
       if (this._shipAnimatingIdx === i) return;
       const def = TYPES[p.type];
-      const pos = this.handPos(i);
-
-      const spr = addCatSprite(this, pos.x, pos.y, p.type);
-      spr.setScale(L.SC);
-      spr.setInteractive({ useHandCursor: true, draggable: false });
-      spr.setData('handIdx', i);
-      this._handSprites[i] = spr;
+      const pose = this.handCardPose(i);
 
       const tutorialBlocked = this.isTutorial() && G.phase === 'sending' &&
         this.isTutorialIslandBlockedPirate(p, tutorialTurn);
-      if (tutorialBlocked) {
-        spr.setTint(0x8a8a8a);
-        spr.setAlpha(0.8);
+      const cardW = metrics.cardW;
+      const cardH = metrics.cardH;
+      const card = this.add.container(pose.x, pose.y);
+      card.setRotation(pose.rot);
+      card.setSize(cardW, cardH);
+      card._home = { x: pose.x, y: pose.y, rot: pose.rot };
+      card._dragMoved = false;
+      card._isDragging = false;
+      card._hintTween = null;
+      card._tipFromHover = false;
+      card._hoverLift = 16 * L.k;
+      card._hoverScale = 1.06;
+
+      const fillCol = tutorialBlocked ? 0x8c919a : 0xefe3c7;
+      const borderCol = tutorialBlocked ? 0x4b5058 : 0x6c5538;
+      const textCol = tutorialBlocked ? '#f1f3f5' : '#2d2a25';
+      const subCol = tutorialBlocked ? '#eef0f2' : '#3f3a32';
+      const labelCol = tutorialBlocked ? '#f7d47a' : '#705c3f';
+
+      const shadow = this.add.graphics();
+      shadow.fillStyle(0x000000, 0.33);
+      shadow.fillRoundedRect(-cardW / 2 + 4 * L.k, -cardH / 2 + 6 * L.k, cardW, cardH, 12 * L.k);
+      card.add(shadow);
+
+      const bg = this.add.graphics();
+      bg.fillStyle(fillCol, tutorialBlocked ? 0.95 : 1);
+      bg.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12 * L.k);
+      bg.lineStyle(2 * L.k, borderCol, 1);
+      bg.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 12 * L.k);
+      card.add(bg);
+
+      const hoverFrame = this.add.graphics().setVisible(false);
+      hoverFrame.lineStyle(4 * L.k, 0xf2c14e, 0.96);
+      hoverFrame.strokeRoundedRect(-cardW / 2 + 2 * L.k, -cardH / 2 + 2 * L.k, cardW - 4 * L.k, cardH - 4 * L.k, 10 * L.k);
+      card.add(hoverFrame);
+
+      const tinyFs = `${Math.max(11, Math.round(13 * L.k))}px`;
+      const bodyFs = `${Math.max(11, Math.round(12 * L.k))}px`;
+      const titleFs = `${Math.max(12, Math.round(14 * L.k))}px`;
+
+      const strength = this.add.text(cardW / 2 - 10 * L.k, -cardH / 2 + 10 * L.k, `${def.str || 0}⚔️`, {
+        fontFamily: 'monospace',
+        fontSize: tinyFs,
+        color: '#7c2630',
+      }).setOrigin(1, 0);
+      card.add(strength);
+
+      if (def.cost !== null) {
+        const cost = this.add.text(-cardW / 2 + 10 * L.k, -cardH / 2 + 10 * L.k, `☠️${def.cost}`, {
+          fontFamily: 'monospace',
+          fontSize: tinyFs,
+          color: '#5f2f73',
+        }).setOrigin(0, 0);
+        card.add(cost);
       }
 
-      if (i === tutorialTargetIdx) {
+      const title = this.add.text(0, -cardH / 2 + 30 * L.k, def.name, {
+        fontFamily: 'monospace',
+        fontSize: titleFs,
+        color: textCol,
+        align: 'center',
+        wordWrap: { width: cardW - 24 * L.k },
+      }).setOrigin(0.5, 0);
+      card.add(title);
+
+      const catScale = Math.min(L.SC * 0.9, (cardW * 0.58) / CATS_PX);
+      const cat = addCatSprite(this, 0, -cardH * 0.10, p.type);
+      cat.setScale(catScale);
+      if (tutorialBlocked) cat.setAlpha(0.82);
+      card.add(cat);
+
+      const divider = this.add.graphics();
+      divider.lineStyle(1 * L.k, borderCol, 0.7);
+      divider.lineBetween(-cardW / 2 + 8 * L.k, cardH * 0.03, cardW / 2 - 8 * L.k, cardH * 0.03);
+      card.add(divider);
+
+      const islandLine = this.add.text(0, cardH * 0.08, `🏝 ${def.dI || '—'}`, {
+        fontFamily: 'monospace',
+        fontSize: bodyFs,
+        color: subCol,
+        align: 'center',
+        wordWrap: { width: cardW - 22 * L.k },
+      }).setOrigin(0.5, 0);
+      card.add(islandLine);
+
+      const shipLine = this.add.text(0, cardH * 0.24, `⛵ ${def.dS || '—'}`, {
+        fontFamily: 'monospace',
+        fontSize: bodyFs,
+        color: subCol,
+        align: 'center',
+        wordWrap: { width: cardW - 22 * L.k },
+      }).setOrigin(0.5, 0);
+      card.add(shipLine);
+
+      let footerText = 'tap / hover for full effect';
+      if (isSending) {
+        if (tutorialBlocked) footerText = 'keep on ship';
+        else if (!def.canIsland) footerText = 'ship only';
+        else footerText = 'drag to island';
+      }
+      const footer = this.add.text(0, cardH / 2 - 26 * L.k, footerText, {
+        fontFamily: 'monospace',
+        fontSize: tinyFs,
+        color: labelCol,
+        align: 'center',
+      }).setOrigin(0.5, 0.5);
+      card.add(footer);
+
+      card.setInteractive({
+        useHandCursor: true,
+        hitArea: new Phaser.Geom.Rectangle(-cardW / 2, -cardH / 2, cardW, cardH),
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+      });
+
+      if (tutorialBlocked) card.setAlpha(0.9);
+
+      const resetCardPose = (duration = 130) => {
         this.tweens.add({
-          targets: spr, y: pos.y - 14 * L.k,
+          targets: card,
+          x: card._home.x,
+          y: card._home.y,
+          rotation: card._home.rot,
+          scaleX: 1,
+          scaleY: 1,
+          duration,
+          ease: 'Cubic.easeOut',
+        });
+      };
+
+      card.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        card._tipFromHover = false;
+        this.showTip(p.type, card._home.x, card._home.y - cardH * 0.54, { fromClick: true });
+      });
+
+      card.on('pointerover', () => {
+        if (card._isDragging) return;
+        this.ct.hand.bringToTop(card);
+        hoverFrame.setVisible(true);
+        this.tweens.add({
+          targets: card,
+          y: card._home.y - card._hoverLift,
+          rotation: card._home.rot * 0.35,
+          scaleX: card._hoverScale,
+          scaleY: card._hoverScale,
+          duration: 120,
+          ease: 'Cubic.easeOut',
+        });
+        card._tipFromHover = true;
+        this.showTip(p.type, card._home.x, card._home.y - cardH * 0.54);
+      });
+
+      card.on('pointerout', () => {
+        if (card._isDragging) return;
+        hoverFrame.setVisible(false);
+        if (card._tipFromHover && this.ct.tip.visible) {
+          this.ct.tip.setVisible(false);
+        }
+        card._tipFromHover = false;
+        resetCardPose();
+      });
+
+      if (i === tutorialTargetIdx) {
+        card._hintTween = this.tweens.add({
+          targets: card,
+          y: card._home.y - 14 * L.k,
           duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
       }
 
       if (isSending) {
-        this.input.setDraggable(spr, true);
+        this.input.setDraggable(card, true);
 
-        spr._dragStartPos = { x: pos.x, y: pos.y };
-        spr._dragMoved = false;
-
-        spr.on('dragstart', (pointer) => {
-          spr._dragMoved = false;
-          spr.setAlpha(0.3);
-          const ghost = addCatSprite(this, pointer.x, pointer.y, p.type);
-          ghost.setScale(L.SC).setDepth(80);
-          this._dragGhost = ghost;
-          this.ct.tip.setPosition(0, 0);
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
-          this._tipDragAnchor = { x: pos.x, y: pos.y };
+        card.on('dragstart', () => {
+          card._isDragging = true;
+          card._dragMoved = false;
+          if (card._hintTween) {
+            card._hintTween.remove();
+            card._hintTween = null;
+          }
+          hoverFrame.setVisible(true);
+          this.ct.hand.bringToTop(card);
+          card._tipFromHover = false;
+          this.ct.tip.setVisible(false);
+          card.setScale(1.08);
+          card.setRotation(0);
         });
 
-        spr.on('drag', (pointer) => {
-          if (this._dragGhost) {
-            this._dragGhost.setPosition(pointer.x, pointer.y);
-          }
-          if (this._tipDragAnchor) {
-            this.ct.tip.setPosition(
-              pointer.x - this._tipDragAnchor.x,
-              pointer.y - this._tipDragAnchor.y
-            );
-          }
+        card.on('drag', (pointer, dragX, dragY) => {
+          card.setPosition(dragX, dragY);
           const dist = Phaser.Math.Distance.Between(
-            spr._dragStartPos.x, spr._dragStartPos.y, pointer.x, pointer.y
+            card._home.x,
+            card._home.y,
+            pointer.x,
+            pointer.y
           );
-          if (dist > 10) spr._dragMoved = true;
+          if (dist > 10) card._dragMoved = true;
         });
 
-        spr.on('dragend', (pointer) => {
-          if (this._dragGhost) {
-            this._dragGhost.destroy();
-            this._dragGhost = null;
-          }
-          this.ct.tip.setPosition(0, 0);
-          this._tipDragAnchor = null;
-          spr.setAlpha(tutorialBlocked ? 0.8 : 1);
+        card.on('dragend', (pointer) => {
+          card._isDragging = false;
+          hoverFrame.setVisible(false);
 
-          if (spr._dragMoved && pointer.y < L.Y_HAND_CENTER) {
+          if (card._dragMoved && this.isPointerInIslandDropZone(pointer)) {
             this.sendToIsland(i, { x: pointer.x, y: pointer.y });
-          } else if (!spr._dragMoved) {
-            this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+            return;
           }
-        });
-      } else {
-        spr.on('pointerdown', (ptr) => {
-          ptr.event.stopPropagation();
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+
+          if (!card._dragMoved) {
+            this.showTip(p.type, card._home.x, card._home.y - cardH * 0.54, { fromClick: true });
+          }
+          resetCardPose();
         });
       }
-
-      spr.on('pointerover', () => {
-        spr.setScale(L.SC + 1);
-        if (this.ct.tip.visible) {
-          this.showTip(p.type, pos.x, pos.y - 5 * L.SC);
-        }
-      });
-      spr.on('pointerout', () => spr.setScale(L.SC));
-
-      this.addTo('hand', spr);
+      this.addTo('hand', card);
     });
 
     if (this._shipMovedIndices && this._shipMovedIndices.size > 0) {
@@ -2183,7 +2334,7 @@ class GameScene extends Phaser.Scene {
   showTip(type, tx, ty, opts = {}) {
     const L = this.L;
     if (opts.fromClick) this._tipJustOpened = true;
-    if (!this._tipDragAnchor) this.ct.tip.setPosition(0, 0);
+    this.ct.tip.setPosition(0, 0);
     this.clearCt('tip');
     const def = TYPES[type];
     const tipFs = L.fs(20);
