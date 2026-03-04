@@ -31,6 +31,10 @@ class GameScene extends Phaser.Scene {
     this.ct.gameover.setDepth(200);
     this._sendingToIsland = new Set();
     this._sacrificedIds = new Set();
+    this._shipMovedIndices = new Map();
+    this._shipAnimatingIdx = -1;
+    this._shipQueueTotal = 0;
+    this.input.setDraggable([]);
 
     this._tipRect = null;
     this._tipJustOpened = false;
@@ -724,6 +728,9 @@ class GameScene extends Phaser.Scene {
     G.shopAnimating = false;
     this._sendingToIsland.clear();
     this._sacrificedIds.clear();
+    this._shipMovedIndices = new Map();
+    this._shipAnimatingIdx = -1;
+    this._shipQueueTotal = 0;
     this.ct.tip.setVisible(false);
     this.closeTutorialHint();
 
@@ -809,6 +816,9 @@ class GameScene extends Phaser.Scene {
     G.busy = false;
     this._sendingToIsland.clear();
     this._sacrificedIds.clear();
+    this._shipMovedIndices = new Map();
+    this._shipAnimatingIdx = -1;
+    this._shipQueueTotal = 0;
     this.ct.tip.setVisible(false);
 
     if (node.type === 'ship') {
@@ -867,7 +877,7 @@ class GameScene extends Phaser.Scene {
     return (si - (m - 1) / 2) * sp;
   }
 
-  sendToIsland(idx) {
+  sendToIsland(idx, fromPos) {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending' || G.busy) return;
     if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
@@ -878,19 +888,20 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
 
     const handPos = this.handPos(idx);
+    const msgPos = fromPos || handPos;
     if (this.isTutorial() && this.isTutorialIslandBlockedPirate(p)) {
-      this.float(handPos.x, handPos.y - 40 * L.k, 'Keep this pirate on ship', '#ffca28');
+      this.float(msgPos.x, msgPos.y - 70 * L.k, 'Keep this pirate on ship', '#ffca28');
       return;
     }
     if (!def.canIsland) {
-      this.float(handPos.x, handPos.y - 40 * L.k, "Can't go!", '#ff8a80');
+      this.float(msgPos.x, msgPos.y - 70 * L.k, "Can't go!", '#ff8a80');
       return;
     }
 
     if (def.island.convert) {
       const c = def.island.convert;
       if ((G.res[c.cRes] || 0) < c.cN) {
-        this.float(handPos.x, handPos.y - 40 * L.k, "Can't go!", '#ff8a80');
+        this.float(msgPos.x, msgPos.y - 70 * L.k, "Can't go!", '#ff8a80');
         return;
       }
     }
@@ -900,8 +911,8 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.add(idx);
     this.renderAll();
 
-    const fromX = handPos.x;
-    const fromY = handPos.y;
+    const fromX = fromPos ? fromPos.x : handPos.x;
+    const fromY = fromPos ? fromPos.y : handPos.y;
     const toX = L.cx + this.sentOffsetX(G.sent.length - 1) * L.k;
     const toY = L.Y_ISL_CY;
 
@@ -915,7 +926,7 @@ class GameScene extends Phaser.Scene {
         ghost.destroy();
         this._sendingToIsland.delete(idx);
         const result = this.resolveIsland(p);
-        this.showIslandResult(result, toX);
+        const hasResourceGain = this.showIslandResult(result, toX);
 
         const isSacrifice = G.island && G.island.sacrifice;
         if (isSacrifice) {
@@ -924,7 +935,8 @@ class GameScene extends Phaser.Scene {
 
         this.renderAll();
 
-        this.time.delayedCall(isSacrifice ? 900 : 500, () => {
+        const waitMs = isSacrifice ? 1400 : (hasResourceGain ? 1000 : 800);
+        this.time.delayedCall(waitMs, () => {
           G.busy = false;
           if (G.sent.length >= this.maxSend()) {
             this.endSending();
@@ -1063,53 +1075,50 @@ class GameScene extends Phaser.Scene {
 
   showIslandResult(r, x) {
     const L = this.L;
+    const fy = L.Y_ISL_CY - 80 * L.k;
+
     if (r.recall !== undefined) {
-      if (r.ok) {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, '↩ Recalled!', '#80cbc4');
-      } else {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, 'No one to recall', '#ffa726');
-      }
-      return;
+      if (r.ok) this.effectText(x, fy, '↩ Recalled!', '#80cbc4');
+      else this.effectText(x, fy, 'No one to recall', '#ffa726', 400);
+      return false;
     }
     if (r.exileSent) {
-      if (r.ok) {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, '💀 Exiled ' + r.name + '!', '#ff8a80');
-      } else {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, 'No one to exile', '#ffa726');
-      }
-      return;
+      if (r.ok) this.effectText(x, fy, '💀 Exiled ' + r.name + '!', '#ff8a80');
+      else this.effectText(x, fy, 'No one to exile', '#ffa726', 400);
+      return false;
     }
     if (r.drawn !== undefined) {
-      if (r.ok) {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, '+1 pirate to hand!', '#80cbc4');
-      } else {
-        this.float(x, L.Y_ISL_CY - 80 * L.k, 'Deck empty', '#ffa726');
-      }
-      return;
+      if (r.ok) this.effectText(x, fy, '+1 pirate to hand!', '#80cbc4');
+      else this.effectText(x, fy, 'Deck empty', '#ffa726', 400);
+      return false;
     }
+
+    let gainItems = [];
     if (r.convert) {
-      this.float(x, L.Y_ISL_CY - 80 * L.k,
-        '-' + r.cN + RES_EMOJI[r.cRes] + ' +' + r.n + RES_EMOJI[r.res], '#66bb6a');
-      return;
-    }
-    if (r.weapons) {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.weapons + '🗡️', '#66bb6a');
-      return;
-    }
-    if (r.items) {
+      this.effectText(x, fy,
+        r.cN + RES_EMOJI[r.cRes] + ' → ' + r.n + RES_EMOJI[r.res], '#66bb6a');
+      gainItems = [{ emoji: RES_EMOJI[r.res], count: r.n }];
+    } else if (r.weapons) {
+      this.effectText(x, fy, '+' + r.weapons + '🗡️', '#66bb6a');
+      gainItems = [{ emoji: '🗡️', count: r.weapons }];
+    } else if (r.items) {
       const msg = r.items.map(i => '+' + i.n + RES_EMOJI[i.res]).join(' ');
-      this.float(x, L.Y_ISL_CY - 80 * L.k, msg, '#66bb6a');
-      return;
-    }
-    const em = RES_EMOJI[r.res] || '🗺️';
-    const eBonus = r.bonusEnthusiasm ? ' +' + r.bonusEnthusiasm + '☠️' : '';
-    if (r.ok) {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, '+' + r.n + em + eBonus, '#66bb6a');
-    } else if (r.res === 'map') {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, '+🗺️!' + eBonus, '#ffd54f');
+      this.effectText(x, fy, msg, '#66bb6a');
+      gainItems = r.items.map(i => ({ emoji: RES_EMOJI[i.res], count: i.n }));
     } else {
-      this.float(x, L.Y_ISL_CY - 80 * L.k, 'Miss +' + r.n + em + eBonus, '#ffa726');
+      const em = RES_EMOJI[r.res] || '🗺️';
+      const eBonus = r.bonusEnthusiasm ? ' +' + r.bonusEnthusiasm + '☠️' : '';
+      gainItems = [{ emoji: em, count: r.n }];
+      if (r.bonusEnthusiasm) gainItems.push({ emoji: '☠️', count: r.bonusEnthusiasm });
+      if (r.ok) this.effectText(x, fy, '+' + r.n + em + eBonus, '#66bb6a');
+      else if (r.res === 'map') this.effectText(x, fy, '+🗺️!' + eBonus, '#ffd54f', 400);
+      else this.effectText(x, fy, 'Miss +' + r.n + em + eBonus, '#ffa726', 400);
     }
+
+    if (gainItems.length) {
+      this.animateResourceGain(x, L.Y_ISL_CY, gainItems);
+    }
+    return true;
   }
 
   endSending() {
@@ -1126,19 +1135,22 @@ class GameScene extends Phaser.Scene {
     G.phase = 'ship';
     G.busy = true;
     this.ct.tip.setVisible(false);
-    this.renderAll();
+    this._shipMovedIndices = new Map();
+    this._shipAnimatingIdx = -1;
 
     this._shipQueue = [];
     for (let i = 0; i < G.hand.length; i++) {
       if (!G.sent.includes(i)) this._shipQueue.push(i);
     }
+    this._shipQueueTotal = this._shipQueue.length;
     this._shipQueuePos = 0;
+    this.renderAll();
     this.processNextShip();
   }
 
   processNextShip() {
     if (this._shipQueuePos >= this._shipQueue.length) {
-      this.time.delayedCall(200, () => {
+      this.time.delayedCall(400, () => {
         if (this.isTutorial()) {
           const turn = this.getTutorialTurn();
           if (turn && turn.requireFeaturedPurchase) {
@@ -1158,72 +1170,119 @@ class GameScene extends Phaser.Scene {
       return;
     }
     const hi = this._shipQueue[this._shipQueuePos];
+    const slotIdx = this._shipQueuePos;
     this._shipQueuePos++;
 
-    this.time.delayedCall(450, () => {
-      const pirate = G.hand[hi];
-      const def = TYPES[pirate.type];
-      const L = this.L;
-      const handPos = this.handPos(hi);
-      const x = handPos.x;
+    const pirate = G.hand[hi];
+    const def = TYPES[pirate.type];
+    const L = this.L;
 
-      if (def.ship && def.ship.removeSelf) {
-        G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
-        G.deck = G.deck.filter(p => p.id !== pirate.id);
-        G.discard = G.discard.filter(p => p.id !== pirate.id);
-        this.float(x, handPos.y - 40 * L.k, '💀 Lost!', '#c060ff');
-        this.renderAll();
-        this.processNextShip();
-        return;
-      }
+    const fromPos = this.handPos(hi);
+    this._shipAnimatingIdx = hi;
+    this.renderAll();
 
-      if (def.ship && def.ship.removeFromDeck) {
-        if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
-          this.float(x, handPos.y - 40 * L.k, '—', '#546e7a');
+    const toPos = this.shipRowPos(slotIdx, this._shipQueue.length);
+
+    const ghost = addCatSprite(this, fromPos.x, fromPos.y, pirate.type);
+    ghost.setScale(L.SC).setDepth(60);
+
+    this.tweens.add({
+      targets: ghost,
+      x: toPos.x, y: toPos.y,
+      scale: L.SC * 0.85,
+      duration: 300, ease: 'Power2',
+      onComplete: () => {
+        ghost.destroy();
+        this._shipAnimatingIdx = -1;
+        this._shipMovedIndices.set(hi, slotIdx);
+        const x = toPos.x;
+        const y = toPos.y;
+
+        if (def.ship && def.ship.removeSelf) {
+          G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
+          G.deck = G.deck.filter(p => p.id !== pirate.id);
+          G.discard = G.discard.filter(p => p.id !== pirate.id);
+          this.effectText(x, y - 70 * L.k, '💀 Lost!', '#c060ff', 400);
           this.renderAll();
-          this.processNextShip();
+          this.time.delayedCall(600, () => this.processNextShip());
           return;
         }
-        const handIds = new Set(G.hand.map(p => p.id));
-        const targets = G.allCrew.filter(p => !handIds.has(p.id));
-        if (targets.length === 0) {
-          this.float(x, handPos.y - 40 * L.k, 'No one to exile', '#ffa726');
+
+        if (def.ship && def.ship.removeFromDeck) {
+          if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
+            this.effectText(x, y - 70 * L.k, '—', '#546e7a', 400);
+            this.renderAll();
+            this.time.delayedCall(500, () => this.processNextShip());
+            return;
+          }
+          const handIds = new Set(G.hand.map(p => p.id));
+          const targets = G.allCrew.filter(p => !handIds.has(p.id));
+          if (targets.length === 0) {
+            this.effectText(x, y - 70 * L.k, 'No one to exile', '#ffa726', 400);
+            this.renderAll();
+            this.time.delayedCall(500, () => this.processNextShip());
+            return;
+          }
+          if (def.ship.cRes) G.res[def.ship.cRes] -= def.ship.cN;
+          this.effectText(x, y - 70 * L.k, 'Exile a pirate!', '#ff8a80');
+          G.phase = 'removing';
+          G.busy = false;
           this.renderAll();
-          this.processNextShip();
           return;
         }
-        if (def.ship.cRes) G.res[def.ship.cRes] -= def.ship.cN;
-        this.float(x, handPos.y - 40 * L.k, 'Exile a pirate!', '#ff8a80');
-        G.phase = 'removing';
-        G.busy = false;
-        this.renderAll();
-        return;
-      }
 
-      if (!def.ship) {
-        this.float(x, handPos.y - 40 * L.k, '—', '#546e7a');
-        this.renderAll();
-        this.processNextShip();
-        return;
-      }
-
-      const r = this.resolveShip(pirate);
-      if (r.ok) {
-        let msg = '';
-        if (r.pN > 0) {
-          const em = r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes];
-          msg = '+' + r.pN + em;
+        if (!def.ship) {
+          this.effectText(x, y - 70 * L.k, '—', '#546e7a', 400);
+          this.renderAll();
+          this.time.delayedCall(500, () => this.processNextShip());
+          return;
         }
-        if (r.extraEnthusiasm) msg += (msg ? ' ' : '') + '+' + r.extraEnthusiasm + '☠️';
-        if (r.weaponN) msg += (msg ? ' ' : '') + '+' + (r.weaponN > 1 ? r.weaponN : '') + '🗡️';
-        if (r.cannonN) msg += (msg ? ' ' : '') + '+' + (r.cannonN > 1 ? r.cannonN : '') + '💣';
-        if (!msg) msg = '✓';
-        this.float(x, handPos.y - 40 * L.k, msg, '#80cbc4');
-      } else {
-        this.float(x, handPos.y - 40 * L.k, '—', '#546e7a');
-      }
-      this.renderAll();
-      this.processNextShip();
+
+        const r = this.resolveShip(pirate);
+        const s = TYPES[pirate.type].ship;
+        let costPart = '';
+        if (s.costs) {
+          costPart = s.costs.map(c => c.n + (c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res])).join(' ');
+        } else if (s.costWeapons) {
+          costPart = (s.costWeapons > 1 ? s.costWeapons : '') + '🗡️';
+        } else if (s.costCannons) {
+          costPart = (s.costCannons > 1 ? s.costCannons : '') + '💣';
+        } else if (s.cRes && s.cN > 0) {
+          costPart = s.cN + RES_EMOJI[s.cRes];
+        }
+        const gainParts = [];
+        if (s.prodWeapons) gainParts.push(s.prodWeapons + '🗡️');
+        if (s.prodCannons) gainParts.push(s.prodCannons + '💣');
+        if (s.pN > 0) {
+          const em = s.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[s.pRes];
+          gainParts.push(s.pN + em);
+        }
+        if (s.extraEnthusiasm) gainParts.push(s.extraEnthusiasm + '☠️');
+        let msg;
+        if (gainParts.length === 0 && !costPart) {
+          msg = '—';
+        } else if (costPart && gainParts.length) {
+          msg = costPart + ' → ' + gainParts.join(' ');
+        } else if (gainParts.length) {
+          msg = gainParts.map(g => '+' + g).join(' ');
+        } else {
+          msg = '—';
+        }
+        this.effectText(x, y - 70 * L.k, msg, r.ok ? '#80cbc4' : '#546e7a', r.ok || 250);
+        if (r.ok) {
+          const gainItems = [];
+          if (r.pN > 0) {
+            gainItems.push({ emoji: r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes], count: r.pN });
+          }
+          if (r.extraEnthusiasm) gainItems.push({ emoji: '☠️', count: r.extraEnthusiasm });
+          if (r.weaponN) gainItems.push({ emoji: '🗡️', count: r.weaponN });
+          if (r.cannonN) gainItems.push({ emoji: '💣', count: r.cannonN });
+          if (gainItems.length) this.animateResourceGain(x, y, gainItems);
+        }
+        this.renderAll();
+        const shipWait = (r.ok && (r.pN > 0 || r.weaponN || r.cannonN || r.extraEnthusiasm)) ? 1000 : 500;
+        this.time.delayedCall(shipWait, () => this.processNextShip());
+      },
     });
   }
 
@@ -1364,6 +1423,9 @@ class GameScene extends Phaser.Scene {
     G.sent = [];
     G.enthusiasm = 0;
     this._sendingToIsland.clear();
+    this._shipMovedIndices = new Map();
+    this._shipAnimatingIdx = -1;
+    this._shipQueueTotal = 0;
     this.ct.tip.setVisible(false);
     G.hand = drawCards(5);
     this.enterMapPhase();
@@ -1578,52 +1640,46 @@ class GameScene extends Phaser.Scene {
   handPos(idx) {
     const L = this.L;
     const n = G.hand.length;
-    const MOBILE_HAND_SHIFT_Y = L.IS_MOBILE ? 130 * L.k : 0;
-    const MAX_STEP = 240 * L.k;
-    const ROW_GAP = 250 * L.k;
     const EDGE_PAD = 8 * L.k;
-    const ISLAND_HALF_H = 170 * L.k;
-    const baseHandY = L.Y_HAND + MOBILE_HAND_SHIFT_Y;
-    const topRowYCandidate = baseHandY - ROW_GAP;
-    const islandBottomY = L.Y_ISL_CY + ISLAND_HALF_H;
+    const MAX_STEP = 180 * L.k;
     const spriteHalfW = 5 * L.SC;
-    const spriteHalfH = 5 * L.SC;
     const minX = spriteHalfW + EDGE_PAD;
     const maxX = L.W - minX;
     const usableW = Math.max(0, maxX - minX);
 
-    const placeOnRow = (rowCount, rowIdx) => {
-      if (rowCount <= 1) return Phaser.Math.Clamp(L.cx, minX, maxX);
-      const stepFit = usableW / Math.max(rowCount - 1, 1);
+    let x;
+    if (n <= 1) {
+      x = Phaser.Math.Clamp(L.cx, minX, maxX);
+    } else {
+      const stepFit = usableW / Math.max(n - 1, 1);
       const step = Math.min(MAX_STEP, stepFit);
-      const rowW = step * (rowCount - 1);
+      const rowW = step * (n - 1);
       const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
-      return startX + rowIdx * step;
-    };
-
-    const safeTopRowY = islandBottomY + spriteHalfH + EDGE_PAD;
-    const topRowY = Math.max(topRowYCandidate, safeTopRowY);
-    const useSplitRows = L.NARROW_HAND_SPLIT && n >= 5;
-
-    if (!useSplitRows) {
-      return {
-        x: placeOnRow(n, idx),
-        y: baseHandY,
-        row: 'single',
-      };
+      x = startX + idx * step;
     }
+    return { x, y: L.Y_HAND_CENTER };
+  }
 
-    const topCount = n === 5 ? 2 : Math.ceil(n / 2);
-    const bottomCount = Math.max(1, n - topCount);
-    const isTopRow = idx < topCount;
-    const rowCount = isTopRow ? topCount : bottomCount;
-    const rowIdx = isTopRow ? idx : idx - topCount;
-
-    return {
-      x: placeOnRow(rowCount, rowIdx),
-      y: isTopRow ? topRowY : baseHandY,
-      row: isTopRow ? 'top' : 'bottom',
-    };
+  shipRowPos(slotIdx, total) {
+    const L = this.L;
+    const EDGE_PAD = 8 * L.k;
+    const MAX_STEP = 160 * L.k;
+    const spriteHalfW = 5 * L.SC;
+    const minX = spriteHalfW + EDGE_PAD;
+    const maxX = L.W - minX;
+    const usableW = Math.max(0, maxX - minX);
+    const n = total || 1;
+    let x;
+    if (n <= 1) {
+      x = Phaser.Math.Clamp(L.cx, minX, maxX);
+    } else {
+      const stepFit = usableW / Math.max(n - 1, 1);
+      const step = Math.min(MAX_STEP, stepFit);
+      const rowW = step * (n - 1);
+      const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
+      x = startX + slotIdx * step;
+    }
+    return { x, y: L.Y_SHIP_ROW };
   }
 
   handX(idx) {
@@ -1866,7 +1922,7 @@ class GameScene extends Phaser.Scene {
       col = '#9fc3e0';
     } else if (G.phase === 'sending') {
       const r = this.maxSend() - G.sent.length;
-      str = `Tap a pirate to send ashore (${r} left)`;
+      str = `Drag a pirate to island (${r} left)`;
     } else if (G.phase === 'ship') {
       str = 'Ship at work…';
       col = '#80cbc4';
@@ -1883,15 +1939,9 @@ class GameScene extends Phaser.Scene {
 
   renderHand() {
     this.clearCt('hand');
+    if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
+    this._handSprites = {};
     const L = this.L;
-    const HAND_TEXT_FONT_SIZE = L.fs(30);
-    const HAND_TEXT_LINE2_OFFSET = 38 * L.k;
-    const HAND_TEXT_LINE3_OFFSET = 74 * L.k;
-
-    const dv = this.add.graphics();
-    dv.lineStyle(2, 0x1e3040);
-    dv.lineBetween(40, L.Y_DIV2, L.W - 40, L.Y_DIV2);
-    this.addTo('hand', dv);
 
     const tutorialTurn = this.isTutorial() ? this.getTutorialTurn() : null;
     const tutorialRequiredSent = this.isTutorial() ? this.tutorialRequiredSent(tutorialTurn) : 0;
@@ -1908,63 +1958,118 @@ class GameScene extends Phaser.Scene {
       })
       : -1;
 
+    const isSending = G.phase === 'sending' && !G.busy;
     G.hand.forEach((p, i) => {
       if (G.sent.includes(i) || this._sendingToIsland.has(i)) return;
+      if (this._shipMovedIndices && this._shipMovedIndices.has(i)) return;
+      if (this._shipAnimatingIdx === i) return;
       const def = TYPES[p.type];
-      const handPos = this.handPos(i);
-      const x = handPos.x;
-      const y = handPos.y;
-      const isTopSplitRow = handPos.row === 'top';
+      const pos = this.handPos(i);
 
-      const spr = addCatSprite(this, x, y, p.type);
+      const spr = addCatSprite(this, pos.x, pos.y, p.type);
       spr.setScale(L.SC);
+      spr.setInteractive({ useHandCursor: true, draggable: false });
+      spr.setData('handIdx', i);
+      this._handSprites[i] = spr;
+
       const tutorialBlocked = this.isTutorial() && G.phase === 'sending' &&
         this.isTutorialIslandBlockedPirate(p, tutorialTurn);
       if (tutorialBlocked) {
         spr.setTint(0x8a8a8a);
+        spr.setAlpha(0.8);
       }
+
       if (i === tutorialTargetIdx) {
         this.tweens.add({
-          targets: spr,
-          y: y - 14 * L.k,
-          duration: 420,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
+          targets: spr, y: pos.y - 14 * L.k,
+          duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
       }
 
-      if (G.phase === 'sending' && !G.busy) {
-        spr.setInteractive({ useHandCursor: true });
-        const cantConvert = def.island && def.island.convert &&
-          (G.res[def.island.convert.cRes] || 0) < def.island.convert.cN;
-        if (tutorialBlocked) spr.setAlpha(0.8);
-        if (!def.canIsland || cantConvert) spr.setAlpha(1);
-        spr.on('pointerover', () => spr.setScale(L.SC + 1));
-        spr.on('pointerout', () => spr.setScale(L.SC));
+      if (isSending) {
+        this.input.setDraggable(spr, true);
+
+        spr._dragStartPos = { x: pos.x, y: pos.y };
+        spr._dragMoved = false;
+
+        spr.on('dragstart', (pointer) => {
+          spr._dragMoved = false;
+          spr.setAlpha(0.3);
+          const ghost = addCatSprite(this, pointer.x, pointer.y, p.type);
+          ghost.setScale(L.SC).setDepth(80);
+          this._dragGhost = ghost;
+          this.ct.tip.setPosition(0, 0);
+          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+          this._tipDragAnchor = { x: pos.x, y: pos.y };
+        });
+
+        spr.on('drag', (pointer) => {
+          if (this._dragGhost) {
+            this._dragGhost.setPosition(pointer.x, pointer.y);
+          }
+          if (this._tipDragAnchor) {
+            this.ct.tip.setPosition(
+              pointer.x - this._tipDragAnchor.x,
+              pointer.y - this._tipDragAnchor.y
+            );
+          }
+          const dist = Phaser.Math.Distance.Between(
+            spr._dragStartPos.x, spr._dragStartPos.y, pointer.x, pointer.y
+          );
+          if (dist > 10) spr._dragMoved = true;
+        });
+
+        spr.on('dragend', (pointer) => {
+          if (this._dragGhost) {
+            this._dragGhost.destroy();
+            this._dragGhost = null;
+          }
+          this.ct.tip.setPosition(0, 0);
+          this._tipDragAnchor = null;
+          spr.setAlpha(tutorialBlocked ? 0.8 : 1);
+
+          if (spr._dragMoved && pointer.y < L.Y_HAND_CENTER) {
+            this.sendToIsland(i, { x: pointer.x, y: pointer.y });
+          } else if (!spr._dragMoved) {
+            this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+          }
+        });
+      } else {
         spr.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
-          this.sendToIsland(i);
+          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
         });
       }
 
-      this.addTo('hand', spr);
+      spr.on('pointerover', () => {
+        spr.setScale(L.SC + 1);
+        if (this.ct.tip.visible) {
+          this.showTip(p.type, pos.x, pos.y - 5 * L.SC);
+        }
+      });
+      spr.on('pointerout', () => spr.setScale(L.SC));
 
-      const textX = x;
-      const topTextOffset = (L.IS_MOBILE && isTopSplitRow) ? 10 * L.k : 18 * L.k;
-      const textTopY = y + 5 * L.SC + topTextOffset;
-      this.txt('hand', textX, textTopY, def.name,
-        { fontSize: HAND_TEXT_FONT_SIZE, color: '#a0b0c0' });
-      if (G.phase === 'boarding') {
-        this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, (def.str || 0) + '⚔️',
-          { fontSize: HAND_TEXT_FONT_SIZE, color: '#e57373' });
-      } else {
-        this.txt('hand', textX, textTopY + HAND_TEXT_LINE2_OFFSET, def.dI,
-          { fontSize: HAND_TEXT_FONT_SIZE, color: '#7a9a6a' });
-        this.txt('hand', textX, textTopY + HAND_TEXT_LINE3_OFFSET, def.dS,
-          { fontSize: HAND_TEXT_FONT_SIZE, color: '#6a8a9a' });
-      }
+      this.addTo('hand', spr);
     });
+
+    if (this._shipMovedIndices && this._shipMovedIndices.size > 0) {
+      const total = this._shipQueueTotal || this._shipMovedIndices.size;
+      this._shipMovedIndices.forEach((slotIdx, hi) => {
+        const p = G.hand[hi];
+        if (!p) return;
+        const pos = this.shipRowPos(slotIdx, total);
+        const spr = addCatSprite(this, pos.x, pos.y, p.type);
+        spr.setScale(L.SC * 0.85);
+        const isLost = !G.allCrew.some(c => c.id === p.id);
+        if (isLost) spr.setAlpha(0.3);
+        spr.setInteractive({ useHandCursor: true });
+        spr.on('pointerdown', (ptr) => {
+          ptr.event.stopPropagation();
+          this.showTip(p.type, pos.x, pos.y - 5 * L.SC, { fromClick: true });
+        });
+        this.addTo('hand', spr);
+      });
+    }
   }
 
   renderBtn() {
@@ -2073,79 +2178,132 @@ class GameScene extends Phaser.Scene {
     return t;
   }
 
-  // ──────────── TOOLTIP ────────────
+  // ──────────── TOOLTIP (CARD) ────────────
 
   showTip(type, tx, ty, opts = {}) {
     const L = this.L;
     if (opts.fromClick) this._tipJustOpened = true;
+    if (!this._tipDragAnchor) this.ct.tip.setPosition(0, 0);
     this.clearCt('tip');
     const def = TYPES[type];
-    const lines = [];
-    lines.push(def.name);
-    lines.push('─────────────');
-    lines.push('🏝️ ' + def.dI);
-    lines.push('⛵ ' + def.dS);
-    lines.push((def.str || 0) + '⚔️');
-    if (def.cost !== null) {
-      lines.push('');
-      lines.push('Cost: ☠️' + def.cost);
-    }
-    if (type === 'smuggler') {
-      if (G.res.map > 0) {
-        lines.push('🗺️ Map: +30% gold chance');
-      }
-    }
-    const body = lines.join('\n');
+    const tipFs = L.fs(20);
+    const headFs = L.fs(24);
+    const sectionFs = L.fs(18);
+    const pad = 18 * L.k;
+    const innerPad = 12 * L.k;
+    const sectionGap = 8 * L.k;
 
-    const tipFs = L.fs(22);
-    const tmp = this.add.text(0, -999, body, {
-      fontFamily: 'monospace', fontSize: tipFs, lineSpacing: 6 * L.k,
-    });
-    const tw = tmp.width, th = tmp.height;
-    tmp.destroy();
+    const nameText = def.name + '  ' + (def.str || 0) + '⚔️';
+    const islandText = def.dI || '—';
+    const shipText = def.dS || '—';
+    const costText = def.cost !== null ? '☠️' + def.cost : '';
+    let extraText = '';
+    if (type === 'smuggler' && G.res.map > 0) {
+      extraText = '🗺️ +30% gold chance';
+    }
 
-    const pad = 20 * L.k;
-    const bw = tw + pad * 2, bh = th + pad * 2;
-    let bx = tx - bw / 2;
-    let by = ty - bh - 16 * L.k;
-    if (bx < 8 * L.k) bx = 8 * L.k;
-    if (bx + bw > L.W - 8 * L.k) bx = L.W - bw - 8 * L.k;
-    if (by < 8 * L.k) by = ty + 60 * L.k;
+    const cardW = Math.min(320 * L.k, L.W - 40 * L.k);
+
+    const measure = (str, fs) => {
+      const t = this.add.text(0, -9999, str, {
+        fontFamily: 'monospace', fontSize: fs, wordWrap: { width: cardW - pad * 2 },
+      });
+      const h = t.height;
+      t.destroy();
+      return h;
+    };
+
+    const nameH = measure(nameText, headFs);
+    const divH = 2 * L.k;
+    const islLabelH = measure('🏝️ Island', sectionFs);
+    const islH = measure(islandText, tipFs);
+    const shipLabelH = measure('⛵ Ship', sectionFs);
+    const shipH = measure(shipText, tipFs);
+    const costH = costText ? measure(costText, sectionFs) + sectionGap : 0;
+    const extraH = extraText ? measure(extraText, sectionFs) + sectionGap : 0;
+
+    const cardH = pad + nameH + sectionGap + divH + sectionGap
+      + islLabelH + innerPad + islH + sectionGap
+      + divH + sectionGap
+      + shipLabelH + innerPad + shipH + sectionGap
+      + costH + extraH + pad;
+
+    let bx = tx - cardW / 2;
+    let by = ty - cardH - 12 * L.k;
+    if (bx < 6 * L.k) bx = 6 * L.k;
+    if (bx + cardW > L.W - 6 * L.k) bx = L.W - cardW - 6 * L.k;
+    if (by < 6 * L.k) by = ty + 50 * L.k;
 
     const bg = this.add.graphics();
-    bg.fillStyle(0x101828, 1);
-    bg.fillRoundedRect(bx, by, bw, bh, 10 * L.k);
-    bg.lineStyle(2 * L.k, 0x304860);
-    bg.strokeRoundedRect(bx, by, bw, bh, 10 * L.k);
+    bg.fillStyle(0x0e1a28, 0.97);
+    bg.fillRoundedRect(bx, by, cardW, cardH, 12 * L.k);
+    bg.lineStyle(2 * L.k, 0x3a5a7a);
+    bg.strokeRoundedRect(bx, by, cardW, cardH, 12 * L.k);
     this.addTo('tip', bg);
 
-    const txt = this.add.text(bx + pad, by + pad, body, {
-      fontFamily: 'monospace', fontSize: tipFs, color: '#d0d8e0', lineSpacing: 6 * L.k,
-    });
-    this.addTo('tip', txt);
+    let cy = by + pad;
 
-    let extraH = 0;
+    const nameObj = this.add.text(bx + pad, cy, nameText, {
+      fontFamily: 'monospace', fontSize: headFs, color: '#ffd78a',
+      wordWrap: { width: cardW - pad * 2 },
+    }).setOrigin(0, 0);
+    this.addTo('tip', nameObj);
+    cy += nameH + sectionGap;
 
-    if (opts.canSend && G.phase === 'sending' && !G.busy) {
-      const btnY = by + bh + 8 * L.k;
-      const sb = this.add.text(bx + bw / 2, btnY, '🏝️ To island', {
-        fontFamily: 'monospace', fontSize: L.fs(22), color: '#ffe0a0',
-        backgroundColor: '#4a3a10', padding: { x: 20 * L.k, y: 10 * L.k },
-      }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
-      sb.on('pointerover', () => sb.setStyle({ backgroundColor: '#6a5a20' }));
-      sb.on('pointerout', () => sb.setStyle({ backgroundColor: '#4a3a10' }));
-      sb.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.ct.tip.setVisible(false);
-        this.sendToIsland(opts.handIdx);
-      });
-      this.addTo('tip', sb);
-      extraH = 60 * L.k;
+    bg.lineStyle(1, 0x3a5a7a, 0.6);
+    bg.lineBetween(bx + pad, cy, bx + cardW - pad, cy);
+    cy += divH + sectionGap;
+
+    const islLabel = this.add.text(bx + pad, cy, 'On island:', {
+      fontFamily: 'monospace', fontSize: sectionFs, color: '#7a9a6a',
+    }).setOrigin(0, 0);
+    this.addTo('tip', islLabel);
+    cy += islLabelH + innerPad;
+
+    const islObj = this.add.text(bx + pad + 10 * L.k, cy, islandText, {
+      fontFamily: 'monospace', fontSize: tipFs, color: '#c8e0c0',
+      wordWrap: { width: cardW - pad * 2 - 10 * L.k },
+    }).setOrigin(0, 0);
+    this.addTo('tip', islObj);
+    cy += islH + sectionGap;
+
+    bg.lineBetween(bx + pad, cy, bx + cardW - pad, cy);
+    cy += divH + sectionGap;
+
+    const shipLabel = this.add.text(bx + pad, cy, 'On ship:', {
+      fontFamily: 'monospace', fontSize: sectionFs, color: '#6a8a9a',
+    }).setOrigin(0, 0);
+    this.addTo('tip', shipLabel);
+    cy += shipLabelH + innerPad;
+
+    const shipObj = this.add.text(bx + pad + 10 * L.k, cy, shipText, {
+      fontFamily: 'monospace', fontSize: tipFs, color: '#b0d0e0',
+      wordWrap: { width: cardW - pad * 2 - 10 * L.k },
+    }).setOrigin(0, 0);
+    this.addTo('tip', shipObj);
+    cy += shipH + sectionGap;
+
+    if (costText) {
+      const costObj = this.add.text(bx + pad, cy, 'Cost: ' + costText, {
+        fontFamily: 'monospace', fontSize: sectionFs, color: '#ce93d8',
+      }).setOrigin(0, 0);
+      this.addTo('tip', costObj);
+      cy += costH;
     }
 
+    if (extraText) {
+      const exObj = this.add.text(bx + pad, cy, extraText, {
+        fontFamily: 'monospace', fontSize: sectionFs, color: '#ffd54f',
+      }).setOrigin(0, 0);
+      this.addTo('tip', exObj);
+      cy += extraH;
+    }
+
+    let btnAreaH = 0;
+
     if (opts.canBuy && G.phase === 'shopping') {
-      const btnY = by + bh + 8 * L.k + extraH;
-      const bb = this.add.text(bx + bw / 2, btnY, 'Buy', {
+      const btnY = by + cardH + 6 * L.k;
+      const bb = this.add.text(bx + cardW / 2, btnY, 'Buy', {
         fontFamily: 'monospace', fontSize: L.fs(22), color: '#a0d8a0',
         backgroundColor: '#1a3a28', padding: { x: 20 * L.k, y: 10 * L.k },
       }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
@@ -2156,12 +2314,81 @@ class GameScene extends Phaser.Scene {
         this.buyPirate(opts.shopIdx);
       });
       this.addTo('tip', bb);
-      extraH += 60 * L.k;
+      btnAreaH = 50 * L.k;
     }
 
-    this._tipRect = new Phaser.Geom.Rectangle(bx, by, bw, bh + extraH);
-
+    this._tipRect = new Phaser.Geom.Rectangle(bx, by, cardW, cardH + btnAreaH);
     this.ct.tip.setVisible(true);
+  }
+
+  // ──────────── RESOURCE GAIN ANIMATION ────────────
+
+  animateResourceGain(fromX, fromY, items) {
+    const L = this.L;
+    const targetX = L.cx;
+    const targetY = L.Y_INV;
+    let delay = 0;
+    for (const item of items) {
+      const n = Math.min(item.count || 1, 8);
+      for (let i = 0; i < n; i++) {
+        this.time.delayedCall(delay, () => {
+          const ox = (Math.random() - 0.5) * 30 * L.k;
+          const sx = fromX + ox;
+          const sy = fromY;
+          const cpX = (sx + targetX) / 2 + (Math.random() - 0.5) * 80 * L.k;
+          const cpY = Math.min(sy, targetY) - 60 * L.k;
+
+          const t = this.add.text(sx, sy, item.emoji, {
+            fontFamily: 'monospace',
+            fontSize: L.fs(28),
+            stroke: '#000',
+            strokeThickness: 3 * L.k,
+          }).setOrigin(0.5).setDepth(70);
+
+          this.tweens.addCounter({
+            from: 0, to: 1,
+            duration: 650,
+            ease: 'Sine.easeInOut',
+            onUpdate: (tw) => {
+              const p = tw.getValue();
+              const bx = (1 - p) * (1 - p) * sx + 2 * (1 - p) * p * cpX + p * p * targetX;
+              const by = (1 - p) * (1 - p) * sy + 2 * (1 - p) * p * cpY + p * p * targetY;
+              t.setPosition(bx, by);
+              t.setScale(1 + 0.2 * Math.sin(p * Math.PI) - p * 0.4);
+              t.setAlpha(0.95 - p * 0.15);
+            },
+            onComplete: () => {
+              t.setPosition(targetX, targetY).setAlpha(1).setScale(1.3);
+              this.tweens.add({
+                targets: t,
+                scale: 1.8, alpha: 0,
+                duration: 250,
+                ease: 'Cubic.easeOut',
+                onComplete: () => t.destroy(),
+              });
+            },
+          });
+        });
+        delay += 110;
+      }
+    }
+  }
+
+  effectText(x, y, str, col, hold = true) {
+    const L = this.L;
+    const t = this.add.text(x, y, str, {
+      fontFamily: 'monospace', fontSize: L.fs(28), color: col || '#fff',
+      stroke: '#000', strokeThickness: 4 * L.k,
+    }).setOrigin(0.5).setDepth(60);
+    this.tweens.add({
+      targets: t,
+      alpha: 0,
+      y: y - (hold ? 30 : 70) * L.k,
+      delay: hold === true ? 800 : (hold === false ? 0 : hold),
+      duration: hold === true ? 500 : (hold === false ? 1200 : 600),
+      ease: 'Power2',
+      onComplete: () => t.destroy(),
+    });
   }
 
   // ──────────── FLOATING TEXT ────────────

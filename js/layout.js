@@ -45,6 +45,10 @@ function computeLayout(w, h) {
   const yPhase = centerY + 194 * k - narrowContentShiftY;
   const yDiv2Raw = handY - 136 * k - (isMobile ? 200 * k : 0);
   const yDiv2 = Math.max(yDiv2Raw, yPhase + 24 * k);
+  const yNav = h - navBaseOffset * k;
+  const handShipSpace = yNav - yPhase;
+  const yHandCenter = yPhase + handShipSpace * 0.6;
+  const yShipRow = yPhase + handShipSpace * 0.82;
   return {
     W: w, H: h, k,
     IS_MOBILE: isMobile,
@@ -60,7 +64,9 @@ function computeLayout(w, h) {
     Y_DIV2:    yDiv2,
     Y_HAND:    handY - 60 * k,
     Y_HLBL:    handY - 60 * k + 54 * k,
-    Y_NAV:     h - navBaseOffset * k,
+    Y_HAND_CENTER: yHandCenter,
+    Y_SHIP_ROW: yShipRow,
+    Y_NAV:     yNav,
     NARROW_HAND_SPLIT: isMobile,
     SC:    10 * k * CHARACTER_SCALE_BOOST,
     SC_SM: 5 * k * CHARACTER_SCALE_BOOST,
