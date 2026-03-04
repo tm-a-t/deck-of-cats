@@ -29,7 +29,7 @@ const CARD = {
   SHIP_GLOW: 0x80cbc4,
   SHIP_GLOW_ALPHA: 0.45,
 
-  NEIGHBOR_SPREAD: 36,
+  NEIGHBOR_SPREAD: 48,
 };
 
 function measureWrappedHeight(ctx, text, maxW, lineH) {
@@ -246,6 +246,18 @@ class CardHand {
     this._dragIdx = -1;
   }
 
+  getCardPositions() {
+    const positions = {};
+    for (const c of this.cards) {
+      positions[c.handIdx] = {
+        x: c.container.x,
+        y: c.container.y,
+        rotation: c.container.rotation,
+      };
+    }
+    return positions;
+  }
+
   render(opts) {
     this.destroy();
     const scene = this.scene;
@@ -342,6 +354,26 @@ class CardHand {
       }
 
       container.add(ct);
+
+      const prevPos = opts.prevPositions && opts.prevPositions[handIdx];
+      if (prevPos) {
+        ct.setPosition(prevPos.x, prevPos.y);
+        ct.setRotation(prevPos.rotation);
+        shadow.setPosition(prevPos.x + CARD.SHADOW_OFF * k, prevPos.y + ch * 0.52);
+        shadow.setRotation(prevPos.rotation);
+        scene.tweens.add({
+          targets: ct,
+          x: slot.x, y: slot.y, rotation: slot.rotation,
+          duration: 300, ease: 'Cubic.easeOut',
+        });
+        scene.tweens.add({
+          targets: shadow,
+          x: slot.x + CARD.SHADOW_OFF * k, y: slot.y + ch * 0.52,
+          rotation: slot.rotation,
+          duration: 300, ease: 'Cubic.easeOut',
+        });
+      }
+
       this.cards.push(cardData);
     });
 
@@ -371,6 +403,8 @@ class CardHand {
       this._shipHighlightTween = null;
     }
 
+    this._killSpreadTweens();
+
     if (active) {
       this._shipHighlightedIdx = handIdx;
       const glow = scene.add.graphics();
@@ -388,6 +422,8 @@ class CardHand {
         y: card.slot.y - 20 * k,
         duration: 300, ease: 'Back.easeOut',
       });
+
+      this._tweenNeighborSpread(card, k, 300, 'Back.easeOut');
     } else {
       this._shipHighlightedIdx = -1;
       if (card._shipGlow) {
@@ -402,6 +438,8 @@ class CardHand {
         y: card.slot.y,
         duration: 200, ease: 'Sine.easeOut',
       });
+
+      this._tweenNeighborSpread(null, k, 200, 'Sine.easeOut');
     }
   }
 
@@ -424,25 +462,40 @@ class CardHand {
     const top = ch / 2 - areaH;
 
     const fontSize = Math.max(14, Math.round(17 * k));
-    const txt = scene.add.text(0, top + areaH / 2, msg, {
-      fontFamily: 'monospace',
-      fontSize: fontSize + 'px',
-      color: color || '#80cbc4',
-      stroke: '#000',
-      strokeThickness: Math.max(1, Math.round(2.5 * k)),
+    const txt = scene.make.text({
+      x: 0, y: top + areaH / 2,
+      text: msg,
+      style: {
+        fontFamily: 'monospace',
+        fontSize: fontSize + 'px',
+        color: color || '#80cbc4',
+        stroke: '#000',
+        strokeThickness: Math.max(1, Math.round(2.5 * k)),
+      },
+      add: false,
     }).setOrigin(0.5);
 
     const pad = Math.round(16 * k);
     const bgW = txt.width + pad * 2;
     const bgH = txt.height + Math.round(8 * k);
     const bgY = top + areaH / 2 - bgH / 2;
-    const bg = scene.add.graphics();
+    const mask = scene.make.graphics({ add: false });
+    mask.fillStyle(CARD.BG, 1);
+    mask.fillRoundedRect(
+      -cw / 2 + 1, top,
+      cw - 2, areaH - 1,
+      { tl: 0, tr: 0, bl: r, br: r }
+    );
+
+    const bg = scene.make.graphics({ add: false });
     bg.fillStyle(0x0e2028, 0.95);
     bg.fillRoundedRect(-bgW / 2, bgY, bgW, bgH, Math.round(4 * k));
 
-    const overlay = scene.add.container(0, 0, [bg, txt]);
+    const overlay = scene.make.container({ add: false });
+    overlay.add([mask, bg, txt]);
     card.container.add(overlay);
     card._shipEffectOverlay = overlay;
+    card._shipEffectParts = [bg, txt];
 
     txt.setScale(0.75);
     txt.setAlpha(0);
@@ -460,14 +513,17 @@ class CardHand {
   hideShipEffectOverlay(handIdx) {
     const card = this.cards.find(c => c.handIdx === handIdx);
     if (!card || !card._shipEffectOverlay) return;
-    const overlay = card._shipEffectOverlay;
+    const parts = card._shipEffectParts || [];
     card._shipEffectOverlay = null;
-    this.scene.tweens.add({
-      targets: overlay,
-      alpha: 0,
-      scaleX: 0.85, scaleY: 0.85,
-      duration: 180,
-    });
+    card._shipEffectParts = null;
+    if (parts.length) {
+      this.scene.tweens.add({
+        targets: parts,
+        alpha: 0,
+        scaleX: 0.85, scaleY: 0.85,
+        duration: 180,
+      });
+    }
   }
 
   _setupDrag(cardData, onSendToIsland, L) {
@@ -576,6 +632,55 @@ class CardHand {
     }
   }
 
+  _killSpreadTweens() {
+    if (this._spreadTweens) {
+      for (const tw of this._spreadTweens) tw.stop();
+      this._spreadTweens = null;
+    }
+  }
+
+  _tweenNeighborSpread(elevCard, k, duration, ease) {
+    const scene = this.scene;
+    const spread = CARD.NEIGHBOR_SPREAD * k;
+    const shadowOff = CARD.SHADOW_OFF * k;
+    this._spreadTweens = [];
+    let pending = 0;
+
+    const elevIdx = elevCard
+      ? this.cards.indexOf(elevCard)
+      : -1;
+
+    const onDone = () => {
+      if (--pending <= 0) this._spreadTweens = null;
+    };
+
+    for (let i = 0; i < this.cards.length; i++) {
+      const c = this.cards[i];
+      if (i === elevIdx || c.dragging) continue;
+      let targetX = c.slot.x;
+      if (elevIdx >= 0) {
+        const diff = i - elevIdx;
+        const dir = Math.sign(diff);
+        const dist = Math.abs(diff);
+        targetX = c.slot.x + dir * spread / dist;
+      }
+      pending++;
+      this._spreadTweens.push(scene.tweens.add({
+        targets: c.container,
+        x: targetX,
+        duration, ease,
+        onComplete: onDone,
+      }));
+      this._spreadTweens.push(scene.tweens.add({
+        targets: c.shadow,
+        x: targetX + shadowOff,
+        duration, ease,
+      }));
+    }
+
+    if (pending === 0) this._spreadTweens = null;
+  }
+
   _updateIdle(L) {
     this._time += 0.03;
     const k = L.k;
@@ -585,23 +690,26 @@ class CardHand {
     let elevIdx = -1;
     for (let i = 0; i < this.cards.length; i++) {
       const c = this.cards[i];
-      if (c.hovered || c.handIdx === this._shipHighlightedIdx) {
+      if (c.hovered || c.dragging || c.handIdx === this._shipHighlightedIdx) {
         elevIdx = i;
         break;
       }
     }
 
+    const spreadTweening = this._spreadTweens != null;
+
     this.cards.forEach((c, i) => {
-      // Spread neighbors toward/away from elevated card
-      let targetX = c.slot.x;
-      if (elevIdx >= 0 && i !== elevIdx && !c.dragging) {
-        const diff = i - elevIdx;
-        const dir = Math.sign(diff);
-        const dist = Math.abs(diff);
-        targetX = c.slot.x + dir * spread / dist;
+      if (!spreadTweening) {
+        let targetX = c.slot.x;
+        if (elevIdx >= 0 && i !== elevIdx && !c.dragging) {
+          const diff = i - elevIdx;
+          const dir = Math.sign(diff);
+          const dist = Math.abs(diff);
+          targetX = c.slot.x + dir * spread / dist;
+        }
+        c.container.x += (targetX - c.container.x) * lerpSpeed;
+        c.shadow.x += ((targetX + CARD.SHADOW_OFF * k) - c.shadow.x) * lerpSpeed;
       }
-      c.container.x += (targetX - c.container.x) * lerpSpeed;
-      c.shadow.x += ((targetX + CARD.SHADOW_OFF * k) - c.shadow.x) * lerpSpeed;
 
       if (c.hovered || c.dragging) return;
       if (c.handIdx === this._shipHighlightedIdx) return;
