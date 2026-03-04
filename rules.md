@@ -37,7 +37,11 @@ Player picks the next node on the map.
 If the selected node is an island:
 
 **Sending phase**:
-- Player sends 0–2 pirates from hand to the island (one click = one send).
+- The hand is displayed as a fan of cards. Each card shows the pirate's portrait, name, and strength badge.
+- Hover (desktop) or tap (mobile) a card to lift it and see its full stats tooltip.
+- **Drag** a card upward toward the island to send that pirate ashore (replaces the old one-click-to-send).
+- Cards that can be sent to the island have a green glow outline.
+- Player sends 0–2 pirates from hand to the island.
 - Port Island allows 3 (base 2 + 1 extra).
 - Skull Island grants +2☠️ at round start (applied immediately when the node is selected).
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
