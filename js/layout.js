@@ -74,10 +74,8 @@ function computeLayout(w, h) {
     fs: () => uniformFontPx,
     fsPx: () => uniformFontPx,
 
-    // Modal map layout
-    MAP_MODAL_W:    Math.min(w - 60 * k, 760 * k),
-    MAP_MODAL_H:    Math.min(h - 250 * k, 860 * k),
-    MAP_MODAL_PAD:  24 * k,
+    // Map panel layout
+    MAP_PANEL_PAD:  24 * k,
     MAP_HEAD_H:     84 * k,
     MAP_FOOT_H:     40 * k,
     MAP_NODE_R:     22 * k,

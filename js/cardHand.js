@@ -146,12 +146,59 @@ function buildCardTexture(scene, typeKey, L) {
   ctx.font = `${statFs}px monospace`;
   ctx.fillStyle = '#a0b8c8';
   const strText = (def.str || 0) + ' ⚔️';
-  const costText = def.cost != null ? '  ☠️' + def.cost : '';
-  ctx.fillText(strText + costText, cw / 2, strY);
+  ctx.fillText(strText, cw / 2, strY);
 
   scene.textures.addCanvas(texKey, canvas);
   scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
   return { texKey, cw, ch };
+}
+
+function createPirateCard(scene, opts) {
+  const L = opts.L || scene.L;
+  const k = L.k;
+  const x = opts.x || 0;
+  const y = opts.y || 0;
+  const rotation = opts.rotation || 0;
+  const depth = opts.depth != null ? opts.depth : 10;
+  const scale = opts.scale != null ? opts.scale : 1;
+  const showShadow = opts.showShadow !== false;
+
+  const built = buildCardTexture(scene, opts.type, L);
+  const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
+  const ct = scene.add.container(x, y, [cardImg]);
+  ct.setRotation(rotation);
+  ct.setDepth(depth);
+  ct.setScale(scale);
+
+  if (opts.alpha != null) cardImg.setAlpha(opts.alpha);
+  if (opts.tint != null) cardImg.setTint(opts.tint);
+
+  if (opts.interactive) {
+    cardImg.setInteractive({ useHandCursor: opts.useHandCursor !== false });
+  }
+
+  let shadow = null;
+  if (showShadow) {
+    shadow = scene.add.graphics();
+    shadow.fillStyle(CARD.SHADOW_COLOR, CARD.SHADOW_ALPHA);
+    shadow.fillEllipse(0, 0, built.cw * 0.8 * scale, built.ch * 0.12 * scale);
+    shadow.setPosition(x + CARD.SHADOW_OFF * k, y + built.ch * 0.52 * scale);
+    shadow.setDepth(depth - 1);
+    shadow.setRotation(rotation);
+  }
+
+  if (opts.container) {
+    if (shadow) opts.container.add(shadow);
+    opts.container.add(ct);
+  }
+
+  return {
+    container: ct,
+    cardImg,
+    shadow,
+    cw: built.cw,
+    ch: built.ch,
+  };
 }
 
 function drawWrappedReturn(ctx, text, x, y, maxW, lineH) {
@@ -290,25 +337,23 @@ class CardHand {
       const isBlocked = tutorialBlocked(pirate);
       const isTarget = handIdx === tutorialTargetIdx;
 
-      const { texKey } = buildCardTexture(scene, pirate.type, L);
-      const cardImg = scene.add.image(0, 0, texKey).setOrigin(0.5, 0.5);
-
-      const ct = scene.add.container(slot.x, slot.y, [cardImg]);
-      ct.setRotation(slot.rotation);
-      ct.setDepth(10 + slotI);
+      const cardView = createPirateCard(scene, {
+        type: pirate.type,
+        x: slot.x,
+        y: slot.y,
+        rotation: slot.rotation,
+        depth: 10 + slotI,
+        L,
+        container,
+      });
+      const ct = cardView.container;
+      const cardImg = cardView.cardImg;
+      const shadow = cardView.shadow;
 
       if (isBlocked) {
         cardImg.setTint(0x8a8a8a);
         cardImg.setAlpha(0.7);
       }
-
-      const shadow = scene.add.graphics();
-      shadow.fillStyle(CARD.SHADOW_COLOR, CARD.SHADOW_ALPHA);
-      shadow.fillEllipse(0, 0, cw * 0.8, ch * 0.12);
-      shadow.setPosition(slot.x + CARD.SHADOW_OFF * k, slot.y + ch * 0.52);
-      shadow.setDepth(9);
-      shadow.setRotation(slot.rotation);
-      container.add(shadow);
 
       const cardData = {
         container: ct,
@@ -350,8 +395,6 @@ class CardHand {
           duration: 420, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
       }
-
-      container.add(ct);
 
       const prevPos = opts.prevPositions && opts.prevPositions[handIdx];
       if (prevPos) {

@@ -1,5 +1,5 @@
 /* ============================================================
-   PIRATES — Shop Modal Scene
+   PIRATES — Shop Panel Scene
    ============================================================ */
 
 class ShopScene extends Phaser.Scene {
@@ -9,8 +9,7 @@ class ShopScene extends Phaser.Scene {
     ensureCatTextures(this);
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
-    this._closing = false;
-    this.modalLayer = this.add.container(0, 0).setDepth(40);
+    this.panelLayer = this.add.container(0, 0).setDepth(40);
     this.tipLayer = this.add.container(0, 0).setDepth(50).setVisible(false);
     this._tipRect = null;
     this._tipJustOpened = false;
@@ -28,7 +27,7 @@ class ShopScene extends Phaser.Scene {
       }
     });
 
-    this.renderModal();
+    this.renderPanel();
     this.animateOpen();
 
     this._onResize = () => {
@@ -43,56 +42,52 @@ class ShopScene extends Phaser.Scene {
 
   animateOpen() {
     const offset = 30 * this.L.k;
-    this.modalLayer.setAlpha(0).setY(offset);
+    this.panelLayer.setAlpha(0).setY(offset);
     this.tweens.add({
-      targets: this.modalLayer,
+      targets: this.panelLayer,
       alpha: 1, y: 0,
       duration: 140,
       ease: 'Cubic.easeOut',
     });
   }
 
-  closeModal() {
-    if (this._closing) return;
-    this.stopFeaturedTicker();
-    this._closing = true;
-    this.input.enabled = false;
-    this.tweens.add({
-      targets: this.modalLayer,
-      alpha: 0, y: 30 * this.L.k,
-      duration: 100,
-      ease: 'Cubic.easeIn',
-      onComplete: () => this.scene.stop(),
-    });
-  }
-
-  computeModal() {
+  computePanel() {
     const L = this.L;
-    const sidePad = 30 * L.k;
-    const top = Math.max(10 * L.k, L.Y_ISL_CY - 250 * L.k);
-    const bottom = L.Y_HAND - 18 * L.k;
-    const maxH = Math.max(260 * L.k, bottom - top);
-    const w = Math.min(L.W - sidePad * 2, 900 * L.k);
-    const h = Math.min(maxH, 700 * L.k);
-    const x = (L.W - w) / 2;
+    const sidePad = 18 * L.k;
+    const top = L.Y_INV + 56 * L.k;
+    const bottom = L.Y_HAND - 112 * L.k;
+    const h = Math.max(300 * L.k, bottom - top);
+    const w = L.W - sidePad * 2;
+    const x = sidePad;
     const y = top;
     return { x, y, w, h };
   }
 
-  shopPos(idx, n, modal) {
+  shopPos(idx, n, panel, layout) {
     const L = this.L;
+    const cardScale = layout.cardScale;
     const cols = Math.min(n, 2);
     const row = Math.floor(idx / cols);
     const col = idx % cols;
     const rowStart = row * cols;
     const rowN = Math.min(cols, n - rowStart);
-    const sp = Math.min(220 * L.k, (modal.w - 80 * L.k) / Math.max(cols - 1, 1));
-    const x = modal.x + modal.w / 2 - ((rowN - 1) * sp) / 2 + col * sp;
+    const cardW = CARD.W * L.k * cardScale;
+    const cardH = CARD.H * L.k * cardScale;
+    const innerW = panel.w - 60 * L.k;
+    const freeW = Math.max(0, innerW - rowN * cardW);
+    // Keep rows compact and centered instead of stretching cards to edges.
+    const preferredGapX = 42 * L.k;
+    const gapX = rowN <= 1 ? 0 : Math.min(preferredGapX, freeW / (rowN - 1));
+    const rowW = rowN * cardW + gapX * (rowN - 1);
+    const rowStartX = panel.x + (panel.w - rowW) / 2;
+    const x = rowStartX + cardW / 2 + col * (cardW + gapX);
     const rows = Math.max(1, Math.ceil(n / cols));
-    const topY = modal.y + 160 * L.k;
-    const bottomY = modal.y + modal.h - 180 * L.k;
-    const rowGap = rows <= 1 ? 0 : Math.max(170 * L.k, (bottomY - topY) / (rows - 1));
-    const y = topY + row * rowGap;
+    const rowPitch = cardH + layout.footerH + layout.rowGap;
+    const usableH = panel.h - layout.topPad - layout.bottomPad;
+    const totalRowsH = rows * rowPitch - layout.rowGap;
+    const extraTop = Math.max(0, (usableH - totalRowsH) / 2);
+    const startY = panel.y + layout.topPad + extraTop;
+    const y = startY + row * rowPitch + cardH / 2;
     return { x, y };
   }
 
@@ -106,7 +101,7 @@ class ShopScene extends Phaser.Scene {
     this._featuredTickerIdx = 0;
   }
 
-  startFeaturedTicker(modal, def) {
+  startFeaturedTicker(panel, def) {
     const L = this.L;
     const lines = [
       `Featured: ${def.name}`,
@@ -116,15 +111,15 @@ class ShopScene extends Phaser.Scene {
       `Cost: ☠️${def.cost}`,
     ];
 
-    const tickerY = modal.y + modal.h - 70 * L.k;
-    const label = this.add.text(modal.x + modal.w / 2, tickerY, lines[0], {
+    const tickerY = panel.y + panel.h - 70 * L.k;
+    const label = this.add.text(panel.x + panel.w / 2, tickerY, lines[0], {
       fontFamily: 'monospace',
       fontSize: L.fs(18),
       color: '#3e2f12',
       align: 'center',
-      wordWrap: { width: modal.w - 60 * L.k },
+      wordWrap: { width: panel.w - 60 * L.k },
     }).setOrigin(0.5);
-    this.modalLayer.add(label);
+    this.panelLayer.add(label);
 
     this._featuredTickerLabel = label;
     this._featuredTickerLines = lines;
@@ -142,96 +137,120 @@ class ShopScene extends Phaser.Scene {
     });
   }
 
-  renderModal() {
+  renderPanel() {
     this.stopFeaturedTicker();
-    this.modalLayer.removeAll(true);
+    this.panelLayer.removeAll(true);
     if (this.tipLayer) this.tipLayer.setVisible(false);
     const L = this.L;
-    const m = this.computeModal();
+    const m = this.computePanel();
 
     const paper = this.add.graphics();
     paper.fillStyle(0xe0d4b1, 1);
     paper.fillRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
     paper.lineStyle(3, 0x6a5838, 1);
     paper.strokeRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
-    this.modalLayer.add(paper);
+    this.panelLayer.add(paper);
 
     const title = this.add.text(m.x + m.w / 2, m.y + 14 * L.k, 'Pirate Shop', {
       fontFamily: 'monospace', fontSize: L.fs(30), color: '#2b2b2b',
     }).setOrigin(0.5, 0);
-    this.modalLayer.add(title);
-
-    const close = this.add.text(m.x + m.w - 18 * L.k, m.y + 12 * L.k, '✕', {
-      fontFamily: 'monospace', fontSize: L.fs(24), color: '#483818',
-      backgroundColor: '#e0d4b1', padding: { x: 8 * L.k, y: 4 * L.k },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    close.on('pointerover', () => close.setStyle({ color: '#7a3118' }));
-    close.on('pointerout', () => close.setStyle({ color: '#483818' }));
-    close.on('pointerdown', (ptr) => {
-      ptr.event.stopPropagation();
-      this.closeModal();
-    });
-    this.modalLayer.add(close);
+    this.panelLayer.add(title);
 
     const canBuyNow = G.phase === 'shopping' && !G.busy;
     const infoText = canBuyNow ? `You have ☠️ ${G.enthusiasm}` : 'Hire in the end of the round';
     const info = this.add.text(m.x + m.w / 2, m.y + 46 * L.k, infoText, {
       fontFamily: 'monospace', fontSize: L.fs(18), color: canBuyNow ? '#6f2a82' : '#7a6a4a',
     }).setOrigin(0.5, 0);
-    this.modalLayer.add(info);
+    this.panelLayer.add(info);
 
     if (G.shop.length === 0) {
       const empty = this.add.text(m.x + m.w / 2, m.y + m.h * 0.48, '(empty)', {
         fontFamily: 'monospace', fontSize: L.fs(22), color: '#7a6a4a',
       }).setOrigin(0.5);
-      this.modalLayer.add(empty);
+      this.panelLayer.add(empty);
       return;
     }
 
+    const rows = Math.max(1, Math.ceil(G.shop.length / 2));
+    const layoutBase = {
+      topPad: 110 * L.k,
+      bottomPad: 120 * L.k,
+      footerH: 44 * L.k,
+      rowGap: 44 * L.k,
+    };
+    const maxCardAreaH = m.h - layoutBase.topPad - layoutBase.bottomPad
+      - rows * layoutBase.footerH - Math.max(0, rows - 1) * layoutBase.rowGap;
+    const maxByRows = maxCardAreaH / Math.max(1, rows * CARD.H * L.k);
+    const cardScale = Phaser.Math.Clamp(Math.min(0.9, maxByRows), 0.58, 0.9);
+    const shopLayout = { ...layoutBase, cardScale };
+
     G.shop.forEach((type, i) => {
       const def = TYPES[type];
-      const pos = this.shopPos(i, G.shop.length, m);
+      const pos = this.shopPos(i, G.shop.length, m, shopLayout);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
-      const cardTextShiftY = 24 * L.k;
+      const card = createPirateCard(this, {
+        type,
+        x: pos.x,
+        y: pos.y,
+        L,
+        container: this.panelLayer,
+        depth: 20 + i,
+        scale: cardScale,
+        interactive: true,
+      });
 
-      const spr = addCatSprite(this, pos.x, pos.y, type);
-      spr.setScale(L.SC);
-      spr.setInteractive({ useHandCursor: true });
-      spr.on('pointerdown', (ptr) => {
+      const cardImg = card.cardImg;
+      const cardCt = card.container;
+      if (!canBuy) cardImg.setTint(0x9da6b2);
+
+      cardImg.on('pointerover', () => {
+        this.tweens.add({
+          targets: cardCt,
+          scaleX: cardScale * 1.04,
+          scaleY: cardScale * 1.04,
+          duration: 120,
+          ease: 'Sine.easeOut',
+        });
+      });
+      cardImg.on('pointerout', () => {
+        this.tweens.add({
+          targets: cardCt,
+          scaleX: cardScale,
+          scaleY: cardScale,
+          duration: 120,
+          ease: 'Sine.easeOut',
+        });
+      });
+      cardImg.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
-        this.showTip(type, pos.x, pos.y - 100 * L.k, { fromClick: true, shopIdx: i });
+        if (!canBuy) return;
+        this.animateBuyTransition(i, m, cardScale);
       });
-      spr.on('pointerover', () => {
-        if (this.tipLayer.visible) this.showTip(type, pos.x, pos.y - 100 * L.k, { shopIdx: i });
-      });
-      this.modalLayer.add(spr);
 
-      this.modalLayer.add(this.add.text(pos.x, pos.y - 92 * L.k, `☠️${def.cost}`, {
-        fontFamily: 'monospace', fontSize: L.fs(20), color: canBuy ? '#6f2a82' : '#8a7a8a',
-      }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 56 * L.k + cardTextShiftY, def.name, {
-        fontFamily: 'monospace', fontSize: L.fs(18), color: '#3f4f60',
-      }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 88 * L.k + cardTextShiftY, (def.str || 0) + '⚔️', {
-        fontFamily: 'monospace', fontSize: L.fs(16), color: '#a05a5a',
-      }).setOrigin(0.5, 0));
+      const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 14 * L.k;
+      const actionLabel = `[ ☠️${def.cost} ]`;
+      // const actionLabel = canBuy
+        // ? `[ buy ☠️${def.cost} ]`
+        // : (canBuyNow ? `[ need ☠️${def.cost} ]` : `[ locked ☠️${def.cost} ]`);
+      const actionColor = canBuy ? '#d7f0d7' : '#8a7a8a';
+      const actionBg = canBuy ? '#275a32' : '#d9cda7';
+      const action = this.add.text(pos.x, footerY, actionLabel, {
+        fontFamily: 'monospace',
+        fontSize: L.fs(19),
+        color: actionColor,
+        backgroundColor: actionBg,
+        padding: { x: 10 * L.k, y: 6 * L.k },
+      }).setOrigin(0.5, 0);
+      this.panelLayer.add(action);
 
       if (canBuy) {
-        const buy = this.add.text(pos.x, pos.y + 124 * L.k + cardTextShiftY, '[ buy ]', {
-          fontFamily: 'monospace',
-          fontSize: L.fs(20),
-          color: '#d7f0d7',
-          backgroundColor: '#275a32',
-          padding: { x: 12 * L.k, y: 6 * L.k },
-        }).setOrigin(0.5, 0);
-        buy.setInteractive({ useHandCursor: true });
-        buy.on('pointerover', () => buy.setStyle({ backgroundColor: '#357542' }));
-        buy.on('pointerout', () => buy.setStyle({ backgroundColor: '#275a32' }));
-        buy.on('pointerdown', (ptr) => {
+        action.setInteractive({ useHandCursor: true });
+        action.on('pointerover', () => action.setStyle({ backgroundColor: '#357542' }));
+        action.on('pointerout', () => action.setStyle({ backgroundColor: '#275a32' }));
+        action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
-          this.animateBuyTransition(i, m);
+          this.animateBuyTransition(i, m, cardScale);
         });
-        this.modalLayer.add(buy);
       }
     });
 
@@ -294,7 +313,7 @@ class ShopScene extends Phaser.Scene {
       bb.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
         this.tipLayer.setVisible(false);
-        this.animateBuyTransition(opts.shopIdx, this.computeModal());
+        this.animateBuyTransition(opts.shopIdx, this.computePanel());
       });
       this.tipLayer.add(bb);
       extraH = 60 * L.k;
@@ -304,7 +323,7 @@ class ShopScene extends Phaser.Scene {
     this.tipLayer.setVisible(true);
   }
 
-  animateBuyTransition(shopIdx, modal) {
+  animateBuyTransition(shopIdx, panel, cardScale = 1) {
     if (G.shopAnimating || G.phase !== 'shopping' || G.busy) return;
     const L = this.L;
     const game = this.scene.get('game');
@@ -318,23 +337,37 @@ class ShopScene extends Phaser.Scene {
 
     G.shopAnimating = true;
 
-    const firstPos = this.shopPos(0, oldN, modal);
-    const lastPos = this.shopPos(oldN - 1, oldN, modal);
+    const shopLayout = {
+      cardScale,
+      topPad: 110 * L.k,
+      bottomPad: 120 * L.k,
+      footerH: 44 * L.k,
+      rowGap: 18 * L.k,
+    };
+    const firstPos = this.shopPos(0, oldN, panel, shopLayout);
+    const lastPos = this.shopPos(oldN - 1, oldN, panel, shopLayout);
+    const cardH = CARD.H * L.k * cardScale;
     const rowMask = this.add.graphics().setDepth(70);
     rowMask.fillStyle(0xe0d4b1, 1);
-    const maskTop = firstPos.y - 120 * L.k;
-    const maskBot = lastPos.y + 240 * L.k;
-    rowMask.fillRect(modal.x + 16 * L.k, maskTop, modal.w - 32 * L.k, maskBot - maskTop);
-    this.modalLayer.add(rowMask);
+    const maskTop = firstPos.y - cardH * 0.75;
+    const maskBot = lastPos.y + cardH * 0.85;
+    rowMask.fillRect(panel.x + 16 * L.k, maskTop, panel.w - 32 * L.k, maskBot - maskTop);
+    this.panelLayer.add(rowMask);
 
     const dur = 340;
     const ghosts = [];
     oldShop.forEach((t, i) => {
-      const p = this.shopPos(i, oldN, modal);
-      const spr = addCatSprite(this, p.x, p.y, t);
-      spr.setScale(L.SC).setDepth(80);
-      this.modalLayer.add(spr);
-      ghosts.push(spr);
+      const p = this.shopPos(i, oldN, panel, shopLayout);
+      const card = createPirateCard(this, {
+        type: t,
+        x: p.x,
+        y: p.y,
+        L,
+        container: this.panelLayer,
+        depth: 80,
+        scale: cardScale,
+      });
+      ghosts.push(card);
     });
 
     game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
@@ -342,8 +375,8 @@ class ShopScene extends Phaser.Scene {
 
     const removed = ghosts[shopIdx];
     this.tweens.add({
-      targets: removed,
-      y: removed.y - 100 * L.k,
+      targets: [removed.container, removed.shadow].filter(Boolean),
+      y: removed.container.y - 100 * L.k,
       alpha: 0,
       duration: dur,
       ease: 'Power2',
@@ -353,9 +386,9 @@ class ShopScene extends Phaser.Scene {
     for (let i = 0; i < oldN; i++) {
       if (i === shopIdx) continue;
       if (ni >= newN) break;
-      const tp = this.shopPos(ni, newN, modal);
+      const tp = this.shopPos(ni, newN, panel, shopLayout);
       this.tweens.add({
-        targets: ghosts[i],
+        targets: [ghosts[i].container, ghosts[i].shadow].filter(Boolean),
         x: tp.x,
         y: tp.y,
         duration: dur,
@@ -368,12 +401,18 @@ class ShopScene extends Phaser.Scene {
     const hasIncoming = newN > (oldN - 1);
     if (hasIncoming) {
       const newType = G.shop[newN - 1];
-      const lastNewPos = this.shopPos(newN - 1, newN, modal);
-      newGhost = addCatSprite(this, modal.x + modal.w + 90 * L.k, lastNewPos.y, newType);
-      newGhost.setScale(L.SC).setDepth(80);
-      this.modalLayer.add(newGhost);
+      const lastNewPos = this.shopPos(newN - 1, newN, panel, shopLayout);
+      newGhost = createPirateCard(this, {
+        type: newType,
+        x: panel.x + panel.w + 120 * L.k,
+        y: lastNewPos.y,
+        L,
+        container: this.panelLayer,
+        depth: 80,
+        scale: cardScale,
+      });
       this.tweens.add({
-        targets: newGhost,
+        targets: [newGhost.container, newGhost.shadow].filter(Boolean),
         x: lastNewPos.x,
         duration: dur,
         ease: 'Power2',
@@ -382,13 +421,19 @@ class ShopScene extends Phaser.Scene {
     }
 
     this.time.delayedCall(dur + 100, () => {
-      ghosts.forEach(g => g.destroy());
-      if (newGhost) newGhost.destroy();
+      ghosts.forEach(g => {
+        if (g.container) g.container.destroy();
+        if (g.shadow) g.shadow.destroy();
+      });
+      if (newGhost) {
+        if (newGhost.container) newGhost.container.destroy();
+        if (newGhost.shadow) newGhost.shadow.destroy();
+      }
       rowMask.destroy();
       G.shopAnimating = false;
       game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!', '#66bb6a');
       game.renderAll();
-      this.renderModal();
+      this.renderPanel();
     });
   }
 }

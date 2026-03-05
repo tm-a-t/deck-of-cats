@@ -43,6 +43,7 @@ If the selected node is an island:
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
 - Each pirate's island ability resolves on arrival (resource gathering, conversion, recall, etc.).
 - Send animation/effect resolution is non-blocking: while one pirate is traveling/resolving, player may send another immediately.
+- Ship phase starts only after all in-flight island send animations/effects are finished.
 - Player ends the phase by pressing **End landing**, or it ends automatically when the maximum number of pirates have been sent.
 
 **Ship phase**:
@@ -187,6 +188,7 @@ Both are summed with crew strength during boarding.
 - **Cost filtering**: max affordable cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
 - **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). The bought slot is refilled with a new random pirate from the pool.
 - **Next round rotation**: first pirate in the window is removed, remaining shift left, a new random pirate enters at the end.
+- **Auto-skip**: in regular runs (not tutorial), if the player enters shopping with no affordable pirates in the current window, the shop is skipped automatically and round progression happens as if **Next round** was pressed.
 
 ---
 

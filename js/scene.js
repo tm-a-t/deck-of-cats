@@ -30,6 +30,7 @@ class GameScene extends Phaser.Scene {
     this.ct.tutorial.setDepth(180).setVisible(false);
     this.ct.gameover.setDepth(200);
     this._sendingToIsland = new Set();
+    this._pendingEndSending = false;
     this._sacrificedIds = new Set();
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
@@ -60,24 +61,24 @@ class GameScene extends Phaser.Scene {
     };
     this.scale.on('resize', this._onResize);
 
-    this._onMapModalShutdown = () => {
+    this._onMapPanelShutdown = () => {
       this._mapPanelOpen = false;
       this.renderNav();
     };
-    this._onShopModalShutdown = () => {
+    this._onShopPanelShutdown = () => {
       this._shopPanelOpen = false;
       this.renderNav();
     };
-    this.scene.get('map').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onMapModalShutdown);
-    this.scene.get('shopModal').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onShopModalShutdown);
+    this.scene.get('map').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onMapPanelShutdown);
+    this.scene.get('shopModal').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onShopPanelShutdown);
 
     if (window.PokiBridge) {
       window.PokiBridge.markGameReady();
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
-      this.scene.get('map').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onMapModalShutdown);
-      this.scene.get('shopModal').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onShopModalShutdown);
+      this.scene.get('map').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onMapPanelShutdown);
+      this.scene.get('shopModal').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onShopPanelShutdown);
       if (this._cardHand) this._cardHand.destroy();
       if (window.PokiBridge) window.PokiBridge.gameplayStop();
     });
@@ -743,6 +744,7 @@ class GameScene extends Phaser.Scene {
     }
     G.shopAnimating = false;
     this._sendingToIsland.clear();
+    this._pendingEndSending = false;
     this._sacrificedIds.clear();
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
@@ -787,7 +789,7 @@ class GameScene extends Phaser.Scene {
 
     if (!opts.deferRender) {
       this.renderAll();
-      if (G.phase === 'shopping') this.openShopModal();
+      if (G.phase === 'shopping') this.openShopPanel();
       this.maybeShowTurnStartTutorialPopup(cur);
     }
   }
@@ -829,6 +831,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm = 0;
     G.busy = false;
     this._sendingToIsland.clear();
+    this._pendingEndSending = false;
     this._sacrificedIds.clear();
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
@@ -864,7 +867,7 @@ class GameScene extends Phaser.Scene {
       this.applyMapNodeSelection(available[0]);
       return;
     }
-    this.openMapModal();
+    this.openMapPanel();
   }
 
   panelSceneKeys() {
@@ -881,7 +884,7 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  openMapModal() {
+  openMapPanel() {
     if (this.isTutorial()) return;
     this.closePanels('map');
     if (this.scene.isActive('map')) return;
@@ -891,7 +894,7 @@ class GameScene extends Phaser.Scene {
     this.renderNav();
   }
 
-  openShopModal() {
+  openShopPanel() {
     if (this.isTutorialPopupOpen()) return;
     this.closePanels('shopModal');
     if (this.scene.isActive('shopModal')) return;
@@ -901,24 +904,24 @@ class GameScene extends Phaser.Scene {
     this.renderNav();
   }
 
-  toggleMapModal() {
+  toggleMapPanel() {
     if (this._mapPanelOpen) {
       this._mapPanelOpen = false;
       this.scene.stop('map');
       this.renderNav();
       return;
     }
-    this.openMapModal();
+    this.openMapPanel();
   }
 
-  toggleShopModal() {
+  toggleShopPanel() {
     if (this._shopPanelOpen) {
       this._shopPanelOpen = false;
       this.scene.stop('shopModal');
       this.renderNav();
       return;
     }
-    this.openShopModal();
+    this.openShopPanel();
   }
 
   maxSend() {
@@ -1000,7 +1003,9 @@ class GameScene extends Phaser.Scene {
         const waitMs = baseWait + (spendDuration || 0);
         this.time.delayedCall(waitMs, () => {
           if (G.phase !== 'sending') return;
-          if (G.sent.length >= this.maxSend() && this._sendingToIsland.size === 0) {
+          const sendingDone = this._sendingToIsland.size === 0;
+          const shouldAutoEnd = G.sent.length >= this.maxSend();
+          if (sendingDone && (shouldAutoEnd || this._pendingEndSending)) {
             this.endSending();
           } else {
             this.renderAll();
@@ -1194,7 +1199,11 @@ class GameScene extends Phaser.Scene {
   endSending() {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending') return;
-    if (this._sendingToIsland.size > 0) return;
+    if (this._sendingToIsland.size > 0) {
+      this._pendingEndSending = true;
+      return;
+    }
+    this._pendingEndSending = false;
     if (this.isTutorial()) {
       const requiredSent = this.tutorialRequiredSent(this.getTutorialTurn());
       if (G.sent.length < requiredSent) {
@@ -1233,7 +1242,14 @@ class GameScene extends Phaser.Scene {
         G.phase = 'shopping';
         G.busy = false;
         this.renderAll();
-        this.openShopModal();
+        if (!this.isTutorial() && !this.canAffordAnyShopPirate()) {
+          this.time.delayedCall(120, () => {
+            if (G.phase !== 'shopping' || G.busy || this.isTutorial()) return;
+            this.advanceFromShopping();
+          });
+          return;
+        }
+        this.openShopPanel();
         if (this.isTutorial() && this.getTutorialCurrentTurn() === 3) {
           this.showTutorialHint('turn3_shop_hint');
         }
@@ -1488,9 +1504,24 @@ class GameScene extends Phaser.Scene {
     G.shopAnimating = false;
     if (opts.deferRender) return;
     this.renderAll();
-    if (!opts.skipModalRefresh && this.scene.isActive('shopModal')) {
-      this.scene.get('shopModal').renderModal();
+    if (!opts.skipPanelRefresh && this.scene.isActive('shopModal')) {
+      this.scene.get('shopModal').renderPanel();
     }
+  }
+
+  canAffordAnyShopPirate() {
+    return G.shop.some((type) => {
+      const def = TYPES[type];
+      return def && def.cost != null && G.enthusiasm >= def.cost;
+    });
+  }
+
+  advanceFromShopping() {
+    if (!this.isTutorial() && G.shop.length) {
+      G.shop.shift();
+      G.shop.push(randomShopType(G.round + 1));
+    }
+    this.prepareNextRound();
   }
 
   prepareNextRound() {
@@ -1512,6 +1543,7 @@ class GameScene extends Phaser.Scene {
     G.sent = [];
     G.enthusiasm = 0;
     this._sendingToIsland.clear();
+    this._pendingEndSending = false;
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
     this.ct.tip.setVisible(false);
@@ -2035,14 +2067,10 @@ class GameScene extends Phaser.Scene {
             this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Buy ${this.tutorialFeaturedName()} to continue`, '#ffa726');
             return;
           }
-          this.prepareNextRound();
+          this.advanceFromShopping();
           return;
         }
-        if (G.shop.length) {
-          G.shop.shift();
-          G.shop.push(randomShopType(G.round + 1));
-        }
-        this.prepareNextRound();
+        this.advanceFromShopping();
       }, right);
     }
   }
@@ -2064,7 +2092,7 @@ class GameScene extends Phaser.Scene {
         this.float(L.cx, L.Y_NAV - 40 * L.k, 'Map is available between rounds', '#8090a0');
         return;
       }
-      this.toggleMapModal();
+      this.toggleMapPanel();
     }, {
       ...leftOpts,
       enabled: mapEnabled,
@@ -2078,7 +2106,7 @@ class GameScene extends Phaser.Scene {
     const shopOpen = this._shopPanelOpen;
     const shopLabel = shopOpen ? '[Shop]' : 'Shop';
     this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
-      this.toggleShopModal();
+      this.toggleShopPanel();
     }, {
       ...leftOpts,
       enabled: shopEnabled,

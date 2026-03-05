@@ -18,14 +18,12 @@ class MapScene extends Phaser.Scene {
     ensureCatTextures(this);
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this.L = computeLayout(this.scale.width, this.scale.height);
-    this._closing = false;
-
-    this.modal = this.computeModal();
-    this.modalLayer = this.add.container(0, 0).setDepth(20);
+    this.panel = this.computePanel();
+    this.panelLayer = this.add.container(0, 0).setDepth(20);
     this.mapGfx = this.add.container(0, 0).setDepth(21);
     this.uiLayer = this.add.container(0, 0).setDepth(22);
 
-    this.renderModalFrame();
+    this.renderPanelFrame();
     this.renderMapGraph();
     this.renderHeader();
     this.setupScroll();
@@ -44,7 +42,7 @@ class MapScene extends Phaser.Scene {
 
   animateOpen() {
     const offset = 30 * this.L.k;
-    [this.modalLayer, this.mapGfx, this.uiLayer].forEach(c => {
+    [this.panelLayer, this.mapGfx, this.uiLayer].forEach(c => {
       const origY = c.y;
       c.setAlpha(0).setY(origY + offset);
       this.tweens.add({
@@ -56,33 +54,16 @@ class MapScene extends Phaser.Scene {
     });
   }
 
-  closeModal() {
-    if (this._closing) return;
-    this._closing = true;
-    this.input.enabled = false;
-    const offset = 30 * this.L.k;
-    [this.modalLayer, this.mapGfx, this.uiLayer].forEach((c, i) => {
-      this.tweens.add({
-        targets: c,
-        alpha: 0, y: c.y + offset,
-        duration: 100,
-        ease: 'Cubic.easeIn',
-        onComplete: i === 0 ? () => this.scene.stop() : undefined,
-      });
-    });
-  }
-
-  computeModal() {
+  computePanel() {
     const L = this.L;
-    const sidePad = 30 * L.k;
-    const top = Math.max(10 * L.k, L.Y_ISL_CY - 250 * L.k);
-    const bottom = L.Y_HAND - 18 * L.k;
-    const maxH = Math.max(260 * L.k, bottom - top);
-    const w = Math.min(L.W - sidePad * 2, 900 * L.k);
-    const h = Math.min(maxH, 700 * L.k);
-    const x = (L.W - w) / 2;
+    const sidePad = 18 * L.k;
+    const top = L.Y_INV + 56 * L.k;
+    const bottom = L.Y_HAND - 112 * L.k;
+    const w = L.W - sidePad * 2;
+    const h = Math.max(300 * L.k, bottom - top);
+    const x = sidePad;
     const y = top;
-    const pad = L.MAP_MODAL_PAD;
+    const pad = L.MAP_PANEL_PAD;
     const headH = L.MAP_HEAD_H;
     const footH = L.MAP_FOOT_H;
     return {
@@ -96,27 +77,27 @@ class MapScene extends Phaser.Scene {
 
   // ──────────── PAGE ────────────
 
-  renderModalFrame() {
+  renderPanelFrame() {
     const L = this.L;
-    const m = this.modal;
+    const m = this.panel;
 
     const paper = this.add.graphics();
     paper.fillStyle(0xd9c9a2, 1);
     paper.fillRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
     paper.lineStyle(3, 0x6a5838, 1);
     paper.strokeRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
-    this.modalLayer.add(paper);
+    this.panelLayer.add(paper);
 
     const sep = this.add.graphics();
     sep.lineStyle(2, 0x8c7850, 1);
     sep.lineBetween(m.x + 16 * L.k, m.y + m.headH, m.x + m.w - 16 * L.k, m.y + m.headH);
-    this.modalLayer.add(sep);
+    this.panelLayer.add(sep);
   }
 
   // ──────────── MAP GRAPH ────────────
 
   nodeScreenX(nodeIdx, layerLen) {
-    const L = this.L, m = this.modal;
+    const L = this.L, m = this.panel;
     const maxW = Math.min(m.innerW - 80 * L.k, 420 * L.k);
     if (layerLen === 1) return m.innerX + m.innerW / 2;
     const sp = maxW / (layerLen - 1);
@@ -124,7 +105,7 @@ class MapScene extends Phaser.Scene {
   }
 
   layerScreenY(layerIdx) {
-    const L = this.L, m = this.modal;
+    const L = this.L, m = this.panel;
     const totalLayers = G.map.layers.length;
     return (totalLayers - 1 - layerIdx) * L.MAP_LAYER_SP + m.innerY + L.MAP_LAYER_SP;
   }
@@ -278,7 +259,7 @@ class MapScene extends Phaser.Scene {
 
         // Layer number (small, to the side)
         if (ni === 0) {
-          const layerNum = this.add.text(this.modal.innerX + 8, ny, '' + (li + 1), {
+          const layerNum = this.add.text(this.panel.innerX + 8, ny, '' + (li + 1), {
             fontFamily: 'monospace',
             fontSize: L.UI_FS,
             color: '#69532f',
@@ -332,33 +313,19 @@ class MapScene extends Phaser.Scene {
 
   renderHeader() {
     const L = this.L;
-    const m = this.modal;
+    const m = this.panel;
     const selecting = G.phase === 'map';
     this.uiTxt(m.x + m.w / 2, m.y + 14 * L.k,
       selecting ? 'Map - choose destination' : 'Map - route preview',
       { fontSize: L.fs(24), color: '#2b2b2b' });
 
-    const close = this.add.text(m.x + m.w - 18 * L.k, m.y + 12 * L.k, '✕', {
-      fontFamily: 'monospace',
-      fontSize: L.fs(24),
-      color: '#483818',
-      backgroundColor: '#d9c9a2',
-      padding: { x: 8 * L.k, y: 4 * L.k },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    close.on('pointerover', () => close.setStyle({ color: '#7a3118' }));
-    close.on('pointerout', () => close.setStyle({ color: '#483818' }));
-    close.on('pointerdown', (ptr) => {
-      ptr.event.stopPropagation();
-      this.closeModal();
-    });
-    this.uiLayer.add(close);
   }
 
   // ──────────── SCROLLING ────────────
 
   setupScroll() {
     const L = this.L;
-    const m = this.modal;
+    const m = this.panel;
     const mapZoneTop = m.innerY;
     const mapZoneBot = m.innerY + m.innerH;
     const viewH = mapZoneBot - mapZoneTop;
@@ -451,7 +418,7 @@ class MapScene extends Phaser.Scene {
     if (game && game.scene && game.scene.isActive()) {
       game.applyMapNodeSelection(nodeId);
     }
-    this.closeModal();
+    this.scene.stop();
   }
 
   // ──────────── HELPERS ────────────
