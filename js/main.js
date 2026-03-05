@@ -32,14 +32,18 @@ applyViewportMode();
 window.addEventListener('resize', applyViewportMode);
 window.addEventListener('orientationchange', applyViewportMode);
 
+const dpr = Math.max(1, window.devicePixelRatio || 1);
+
 const phaserGame = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  roundPixels: true,
+  antialias: true,
+  roundPixels: false,
+  resolution: dpr,
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    zoom: 1 / window.devicePixelRatio,
+    zoom: 1,
   },
   scene: [MenuScene, GameScene, MapScene, ShopScene, CostumesScene, AllPiratesScene],
 });
