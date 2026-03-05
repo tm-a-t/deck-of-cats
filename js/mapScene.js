@@ -74,10 +74,14 @@ class MapScene extends Phaser.Scene {
 
   computeModal() {
     const L = this.L;
-    const w = L.MAP_MODAL_W;
-    const h = L.MAP_MODAL_H;
+    const sidePad = 30 * L.k;
+    const top = Math.max(10 * L.k, L.Y_ISL_CY - 250 * L.k);
+    const bottom = L.Y_HAND - 18 * L.k;
+    const maxH = Math.max(260 * L.k, bottom - top);
+    const w = Math.min(L.W - sidePad * 2, 900 * L.k);
+    const h = Math.min(maxH, 700 * L.k);
     const x = (L.W - w) / 2;
-    const y = (L.H - h) / 2;
+    const y = top;
     const pad = L.MAP_MODAL_PAD;
     const headH = L.MAP_HEAD_H;
     const footH = L.MAP_FOOT_H;
@@ -90,20 +94,11 @@ class MapScene extends Phaser.Scene {
     };
   }
 
-  // ──────────── MODAL ────────────
+  // ──────────── PAGE ────────────
 
   renderModalFrame() {
     const L = this.L;
     const m = this.modal;
-
-    const blocker = this.add.rectangle(0, 0, L.W, L.H, 0x000000, 0.25).setOrigin(0, 0);
-    blocker.setInteractive();
-    blocker.on('pointerdown', (ptr) => {
-      ptr.event.stopPropagation();
-      if (ptr.x >= m.x && ptr.x <= m.x + m.w && ptr.y >= m.y && ptr.y <= m.y + m.h) return;
-      this.closeModal();
-    });
-    this.modalLayer.add(blocker);
 
     const paper = this.add.graphics();
     paper.fillStyle(0xd9c9a2, 1);
@@ -340,7 +335,7 @@ class MapScene extends Phaser.Scene {
     const m = this.modal;
     const selecting = G.phase === 'map';
     this.uiTxt(m.x + m.w / 2, m.y + 14 * L.k,
-      selecting ? 'Map — choose destination' : 'Map — route preview',
+      selecting ? 'Map - choose destination' : 'Map - route preview',
       { fontSize: L.fs(24), color: '#2b2b2b' });
 
     const close = this.add.text(m.x + m.w - 18 * L.k, m.y + 12 * L.k, '✕', {

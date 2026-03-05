@@ -30,6 +30,7 @@ const CARD = {
   SHIP_GLOW_ALPHA: 0.45,
 
   NEIGHBOR_SPREAD: 48,
+  MOBILE_DRAG_PULL: 60,
 };
 
 function measureWrappedHeight(ctx, text, maxW, lineH) {
@@ -334,16 +335,13 @@ class CardHand {
 
       cardImg.on('pointerover', () => {
         if (cardData.dragging) return;
-        this._hoverIdx = slotI;
-        cardData.hovered = true;
-        this._animateHover(cardData, true, L);
+        this._setHoveredCard(slotI, L);
       });
 
       cardImg.on('pointerout', () => {
         if (cardData.dragging) return;
-        this._hoverIdx = -1;
-        cardData.hovered = false;
-        this._animateHover(cardData, false, L);
+        if (this._hoverIdx !== slotI) return;
+        this._setHoveredCard(-1, L);
       });
 
       if (isTarget) {
@@ -383,6 +381,19 @@ class CardHand {
       loop: true,
       callback: () => this._updateIdle(L),
     });
+  }
+
+  _setHoveredCard(slotIndex, L) {
+    if (this._hoverIdx === slotIndex) return;
+
+    this.cards.forEach((c) => {
+      if (c.dragging) return;
+      const shouldHover = c.slotIndex === slotIndex;
+      if (c.hovered === shouldHover) return;
+      c.hovered = shouldHover;
+      this._animateHover(c, shouldHover, L);
+    });
+    this._hoverIdx = slotIndex;
   }
 
   getCardPosition(handIdx) {
@@ -528,56 +539,106 @@ class CardHand {
 
   _setupDrag(cardData, onSendToIsland, L) {
     const scene = this.scene;
-    const ct = cardData.container;
     const cardImg = cardData.cardImg;
     const k = L.k;
-    const ch = Math.round(CARD.H * k);
 
     let dragMoved = false;
+    let dragActivated = false;
+    let touchDrag = false;
+    let dragCard = cardData;
+    let dragStartY = cardData.slot.y;
+    const mobilePullThreshold = CARD.MOBILE_DRAG_PULL * k;
 
-    cardImg.on('dragstart', (pointer) => {
-      dragMoved = false;
-      cardData.dragging = true;
-      this._dragIdx = cardData.slotIndex;
-      ct.setAlpha(0.3);
-      ct.setDepth(5);
+    const isTouchPointer = (pointer) =>
+      !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
+    const isMobileViewport = () =>
+      typeof window !== 'undefined' && window.__VIEWPORT_MODE__ === 'mobile';
 
-      const ghost = scene.add.image(pointer.x, pointer.y, cardImg.texture.key);
+    const beginDragVisual = (pointer) => {
+      if (dragActivated) return;
+      dragActivated = true;
+      dragCard.dragging = true;
+      this._dragIdx = dragCard.slotIndex;
+      dragCard.container.setAlpha(0.3);
+      dragCard.container.setDepth(5);
+
+      const ghost = scene.add.image(pointer.x, pointer.y, dragCard.cardImg.texture.key);
       ghost.setOrigin(0.5, 0.5);
       ghost.setDepth(80);
       ghost.setScale(CARD.DRAG_SCALE);
       ghost.setRotation(0);
       this._dragGhost = ghost;
+    };
+
+    const resetDragVisual = () => {
+      dragActivated = false;
+      dragMoved = false;
+      dragCard.dragging = false;
+      this._dragIdx = -1;
+      if (this._dragGhost) {
+        this._dragGhost.destroy();
+        this._dragGhost = null;
+      }
+      dragCard.container.setAlpha(dragCard.isBlocked ? 0.7 : 1);
+      dragCard.container.setDepth(10 + dragCard.slotIndex);
+    };
+
+    cardImg.on('pointerdown', (pointer) => {
+      dragStartY = pointer.y;
+    });
+
+    cardImg.on('dragstart', (pointer) => {
+      dragMoved = false;
+      dragActivated = false;
+      dragCard = cardData;
+      touchDrag = isMobileViewport() && isTouchPointer(pointer);
+
+      if (!touchDrag) {
+        beginDragVisual(pointer);
+      }
     });
 
     cardImg.on('drag', (pointer) => {
+      if (touchDrag) {
+        if (!dragActivated) {
+          const hoveredCard = this.cards.find(c => c.slotIndex === this._hoverIdx);
+          if (hoveredCard && !hoveredCard.isBlocked) {
+            dragCard = hoveredCard;
+          }
+        }
+        const upwardPull = dragStartY - pointer.y;
+        if (upwardPull >= mobilePullThreshold) {
+          if (!dragActivated) beginDragVisual(pointer);
+        } else {
+          if (dragActivated) {
+            resetDragVisual();
+            this._setHoveredCard(-1, L);
+          }
+          return;
+        }
+      }
+      if (!dragActivated) return;
+
       if (this._dragGhost) {
         this._dragGhost.setPosition(pointer.x, pointer.y);
         const dx = pointer.x - (pointer.prevPosition ? pointer.prevPosition.x : pointer.x);
         this._dragGhost.setRotation(Phaser.Math.Clamp(dx * 0.01, -0.15, 0.15));
       }
       const dist = Phaser.Math.Distance.Between(
-        cardData.slot.x, cardData.slot.y, pointer.x, pointer.y
+        dragCard.slot.x, dragCard.slot.y, pointer.x, pointer.y
       );
       if (dist > 10) dragMoved = true;
     });
 
     cardImg.on('dragend', (pointer) => {
-      cardData.dragging = false;
-      this._dragIdx = -1;
+      const wasActivated = dragActivated;
+      const wasMoved = dragMoved;
+      resetDragVisual();
 
-      if (this._dragGhost) {
-        this._dragGhost.destroy();
-        this._dragGhost = null;
-      }
-
-      ct.setAlpha(cardData.isBlocked ? 0.7 : 1);
-      ct.setDepth(10 + cardData.slotIndex);
-
-      if (dragMoved && pointer.y < L.Y_HAND_CENTER) {
-        if (onSendToIsland) onSendToIsland(cardData.handIdx, { x: pointer.x, y: pointer.y });
+      if (wasActivated && wasMoved && pointer.y < L.Y_HAND_CENTER) {
+        if (onSendToIsland) onSendToIsland(dragCard.handIdx, { x: pointer.x, y: pointer.y });
       } else {
-        this._animateHover(cardData, false, L);
+        this._animateHover(dragCard, false, L);
       }
     });
   }

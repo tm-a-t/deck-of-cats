@@ -40,6 +40,8 @@ class GameScene extends Phaser.Scene {
     this._tipJustOpened = false;
     this._tutorialPopupOpen = false;
     this._tutorialHintTimer = null;
+    this._mapPanelOpen = false;
+    this._shopPanelOpen = false;
     this.input.on('pointerdown', (ptr) => {
       if (this._tipJustOpened) {
         this._tipJustOpened = false;
@@ -58,11 +60,24 @@ class GameScene extends Phaser.Scene {
     };
     this.scale.on('resize', this._onResize);
 
+    this._onMapModalShutdown = () => {
+      this._mapPanelOpen = false;
+      this.renderNav();
+    };
+    this._onShopModalShutdown = () => {
+      this._shopPanelOpen = false;
+      this.renderNav();
+    };
+    this.scene.get('map').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onMapModalShutdown);
+    this.scene.get('shopModal').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onShopModalShutdown);
+
     if (window.PokiBridge) {
       window.PokiBridge.markGameReady();
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      this.scene.get('map').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onMapModalShutdown);
+      this.scene.get('shopModal').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onShopModalShutdown);
       if (this._cardHand) this._cardHand.destroy();
       if (window.PokiBridge) window.PokiBridge.gameplayStop();
     });
@@ -768,12 +783,11 @@ class GameScene extends Phaser.Scene {
       if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
     }
 
-    if (this.scene.isActive('shopModal') && G.phase !== 'shopping') {
-      this.scene.stop('shopModal');
-    }
+    this.closePanels(G.phase === 'shopping' ? 'shopModal' : null);
 
     if (!opts.deferRender) {
       this.renderAll();
+      if (G.phase === 'shopping') this.openShopModal();
       this.maybeShowTurnStartTutorialPopup(cur);
     }
   }
@@ -832,12 +846,14 @@ class GameScene extends Phaser.Scene {
       if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
     }
 
+    this.closePanels();
     this.renderAll();
     return true;
   }
 
   enterMapPhase() {
     if (this.isTutorial()) return;
+    this.closePanels('map');
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
@@ -848,20 +864,61 @@ class GameScene extends Phaser.Scene {
       this.applyMapNodeSelection(available[0]);
       return;
     }
+    this.openMapModal();
+  }
+
+  panelSceneKeys() {
+    return ['map', 'shopModal'];
+  }
+
+  closePanels(exceptKey = null) {
+    this.panelSceneKeys().forEach((key) => {
+      if (exceptKey && key === exceptKey) return;
+      if (!this.scene.isActive(key)) return;
+      if (key === 'map') this._mapPanelOpen = false;
+      if (key === 'shopModal') this._shopPanelOpen = false;
+      this.scene.stop(key);
+    });
   }
 
   openMapModal() {
     if (this.isTutorial()) return;
+    this.closePanels('map');
     if (this.scene.isActive('map')) return;
     this.scene.launch('map');
     this.scene.bringToTop('map');
+    this._mapPanelOpen = true;
+    this.renderNav();
   }
 
   openShopModal() {
     if (this.isTutorialPopupOpen()) return;
+    this.closePanels('shopModal');
     if (this.scene.isActive('shopModal')) return;
     this.scene.launch('shopModal');
     this.scene.bringToTop('shopModal');
+    this._shopPanelOpen = true;
+    this.renderNav();
+  }
+
+  toggleMapModal() {
+    if (this._mapPanelOpen) {
+      this._mapPanelOpen = false;
+      this.scene.stop('map');
+      this.renderNav();
+      return;
+    }
+    this.openMapModal();
+  }
+
+  toggleShopModal() {
+    if (this._shopPanelOpen) {
+      this._shopPanelOpen = false;
+      this.scene.stop('shopModal');
+      this.renderNav();
+      return;
+    }
+    this.openShopModal();
   }
 
   maxSend() {
@@ -878,7 +935,7 @@ class GameScene extends Phaser.Scene {
 
   sendToIsland(idx, fromPos) {
     if (this.isTutorialPopupOpen()) return;
-    if (G.phase !== 'sending' || G.busy) return;
+    if (G.phase !== 'sending') return;
     if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
 
     this.ct.tip.setVisible(false);
@@ -905,7 +962,6 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    G.busy = true;
     G.sent.push(idx);
     this._sendingToIsland.add(idx);
     this.renderAll();
@@ -943,8 +999,8 @@ class GameScene extends Phaser.Scene {
         const baseWait = isSacrifice ? 1400 : (spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (spendDuration || 0);
         this.time.delayedCall(waitMs, () => {
-          G.busy = false;
-          if (G.sent.length >= this.maxSend()) {
+          if (G.phase !== 'sending') return;
+          if (G.sent.length >= this.maxSend() && this._sendingToIsland.size === 0) {
             this.endSending();
           } else {
             this.renderAll();
@@ -1138,6 +1194,7 @@ class GameScene extends Phaser.Scene {
   endSending() {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending') return;
+    if (this._sendingToIsland.size > 0) return;
     if (this.isTutorial()) {
       const requiredSent = this.tutorialRequiredSent(this.getTutorialTurn());
       if (G.sent.length < requiredSent) {
@@ -1176,6 +1233,7 @@ class GameScene extends Phaser.Scene {
         G.phase = 'shopping';
         G.busy = false;
         this.renderAll();
+        this.openShopModal();
         if (this.isTutorial() && this.getTutorialCurrentTurn() === 3) {
           this.showTutorialHint('turn3_shop_hint');
         }
@@ -1323,7 +1381,7 @@ class GameScene extends Phaser.Scene {
     G.discard = G.discard.filter(p => p.id !== pirateId);
 
     const L = this.L;
-    this.float(L.cx, L.Y_CREW - 20 * L.k, '💀 Exiled!', '#ff8a80');
+    this.float(L.cx, L.Y_INV + 20 * L.k, '💀 Exiled!', '#ff8a80');
 
     G.phase = 'ship';
     G.busy = true;
@@ -1443,7 +1501,7 @@ class GameScene extends Phaser.Scene {
       const tut = this.tutorialState();
       const totalTurns = this.getTutorialTurnCount();
       if (tut.currentTurn >= totalTurns) return;
-      if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+      this.closePanels();
       tut.currentTurn += 1;
       this.applyTutorialTurn(tut.currentTurn);
       return;
@@ -1570,8 +1628,7 @@ class GameScene extends Phaser.Scene {
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
-      this.scene.stop('map');
-      this.scene.stop('shopModal');
+      this.closePanels();
       initState();
       this.scene.restart();
     });
@@ -1610,8 +1667,7 @@ class GameScene extends Phaser.Scene {
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
-      this.scene.stop('map');
-      this.scene.stop('shopModal');
+      this.closePanels();
       initState();
       this.scene.restart();
     });
@@ -1657,8 +1713,7 @@ class GameScene extends Phaser.Scene {
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
-      this.scene.stop('map');
-      this.scene.stop('shopModal');
+      this.closePanels();
       initState();
       this.scene.restart();
     });
@@ -1741,8 +1796,6 @@ class GameScene extends Phaser.Scene {
   renderTop() {
     this.clearCt('top');
     const L = this.L;
-    const topCrewScale = L.SC_SM * 0.86;
-    const topShopScale = L.SC_SM * 0.66;
 
     this.txt('top', L.cx, L.Y_ROUND,
       `Round ${G.round}`,
@@ -1761,87 +1814,9 @@ class GameScene extends Phaser.Scene {
     this.txt('top', L.cx, L.Y_INV, inv,
       { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
 
-    const crew = [...G.allCrew].sort((a, b) => {
-      const ca = TYPES[a.type].cost ?? -1;
-      const cb = TYPES[b.type].cost ?? -1;
-      if (ca !== cb) return ca - cb;
-      return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
-    });
-    const maxSp = 44 * L.k;
-    const sp = Math.min(maxSp, (L.W - 80) / Math.max(crew.length, 1));
-    const sx = L.cx - ((crew.length - 1) * sp) / 2;
-
-    const handIds = new Set(G.hand.map(p => p.id));
-    const deckIds = new Set(G.deck.map(p => p.id));
-
-    crew.forEach((p, i) => {
-      const cx = sx + i * sp;
-      const spr = addCatSprite(this, cx, L.Y_CREW, p.type);
-      spr.setScale(topCrewScale);
-
-      if (G.phase === 'removing') {
-        if (handIds.has(p.id)) {
-          spr.setAlpha(1);
-        } else {
-          spr.setTint(0xff6666);
-          spr.setInteractive({ useHandCursor: true });
-          spr.on('pointerover', () => spr.setScale(topCrewScale + 1));
-          spr.on('pointerout', () => spr.setScale(topCrewScale));
-          spr.on('pointerdown', (ptr) => {
-            ptr.event.stopPropagation();
-            this.completeRemoval(p.id);
-          });
-        }
-      } else {
-        if (!deckIds.has(p.id)) spr.setTint(0x333333);
-        spr.setInteractive({ useHandCursor: true });
-        spr.on('pointerdown', (ptr) => {
-          ptr.event.stopPropagation();
-          this.showTip(p.type, cx, L.Y_CREW + 30 * L.k, { fromClick: true });
-        });
-        spr.on('pointerover', () => {
-          if (this.ct.tip.visible) this.showTip(p.type, cx, L.Y_CREW + 30 * L.k);
-        });
-      }
-
-      this.addTo('top', spr);
-    });
-
-    const shopLabel = this.add.text(0, L.Y_SHOP, 'Shop:', {
-      fontFamily: 'monospace',
-      fontSize: L.fs(22),
-      color: '#b0b8c8',
-    }).setOrigin(0, 0.5);
-
-    const shop = G.shop.slice(0, 4);
-    const shopSp = 56 * L.k;
-    const shopIconW = 8 * topShopScale;
-    const shopGap = 16 * L.k;
-    const shopIconsW = shop.length > 0 ? shopIconW + (shop.length - 1) * shopSp : 0;
-    const shopBlockW = shopLabel.width + (shop.length > 0 ? shopGap + shopIconsW : 0);
-    const shopLeft = L.cx - shopBlockW / 2;
-    shopLabel.setPosition(shopLeft, L.Y_SHOP);
-    this.addTo('top', shopLabel);
-
-    const shopSx = shopLeft + shopLabel.width + (shop.length > 0 ? shopGap + shopIconW / 2 : 0);
-    shop.forEach((type, i) => {
-      const cx = shopSx + i * shopSp;
-      const spr = addCatSprite(this, cx, L.Y_SHOP, type);
-      spr.setScale(topShopScale);
-      spr.setInteractive({ useHandCursor: true });
-      spr.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.showTip(type, cx, L.Y_SHOP + 30 * L.k, { fromClick: true });
-      });
-      spr.on('pointerover', () => {
-        if (this.ct.tip.visible) this.showTip(type, cx, L.Y_SHOP + 30 * L.k);
-      });
-      this.addTo('top', spr);
-    });
-
     const dv = this.add.graphics();
     dv.lineStyle(2, 0x1e3040);
-    dv.lineBetween(40, L.Y_DIV1, L.W - 40, L.Y_DIV1);
+    dv.lineBetween(40, L.Y_INV + 44 * L.k, L.W - 40, L.Y_INV + 44 * L.k);
     this.addTo('top', dv);
   }
 
@@ -1957,7 +1932,7 @@ class GameScene extends Phaser.Scene {
       str = 'Ship at work…';
       col = '#80cbc4';
     } else if (G.phase === 'removing') {
-      str = 'Click a pirate above to exile';
+      str = 'Choose a pirate to exile';
       col = '#ff8a80';
     } else {
       const canHire = G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
@@ -1965,6 +1940,37 @@ class GameScene extends Phaser.Scene {
       col = canHire ? '#ce93d8' : '#8090a0';
     }
     this.txt('phase', L.cx, statusY, str, { fontSize: L.fs(22), color: col });
+
+    if (G.phase === 'removing') {
+      const crew = [...G.allCrew].sort((a, b) => {
+        const ca = TYPES[a.type].cost ?? -1;
+        const cb = TYPES[b.type].cost ?? -1;
+        if (ca !== cb) return ca - cb;
+        return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
+      });
+      const handIds = new Set(G.hand.map(p => p.id));
+      const selectable = crew.filter(p => !handIds.has(p.id));
+      const rowY = statusY + 56 * L.k;
+      const scale = L.SC_SM * 0.86;
+      const maxSp = 52 * L.k;
+      const sp = Math.min(maxSp, (L.W - 80) / Math.max(selectable.length, 1));
+      const sx = L.cx - ((selectable.length - 1) * sp) / 2;
+
+      selectable.forEach((p, i) => {
+        const cx = sx + i * sp;
+        const spr = addCatSprite(this, cx, rowY, p.type);
+        spr.setScale(scale);
+        spr.setTint(0xff6666);
+        spr.setInteractive({ useHandCursor: true });
+        spr.on('pointerover', () => spr.setScale(scale + 1));
+        spr.on('pointerout', () => spr.setScale(scale));
+        spr.on('pointerdown', (ptr) => {
+          ptr.event.stopPropagation();
+          this.completeRemoval(p.id);
+        });
+        this.addTo('phase', spr);
+      });
+    }
   }
 
   renderHand() {
@@ -1989,7 +1995,7 @@ class GameScene extends Phaser.Scene {
       })
       : -1;
 
-    const isSending = G.phase === 'sending' && !G.busy;
+    const isSending = G.phase === 'sending';
 
     this._cardHand.render({
       hand: G.hand,
@@ -2051,14 +2057,14 @@ class GameScene extends Phaser.Scene {
     const gap = 12 * L.k;
     const leftOpts = { originX: 0 };
 
-    const mapHighlight = mapEnabled && G.phase === 'map' && getAvailableNodes(G.map).length > 1;
-    const mapLabel = mapHighlight ? 'Map (!)' : 'Map';
+    const mapOpen = this._mapPanelOpen;
+    const mapLabel = mapOpen ? '[Map]' : 'Map';
     const mapBtn = this.mkBtn('nav', left, L.Y_NAV, mapLabel, () => {
       if (!mapEnabled) {
         this.float(L.cx, L.Y_NAV - 40 * L.k, 'Map is available between rounds', '#8090a0');
         return;
       }
-      this.openMapModal();
+      this.toggleMapModal();
     }, {
       ...leftOpts,
       enabled: mapEnabled,
@@ -2069,10 +2075,10 @@ class GameScene extends Phaser.Scene {
       disabledColor: '#5a6570',
     });
 
-    const canBuyAny = G.phase === 'shopping' && G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
-    const shopLabel = canBuyAny ? 'Shop (!)' : 'Shop';
+    const shopOpen = this._shopPanelOpen;
+    const shopLabel = shopOpen ? '[Shop]' : 'Shop';
     this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
-      this.openShopModal();
+      this.toggleShopModal();
     }, {
       ...leftOpts,
       enabled: shopEnabled,

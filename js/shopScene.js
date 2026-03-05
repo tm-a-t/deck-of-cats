@@ -68,10 +68,14 @@ class ShopScene extends Phaser.Scene {
 
   computeModal() {
     const L = this.L;
-    const w = Math.min(L.W - 80 * L.k, 820 * L.k);
-    const h = Math.min(L.H - 400 * L.k, 1040 * L.k);
+    const sidePad = 30 * L.k;
+    const top = Math.max(10 * L.k, L.Y_ISL_CY - 250 * L.k);
+    const bottom = L.Y_HAND - 18 * L.k;
+    const maxH = Math.max(260 * L.k, bottom - top);
+    const w = Math.min(L.W - sidePad * 2, 900 * L.k);
+    const h = Math.min(maxH, 700 * L.k);
     const x = (L.W - w) / 2;
-    const y = (L.H - h) / 2;
+    const y = top;
     return { x, y, w, h };
   }
 
@@ -84,8 +88,10 @@ class ShopScene extends Phaser.Scene {
     const rowN = Math.min(cols, n - rowStart);
     const sp = Math.min(220 * L.k, (modal.w - 80 * L.k) / Math.max(cols - 1, 1));
     const x = modal.x + modal.w / 2 - ((rowN - 1) * sp) / 2 + col * sp;
-    const rowGap = 350 * L.k;
-    const topY = modal.y + 220 * L.k;
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const topY = modal.y + 160 * L.k;
+    const bottomY = modal.y + modal.h - 180 * L.k;
+    const rowGap = rows <= 1 ? 0 : Math.max(170 * L.k, (bottomY - topY) / (rows - 1));
     const y = topY + row * rowGap;
     return { x, y };
   }
@@ -142,15 +148,6 @@ class ShopScene extends Phaser.Scene {
     if (this.tipLayer) this.tipLayer.setVisible(false);
     const L = this.L;
     const m = this.computeModal();
-
-    const blocker = this.add.rectangle(0, 0, L.W, L.H, 0x000000, 0.25).setOrigin(0, 0);
-    blocker.setInteractive();
-    blocker.on('pointerdown', (ptr) => {
-      ptr.event.stopPropagation();
-      if (ptr.x >= m.x && ptr.x <= m.x + m.w && ptr.y >= m.y && ptr.y <= m.y + m.h) return;
-      this.closeModal();
-    });
-    this.modalLayer.add(blocker);
 
     const paper = this.add.graphics();
     paper.fillStyle(0xe0d4b1, 1);
@@ -215,18 +212,12 @@ class ShopScene extends Phaser.Scene {
       this.modalLayer.add(this.add.text(pos.x, pos.y + 56 * L.k + cardTextShiftY, def.name, {
         fontFamily: 'monospace', fontSize: L.fs(18), color: '#3f4f60',
       }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 86 * L.k + cardTextShiftY, def.dI, {
-        fontFamily: 'monospace', fontSize: L.fs(16), color: '#5a7a4a',
-      }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 116 * L.k + cardTextShiftY, def.dS, {
-        fontFamily: 'monospace', fontSize: L.fs(16), color: '#4a6f7a',
-      }).setOrigin(0.5, 0));
-      this.modalLayer.add(this.add.text(pos.x, pos.y + 146 * L.k + cardTextShiftY, (def.str || 0) + '⚔️', {
+      this.modalLayer.add(this.add.text(pos.x, pos.y + 88 * L.k + cardTextShiftY, (def.str || 0) + '⚔️', {
         fontFamily: 'monospace', fontSize: L.fs(16), color: '#a05a5a',
       }).setOrigin(0.5, 0));
 
       if (canBuy) {
-        const buy = this.add.text(pos.x, pos.y + 186 * L.k + cardTextShiftY, '[ buy ]', {
+        const buy = this.add.text(pos.x, pos.y + 124 * L.k + cardTextShiftY, '[ buy ]', {
           fontFamily: 'monospace',
           fontSize: L.fs(20),
           color: '#d7f0d7',

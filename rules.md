@@ -28,8 +28,8 @@ Hand size: always draw 5. When the deck is empty, the discard pile is shuffled b
 ### 1. Map Phase
 
 Player picks the next node on the map.
-- If only 1 available node → auto-selected (no map modal).
-- If 2+ available → map modal opens for manual selection.
+- If only 1 available node → auto-selected (no map page needed).
+- If 2+ available → map page opens automatically for manual selection.
 - The **Map** button is always visible; outside the map phase it opens the map in read-only preview mode.
 
 ### 2a. Island Round
@@ -42,6 +42,7 @@ If the selected node is an island:
 - Skull Island grants +2☠️ at round start (applied immediately when the node is selected).
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
 - Each pirate's island ability resolves on arrival (resource gathering, conversion, recall, etc.).
+- Send animation/effect resolution is non-blocking: while one pirate is traveling/resolving, player may send another immediately.
 - Player ends the phase by pressing **End landing**, or it ends automatically when the maximum number of pirates have been sent.
 
 **Ship phase**:
@@ -52,7 +53,8 @@ If the selected node is an island:
 - All others attempt to spend input resources and produce output resources/enthusiasm/weapons/cannons.
 
 **Shopping phase**:
-- Player may open the Shop modal to buy pirates for ☠️.
+- Shop page opens automatically.
+- Player may reopen the Shop page to buy pirates for ☠️.
 - When **Next round** is pressed:
   1. The first pirate in the shop window is removed, remaining shift left, a new random pirate enters from the right.
   2. Hand goes to discard (only pirates still in the crew; exiled pirates are gone).
@@ -180,6 +182,7 @@ Both are summed with crew strength during boarding.
 ## Shop
 
 - **Window size**: 4 slots.
+- **UI panel behavior**: only one page panel can be open at a time (Map/Shop/other future panels). Opening one closes the others. Panels close automatically when arriving at a new island or ship node.
 - **Pool**: all non-starter, non-tutorial pirate types (26 types).
 - **Cost filtering**: max affordable cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
 - **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). The bought slot is refilled with a new random pirate from the pool.
