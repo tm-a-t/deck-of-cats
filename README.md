@@ -1,4 +1,4 @@
-🇬🇧 English below  
+🇬🇧 English above  
 🇷🇺 Русская версия ниже
 
 play at https://pirate-islands.netlify.app/.
