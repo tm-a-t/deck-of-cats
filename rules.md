@@ -10,7 +10,7 @@ Genre: deck-building with pirate cats. Player assembles a crew (deck), sails a b
 
 ---
 
-## Starting Deck
+## Regular Run Starting Deck
 
 10 pirates total:
 
@@ -19,11 +19,11 @@ Genre: deck-building with pirate cats. Player assembles a crew (deck), sails a b
 | Rigger | 5 |
 | Ballaster | 5 |
 
-Hand size: always draw 5. When the deck is empty, the discard pile is shuffled back into the deck.
+Hand size: draw up to 5. When the deck is empty, the discard pile is shuffled back into the deck. If fewer than 5 crew remain, the new hand is smaller.
 
 ---
 
-## Round Flow
+## Regular Run Flow
 
 ### 1. Map Phase
 
@@ -37,7 +37,7 @@ Player picks the next node on the map.
 If the selected node is an island:
 
 **Sending phase**:
-- Player sends 0–2 pirates from hand to the island (one click = one send).
+- Player sends 0–2 pirates from hand to the island.
 - Port Island allows 3 (base 2 + 1 extra).
 - Skull Island grants +2☠️ at round start (applied immediately when the node is selected).
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
@@ -54,25 +54,25 @@ If the selected node is an island:
 - All others attempt to spend input resources and produce output resources/enthusiasm/weapons/cannons.
 
 **Shopping phase**:
-- Shop page opens automatically.
+- Shop page opens automatically unless the regular-run auto-skip condition triggers.
 - Player may reopen the Shop page to buy pirates for ☠️.
 - When **Next round** is pressed:
   1. The first pirate in the shop window is removed, remaining shift left, a new random pirate enters from the right.
   2. Hand goes to discard (only pirates still in the crew; exiled pirates are gone).
   3. Enthusiasm resets to 0; resources persist.
-  4. 5 new pirates drawn from deck.
+  4. Up to 5 new pirates are drawn from deck.
   5. Return to map phase.
 
 ### 2b. Boarding Round
 
 If the selected node is an enemy ship:
-- All 5 pirates in hand participate; no island phase, no shop phase.
+- All pirates currently in hand participate; no island phase, no shop phase.
 - **Crew strength** = sum of all hand pirates' ⚔️.
 - **Ship bonus** = 🗡️ weapons + 💣 cannons.
 - **Total strength** = crew strength + ship bonus.
 - **Victory** (total ≥ enemy strength):
   - 🗡️ weapons reset to 0; 💣 cannons persist.
-  - Hand discarded, draw 5 new, proceed to map phase.
+  - Hand discarded, draw up to 5 new pirates, proceed to map phase.
   - If this was the final map node → **Victory screen**.
 - **Defeat** (total < enemy strength):
   - **Game Over** screen.
@@ -100,8 +100,8 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 | Ship # | Layer | Strength |
 |--------|-------|----------|
 | 1 | 4 | 6 |
-| 2 | 9 | 12 |
-| 3 | 14 | 19 |
+| 2 | 9 | 11 |
+| 3 | 14 | 16 |
 
 ### Mid/Late Game (layers 15–49)
 
@@ -110,17 +110,17 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 - Siren Island can appear starting at layer 15 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
 
-**Ship strength** (general formula): `trunc(shipNumber ^ 1.39 × 4 + 2)`
+**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 4 + 2)`
 
-| Ship # | Layer | Approx. Strength |
-|--------|-------|------------------|
-| 4 | 19 | 28 |
-| 5 | 24 | 37 |
-| 6 | 29 | 48 |
-| 7 | 34 | 59 |
-| 8 | 39 | 71 |
-| 9 | 44 | 84 |
-| 10 | 49 | 97 |
+| Ship # | Layer | Strength |
+|--------|-------|----------|
+| 4 | 19 | 23 |
+| 5 | 24 | 29 |
+| 6 | 29 | 36 |
+| 7 | 34 | 43 |
+| 8 | 39 | 50 |
+| 9 | 44 | 57 |
+| 10 | 49 | 65 |
 
 ### Victory Condition
 
@@ -139,7 +139,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 | Skull Island | 💀 | +2☠️ at round start |
 | Siren Island | 🧜 | Pirates sent are permanently lost after their action |
 
-**Island bonus doubling**: applies to any pirate's island yield that matches the island's bonus resource. Affects standard gathering, conversion outputs, and multi-resource outputs.
+**Island bonus doubling**: applies to chance-based gathering, conversion outputs, and multi-resource outputs that match the island's bonus resource.
 
 ---
 
@@ -165,7 +165,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 2. **Exile from Deck** (Cutthroat): spend resources, then player picks a crew member (not from current hand) to permanently exile. No effect if resources insufficient or no valid targets.
 3. **No action** (Herald): does nothing on ship.
 4. **Free production** (Bosun, Corsair, etc.): generates enthusiasm, weapons, and/or cannons with no input cost.
-5. **Resource conversion**: spend N of a resource (or weapons/cannons), produce enthusiasm + weapons/cannons. Fails silently if insufficient resources.
+5. **Resource conversion**: spend N of a resource (or weapons/cannons), produce resources, enthusiasm, weapons, and/or cannons. Fails silently if insufficient resources.
 
 ---
 
@@ -173,8 +173,8 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Type | Emoji | Effect | Persistence |
 |------|-------|--------|-------------|
-| Weapons | 🗡️ | +1⚔️ per weapon in next boarding | Reset to 0 after boarding (win or lose) |
-| Cannons | 💣 | +1⚔️ per cannon in every boarding | Permanent |
+| Weapons | 🗡️ | +1⚔️ per weapon in next boarding; some ship actions can spend them | Reset to 0 after boarding (win or lose) |
+| Cannons | 💣 | +1⚔️ per cannon in every boarding; some ship actions can spend them | Not reset after boarding |
 
 Both are summed with crew strength during boarding.
 
@@ -182,12 +182,12 @@ Both are summed with crew strength during boarding.
 
 ## Shop
 
-- **Window size**: 4 slots.
+- **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
 - **UI panel behavior**: only one page panel can be open at a time (Map/Shop/other future panels). Opening one closes the others. Panels close automatically when arriving at a new island or ship node.
-- **Pool**: all non-starter, non-tutorial pirate types (26 types).
-- **Cost filtering**: max affordable cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
-- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). The bought slot is refilled with a new random pirate from the pool.
-- **Next round rotation**: first pirate in the window is removed, remaining shift left, a new random pirate enters at the end.
+- **Regular-run pool**: all non-starter, non-tutorial pirate types (26 types).
+- **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
+- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
+- **Next round rotation**: in regular runs, the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
 - **Auto-skip**: in regular runs (not tutorial), if the player enters shopping with no affordable pirates in the current window, the shop is skipped automatically and round progression happens as if **Next round** was pressed.
 
 ---
@@ -207,6 +207,7 @@ Both are summed with crew strength during boarding.
 |------|-----|--------|------|
 | Trail Forager | 1 | → 1🪵 (guaranteed) | 1🪵 → 1☠️ |
 | Deck Swabbie | 1 | Can't land | → 1☠️ |
+| Admiral Blackpowder | 3 | Can't land | 1🪙 → 3💣 |
 
 ### Tier 1: Early Upgrades (cost 2–5)
 
@@ -285,19 +286,25 @@ Both are summed with crew strength during boarding.
 | 🪙 | Gold | Ship actions input; high-tier conversions |
 | 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-| 🗡️ | Weapons | Temporary ⚔️ bonus (resets after boarding) |
-| 💣 | Cannons | Permanent ⚔️ bonus |
+| 🗡️ | Weapons | Temporary ⚔️ bonus; also spendable by some ship actions |
+| 💣 | Cannons | Persistent ⚔️ bonus; not reset after boarding, but some ship actions can spend them |
 
 ---
 
 ## Tutorial
 
 Activated from the menu:
-- Crew: 1 Trail Forager + 4 Deck Swabbies.
-- Fixed island: Training Cove (max 1 pirate ashore).
-- Fixed shop: Carpenter, Quartermaster, Master Rigger, Master Ballaster.
-- Steps: landing → shop → boss #1 (winnable) → boss #2 (unwinnable) → outro.
-- Boss 1 strength is set so the player wins; Boss 2 is set so they lose.
+- No map; turns are fully scripted.
+- Starting tutorial crew: 3 Riggers, 3 Ballasters, 3 Deck Swabbies.
+- The tutorial lasts 5 turns.
+- Turns 1–4 are island rounds and require sending exactly 2 pirates.
+- Turn 1 island: Forest Island.
+- Turn 2 island: Rocky Island.
+- Turns 3–4 island: Calm Atoll (no island bonus).
+- Turn 3 shop: only Admiral Blackpowder is offered, and the tutorial does not continue until it is bought.
+- Turn 4 includes a scripted mismatch: one Rigger brings back 1🪙 instead of 1🪵, and Admiral Blackpowder is blocked from landing so it stays on ship.
+- Turn 5 is a boarding fight against 9⚔️.
+- Winning the final tutorial boarding shows the tutorial outro; losing shows the normal game-over screen.
 - After outro, player can start a real game.
 
 No map in tutorial mode.
