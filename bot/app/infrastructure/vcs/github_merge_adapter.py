@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.shared.errors import ExternalIntegrationError
+
+
+logger = logging.getLogger(__name__)
 
 
 class GithubMergeAdapter:
@@ -41,6 +46,12 @@ class GithubMergeAdapter:
             raise ExternalIntegrationError(f"GitHub approve PR request failed: {exc}") from exc
 
         if response.status_code not in {200, 201}:
+            if self._is_self_approval_rejected(response):
+                logger.warning(
+                    "GitHub refused self-approval for PR %s; continuing without approval",
+                    pr_number,
+                )
+                return
             raise ExternalIntegrationError(
                 f"GitHub approve PR failed (status={response.status_code}): {self._safe_response_text(response)}"
             )
@@ -122,6 +133,12 @@ class GithubMergeAdapter:
     def _safe_response_text(response: httpx.Response) -> str:
         text = response.text.strip()
         return text or "<empty response>"
+
+    @classmethod
+    def _is_self_approval_rejected(cls, response: httpx.Response) -> bool:
+        if response.status_code != 422:
+            return False
+        return "approve your own pull request" in cls._safe_response_text(response).lower()
 
     def _github_headers(self) -> dict[str, str]:
         return {

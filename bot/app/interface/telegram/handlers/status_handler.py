@@ -17,6 +17,10 @@ from app.application.ports.unit_of_work import UnitOfWork
 from app.application.use_cases.list_active_tasks import ListActiveTasksUseCase
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.domain.events.domain_events import DomainEvent
+from app.interface.telegram.callback_alerts import (
+    build_callback_alert_text,
+    build_callback_details_text,
+)
 from app.interface.telegram.fsm.states import TaskStates
 from app.interface.telegram.keyboards.decision_keyboard import build_decision_request_keyboard
 from app.interface.telegram.keyboards.task_keyboard import (
@@ -321,7 +325,17 @@ def build_router(
                     tx.commit()
                     task = current
             except AppError as exc:
-                await callback.answer(str(exc), show_alert=True)
+                if callback.message is not None:
+                    await callback.message.answer(
+                        build_callback_details_text(
+                            f"Не удалось подготовить решение для {task.public_id}.",
+                            exc,
+                        )
+                    )
+                await callback.answer(
+                    build_callback_alert_text(exc, fallback="Не удалось подготовить решение"),
+                    show_alert=True,
+                )
                 return
 
             keyboard = build_decision_request_keyboard(task.public_id, token, callback_signer)

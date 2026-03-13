@@ -11,6 +11,10 @@ from app.application.orchestrators.dev_cycle_orchestrator import DevCycleOrchest
 from app.application.ports.unit_of_work import UnitOfWork
 from app.application.use_cases.accept_merge_decision import AcceptMergeDecisionUseCase
 from app.domain.events.domain_events import DomainEvent
+from app.interface.telegram.callback_alerts import (
+    build_callback_alert_text,
+    build_callback_details_text,
+)
 from app.interface.telegram.fsm.states import TaskStates
 from app.interface.telegram.keyboards.decision_keyboard import build_decision_confirm_keyboard
 from app.interface.telegram.keyboards.main_menu_keyboard import CANCEL_BUTTON, build_main_menu_keyboard
@@ -90,7 +94,17 @@ def build_router(
             decision = MergeDecision(decision_raw)
             await use_case.execute(task_id=task_id, decision=decision, decision_token=token)
         except AppError as exc:
-            await callback.answer(str(exc), show_alert=True)
+            if callback.message is not None:
+                await callback.message.answer(
+                    build_callback_details_text(
+                        f"Не удалось применить решение для {public_id}.",
+                        exc,
+                    )
+                )
+            await callback.answer(
+                build_callback_alert_text(exc, fallback="Не удалось применить решение"),
+                show_alert=True,
+            )
             return
 
         if decision == MergeDecision.RERUN_TESTS:

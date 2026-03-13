@@ -279,6 +279,50 @@ async def test_github_merge_adapter_calls_merge_and_close_endpoints(monkeypatch:
     assert _FakeAsyncClient.put_calls[0][2]["merge_method"] == "squash"
 
 
+async def test_github_merge_adapter_ignores_self_approval_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeAsyncClient:
+        post_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
+
+        def __init__(self, timeout: httpx.Timeout) -> None:
+            _ = timeout
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            _ = exc_type, exc, tb
+            return False
+
+        async def post(self, url: str, headers: dict[str, str], json: dict[str, str]) -> httpx.Response:
+            self.post_calls.append((url, headers, json))
+            return _http_response(
+                method="POST",
+                status_code=422,
+                payload={
+                    "message": "Unprocessable Entity",
+                    "errors": ["Review Can not approve your own pull request"],
+                },
+            )
+
+    monkeypatch.setattr(merge_module.httpx, "AsyncClient", _FakeAsyncClient)
+
+    task = _task()
+    task.pr_number = 19
+    adapter = GithubMergeAdapter(
+        owner="octo",
+        repo="deck",
+        token="token",
+        api_base_url="https://api.github.com",
+        merge_method="squash",
+        dry_run=False,
+        timeout_seconds=30,
+    )
+
+    await adapter.approve_pr(task)
+
+    assert _FakeAsyncClient.post_calls[0][0].endswith("/repos/octo/deck/pulls/19/reviews")
+
+
 async def test_github_merge_adapter_raises_without_pr_number() -> None:
     adapter = GithubMergeAdapter(
         owner="octo",
