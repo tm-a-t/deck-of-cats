@@ -115,6 +115,61 @@ class CodexPromptBuilder:
             """
         ).strip()
 
+    def build_chat_agent_log_summary_prompt(
+        self,
+        personality_key: str,
+        guide_path: str,
+        is_new_session: bool,
+        chat_id: int,
+        user_message: str,
+        task_public_id: str,
+        task_title: str,
+        task_status: str,
+        log_text: str,
+    ) -> str:
+        session_instruction = (
+            "You are starting a new Codex agent personality for this repository."
+            if is_new_session
+            else "Continue as the existing Codex agent personality for this repository."
+        )
+        guide_instruction = (
+            "Before doing any work, read and follow this guide exactly:"
+            if is_new_session
+            else "If you are not fully sure you remember the role or workflow, re-read this guide:"
+        )
+        log_excerpt = self._truncate_log_excerpt(log_text)
+        return textwrap.dedent(
+            f"""
+            {session_instruction}
+            Personality: {personality_key}
+            This is a new chat turn.
+            {guide_instruction}
+            - {guide_path}
+
+            You are handling a Telegram bot message for chat_id={chat_id}.
+            The user is asking about an existing task log. Read the metadata and raw log text below, then answer in Russian.
+
+            Latest user message:
+            {user_message}
+
+            Task metadata:
+            - Public ID: {task_public_id}
+            - Status: {task_status}
+            - Title: {task_title}
+
+            Raw log text:
+            {log_excerpt}
+
+            Requirements:
+            - Do not return JSON.
+            - Do not dump the raw log text back to the user.
+            - Summarize the important result in plain Russian.
+            - Explain what was tested, what passed or failed, and the main blocker or outcome.
+            - Mention the next practical step if the logs make it clear.
+            - Keep the answer concise but informative.
+            """
+        ).strip()
+
     def build_validate_prompt(self, task: TaskAggregate) -> str:
         changed_files_block = self._changed_files_block(task)
         return textwrap.dedent(
@@ -191,3 +246,12 @@ class CodexPromptBuilder:
             title = item.get("title", "").strip() or "<untitled>"
             lines.append(f"- {public_id} | {status} | {title}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _truncate_log_excerpt(value: str, limit: int = 12000) -> str:
+        normalized = value.strip()
+        if not normalized:
+            return "<empty>"
+        if len(normalized) <= limit:
+            return normalized
+        return "[truncated to last log section]\n" + normalized[-limit:].lstrip()

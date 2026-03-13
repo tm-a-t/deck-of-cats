@@ -76,6 +76,25 @@ def test_chat_agent_prompt_mentions_chat_turn_and_json_contract() -> None:
     assert "T-AAAA1111 | NEW | Add direct chat agent" in prompt
 
 
+def test_chat_agent_log_summary_prompt_requires_russian_paraphrase_without_raw_dump() -> None:
+    prompt = CodexPromptBuilder().build_chat_agent_log_summary_prompt(
+        personality_key="chat-agent:123",
+        guide_path="bot/personalities/chat-agent.md",
+        is_new_session=False,
+        chat_id=123,
+        user_message="Перескажи лог человеческими словами",
+        task_public_id="T-AAAA1111",
+        task_title="Add direct chat agent",
+        task_status="CODEX_VALIDATE_RUNNING",
+        log_text="Backend-only change; browser validation skipped.",
+    )
+
+    assert "The user is asking about an existing task log" in prompt
+    assert "Do not return JSON." in prompt
+    assert "Do not dump the raw log text back to the user" in prompt
+    assert "Backend-only change; browser validation skipped." in prompt
+
+
 def test_lead_review_prompt_contains_structured_decision_contract() -> None:
     prompt = CodexPromptBuilder().build_lead_review_prompt(_task())
 

@@ -20,6 +20,16 @@ class ChatAgentRequest:
     active_tasks: list[dict[str, str]]
 
 
+@dataclass(frozen=True)
+class ChatAgentLogSummaryRequest:
+    chat_id: int
+    user_message: str
+    task_public_id: str
+    task_title: str
+    task_status: str
+    log_text: str
+
+
 class CodexChatAgentAdapter:
     def __init__(
         self,
@@ -61,7 +71,47 @@ class CodexChatAgentAdapter:
             user_message=request.user_message,
             active_tasks=request.active_tasks,
         )
-        args = self._build_args(prompt=prompt, session_id=stored.session_id if use_resume and stored else None)
+        parsed_output = await self._run_prompt(
+            personality_key=personality_key,
+            prompt=prompt,
+            session_id=stored.session_id if use_resume and stored else None,
+        )
+
+        if not parsed_output.final_message:
+            raise ChatAgentAdapterError("chat agent returned no final message")
+
+        try:
+            return self._parser.parse(parsed_output.final_message)
+        except Exception as exc:
+            raise ChatAgentAdapterError(f"chat agent parse failed: {exc}") from exc
+
+    async def explain_logs(self, request: ChatAgentLogSummaryRequest) -> str:
+        personality_key = f"{self._personality_key_prefix}:{request.chat_id}"
+        stored = self._personality_store.get(personality_key)
+        use_resume = stored is not None and bool(stored.session_id)
+        prompt = self._prompt_builder.build_chat_agent_log_summary_prompt(
+            personality_key=personality_key,
+            guide_path=self._guide_path,
+            is_new_session=not use_resume,
+            chat_id=request.chat_id,
+            user_message=request.user_message,
+            task_public_id=request.task_public_id,
+            task_title=request.task_title,
+            task_status=request.task_status,
+            log_text=request.log_text,
+        )
+        parsed_output = await self._run_prompt(
+            personality_key=personality_key,
+            prompt=prompt,
+            session_id=stored.session_id if use_resume and stored else None,
+        )
+        final_message = (parsed_output.final_message or "").strip()
+        if not final_message:
+            raise ChatAgentAdapterError("chat agent returned no log explanation")
+        return final_message
+
+    async def _run_prompt(self, personality_key: str, prompt: str, session_id: str | None):
+        args = self._build_args(prompt=prompt, session_id=session_id)
         result = await self._runner.run(
             args=args,
             cwd=self._repo_path,
@@ -76,14 +126,7 @@ class CodexChatAgentAdapter:
             raise ChatAgentAdapterError(
                 f"chat agent codex exec {summary}: {result.stderr.strip() or result.stdout.strip() or 'no output'}"
             )
-
-        if not parsed_output.final_message:
-            raise ChatAgentAdapterError("chat agent returned no final message")
-
-        try:
-            return self._parser.parse(parsed_output.final_message)
-        except Exception as exc:
-            raise ChatAgentAdapterError(f"chat agent parse failed: {exc}") from exc
+        return parsed_output
 
     def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
         args = [

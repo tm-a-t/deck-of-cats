@@ -9,14 +9,16 @@ from app.application.ports.unit_of_work import UnitOfWork
 from app.application.use_cases.list_active_tasks import ListActiveTasksUseCase
 from app.application.use_cases.submit_change_request import SubmitChangeRequestUseCase
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.infrastructure.codex.chat_agent_adapter import ChatAgentAdapterError, ChatAgentRequest, CodexChatAgentAdapter
+from app.infrastructure.codex.chat_agent_adapter import (
+    ChatAgentAdapterError,
+    ChatAgentLogSummaryRequest,
+    ChatAgentRequest,
+    CodexChatAgentAdapter,
+)
 from app.infrastructure.codex.chat_agent_parser import ChatAgentAction
 from app.interface.telegram.keyboards.main_menu_keyboard import build_main_menu_keyboard
 from app.interface.telegram.message_utils import derive_title_from_body, is_system_menu_input
 from app.interface.telegram.presenters.task_card import render_task_card, render_task_list_row
-
-
-LOG_CHUNK_SIZE = 3500
 
 
 def build_router(
@@ -26,30 +28,6 @@ def build_router(
     uow_factory: Callable[[], UnitOfWork],
 ) -> Router:
     router = Router(name="chat-agent")
-
-    def _chunk_text(text: str, max_len: int = LOG_CHUNK_SIZE) -> list[str]:
-        normalized = text.strip()
-        if not normalized:
-            return [""]
-        if len(normalized) <= max_len:
-            return [normalized]
-
-        chunks: list[str] = []
-        remaining = normalized
-        while remaining:
-            if len(remaining) <= max_len:
-                chunks.append(remaining)
-                break
-
-            split_at = remaining.rfind("\n", 0, max_len)
-            if split_at < max_len // 2:
-                split_at = remaining.rfind(" ", 0, max_len)
-            if split_at <= 0:
-                split_at = max_len
-
-            chunks.append(remaining[:split_at].rstrip())
-            remaining = remaining[split_at:].lstrip("\n ")
-        return chunks
 
     def _resolve_task(ref: str | None, chat_id: int) -> TaskAggregate | None:
         normalized_ref = (ref or "").strip()
@@ -159,11 +137,25 @@ def build_router(
                     reply_markup=build_main_menu_keyboard(),
                 )
                 return
-            intro = decision.reply_text or f"Показываю логи для {task.public_id}."
-            await message.answer(intro, reply_markup=build_main_menu_keyboard())
-            for index, chunk in enumerate(_chunk_text(_load_log_text(task))):
-                suffix = "" if index == 0 else " (продолжение)"
-                await message.answer(f"🧾 {task.public_id}{suffix}\n{chunk}")
+            try:
+                explanation = await chat_agent.explain_logs(
+                    ChatAgentLogSummaryRequest(
+                        chat_id=message.chat.id,
+                        user_message=text,
+                        task_public_id=task.public_id,
+                        task_title=task.title,
+                        task_status=task.status.value,
+                        log_text=_load_log_text(task),
+                    )
+                )
+            except ChatAgentAdapterError as exc:
+                await message.answer(
+                    "Не смог пересказать логи через chat-agent.\n"
+                    f"Ошибка: {exc}",
+                    reply_markup=build_main_menu_keyboard(),
+                )
+                return
+            await message.answer(explanation, reply_markup=build_main_menu_keyboard())
             return
 
         if decision.action == ChatAgentAction.HELP:
