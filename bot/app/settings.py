@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     bot_auto_start_tasks: bool = Field(default=False, alias="BOT_AUTO_START_TASKS")
     bot_enable_worker_loop: bool = Field(default=False, alias="BOT_ENABLE_WORKER_LOOP")
     bot_enable_lead_autoreview: bool = Field(default=False, alias="BOT_ENABLE_LEAD_AUTOREVIEW")
-    bot_use_current_branch: bool = Field(default=False, alias="BOT_USE_CURRENT_BRANCH")
+    bot_use_current_branch: bool = Field(default=True, alias="BOT_USE_CURRENT_BRANCH")
     bot_self_approve_prs: bool = Field(default=False, alias="BOT_SELF_APPROVE_PRS")
     bot_self_restart_module: str = Field(default="app.main_all_in_one", alias="BOT_SELF_RESTART_MODULE")
 

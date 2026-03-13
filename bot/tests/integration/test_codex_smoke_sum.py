@@ -42,7 +42,7 @@ async def test_codex_creates_sum_file_and_reports_pass() -> None:
 
     try:
         result = await runner.run(
-            args=[codex_executable, "exec", prompt],
+            args=[codex_executable, "--yolo", "exec", prompt],
             cwd=str(repo_root),
             timeout_seconds=180,
         )

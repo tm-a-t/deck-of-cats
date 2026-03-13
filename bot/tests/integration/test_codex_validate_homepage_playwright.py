@@ -46,7 +46,7 @@ async def test_codex_validator_can_open_homepage_via_playwright_cli() -> None:
     parser = CodexResultParser()
 
     result = await runner.run(
-        args=[codex_executable, "-a", approval_policy, "exec", "--sandbox", sandbox_mode, prompt],
+        args=[codex_executable, "--yolo", "-a", approval_policy, "exec", "--sandbox", sandbox_mode, prompt],
         cwd=str(project_root),
         timeout_seconds=420,
     )

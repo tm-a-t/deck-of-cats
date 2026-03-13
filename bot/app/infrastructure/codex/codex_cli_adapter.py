@@ -259,6 +259,7 @@ class CodexCliAdapter:
     def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
         args = [
             self._codex_executable,
+            "--yolo",
             "-a",
             self._approval_policy,
             "-s",
