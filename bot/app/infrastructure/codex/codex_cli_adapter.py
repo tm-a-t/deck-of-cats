@@ -260,10 +260,6 @@ class CodexCliAdapter:
         args = [
             self._codex_executable,
             "--yolo",
-            "-a",
-            self._approval_policy,
-            "-s",
-            self._sandbox_mode,
             "exec",
         ]
         if session_id:

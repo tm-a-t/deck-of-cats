@@ -108,17 +108,13 @@ async def test_implement_starts_new_developer_personality_and_persists_session(t
     assert result.metadata["personality_key"] == "developer"
     assert result.metadata["personality_run_mode"] == "exec"
     assert result.metadata["codex_session_id"] == "session-dev-1"
-    assert runner.calls[0]["args"][:8] == [
+    assert runner.calls[0]["args"][:4] == [
         "codex",
         "--yolo",
-        "-a",
-        "never",
-        "-s",
-        "workspace-write",
         "exec",
         "--json",
     ]
-    prompt = runner.calls[0]["args"][8]
+    prompt = runner.calls[0]["args"][4]
     assert "This is a new task." in prompt
     assert "bot/personalities/developer.md" in prompt
     assert "read and follow this guide exactly" in prompt
@@ -143,19 +139,15 @@ async def test_implement_resumes_existing_developer_personality(tmp_path: Path) 
     assert result.metadata is not None
     assert result.metadata["personality_run_mode"] == "resume"
     assert result.metadata["codex_session_id"] == "session-dev-existing"
-    assert runner.calls[0]["args"][:10] == [
+    assert runner.calls[0]["args"][:6] == [
         "codex",
         "--yolo",
-        "-a",
-        "never",
-        "-s",
-        "workspace-write",
         "exec",
         "resume",
         "--json",
         "session-dev-existing",
     ]
-    prompt = runner.calls[0]["args"][10]
+    prompt = runner.calls[0]["args"][6]
     assert "This is a new task." in prompt
     assert "bot/personalities/developer.md" in prompt
     assert "re-read this guide" in prompt
@@ -185,17 +177,13 @@ async def test_validate_uses_fresh_tester_personality_even_if_store_has_entry(tm
     assert result.metadata["personality_key"] == "tester"
     assert result.metadata["personality_run_mode"] == "exec"
     assert result.metadata["codex_session_id"] == "session-tester-new"
-    assert runner.calls[0]["args"][:8] == [
+    assert runner.calls[0]["args"][:4] == [
         "codex",
         "--yolo",
-        "-a",
-        "never",
-        "-s",
-        "workspace-write",
         "exec",
         "--json",
     ]
-    prompt = runner.calls[0]["args"][8]
+    prompt = runner.calls[0]["args"][4]
     assert "bot/personalities/tester.md" in prompt
     assert "read and follow this guide exactly" in prompt
     assert "bot/app/di.py" in prompt
@@ -225,16 +213,12 @@ async def test_lead_review_uses_persistent_lead_personality_and_returns_decision
     assert result.metadata is not None
     assert result.metadata["personality_key"] == "lead"
     assert result.metadata["review_decision"] == "merge"
-    assert runner.calls[0]["args"][:8] == [
+    assert runner.calls[0]["args"][:4] == [
         "codex",
         "--yolo",
-        "-a",
-        "never",
-        "-s",
-        "workspace-write",
         "exec",
         "--json",
     ]
-    prompt = runner.calls[0]["args"][8]
+    prompt = runner.calls[0]["args"][4]
     assert "bot/personalities/lead.md" in prompt
     assert "DECISION: MERGE|RERUN_TESTS|CLOSE" in prompt

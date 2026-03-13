@@ -21,9 +21,6 @@ async def test_codex_validator_can_open_homepage_via_playwright_cli() -> None:
     codex_executable = os.getenv("CODEX_CLI_EXECUTABLE", "codex")
     if shutil.which(codex_executable) is None:
         pytest.skip(f"{codex_executable} is not available in PATH")
-    approval_policy = os.getenv("CODEX_CLI_APPROVAL_POLICY", "never")
-    sandbox_mode = os.getenv("CODEX_CLI_SANDBOX_MODE", "danger-full-access")
-
     project_root = Path(__file__).resolve().parents[3]
 
     prompt = (
@@ -46,7 +43,7 @@ async def test_codex_validator_can_open_homepage_via_playwright_cli() -> None:
     parser = CodexResultParser()
 
     result = await runner.run(
-        args=[codex_executable, "--yolo", "-a", approval_policy, "exec", "--sandbox", sandbox_mode, prompt],
+        args=[codex_executable, "--yolo", "exec", prompt],
         cwd=str(project_root),
         timeout_seconds=420,
     )
