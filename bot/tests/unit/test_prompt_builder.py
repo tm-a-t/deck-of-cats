@@ -76,6 +76,20 @@ def test_chat_agent_prompt_mentions_chat_turn_and_json_contract() -> None:
     assert "T-AAAA1111 | NEW | Add direct chat agent" in prompt
 
 
+def test_chat_reply_prompt_requests_plain_text_reply_only() -> None:
+    prompt = CodexPromptBuilder().build_chat_reply_prompt(
+        personality_key="chat-agent-reply:175504456",
+        guide_path="bot/personalities/chat-agent.md",
+        is_new_session=True,
+        chat_id=175504456,
+        user_message="Как дела?",
+    )
+
+    assert "plain conversation, not task creation or task status work" in prompt
+    assert "Reply in Russian only." in prompt
+    assert "Return plain text only." in prompt
+
+
 def test_lead_review_prompt_contains_structured_decision_contract() -> None:
     prompt = CodexPromptBuilder().build_lead_review_prompt(_task())
 

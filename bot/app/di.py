@@ -47,6 +47,11 @@ from app.shared.enums import StepName
 from app.shared.security import CallbackSigner
 
 
+# Only plain conversational replies in this Telegram chat should use spark.
+CHAT_AGENT_SPARK_CHAT_ID = 175504456
+CHAT_AGENT_SPARK_MODEL = "gpt-5.3-codex-spark"
+
+
 @dataclass
 class UseCases:
     submit_change_request: SubmitChangeRequestUseCase
@@ -121,6 +126,7 @@ def build_container(settings: Settings) -> Container:
         codex_executable=settings.codex_cli_executable,
         sandbox_mode=settings.codex_cli_sandbox_mode,
         approval_policy=settings.codex_cli_approval_policy,
+        chat_reply_model_overrides={CHAT_AGENT_SPARK_CHAT_ID: CHAT_AGENT_SPARK_MODEL},
     )
 
     branch_port = GithubBranchAdapter(

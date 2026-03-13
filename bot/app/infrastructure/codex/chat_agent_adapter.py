@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Mapping
 
-from app.infrastructure.codex.chat_agent_parser import ChatAgentDecision, ChatAgentParser
+from app.infrastructure.codex.chat_agent_parser import ChatAgentAction, ChatAgentDecision, ChatAgentParser
 from app.infrastructure.codex.json_output_parser import CodexJsonOutputParseError, CodexJsonOutputParser
 from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
@@ -35,6 +36,7 @@ class CodexChatAgentAdapter:
         approval_policy: str = "never",
         guide_path: str = "bot/personalities/chat-agent.md",
         personality_key_prefix: str = "chat-agent",
+        chat_reply_model_overrides: Mapping[int, str] | None = None,
     ) -> None:
         self._runner = runner
         self._prompt_builder = prompt_builder
@@ -48,8 +50,22 @@ class CodexChatAgentAdapter:
         self._approval_policy = approval_policy
         self._guide_path = guide_path
         self._personality_key_prefix = personality_key_prefix
+        self._chat_reply_model_overrides = {
+            int(chat_id): model.strip()
+            for chat_id, model in (chat_reply_model_overrides or {}).items()
+            if model.strip()
+        }
 
     async def plan(self, request: ChatAgentRequest) -> ChatAgentDecision:
+        decision = await self._plan_routing(request)
+        reply_model = self._chat_reply_model_overrides.get(request.chat_id)
+        if decision.action != ChatAgentAction.REPLY or not reply_model:
+            return decision
+
+        reply_text = await self._generate_reply(request, model=reply_model)
+        return replace(decision, reply_text=reply_text)
+
+    async def _plan_routing(self, request: ChatAgentRequest) -> ChatAgentDecision:
         personality_key = f"{self._personality_key_prefix}:{request.chat_id}"
         stored = self._personality_store.get(personality_key)
         use_resume = stored is not None and bool(stored.session_id)
@@ -61,7 +77,10 @@ class CodexChatAgentAdapter:
             user_message=request.user_message,
             active_tasks=request.active_tasks,
         )
-        args = self._build_args(prompt=prompt, session_id=stored.session_id if use_resume and stored else None)
+        args = self._build_args(
+            prompt=prompt,
+            session_id=stored.session_id if use_resume and stored else None,
+        )
         result = await self._runner.run(
             args=args,
             cwd=self._repo_path,
@@ -85,15 +104,53 @@ class CodexChatAgentAdapter:
         except Exception as exc:
             raise ChatAgentAdapterError(f"chat agent parse failed: {exc}") from exc
 
-    def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
+    async def _generate_reply(self, request: ChatAgentRequest, model: str) -> str:
+        personality_key = f"{self._personality_key_prefix}-reply:{request.chat_id}"
+        stored = self._personality_store.get(personality_key)
+        use_resume = stored is not None and bool(stored.session_id)
+        prompt = self._prompt_builder.build_chat_reply_prompt(
+            personality_key=personality_key,
+            guide_path=self._guide_path,
+            is_new_session=not use_resume,
+            chat_id=request.chat_id,
+            user_message=request.user_message,
+        )
+        args = self._build_args(
+            prompt=prompt,
+            session_id=stored.session_id if use_resume and stored else None,
+            model=model,
+        )
+        result = await self._runner.run(
+            args=args,
+            cwd=self._repo_path,
+            timeout_seconds=self._timeout_seconds,
+        )
+        parsed_output = self._parse_json_output(result.stdout)
+        if parsed_output.session_id:
+            self._personality_store.save(personality_key, parsed_output.session_id, self._guide_path)
+
+        if result.returncode != 0:
+            summary = "timed out" if result.timed_out else "failed"
+            raise ChatAgentAdapterError(
+                f"chat reply codex exec {summary}: {result.stderr.strip() or result.stdout.strip() or 'no output'}"
+            )
+
+        reply_text = (parsed_output.final_message or "").strip()
+        if not reply_text:
+            raise ChatAgentAdapterError("chat reply returned no final message")
+        return reply_text
+
+    def _build_args(self, prompt: str, session_id: str | None, model: str | None = None) -> list[str]:
         args = [
             self._codex_executable,
             "-a",
             self._approval_policy,
             "-s",
             self._sandbox_mode,
-            "exec",
         ]
+        if model:
+            args.extend(["-m", model])
+        args.append("exec")
         if session_id:
             args.extend(["resume", "--json", session_id, prompt])
             return args
