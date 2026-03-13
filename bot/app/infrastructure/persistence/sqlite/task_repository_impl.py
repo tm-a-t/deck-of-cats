@@ -18,15 +18,16 @@ class SQLiteTaskRepository(TaskRepository):
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, public_id, author_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
+                id, public_id, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
                 task.public_id,
                 task.author_id,
+                task.chat_id,
                 task.author_username,
                 task.author_display_name,
                 task.title,
@@ -50,7 +51,7 @@ class SQLiteTaskRepository(TaskRepository):
         row = self._conn.execute(
             """
             SELECT
-                id, public_id, author_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
+                id, public_id, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
             FROM tasks
@@ -66,22 +67,23 @@ class SQLiteTaskRepository(TaskRepository):
             id=row[0],
             public_id=row[1] or TaskAggregate.derive_public_id(row[0]),
             author_id=row[2],
-            author_username=row[3],
-            author_display_name=row[4],
-            title=row[5],
-            body=row[6],
-            changed_files=_json_list(row[7]),
-            correlation_id=row[8],
-            status=TaskStatus(row[9]),
-            version=row[10],
-            pr_url=row[11],
-            pr_number=row[12],
-            preview_url=row[13],
-            decision_token_hash=row[14],
-            decision_expires_at=_dt(row[15]),
-            last_error=row[16],
-            created_at=_dt(row[17]) or datetime.utcnow(),
-            updated_at=_dt(row[18]) or datetime.utcnow(),
+            chat_id=row[3] or row[2],
+            author_username=row[4],
+            author_display_name=row[5],
+            title=row[6],
+            body=row[7],
+            changed_files=_json_list(row[8]),
+            correlation_id=row[9],
+            status=TaskStatus(row[10]),
+            version=row[11],
+            pr_url=row[12],
+            pr_number=row[13],
+            preview_url=row[14],
+            decision_token_hash=row[15],
+            decision_expires_at=_dt(row[16]),
+            last_error=row[17],
+            created_at=_dt(row[18]) or datetime.utcnow(),
+            updated_at=_dt(row[19]) or datetime.utcnow(),
         )
 
     def update(self, task: TaskAggregate) -> None:
@@ -94,6 +96,7 @@ class SQLiteTaskRepository(TaskRepository):
                 body = ?,
                 changed_files_json = ?,
                 public_id = ?,
+                chat_id = ?,
                 author_username = ?,
                 author_display_name = ?,
                 status = ?,
@@ -112,6 +115,7 @@ class SQLiteTaskRepository(TaskRepository):
                 task.body,
                 _json(task.changed_files),
                 task.public_id,
+                task.chat_id,
                 task.author_username,
                 task.author_display_name,
                 task.status.value,
@@ -130,28 +134,35 @@ class SQLiteTaskRepository(TaskRepository):
         if cursor.rowcount == 0:
             raise ConcurrencyError(f"Optimistic lock failed for task {task.id}")
 
-    def list_active(self) -> list[TaskAggregate]:
-        rows = self._conn.execute(
-            """
+    def list_active(self, chat_id: int | None = None) -> list[TaskAggregate]:
+        query = """
             SELECT id FROM tasks
             WHERE status NOT IN ('MERGED', 'CLOSED', 'DEAD_LETTER')
-            ORDER BY updated_at DESC
-            """
-        ).fetchall()
+        """
+        params: tuple[object, ...] = ()
+        if chat_id is not None:
+            query += " AND chat_id = ?"
+            params = (chat_id,)
+        query += " ORDER BY updated_at DESC"
+        rows = self._conn.execute(query, params).fetchall()
         return [task for row in rows if (task := self.get(row[0])) is not None]
 
-    def find_by_short_id(self, short_id: str) -> TaskAggregate | None:
-        row = self._conn.execute(
-            """
+    def find_by_short_id(self, short_id: str, chat_id: int | None = None) -> TaskAggregate | None:
+        query = """
             SELECT id
             FROM tasks
-            WHERE lower(public_id) = lower(?)
-               OR id LIKE ?
+            WHERE (lower(public_id) = lower(?)
+               OR id LIKE ?)
+        """
+        params: tuple[object, ...] = (short_id, f"{short_id}%")
+        if chat_id is not None:
+            query += " AND chat_id = ?"
+            params += (chat_id,)
+        query += """
             ORDER BY created_at DESC
             LIMIT 1
-            """,
-            (short_id, f"{short_id}%"),
-        ).fetchone()
+        """
+        row = self._conn.execute(query, params).fetchone()
         if row is None:
             return None
         return self.get(row[0])

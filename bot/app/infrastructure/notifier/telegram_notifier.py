@@ -14,9 +14,13 @@ class TelegramNotifier:
         self._bot = bot
         self._callback_signer = callback_signer
 
+    @staticmethod
+    def _target_chat_id(task: TaskAggregate) -> int:
+        return task.chat_id or task.author_id
+
     async def notify_task_started(self, task: TaskAggregate) -> None:
         await self._bot.send_message(
-            chat_id=task.author_id,
+            chat_id=self._target_chat_id(task),
             text=(
                 f"🆕 Задача создана: {task.public_id}\n"
                 f"{task.title}\n"
@@ -26,7 +30,7 @@ class TelegramNotifier:
 
     async def notify_step_result(self, task: TaskAggregate, step: str, message: str) -> None:
         await self._bot.send_message(
-            chat_id=task.author_id,
+            chat_id=self._target_chat_id(task),
             text=f"[{task.public_id}] {step}: {message or 'completed'}",
         )
 
@@ -35,7 +39,7 @@ class TelegramNotifier:
         preview_line = f"\nPreview: {task.preview_url}" if task.preview_url else ""
 
         await self._bot.send_message(
-            chat_id=task.author_id,
+            chat_id=self._target_chat_id(task),
             text=(
                 "Требуется решение по PR\n"
                 f"Задача: {task.public_id}\n"
@@ -61,6 +65,6 @@ class TelegramNotifier:
             status_line = f"❌ Задача {task.public_id} завершилась ошибкой"
 
         await self._bot.send_message(
-            chat_id=task.author_id,
+            chat_id=self._target_chat_id(task),
             text=f"{status_line}\n{render_task_card(task)}",
         )

@@ -4,6 +4,7 @@ from aiogram import Dispatcher
 
 from app.di import Container
 from app.interface.telegram.bot_factory import build_dispatcher
+from app.interface.telegram.handlers.chat_agent_handler import build_router as build_chat_agent_router
 from app.interface.telegram.handlers.decision_handler import build_router as build_decision_router
 from app.interface.telegram.handlers.start_handler import build_router as build_start_router
 from app.interface.telegram.handlers.status_handler import build_router as build_status_router
@@ -31,6 +32,14 @@ def build_app_dispatcher(container: Container) -> Dispatcher:
             container.orchestrator,
             container.uow_factory,
             container.callback_signer,
+        )
+    )
+    dispatcher.include_router(
+        build_chat_agent_router(
+            container.chat_agent,
+            container.use_cases.submit_change_request,
+            container.use_cases.list_active_tasks,
+            container.uow_factory,
         )
     )
 

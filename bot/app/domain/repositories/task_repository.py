@@ -19,9 +19,9 @@ class TaskRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def list_active(self) -> list[TaskAggregate]:
+    def list_active(self, chat_id: int | None = None) -> list[TaskAggregate]:
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_short_id(self, short_id: str) -> TaskAggregate | None:
+    def find_by_short_id(self, short_id: str, chat_id: int | None = None) -> TaskAggregate | None:
         raise NotImplementedError

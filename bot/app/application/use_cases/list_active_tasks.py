@@ -10,9 +10,9 @@ from app.application.ports.unit_of_work import UnitOfWork
 class ListActiveTasksUseCase:
     uow_factory: Callable[[], UnitOfWork]
 
-    def execute(self) -> list[dict[str, str]]:
+    def execute(self, chat_id: int | None = None) -> list[dict[str, str]]:
         with self.uow_factory() as uow:
-            tasks = uow.tasks.list_active()
+            tasks = uow.tasks.list_active(chat_id=chat_id)
             return [
                 {
                     "task_id": task.id,

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     public_id TEXT,
     author_id INTEGER NOT NULL,
+    chat_id INTEGER,
     author_username TEXT,
     author_display_name TEXT,
     title TEXT NOT NULL,
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS locks (
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     _ensure_tasks_public_id(conn)
+    _ensure_tasks_chat_id(conn)
     _ensure_tasks_author_identity(conn)
     _ensure_tasks_changed_files(conn)
     _ensure_single_running_attempt(conn)
@@ -137,6 +139,14 @@ def _ensure_tasks_author_identity(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN author_username TEXT")
     if "author_display_name" not in column_names:
         conn.execute("ALTER TABLE tasks ADD COLUMN author_display_name TEXT")
+
+
+def _ensure_tasks_chat_id(conn: sqlite3.Connection) -> None:
+    columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
+    column_names = {str(row[1]) for row in columns}
+    if "chat_id" not in column_names:
+        conn.execute("ALTER TABLE tasks ADD COLUMN chat_id INTEGER")
+    conn.execute("UPDATE tasks SET chat_id = author_id WHERE chat_id IS NULL")
 
 
 def _ensure_tasks_changed_files(conn: sqlite3.Connection) -> None:

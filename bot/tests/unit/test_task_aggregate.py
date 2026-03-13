@@ -23,6 +23,7 @@ def test_task_aggregate_happy_path() -> None:
 
     assert task.status == TaskStatus.CLOSED
     assert task.public_id == "T-11111111"
+    assert task.chat_id == 1
     assert task.pr_number == 1
     assert task.changed_files == ["bot/app/settings.py"]
 

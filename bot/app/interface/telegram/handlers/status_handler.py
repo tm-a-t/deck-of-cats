@@ -35,6 +35,18 @@ from app.shared.security import CallbackSigner
 LOG_CHUNK_SIZE = 3500
 
 
+def _resolve_task_for_chat(
+    uow_factory: Callable[[], UnitOfWork],
+    value: str,
+    chat_id: int,
+) -> TaskAggregate | None:
+    with uow_factory() as tx:
+        task = tx.tasks.get(value)
+        if task is not None and task.chat_id == chat_id:
+            return task
+        return tx.tasks.find_by_short_id(value, chat_id=chat_id)
+
+
 def build_router(
     list_active_use_case: ListActiveTasksUseCase,
     uow_factory: Callable[[], UnitOfWork],
@@ -71,13 +83,6 @@ def build_router(
     def _is_not_modified_error(exc: TelegramBadRequest) -> bool:
         return "message is not modified" in str(exc).lower()
 
-    def _resolve_task(value: str) -> TaskAggregate | None:
-        with uow_factory() as tx:
-            task = tx.tasks.get(value)
-            if task is not None:
-                return task
-            return tx.tasks.find_by_short_id(value)
-
     async def _send_task_card(message: Message, task: TaskAggregate) -> None:
         await message.answer(
             render_task_card(task),
@@ -111,7 +116,7 @@ def build_router(
             return
 
         ref = parts[1].strip()
-        task = _resolve_task(ref)
+        task = _resolve_task_for_chat(uow_factory, ref, chat_id=message.chat.id)
         if task is None:
             await message.answer(f"Task {ref} not found")
             return
@@ -125,7 +130,7 @@ def build_router(
             await message.answer("Use format: /task <public_id>")
             return
         ref = parts[1].strip()
-        task = _resolve_task(ref)
+        task = _resolve_task_for_chat(uow_factory, ref, chat_id=message.chat.id)
         if task is None:
             await message.answer(f"Task {ref} not found")
             return
@@ -135,7 +140,7 @@ def build_router(
         await _send_active_tasks_page(message, page=0)
 
     async def _send_active_tasks_page(message: Message, page: int) -> None:
-        tasks = list_active_use_case.execute()
+        tasks = list_active_use_case.execute(chat_id=message.chat.id)
         if not tasks:
             await message.answer("Нет открытых задач")
             return
@@ -170,6 +175,9 @@ def build_router(
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("tasks|")))
     async def on_tasks_page(callback: CallbackQuery) -> None:
+        if callback.message is None:
+            await callback.answer("Chat context missing", show_alert=True)
+            return
         parts = callback.data.split("|")
         if len(parts) != 2:
             await callback.answer("Invalid pagination payload", show_alert=True)
@@ -180,7 +188,7 @@ def build_router(
             await callback.answer("Invalid page", show_alert=True)
             return
 
-        tasks = list_active_use_case.execute()
+        tasks = list_active_use_case.execute(chat_id=callback.message.chat.id)
         if not tasks:
             await callback.answer("Нет открытых задач", show_alert=True)
             return
@@ -220,13 +228,16 @@ def build_router(
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("task|")))
     async def on_task_callback(callback: CallbackQuery, state: FSMContext) -> None:
+        if callback.message is None:
+            await callback.answer("Chat context missing", show_alert=True)
+            return
         parts = callback.data.split("|")
         if len(parts) != 3:
             await callback.answer("Invalid action payload", show_alert=True)
             return
 
         _, public_id, action = parts
-        task = _resolve_task(public_id)
+        task = _resolve_task_for_chat(uow_factory, public_id, chat_id=callback.message.chat.id)
         if task is None:
             await callback.answer("Task not found", show_alert=True)
             return
@@ -268,7 +279,7 @@ def build_router(
                     tx.commit()
             asyncio.create_task(orchestrator.run_task(task.id))
             await callback.answer("Запуск поставлен в очередь")
-            task_after = _resolve_task(public_id)
+            task_after = _resolve_task_for_chat(uow_factory, public_id, chat_id=callback.message.chat.id)
             if task_after is not None:
                 await _edit_or_send_task_card(callback, task_after)
             return

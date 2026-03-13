@@ -21,7 +21,10 @@ from app.application.workflows.steps.codex_validate_step import CodexValidateSte
 from app.application.workflows.steps.decision_step import DecisionStep
 from app.application.workflows.steps.preview_step import PreviewStep
 from app.application.workflows.steps.pr_step import PrStep
+from app.infrastructure.codex.chat_agent_adapter import CodexChatAgentAdapter
+from app.infrastructure.codex.chat_agent_parser import ChatAgentParser
 from app.infrastructure.codex.codex_cli_adapter import CodexCliAdapter
+from app.infrastructure.codex.json_output_parser import CodexJsonOutputParser
 from app.infrastructure.codex.personality import CodexPersonalityRegistry
 from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
@@ -59,6 +62,7 @@ class Container:
     callback_signer: CallbackSigner
     uow_factory: Callable[[], UnitOfWork]
     orchestrator: DevCycleOrchestrator
+    chat_agent: CodexChatAgentAdapter
     use_cases: UseCases
 
 
@@ -90,11 +94,13 @@ def build_container(settings: Settings) -> Container:
     notifier = TelegramNotifier(bot, callback_signer)
     personality_store = JsonPersonalityStore(str(Path(settings.repo_path) / "bot" / "runtime" / "agent_personalities.json"))
     personality_registry = CodexPersonalityRegistry.default()
+    prompt_builder = CodexPromptBuilder()
+    json_output_parser = CodexJsonOutputParser()
 
     codex_adapter = CodexCliAdapter(
         runner=process_runner,
         worktree_manager=worktree_manager,
-        prompt_builder=CodexPromptBuilder(),
+        prompt_builder=prompt_builder,
         result_parser=CodexResultParser(),
         timeout_seconds=settings.bot_step_timeout_seconds,
         codex_executable=settings.codex_cli_executable,
@@ -102,6 +108,19 @@ def build_container(settings: Settings) -> Container:
         approval_policy=settings.codex_cli_approval_policy,
         personality_registry=personality_registry,
         personality_store=personality_store,
+        json_output_parser=json_output_parser,
+    )
+    chat_agent = CodexChatAgentAdapter(
+        runner=process_runner,
+        prompt_builder=prompt_builder,
+        parser=ChatAgentParser(),
+        json_output_parser=json_output_parser,
+        personality_store=personality_store,
+        repo_path=settings.repo_path,
+        timeout_seconds=settings.bot_step_timeout_seconds,
+        codex_executable=settings.codex_cli_executable,
+        sandbox_mode=settings.codex_cli_sandbox_mode,
+        approval_policy=settings.codex_cli_approval_policy,
     )
 
     branch_port = GithubBranchAdapter(
@@ -198,5 +217,6 @@ def build_container(settings: Settings) -> Container:
         callback_signer=callback_signer,
         uow_factory=uow_factory,
         orchestrator=orchestrator,
+        chat_agent=chat_agent,
         use_cases=use_cases,
     )
