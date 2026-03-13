@@ -62,6 +62,16 @@ def _implement_json(session_id: str) -> str:
     )
 
 
+def _implement_pass_json(session_id: str) -> str:
+    return "\n".join(
+        [
+            f'{{"type":"thread.started","thread_id":"{session_id}"}}',
+            '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"RESULT: PASS\\nSUMMARY: implemented\\nDETAILS: implementation complete\\nCHANGED_FILES:\\n- bot/README.md"}}',
+            '{"type":"turn.completed"}',
+        ]
+    )
+
+
 def _validate_json(session_id: str) -> str:
     return "\n".join(
         [
@@ -224,11 +234,21 @@ async def test_lead_review_uses_persistent_lead_personality_and_returns_decision
     assert "DECISION: MERGE|RERUN_TESTS|CLOSE" in prompt
 
 
-def test_validate_changed_files_ignores_bot_venv_runtime_path(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_validate_changed_files_ignores_runtime_python_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         CodexCliAdapter,
         "_collect_changed_files",
-        classmethod(lambda cls, worktree_path: (["bot/.venv", "bot/README.md"], None)),
+        classmethod(
+            lambda cls, worktree_path: (
+                [
+                    "bot/.venv",
+                    "bot/app/__pycache__/__init__.cpython-314.pyc",
+                    "bot/.pytest_cache/v/cache/nodeids",
+                    "bot/README.md",
+                ],
+                None,
+            )
+        ),
     )
 
     mismatch = CodexCliAdapter._validate_changed_files(
@@ -237,3 +257,40 @@ def test_validate_changed_files_ignores_bot_venv_runtime_path(monkeypatch: pytes
     )
 
     assert mismatch is None
+
+
+async def test_implement_uses_actual_git_changed_files_when_declared_list_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    store = JsonPersonalityStore(str(tmp_path / "agent_personalities.json"))
+    runner = _FakeRunner(stdout=_implement_pass_json("session-dev-pass"))
+    adapter = CodexCliAdapter(
+        runner=runner,
+        worktree_manager=_FakeWorktreeManager(),
+        prompt_builder=CodexPromptBuilder(),
+        result_parser=CodexResultParser(),
+        timeout_seconds=30,
+        personality_registry=CodexPersonalityRegistry.default(),
+        personality_store=store,
+    )
+    monkeypatch.setattr(
+        CodexCliAdapter,
+        "_collect_changed_files",
+        classmethod(
+            lambda cls, worktree_path: (
+                ["bot/README.md", "bot/app/application/use_cases/list_active_tasks.py"],
+                None,
+            )
+        ),
+    )
+
+    result = await adapter.implement(_task())
+
+    assert result.ok is True
+    assert result.metadata is not None
+    assert result.metadata["changed_files"] == [
+        "bot/README.md",
+        "bot/app/application/use_cases/list_active_tasks.py",
+    ]
+    assert "CHANGED_FILES auto-reconciled to git diff/status." in result.details

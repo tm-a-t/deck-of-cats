@@ -18,6 +18,17 @@ from app.shared.enums import StepName
 class CodexCliAdapter:
     _IGNORED_CHANGED_FILE_PREFIXES = (
         "bot/.venv",
+        "bot/.pytest_cache",
+        "bot/.mypy_cache",
+        "bot/.ruff_cache",
+        "bot/.hypothesis",
+    )
+    _IGNORED_CHANGED_FILE_PARTS = {
+        "__pycache__",
+    }
+    _IGNORED_CHANGED_FILE_SUFFIXES = (
+        ".pyc",
+        ".pyo",
     )
 
     def __init__(
@@ -168,12 +179,11 @@ class CodexCliAdapter:
                 metadata=metadata,
             )
 
+        result_details = parsed.details if parsed is not None else "Lead review parser returned no result"
+        resolved_changed_files: list[str] | None = None
         if parsed is not None and require_changed_files and parsed.ok:
-            mismatch_details = self._validate_changed_files(
-                worktree_path=worktree_path,
-                declared_files=parsed.changed_files or [],
-            )
-            if mismatch_details is not None:
+            actual_files, inspect_error = self._collect_changed_files(worktree_path)
+            if inspect_error is not None:
                 formatted_output = self._format_output(
                     personality=personality,
                     run_mode="resume" if use_resume else "exec",
@@ -186,7 +196,7 @@ class CodexCliAdapter:
                 return StepResult(
                     ok=False,
                     summary="codex changed files mismatch",
-                    details=f"{mismatch_details}\n\n{formatted_output}",
+                    details=f"{inspect_error}\n\n{formatted_output}",
                     metadata=self._build_metadata(
                         branch=branch,
                         worktree_path=worktree_path,
@@ -196,6 +206,41 @@ class CodexCliAdapter:
                     ),
                 )
 
+            resolved_changed_files = self._filter_changed_files(actual_files)
+            if not resolved_changed_files:
+                formatted_output = self._format_output(
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                )
+                return StepResult(
+                    ok=False,
+                    summary="codex changed files mismatch",
+                    details=f"No changed files found in git diff/status\n\n{formatted_output}",
+                    metadata=self._build_metadata(
+                        branch=branch,
+                        worktree_path=worktree_path,
+                        personality=personality,
+                        run_mode="resume" if use_resume else "exec",
+                        session_id=parsed_output.session_id or stored_session_id,
+                    ),
+                )
+
+            mismatch_details = self._describe_changed_files_mismatch(
+                declared_files=parsed.changed_files or [],
+                actual_files=resolved_changed_files,
+            )
+            if mismatch_details is not None:
+                result_details = (
+                    f"{parsed.details}\n\n"
+                    "CHANGED_FILES auto-reconciled to git diff/status.\n"
+                    f"{mismatch_details}"
+                )
+
         metadata = self._build_metadata(
             branch=branch,
             worktree_path=worktree_path,
@@ -203,13 +248,15 @@ class CodexCliAdapter:
             run_mode="resume" if use_resume else "exec",
             session_id=parsed_output.session_id or stored_session_id,
         )
-        if parsed is not None and parsed.changed_files is not None:
+        if resolved_changed_files is not None:
+            metadata["changed_files"] = resolved_changed_files
+        elif parsed is not None and parsed.changed_files is not None:
             metadata["changed_files"] = parsed.changed_files
 
         return StepResult(
             ok=parsed.ok if parsed is not None else False,
             summary=parsed.summary if parsed is not None else "codex result parse failed",
-            details=parsed.details if parsed is not None else "Lead review parser returned no result",
+            details=result_details,
             metadata=metadata,
         )
 
@@ -314,7 +361,18 @@ class CodexCliAdapter:
         actual_files, inspect_error = cls._collect_changed_files(worktree_path)
         if inspect_error is not None:
             return inspect_error
-        actual_files = [path for path in actual_files if not cls._is_ignored_changed_file(path)]
+        actual_files = cls._filter_changed_files(actual_files)
+        if not actual_files:
+            return "No changed files found in git diff/status"
+
+        return cls._describe_changed_files_mismatch(declared_files=declared_files, actual_files=actual_files)
+
+    @classmethod
+    def _filter_changed_files(cls, paths: list[str]) -> list[str]:
+        return [path for path in paths if not cls._is_ignored_changed_file(path)]
+
+    @classmethod
+    def _describe_changed_files_mismatch(cls, declared_files: list[str], actual_files: list[str]) -> str | None:
         if not actual_files:
             return "No changed files found in git diff/status"
 
@@ -382,7 +440,14 @@ class CodexCliAdapter:
 
     @classmethod
     def _is_ignored_changed_file(cls, path: str) -> bool:
-        return any(
+        if any(
             path == prefix or path.startswith(f"{prefix}/")
             for prefix in cls._IGNORED_CHANGED_FILE_PREFIXES
-        )
+        ):
+            return True
+
+        parts = [part for part in path.split("/") if part]
+        if any(part in cls._IGNORED_CHANGED_FILE_PARTS for part in parts):
+            return True
+
+        return path.endswith(cls._IGNORED_CHANGED_FILE_SUFFIXES)
