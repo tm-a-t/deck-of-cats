@@ -32,14 +32,15 @@ class TelegramNotifier:
 
     async def notify_decision_required(self, task: TaskAggregate, token: str) -> None:
         keyboard = build_decision_request_keyboard(task.public_id, token, self._callback_signer)
+        preview_line = f"\nPreview: {task.preview_url}" if task.preview_url else ""
 
         await self._bot.send_message(
             chat_id=task.author_id,
             text=(
                 "Требуется решение по PR\n"
                 f"Задача: {task.public_id}\n"
-                f"PR: {task.pr_url or '-'}\n"
-                f"Preview: {task.preview_url or '-'}"
+                f"PR: {task.pr_url or '-'}"
+                f"{preview_line}"
             ),
             reply_markup=keyboard,
         )

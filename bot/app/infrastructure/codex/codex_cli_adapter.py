@@ -4,10 +4,15 @@ import subprocess
 
 from app.application.workflows.models import StepResult
 from app.domain.aggregates.task_aggregate import TaskAggregate
+from app.infrastructure.codex.json_output_parser import CodexJsonOutputParseError, CodexJsonOutputParser
+from app.infrastructure.codex.lead_review_parser import CodexLeadReviewParseError, CodexLeadReviewParser
+from app.infrastructure.codex.personality import CodexPersonality, CodexPersonalityRegistry
+from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 from app.infrastructure.codex.result_parser import CodexResultParseError, CodexResultParser
 from app.infrastructure.execution.process_runner import ProcessRunner
 from app.infrastructure.execution.worktree_manager import WorktreeManager
+from app.shared.enums import StepName
 
 
 class CodexCliAdapter:
@@ -21,6 +26,10 @@ class CodexCliAdapter:
         codex_executable: str = "codex",
         sandbox_mode: str = "workspace-write",
         approval_policy: str = "never",
+        personality_registry: CodexPersonalityRegistry | None = None,
+        personality_store: JsonPersonalityStore | None = None,
+        json_output_parser: CodexJsonOutputParser | None = None,
+        lead_review_parser: CodexLeadReviewParser | None = None,
     ) -> None:
         self._runner = runner
         self._worktree_manager = worktree_manager
@@ -30,31 +39,34 @@ class CodexCliAdapter:
         self._codex_executable = codex_executable
         self._sandbox_mode = sandbox_mode
         self._approval_policy = approval_policy
+        self._personality_registry = personality_registry or CodexPersonalityRegistry.default()
+        self._personality_store = personality_store
+        self._json_output_parser = json_output_parser or CodexJsonOutputParser()
+        self._lead_review_parser = lead_review_parser or CodexLeadReviewParser()
 
     async def implement(self, task: TaskAggregate) -> StepResult:
-        prompt = self._prompt_builder.build_implement_prompt(task)
-        return await self._run(task, prompt=prompt, require_changed_files=True)
+        return await self._run(task, step=StepName.CODEX_IMPLEMENT, require_changed_files=True)
 
     async def validate(self, task: TaskAggregate) -> StepResult:
-        prompt = self._prompt_builder.build_validate_prompt(task)
-        return await self._run(task, prompt=prompt, require_changed_files=False)
+        return await self._run(task, step=StepName.CODEX_VALIDATE, require_changed_files=False)
 
-    async def _run(self, task: TaskAggregate, prompt: str, require_changed_files: bool) -> StepResult:
+    async def lead_review(self, task: TaskAggregate) -> StepResult:
+        return await self._run(task, step=StepName.LEAD_REVIEW, require_changed_files=False)
+
+    async def _run(self, task: TaskAggregate, step: StepName, require_changed_files: bool) -> StepResult:
         worktree_path, branch = self._worktree_manager.create(task.id)
-        args = [
-            self._codex_executable,
-            "-a",
-            self._approval_policy,
-            "exec",
-            "--sandbox",
-            self._sandbox_mode,
-        ]
-        args.append(prompt)
+        personality = self._personality_registry.for_step(step)
+        stored_session_id = self._load_session_id(personality)
+        use_resume = bool(personality.persist_session and stored_session_id)
+        prompt = self._build_prompt(task=task, step=step, personality=personality, is_new_session=not use_resume)
+        args = self._build_args(prompt=prompt, session_id=stored_session_id if use_resume else None)
         result = await self._runner.run(
             args=args,
             cwd=worktree_path,
             timeout_seconds=self._timeout_seconds,
         )
+        parsed_output = self._parse_json_output(result.stdout)
+        self._store_session_if_needed(personality, parsed_output.session_id)
 
         if result.returncode != 0:
             summary = "codex exec timed out" if result.timed_out else "codex exec failed"
@@ -62,55 +74,156 @@ class CodexCliAdapter:
                 ok=False,
                 summary=summary,
                 details=self._format_output(
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
                     branch=branch,
                     worktree_path=worktree_path,
                     stdout=result.stdout,
                     stderr=result.stderr,
                 ),
+                metadata=self._build_metadata(
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                ),
             )
 
-        try:
-            parsed = (
-                self._result_parser.parse_implement(result.stdout)
-                if require_changed_files
-                else self._result_parser.parse_validate(result.stdout)
-            )
-        except CodexResultParseError as exc:
+        message = parsed_output.final_message
+        if not message:
             return StepResult(
                 ok=False,
                 summary="codex result parse failed",
-                details=f"{exc}\n\n{self._format_output(branch=branch, worktree_path=worktree_path, stdout=result.stdout, stderr=result.stderr)}",
+                details=self._format_output(
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                ),
+                metadata=self._build_metadata(
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                ),
             )
 
-        if require_changed_files and parsed.ok:
+        try:
+            if step == StepName.CODEX_IMPLEMENT:
+                parsed = self._result_parser.parse_implement(message)
+                parsed_review = None
+            elif step == StepName.CODEX_VALIDATE:
+                parsed = self._result_parser.parse_validate(message)
+                parsed_review = None
+            else:
+                parsed = None
+                parsed_review = self._lead_review_parser.parse(message)
+        except (CodexResultParseError, CodexLeadReviewParseError) as exc:
+            formatted_output = self._format_output(
+                personality=personality,
+                run_mode="resume" if use_resume else "exec",
+                session_id=parsed_output.session_id or stored_session_id,
+                branch=branch,
+                worktree_path=worktree_path,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
+            return StepResult(
+                ok=False,
+                summary="codex result parse failed",
+                details=f"{exc}\n\n{formatted_output}",
+                metadata=self._build_metadata(
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                ),
+            )
+
+        if step == StepName.LEAD_REVIEW and parsed_review is not None:
+            metadata = self._build_metadata(
+                branch=branch,
+                worktree_path=worktree_path,
+                personality=personality,
+                run_mode="resume" if use_resume else "exec",
+                session_id=parsed_output.session_id or stored_session_id,
+            )
+            metadata["review_decision"] = parsed_review.decision.value
+            metadata["review_feedback"] = parsed_review.details
+            return StepResult(
+                ok=True,
+                summary=parsed_review.summary,
+                details=parsed_review.details,
+                metadata=metadata,
+            )
+
+        if parsed is not None and require_changed_files and parsed.ok:
             mismatch_details = self._validate_changed_files(
                 worktree_path=worktree_path,
                 declared_files=parsed.changed_files or [],
             )
             if mismatch_details is not None:
+                formatted_output = self._format_output(
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                )
                 return StepResult(
                     ok=False,
                     summary="codex changed files mismatch",
-                    details=f"{mismatch_details}\n\n{self._format_output(branch=branch, worktree_path=worktree_path, stdout=result.stdout, stderr=result.stderr)}",
+                    details=f"{mismatch_details}\n\n{formatted_output}",
+                    metadata=self._build_metadata(
+                        branch=branch,
+                        worktree_path=worktree_path,
+                        personality=personality,
+                        run_mode="resume" if use_resume else "exec",
+                        session_id=parsed_output.session_id or stored_session_id,
+                    ),
                 )
 
-        metadata: dict[str, str | int | bool | list[str]] = {
-            "branch": branch,
-            "worktree_path": worktree_path,
-        }
-        if parsed.changed_files is not None:
+        metadata = self._build_metadata(
+            branch=branch,
+            worktree_path=worktree_path,
+            personality=personality,
+            run_mode="resume" if use_resume else "exec",
+            session_id=parsed_output.session_id or stored_session_id,
+        )
+        if parsed is not None and parsed.changed_files is not None:
             metadata["changed_files"] = parsed.changed_files
 
         return StepResult(
-            ok=parsed.ok,
-            summary=parsed.summary,
-            details=parsed.details,
+            ok=parsed.ok if parsed is not None else False,
+            summary=parsed.summary if parsed is not None else "codex result parse failed",
+            details=parsed.details if parsed is not None else "Lead review parser returned no result",
             metadata=metadata,
         )
 
     @staticmethod
-    def _format_output(branch: str, worktree_path: str, stdout: str, stderr: str) -> str:
+    def _format_output(
+        personality: CodexPersonality,
+        run_mode: str,
+        session_id: str | None,
+        branch: str,
+        worktree_path: str,
+        stdout: str,
+        stderr: str,
+    ) -> str:
         sections = [
+            f"personality={personality.key}",
+            f"guide={personality.guide_path}",
+            f"run_mode={run_mode}",
+            f"session_id={session_id or '<none>'}",
             f"branch={branch}",
             f"worktree={worktree_path}",
             "stdout:",
@@ -119,6 +232,81 @@ class CodexCliAdapter:
             stderr.strip() or "<empty>",
         ]
         return "\n".join(sections)
+
+    def _build_prompt(
+        self,
+        task: TaskAggregate,
+        step: StepName,
+        personality: CodexPersonality,
+        is_new_session: bool,
+    ) -> str:
+        preamble = self._prompt_builder.build_personality_preamble(
+            personality_key=personality.key,
+            guide_path=personality.guide_path,
+            is_new_session=is_new_session,
+        )
+        base_prompt = (
+            self._prompt_builder.build_implement_prompt(task)
+            if step == StepName.CODEX_IMPLEMENT
+            else (
+                self._prompt_builder.build_validate_prompt(task)
+                if step == StepName.CODEX_VALIDATE
+                else self._prompt_builder.build_lead_review_prompt(task)
+            )
+        )
+        return f"{preamble}\n\n{base_prompt}"
+
+    def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
+        args = [
+            self._codex_executable,
+            "-a",
+            self._approval_policy,
+            "-s",
+            self._sandbox_mode,
+            "exec",
+        ]
+        if session_id:
+            args.extend(["resume", "--json", session_id, prompt])
+            return args
+
+        args.extend(["--json", prompt])
+        return args
+
+    def _load_session_id(self, personality: CodexPersonality) -> str | None:
+        if self._personality_store is None or not personality.persist_session:
+            return None
+        stored = self._personality_store.get(personality.key)
+        return None if stored is None else stored.session_id
+
+    def _store_session_if_needed(self, personality: CodexPersonality, session_id: str | None) -> None:
+        if self._personality_store is None or not personality.persist_session or not session_id:
+            return
+        self._personality_store.save(personality.key, session_id, personality.guide_path)
+
+    def _parse_json_output(self, output: str):
+        try:
+            return self._json_output_parser.parse(output)
+        except CodexJsonOutputParseError:
+            return self._json_output_parser.parse("")
+
+    @staticmethod
+    def _build_metadata(
+        branch: str,
+        worktree_path: str,
+        personality: CodexPersonality,
+        run_mode: str,
+        session_id: str | None,
+    ) -> dict[str, str | int | bool | list[str]]:
+        metadata: dict[str, str | int | bool | list[str]] = {
+            "branch": branch,
+            "worktree_path": worktree_path,
+            "personality_key": personality.key,
+            "personality_guide_path": personality.guide_path,
+            "personality_run_mode": run_mode,
+        }
+        if session_id:
+            metadata["codex_session_id"] = session_id
+        return metadata
 
     @classmethod
     def _validate_changed_files(cls, worktree_path: str, declared_files: list[str]) -> str | None:

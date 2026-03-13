@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from string import hexdigits
+import textwrap
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.domain.events.domain_events import (
@@ -18,6 +19,8 @@ from app.shared.time import utcnow
 TERMINAL_STATUSES = {TaskStatus.MERGED, TaskStatus.CLOSED, TaskStatus.DEAD_LETTER}
 EXPECTED_HEAD_SHA_FRAGMENT_KEY = "bot_expected_head_sha"
 REWORK_HISTORY_HEADER = "Rework history:"
+TESTER_FEEDBACK_HISTORY_HEADER = "Tester feedback history:"
+LEAD_REVIEW_HISTORY_HEADER = "Lead review history:"
 
 
 @dataclass
@@ -30,6 +33,7 @@ class TaskAggregate:
     correlation_id: str
     author_username: str | None = None
     author_display_name: str | None = None
+    changed_files: list[str] = field(default_factory=list)
     status: TaskStatus = TaskStatus.NEW
     version: int = 0
     pr_url: str | None = None
@@ -87,6 +91,10 @@ class TaskAggregate:
         self._events.clear()
         return events
 
+    def touch(self) -> None:
+        self.version += 1
+        self.updated_at = utcnow()
+
     def _set_status(self, new_status: TaskStatus) -> None:
         old_status = self.status
         self.status = new_status
@@ -111,11 +119,12 @@ class TaskAggregate:
         self._ensure({TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}, "start_codex_implement")
         self._set_status(TaskStatus.CODEX_IMPLEMENT_RUNNING)
 
-    def mark_codex_implement_passed(self) -> None:
+    def mark_codex_implement_passed(self, changed_files: list[str] | None = None) -> None:
         self._ensure(
             {TaskStatus.CODEX_IMPLEMENT_RUNNING},
             "mark_codex_implement_passed",
         )
+        self.changed_files = self._normalize_changed_files(changed_files or [])
         self._set_status(TaskStatus.CODEX_VALIDATE_RUNNING)
 
     def mark_codex_validate_passed(self) -> None:
@@ -123,18 +132,23 @@ class TaskAggregate:
             {TaskStatus.CODEX_VALIDATE_RUNNING},
             "mark_codex_validate_passed",
         )
+        self.last_error = None
         self._set_status(TaskStatus.PR_CREATING)
 
     def mark_pr_created(self, pr_number: int, pr_url: str) -> None:
         self._ensure({TaskStatus.PR_CREATING}, "mark_pr_created")
         self.pr_number = pr_number
         self.pr_url = pr_url
-        self._set_status(TaskStatus.AWAITING_PREVIEW)
+        self._set_status(TaskStatus.AWAITING_DECISION)
 
     def mark_preview_ready(self, preview_url: str) -> None:
-        self._ensure({TaskStatus.AWAITING_PREVIEW}, "mark_preview_ready")
+        self._ensure({TaskStatus.AWAITING_PREVIEW, TaskStatus.AWAITING_DECISION}, "mark_preview_ready")
         self.preview_url = preview_url
-        self._set_status(TaskStatus.AWAITING_DECISION)
+        if self.status == TaskStatus.AWAITING_PREVIEW:
+            self._set_status(TaskStatus.AWAITING_DECISION)
+            return
+        self.version += 1
+        self.updated_at = utcnow()
 
     def request_decision(
         self,
@@ -142,7 +156,9 @@ class TaskAggregate:
         ttl_seconds: int,
         expected_merge_head_sha: str | None = None,
     ) -> None:
-        self._ensure({TaskStatus.AWAITING_DECISION}, "request_decision")
+        self._ensure({TaskStatus.AWAITING_DECISION, TaskStatus.AWAITING_PREVIEW}, "request_decision")
+        if self.status == TaskStatus.AWAITING_PREVIEW:
+            self.status = TaskStatus.AWAITING_DECISION
         self.decision_token_hash = token_hash
         self.decision_expires_at = utcnow() + timedelta(seconds=ttl_seconds)
         if expected_merge_head_sha:
@@ -191,14 +207,40 @@ class TaskAggregate:
             raise InvalidTransitionError("Rework feedback cannot be empty")
 
         timestamp = utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        body = self.body.rstrip()
-        if REWORK_HISTORY_HEADER not in body:
-            body = f"{body}\n\n{REWORK_HISTORY_HEADER}"
-        body = f"{body}\n- [{timestamp} UTC] {normalized_feedback}"
-
-        self.body = body
+        self.body = self._append_history_entry(
+            self.body,
+            REWORK_HISTORY_HEADER,
+            f"[{timestamp} UTC] {normalized_feedback}",
+        )
         self.last_error = f"Rework requested: {normalized_feedback}"
         self._set_status(TaskStatus.RETRY_SCHEDULED)
+
+    def schedule_reimplementation_from_tester(self, summary: str, details: str) -> None:
+        self._ensure({TaskStatus.CODEX_VALIDATE_RUNNING}, "schedule_reimplementation_from_tester")
+        self.body = self._append_structured_feedback(
+            self.body,
+            TESTER_FEEDBACK_HISTORY_HEADER,
+            summary=summary,
+            details=details,
+            changed_files=self.changed_files,
+        )
+        self.last_error = summary
+        self._set_status(TaskStatus.RETRY_SCHEDULED)
+
+    def finalize_lead_rework(self, feedback: str) -> None:
+        self._ensure({TaskStatus.DECISION_APPLYING}, "finalize_lead_rework")
+        normalized_feedback = " ".join(feedback.split()).strip() or "Lead requested rework"
+        self.body = self._append_structured_feedback(
+            self.body,
+            LEAD_REVIEW_HISTORY_HEADER,
+            summary="Lead review requested changes",
+            details=normalized_feedback,
+            changed_files=self.changed_files,
+        )
+        self.last_error = normalized_feedback
+        self._set_status(TaskStatus.RETRY_SCHEDULED)
+        self.decision_token_hash = None
+        self.decision_expires_at = None
 
     def rollback_decision_applying(self, reason: str) -> None:
         self._ensure({TaskStatus.DECISION_APPLYING}, "rollback_decision_applying")
@@ -250,3 +292,42 @@ class TaskAggregate:
         if not (7 <= len(value) <= 64):
             return False
         return all(char in hexdigits for char in value)
+
+    @staticmethod
+    def _normalize_changed_files(paths: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for path in paths:
+            normalized = path.strip().replace("\\", "/")
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
+        return result
+
+    @staticmethod
+    def _append_history_entry(body: str, header: str, entry: str) -> str:
+        normalized = body.rstrip()
+        if header not in normalized:
+            normalized = f"{normalized}\n\n{header}"
+        return f"{normalized}\n- {entry}"
+
+    @classmethod
+    def _append_structured_feedback(
+        cls,
+        body: str,
+        header: str,
+        summary: str,
+        details: str,
+        changed_files: list[str],
+    ) -> str:
+        timestamp = utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [f"[{timestamp} UTC] Summary: {summary.strip() or 'No summary provided'}"]
+        if changed_files:
+            lines.append("Changed files:")
+            lines.extend(f"- {path}" for path in changed_files)
+        normalized_details = details.strip()
+        if normalized_details:
+            lines.append("Details:")
+            lines.extend(textwrap.dedent(normalized_details).strip().splitlines())
+        return cls._append_history_entry(body, header, "\n  ".join(lines))

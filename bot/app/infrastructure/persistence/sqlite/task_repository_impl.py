@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import sqlite3
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
@@ -17,10 +18,10 @@ class SQLiteTaskRepository(TaskRepository):
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, public_id, author_id, author_username, author_display_name, title, body, correlation_id, status, version,
+                id, public_id, author_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
@@ -30,6 +31,7 @@ class SQLiteTaskRepository(TaskRepository):
                 task.author_display_name,
                 task.title,
                 task.body,
+                _json(task.changed_files),
                 task.correlation_id,
                 task.status.value,
                 task.version,
@@ -48,7 +50,7 @@ class SQLiteTaskRepository(TaskRepository):
         row = self._conn.execute(
             """
             SELECT
-                id, public_id, author_id, author_username, author_display_name, title, body, correlation_id, status, version,
+                id, public_id, author_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
             FROM tasks
@@ -68,17 +70,18 @@ class SQLiteTaskRepository(TaskRepository):
             author_display_name=row[4],
             title=row[5],
             body=row[6],
-            correlation_id=row[7],
-            status=TaskStatus(row[8]),
-            version=row[9],
-            pr_url=row[10],
-            pr_number=row[11],
-            preview_url=row[12],
-            decision_token_hash=row[13],
-            decision_expires_at=_dt(row[14]),
-            last_error=row[15],
-            created_at=_dt(row[16]) or datetime.utcnow(),
-            updated_at=_dt(row[17]) or datetime.utcnow(),
+            changed_files=_json_list(row[7]),
+            correlation_id=row[8],
+            status=TaskStatus(row[9]),
+            version=row[10],
+            pr_url=row[11],
+            pr_number=row[12],
+            preview_url=row[13],
+            decision_token_hash=row[14],
+            decision_expires_at=_dt(row[15]),
+            last_error=row[16],
+            created_at=_dt(row[17]) or datetime.utcnow(),
+            updated_at=_dt(row[18]) or datetime.utcnow(),
         )
 
     def update(self, task: TaskAggregate) -> None:
@@ -89,6 +92,7 @@ class SQLiteTaskRepository(TaskRepository):
             SET
                 title = ?,
                 body = ?,
+                changed_files_json = ?,
                 public_id = ?,
                 author_username = ?,
                 author_display_name = ?,
@@ -106,6 +110,7 @@ class SQLiteTaskRepository(TaskRepository):
             (
                 task.title,
                 task.body,
+                _json(task.changed_files),
                 task.public_id,
                 task.author_username,
                 task.author_display_name,
@@ -162,3 +167,19 @@ def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat()
+
+
+def _json(value: list[str]) -> str:
+    return json.dumps(value)
+
+
+def _json_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if isinstance(item, str)]

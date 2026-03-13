@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     author_display_name TEXT,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
+    changed_files_json TEXT,
     correlation_id TEXT NOT NULL,
     status TEXT NOT NULL,
     version INTEGER NOT NULL,
@@ -108,6 +109,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
     _ensure_tasks_public_id(conn)
     _ensure_tasks_author_identity(conn)
+    _ensure_tasks_changed_files(conn)
     _ensure_single_running_attempt(conn)
     conn.commit()
 
@@ -135,6 +137,13 @@ def _ensure_tasks_author_identity(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tasks ADD COLUMN author_username TEXT")
     if "author_display_name" not in column_names:
         conn.execute("ALTER TABLE tasks ADD COLUMN author_display_name TEXT")
+
+
+def _ensure_tasks_changed_files(conn: sqlite3.Connection) -> None:
+    columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
+    column_names = {str(row[1]) for row in columns}
+    if "changed_files_json" not in column_names:
+        conn.execute("ALTER TABLE tasks ADD COLUMN changed_files_json TEXT")
 
 
 def _ensure_single_running_attempt(conn: sqlite3.Connection) -> None:

@@ -9,11 +9,12 @@ from collections.abc import Callable
 from app.application.ports.lock_port import LockPort
 from app.application.ports.notifier_port import NotifierPort
 from app.application.ports.unit_of_work import UnitOfWork
+from app.application.use_cases.accept_merge_decision import AcceptMergeDecisionUseCase
 from app.application.workflows.dev_cycle_workflow import DevCycleWorkflow
 from app.application.workflows.models import StepResult
 from app.application.workflows.steps.base import StepHandler
 from app.domain.events.domain_events import DomainEvent
-from app.shared.enums import StepExecutionStatus, StepName, TaskStatus
+from app.shared.enums import MergeDecision, StepExecutionStatus, StepName, TaskStatus
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ class DevCycleOrchestrator:
         notifier: NotifierPort,
         max_retries: int,
         decision_ttl_seconds: int,
+        auto_decision_use_case: AcceptMergeDecisionUseCase | None = None,
         lock_ttl_seconds: int = 300,
     ) -> None:
         self._uow_factory = uow_factory
@@ -38,6 +40,7 @@ class DevCycleOrchestrator:
         self._notifier = notifier
         self._max_retries = max_retries
         self._decision_ttl_seconds = decision_ttl_seconds
+        self._auto_decision_use_case = auto_decision_use_case
         self._lock_ttl_seconds = lock_ttl_seconds
 
     async def run_task(self, task_id: str) -> None:
@@ -133,6 +136,21 @@ class DevCycleOrchestrator:
                     await self._notifier.notify_decision_required(final_state, token)
                     return
 
+                if step_name == StepName.LEAD_REVIEW and result.ok and self._auto_decision_use_case is not None:
+                    decision_raw = str((result.metadata or {}).get("review_decision", "")).strip()
+                    feedback = str((result.metadata or {}).get("review_feedback", "")).strip() or result.details
+                    try:
+                        decision = MergeDecision(decision_raw)
+                    except ValueError:
+                        await self._mark_dead_letter(final_state.id, f"Invalid lead review decision: {decision_raw!r}")
+                        return
+                    await self._auto_decision_use_case.execute_system(
+                        task_id=final_state.id,
+                        decision=decision,
+                        feedback=feedback,
+                    )
+                    return
+
                 should_wait_for_user_decision = (
                     final_state.status == TaskStatus.AWAITING_DECISION
                     and final_state.decision_token_hash is not None
@@ -210,6 +228,9 @@ class DevCycleOrchestrator:
                 elif failed_attempts >= self._max_retries:
                     task.mark_dead_letter(summary)
                     status = StepExecutionStatus.FAILED
+                elif step_name == StepName.CODEX_VALIDATE:
+                    task.schedule_reimplementation_from_tester(summary=summary, details=details)
+                    status = StepExecutionStatus.RETRY_SCHEDULED
                 else:
                     task.schedule_retry(summary)
                     status = StepExecutionStatus.RETRY_SCHEDULED

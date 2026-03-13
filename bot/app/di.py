@@ -16,11 +16,14 @@ from app.application.use_cases.request_task_status import RequestTaskStatusUseCa
 from app.application.use_cases.submit_change_request import SubmitChangeRequestUseCase
 from app.application.workflows.dev_cycle_workflow import DevCycleWorkflow
 from app.application.workflows.steps.codex_implement_step import CodexImplementStep
+from app.application.workflows.steps.codex_lead_review_step import CodexLeadReviewStep
 from app.application.workflows.steps.codex_validate_step import CodexValidateStep
 from app.application.workflows.steps.decision_step import DecisionStep
 from app.application.workflows.steps.preview_step import PreviewStep
 from app.application.workflows.steps.pr_step import PrStep
 from app.infrastructure.codex.codex_cli_adapter import CodexCliAdapter
+from app.infrastructure.codex.personality import CodexPersonalityRegistry
+from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 from app.infrastructure.codex.result_parser import CodexResultParser
 from app.infrastructure.execution.process_runner import ProcessRunner
@@ -85,6 +88,8 @@ def build_container(settings: Settings) -> Container:
     lock_port = SQLiteLockRepository(lock_conn)
 
     notifier = TelegramNotifier(bot, callback_signer)
+    personality_store = JsonPersonalityStore(str(Path(settings.repo_path) / "bot" / "runtime" / "agent_personalities.json"))
+    personality_registry = CodexPersonalityRegistry.default()
 
     codex_adapter = CodexCliAdapter(
         runner=process_runner,
@@ -95,6 +100,8 @@ def build_container(settings: Settings) -> Container:
         codex_executable=settings.codex_cli_executable,
         sandbox_mode=settings.codex_cli_sandbox_mode,
         approval_policy=settings.codex_cli_approval_policy,
+        personality_registry=personality_registry,
+        personality_store=personality_store,
     )
 
     branch_port = GithubBranchAdapter(
@@ -133,14 +140,34 @@ def build_container(settings: Settings) -> Container:
         api_base_url=settings.github_api_base_url,
     )
 
-    workflow = DevCycleWorkflow()
+    workflow = DevCycleWorkflow(auto_lead_review=settings.bot_enable_lead_autoreview)
     steps = {
         StepName.CODEX_IMPLEMENT: CodexImplementStep(codex_adapter),
         StepName.CODEX_VALIDATE: CodexValidateStep(codex_adapter),
+        StepName.LEAD_REVIEW: CodexLeadReviewStep(codex_adapter),
         StepName.PR: PrStep(branch_port, pr_port),
         StepName.PREVIEW: PreviewStep(preview_port, timeout_seconds=settings.bot_step_timeout_seconds),
         StepName.DECISION: DecisionStep(),
     }
+
+    restart_scheduler = DetachedSelfRestartScheduler(
+        repo_path=settings.repo_path,
+        bot_path=str(Path(settings.repo_path) / "bot"),
+        base_branch=resolved_base_branch,
+        remote_name=settings.github_remote_name,
+        python_executable=sys.executable,
+        restart_module=settings.bot_self_restart_module,
+    )
+
+    accept_merge_decision = AcceptMergeDecisionUseCase(
+        uow_factory=uow_factory,
+        merge_port=merge_port,
+        notifier=notifier,
+        worktree_cleanup=worktree_manager.cleanup,
+        self_approve_prs=settings.bot_self_approve_prs,
+        self_restart_scheduler=restart_scheduler.enqueue if settings.bot_self_approve_prs else None,
+        exit_handler=_exit_current_process if settings.bot_self_approve_prs else None,
+    )
 
     orchestrator = DevCycleOrchestrator(
         uow_factory=uow_factory,
@@ -150,15 +177,7 @@ def build_container(settings: Settings) -> Container:
         notifier=notifier,
         max_retries=settings.bot_max_retries,
         decision_ttl_seconds=settings.bot_decision_ttl_seconds,
-    )
-
-    restart_scheduler = DetachedSelfRestartScheduler(
-        repo_path=settings.repo_path,
-        bot_path=str(Path(settings.repo_path) / "bot"),
-        base_branch=resolved_base_branch,
-        remote_name=settings.github_remote_name,
-        python_executable=sys.executable,
-        restart_module=settings.bot_self_restart_module,
+        auto_decision_use_case=accept_merge_decision if settings.bot_enable_lead_autoreview else None,
     )
 
     use_cases = UseCases(
@@ -170,15 +189,7 @@ def build_container(settings: Settings) -> Container:
         ),
         request_task_status=RequestTaskStatusUseCase(uow_factory=uow_factory),
         list_active_tasks=ListActiveTasksUseCase(uow_factory=uow_factory),
-        accept_merge_decision=AcceptMergeDecisionUseCase(
-            uow_factory=uow_factory,
-            merge_port=merge_port,
-            notifier=notifier,
-            worktree_cleanup=worktree_manager.cleanup,
-            self_approve_prs=settings.bot_self_approve_prs,
-            self_restart_scheduler=restart_scheduler.enqueue if settings.bot_self_approve_prs else None,
-            exit_handler=_exit_current_process if settings.bot_self_approve_prs else None,
-        ),
+        accept_merge_decision=accept_merge_decision,
     )
 
     return Container(

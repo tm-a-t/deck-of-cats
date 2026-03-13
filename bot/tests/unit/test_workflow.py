@@ -29,13 +29,24 @@ def test_awaiting_decision_without_token_requests_decision_step() -> None:
     workflow = DevCycleWorkflow()
     task = _task()
     task.start_codex_implement()
-    task.mark_codex_implement_passed()
+    task.mark_codex_implement_passed(["bot/app/settings.py"])
     task.mark_codex_validate_passed()
     task.mark_pr_created(1, "u")
-    task.mark_preview_ready("p")
 
     step = workflow.next_step(task)
     assert step == StepName.DECISION
+
+
+def test_awaiting_decision_without_token_requests_lead_review_when_enabled() -> None:
+    workflow = DevCycleWorkflow(auto_lead_review=True)
+    task = _task()
+    task.start_codex_implement()
+    task.mark_codex_implement_passed(["bot/app/settings.py"])
+    task.mark_codex_validate_passed()
+    task.mark_pr_created(1, "u")
+
+    step = workflow.next_step(task)
+    assert step == StepName.LEAD_REVIEW
 
 
 def test_awaiting_rework_input_does_not_autostart_step() -> None:

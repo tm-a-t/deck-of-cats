@@ -53,6 +53,34 @@ class AcceptMergeDecisionUseCase:
             uow.commit()
             logger.info("Decision applying started task_id=%s decision=%s", task_id, decision.value)
 
+        await self._apply_started_decision(task_id=task_id, decision=decision)
+
+    async def execute_system(self, task_id: str, decision: MergeDecision, feedback: str | None = None) -> None:
+        logger.info("System decision received task_id=%s decision=%s", task_id, decision.value)
+        with self.uow_factory() as uow:
+            task = uow.tasks.get(task_id)
+            if task is None:
+                raise NotFoundError(f"Task {task_id} not found")
+
+            if task.status != TaskStatus.AWAITING_DECISION:
+                raise InvalidTransitionError(f"Task {task_id} is not awaiting decision")
+
+            task.start_decision_applying()
+            uow.tasks.update(task)
+            for event in task.pull_events():
+                if isinstance(event, DomainEvent):
+                    uow.outbox.enqueue(event.aggregate_id, event.event_type, event.payload)
+            uow.commit()
+            logger.info("System decision applying started task_id=%s decision=%s", task_id, decision.value)
+
+        await self._apply_started_decision(task_id=task_id, decision=decision, system_feedback=feedback)
+
+    async def _apply_started_decision(
+        self,
+        task_id: str,
+        decision: MergeDecision,
+        system_feedback: str | None = None,
+    ) -> None:
         side_effect_error: Exception | None = None
         with self.uow_factory() as uow:
             side_effect_task = uow.tasks.get(task_id)
@@ -85,7 +113,10 @@ class AcceptMergeDecisionUseCase:
                 raise InvalidTransitionError(f"Task {task_id} is not in decision applying state")
 
             if side_effect_error is None:
-                task.finalize_decision(decision)
+                if decision == MergeDecision.RERUN_TESTS and system_feedback is not None:
+                    task.finalize_lead_rework(system_feedback)
+                else:
+                    task.finalize_decision(decision)
             else:
                 task.rollback_decision_applying(str(side_effect_error))
 

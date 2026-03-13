@@ -25,6 +25,7 @@ class StepName(str, Enum):
     PR = "pr"
     PREVIEW = "preview"
     DECISION = "decision"
+    LEAD_REVIEW = "lead_review"
 
 
 class StepExecutionStatus(str, Enum):

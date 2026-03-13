@@ -28,10 +28,11 @@ async def _main() -> None:
     settings = Settings()
     configure_logging(settings.bot_log_level)
     logger.info(
-        "Bot startup mode dry_run=%s auto_start=%s worker_loop=%s poll_interval=%ss base_branch=%s",
+        "Bot startup mode dry_run=%s auto_start=%s worker_loop=%s lead_autoreview=%s poll_interval=%ss base_branch=%s",
         settings.bot_dry_run,
         settings.bot_auto_start_tasks,
         settings.bot_enable_worker_loop,
+        settings.bot_enable_lead_autoreview,
         settings.bot_poll_interval_seconds,
         settings.default_base_branch,
     )

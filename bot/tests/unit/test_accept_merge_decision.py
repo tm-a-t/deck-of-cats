@@ -40,10 +40,9 @@ def _task() -> TaskAggregate:
         correlation_id="corr-1",
     )
     task.start_codex_implement()
-    task.mark_codex_implement_passed()
+    task.mark_codex_implement_passed(["bot/app/di.py"])
     task.mark_codex_validate_passed()
     task.mark_pr_created(pr_number=7, pr_url="https://github.com/octo/deck/pull/7")
-    task.mark_preview_ready("https://preview.example")
     return task
 
 
@@ -81,3 +80,36 @@ async def test_accept_merge_decision_self_approves_and_schedules_restart(tmp_pat
     assert merge_port.calls == ["approve", "merge"]
     assert restart_calls == ["queued"]
     assert exit_codes == [0]
+
+
+async def test_execute_system_can_send_task_back_to_rework(tmp_path) -> None:
+    db_path = tmp_path / "bot.sqlite3"
+    uow_factory = lambda: SqliteUnitOfWork(str(db_path))
+    task = _task()
+    task.pull_events()
+
+    with uow_factory() as uow:
+        uow.tasks.add(task)
+        uow.commit()
+
+    merge_port = _FakeMergePort()
+    use_case = AcceptMergeDecisionUseCase(
+        uow_factory=uow_factory,
+        merge_port=merge_port,
+        notifier=NullNotifier(),
+    )
+
+    await use_case.execute_system(
+        task_id=task.id,
+        decision=MergeDecision.RERUN_TESTS,
+        feedback="Lead wants the implementation cleaned up before merge",
+    )
+
+    with uow_factory() as uow:
+        stored = uow.tasks.get(task.id)
+
+    assert stored is not None
+    assert stored.status == TaskStatus.RETRY_SCHEDULED
+    assert "Lead review history:" in stored.body
+    assert "Lead wants the implementation cleaned up before merge" in stored.body
+    assert merge_port.calls == []

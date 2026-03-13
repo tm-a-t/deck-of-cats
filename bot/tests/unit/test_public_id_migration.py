@@ -57,3 +57,4 @@ def test_init_db_backfills_public_id_for_legacy_rows() -> None:
     column_names = {str(column[1]) for column in columns}
     assert "author_username" in column_names
     assert "author_display_name" in column_names
+    assert "changed_files_json" in column_names

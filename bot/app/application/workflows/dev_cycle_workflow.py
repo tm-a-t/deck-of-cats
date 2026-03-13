@@ -8,6 +8,9 @@ from app.shared.enums import StepName, TaskStatus
 
 
 class DevCycleWorkflow:
+    def __init__(self, auto_lead_review: bool = False) -> None:
+        self._auto_lead_review = auto_lead_review
+
     def next_step(self, task: TaskAggregate) -> StepName | None:
         if task.status in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}:
             task.start_codex_implement()
@@ -19,10 +22,8 @@ class DevCycleWorkflow:
             return StepName.CODEX_VALIDATE
         if task.status == TaskStatus.PR_CREATING:
             return StepName.PR
-        if task.status == TaskStatus.AWAITING_PREVIEW:
-            return StepName.PREVIEW
-        if task.status == TaskStatus.AWAITING_DECISION and task.decision_token_hash is None:
-            return StepName.DECISION
+        if task.status in {TaskStatus.AWAITING_PREVIEW, TaskStatus.AWAITING_DECISION} and task.decision_token_hash is None:
+            return StepName.LEAD_REVIEW if self._auto_lead_review else StepName.DECISION
         return None
 
     def apply_success(
@@ -33,7 +34,9 @@ class DevCycleWorkflow:
         decision_ttl_seconds: int,
     ) -> None:
         if step == StepName.CODEX_IMPLEMENT:
-            task.mark_codex_implement_passed()
+            changed_files_raw = (result.metadata or {}).get("changed_files")
+            changed_files = changed_files_raw if isinstance(changed_files_raw, list) else []
+            task.mark_codex_implement_passed(changed_files=[str(path) for path in changed_files])
             return
         if step == StepName.CODEX_VALIDATE:
             task.mark_codex_validate_passed()
@@ -46,6 +49,9 @@ class DevCycleWorkflow:
             pr_head_sha = metadata.get("pr_head_sha")
             if isinstance(pr_head_sha, str):
                 task.pr_url = TaskAggregate.attach_expected_head_sha(task.pr_url, pr_head_sha)
+            return
+        if step == StepName.LEAD_REVIEW:
+            task.touch()
             return
         if step == StepName.PREVIEW:
             preview_url = str((result.metadata or {}).get("preview_url", ""))

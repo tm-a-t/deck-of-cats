@@ -12,3 +12,6 @@ class CodexExecPort(Protocol):
 
     async def validate(self, task: TaskAggregate) -> StepResult:
         ...
+
+    async def lead_review(self, task: TaskAggregate) -> StepResult:
+        ...

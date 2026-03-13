@@ -5,13 +5,15 @@ from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 
 
 def _task() -> TaskAggregate:
-    return TaskAggregate.create(
+    task = TaskAggregate.create(
         task_id="99999999-9999-9999-9999-999999999999",
         author_id=1,
         title="Validate homepage",
         body="Check homepage title and controls",
         correlation_id="corr-x",
     )
+    task.changed_files = ["bot/app/di.py", "bot/app/settings.py"]
+    return task
 
 
 def test_validate_prompt_includes_playwright_guide_path() -> None:
@@ -19,4 +21,46 @@ def test_validate_prompt_includes_playwright_guide_path() -> None:
 
     assert "bot/docs/codex-playwright-validation-guide.md" in prompt
     assert "Before any browser check, read and follow this guide exactly" in prompt
+    assert "bot/app/di.py" in prompt
+    assert "Use that list to focus your checks first" in prompt
 
+
+def test_personality_preamble_marks_new_task_and_guide() -> None:
+    prompt = CodexPromptBuilder().build_personality_preamble(
+        personality_key="developer",
+        guide_path="bot/personalities/developer.md",
+        is_new_session=True,
+    )
+
+    assert "Personality: developer" in prompt
+    assert "This is a new task." in prompt
+    assert "read and follow this guide exactly" in prompt
+    assert "bot/personalities/developer.md" in prompt
+
+
+def test_personality_preamble_for_resumed_session_mentions_reread() -> None:
+    prompt = CodexPromptBuilder().build_personality_preamble(
+        personality_key="developer",
+        guide_path="bot/personalities/developer.md",
+        is_new_session=False,
+    )
+
+    assert "Continue as the existing Codex agent personality" in prompt
+    assert "This is a new task." in prompt
+    assert "If you are not fully sure you remember the role or workflow" in prompt
+
+
+def test_implement_prompt_tells_developer_not_to_run_tests() -> None:
+    prompt = CodexPromptBuilder().build_implement_prompt(_task())
+
+    assert "Do not run tests, browser validation, or broad verification commands" in prompt
+    assert '"Tester feedback history:"' in prompt
+    assert '"Lead review history:"' in prompt
+
+
+def test_lead_review_prompt_contains_structured_decision_contract() -> None:
+    prompt = CodexPromptBuilder().build_lead_review_prompt(_task())
+
+    assert "PR URL:" in prompt
+    assert "DECISION: MERGE|RERUN_TESTS|CLOSE" in prompt
+    assert "Do not edit files, do not run tests, and do not create commits" in prompt
