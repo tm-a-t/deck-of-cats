@@ -222,3 +222,18 @@ async def test_lead_review_uses_persistent_lead_personality_and_returns_decision
     prompt = runner.calls[0]["args"][4]
     assert "bot/personalities/lead.md" in prompt
     assert "DECISION: MERGE|RERUN_TESTS|CLOSE" in prompt
+
+
+def test_validate_changed_files_ignores_bot_venv_runtime_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        CodexCliAdapter,
+        "_collect_changed_files",
+        classmethod(lambda cls, worktree_path: (["bot/.venv", "bot/README.md"], None)),
+    )
+
+    mismatch = CodexCliAdapter._validate_changed_files(
+        worktree_path="/tmp/codex-worktree",
+        declared_files=["bot/README.md"],
+    )
+
+    assert mismatch is None

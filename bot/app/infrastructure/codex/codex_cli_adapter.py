@@ -16,6 +16,10 @@ from app.shared.enums import StepName
 
 
 class CodexCliAdapter:
+    _IGNORED_CHANGED_FILE_PREFIXES = (
+        "bot/.venv",
+    )
+
     def __init__(
         self,
         runner: ProcessRunner,
@@ -310,13 +314,14 @@ class CodexCliAdapter:
         actual_files, inspect_error = cls._collect_changed_files(worktree_path)
         if inspect_error is not None:
             return inspect_error
+        actual_files = [path for path in actual_files if not cls._is_ignored_changed_file(path)]
         if not actual_files:
             return "No changed files found in git diff/status"
 
         declared_set: set[str] = set()
         for path in declared_files:
             normalized = cls._normalize_path(path)
-            if normalized:
+            if normalized and not cls._is_ignored_changed_file(normalized):
                 declared_set.add(normalized)
 
         actual_set: set[str] = set()
@@ -364,7 +369,7 @@ class CodexCliAdapter:
         for chunk in (diff_result.stdout, untracked_result.stdout):
             for raw_line in chunk.splitlines():
                 normalized = CodexCliAdapter._normalize_path(raw_line)
-                if normalized:
+                if normalized and not CodexCliAdapter._is_ignored_changed_file(normalized):
                     files.add(normalized)
         return sorted(files), None
 
@@ -374,3 +379,10 @@ class CodexCliAdapter:
         while normalized.startswith("./"):
             normalized = normalized[2:]
         return normalized
+
+    @classmethod
+    def _is_ignored_changed_file(cls, path: str) -> bool:
+        return any(
+            path == prefix or path.startswith(f"{prefix}/")
+            for prefix in cls._IGNORED_CHANGED_FILE_PREFIXES
+        )
