@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.infrastructure.codex.chat_agent_parser import ChatAgentDecision, ChatAgentParser
+from app.infrastructure.codex.json_output_parser import CodexJsonOutputParseError, CodexJsonOutputParser
+from app.infrastructure.codex.personality_store import JsonPersonalityStore
+from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
+from app.infrastructure.execution.process_runner import ProcessRunner
+
+
+class ChatAgentAdapterError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ChatAgentRequest:
+    chat_id: int
+    user_message: str
+    active_tasks: list[dict[str, str]]
+
+
+class CodexChatAgentAdapter:
+    def __init__(
+        self,
+        runner: ProcessRunner,
+        prompt_builder: CodexPromptBuilder,
+        parser: ChatAgentParser,
+        json_output_parser: CodexJsonOutputParser,
+        personality_store: JsonPersonalityStore,
+        repo_path: str,
+        timeout_seconds: int,
+        codex_executable: str = "codex",
+        sandbox_mode: str = "workspace-write",
+        approval_policy: str = "never",
+        guide_path: str = "bot/personalities/chat-agent.md",
+        personality_key_prefix: str = "chat-agent",
+    ) -> None:
+        self._runner = runner
+        self._prompt_builder = prompt_builder
+        self._parser = parser
+        self._json_output_parser = json_output_parser
+        self._personality_store = personality_store
+        self._repo_path = repo_path
+        self._timeout_seconds = timeout_seconds
+        self._codex_executable = codex_executable
+        self._sandbox_mode = sandbox_mode
+        self._approval_policy = approval_policy
+        self._guide_path = guide_path
+        self._personality_key_prefix = personality_key_prefix
+
+    async def plan(self, request: ChatAgentRequest) -> ChatAgentDecision:
+        personality_key = f"{self._personality_key_prefix}:{request.chat_id}"
+        stored = self._personality_store.get(personality_key)
+        use_resume = stored is not None and bool(stored.session_id)
+        prompt = self._prompt_builder.build_chat_agent_prompt(
+            personality_key=personality_key,
+            guide_path=self._guide_path,
+            is_new_session=not use_resume,
+            chat_id=request.chat_id,
+            user_message=request.user_message,
+            active_tasks=request.active_tasks,
+        )
+        args = self._build_args(prompt=prompt, session_id=stored.session_id if use_resume and stored else None)
+        result = await self._runner.run(
+            args=args,
+            cwd=self._repo_path,
+            timeout_seconds=self._timeout_seconds,
+        )
+        parsed_output = self._parse_json_output(result.stdout)
+        if parsed_output.session_id:
+            self._personality_store.save(personality_key, parsed_output.session_id, self._guide_path)
+
+        if result.returncode != 0:
+            summary = "timed out" if result.timed_out else "failed"
+            raise ChatAgentAdapterError(
+                f"chat agent codex exec {summary}: {result.stderr.strip() or result.stdout.strip() or 'no output'}"
+            )
+
+        if not parsed_output.final_message:
+            raise ChatAgentAdapterError("chat agent returned no final message")
+
+        try:
+            return self._parser.parse(parsed_output.final_message)
+        except Exception as exc:
+            raise ChatAgentAdapterError(f"chat agent parse failed: {exc}") from exc
+
+    def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
+        args = [
+            self._codex_executable,
+            "-a",
+            self._approval_policy,
+            "-s",
+            self._sandbox_mode,
+            "exec",
+        ]
+        if session_id:
+            args.extend(["resume", "--json", session_id, prompt])
+            return args
+        args.extend(["--json", prompt])
+        return args
+
+    def _parse_json_output(self, output: str):
+        try:
+            return self._json_output_parser.parse(output)
+        except CodexJsonOutputParseError:
+            return self._json_output_parser.parse("")

@@ -29,3 +29,14 @@ def test_personality_store_ignores_invalid_json(tmp_path: Path) -> None:
     store = JsonPersonalityStore(str(path))
 
     assert store.get("developer") is None
+
+
+def test_personality_store_supports_per_chat_keys(tmp_path: Path) -> None:
+    store = JsonPersonalityStore(str(tmp_path / "agent_personalities.json"))
+
+    store.save("chat-agent:12345", "session-chat-1", "bot/personalities/chat-agent.md")
+    stored = store.get("chat-agent:12345")
+
+    assert stored is not None
+    assert stored.session_id == "session-chat-1"
+    assert stored.guide_path == "bot/personalities/chat-agent.md"

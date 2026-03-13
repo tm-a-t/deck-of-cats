@@ -53,8 +53,13 @@ def test_init_db_backfills_public_id_for_legacy_rows() -> None:
     assert row is not None
     assert row[0] == "T-ABCFB694"
 
+    chat_row = conn.execute("SELECT chat_id FROM tasks WHERE id = ?", ("abcfb694-15de-4ab7-8e42-df16610e4cb5",)).fetchone()
+    assert chat_row is not None
+    assert chat_row[0] == 1
+
     columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
     column_names = {str(column[1]) for column in columns}
+    assert "chat_id" in column_names
     assert "author_username" in column_names
     assert "author_display_name" in column_names
     assert "changed_files_json" in column_names

@@ -27,10 +27,13 @@ class SubmitChangeRequestUseCase:
     async def execute(
         self,
         author_id: int,
+        chat_id: int | None,
         title: str,
         body: str,
         author_username: str | None = None,
         author_display_name: str | None = None,
+        notify_started: bool = True,
+        start_immediately: bool | None = None,
     ) -> str:
         normalized_body = " ".join(body.split()).strip()
         if not normalized_body:
@@ -39,9 +42,11 @@ class SubmitChangeRequestUseCase:
         normalized_title = " ".join(title.split()).strip() or self._derive_title(normalized_body)
         task_id = TaskId.new().value
         correlation_id = CorrelationId.new().value
+        effective_auto_start = self.auto_start if start_immediately is None else start_immediately
         task = TaskAggregate.create(
             task_id=task_id,
             author_id=author_id,
+            chat_id=chat_id,
             title=normalized_title,
             body=normalized_body,
             correlation_id=correlation_id,
@@ -57,14 +62,16 @@ class SubmitChangeRequestUseCase:
             uow.commit()
 
         logger.info(
-            "Task created task_id=%s author_id=%s title=%r auto_start=%s",
+            "Task created task_id=%s author_id=%s chat_id=%s title=%r auto_start=%s",
             task.id,
             task.author_id,
+            task.chat_id,
             task.title,
-            self.auto_start,
+            effective_auto_start,
         )
-        await self.notifier.notify_task_started(task)
-        if self.auto_start and self.orchestrator is not None:
+        if notify_started:
+            await self.notifier.notify_task_started(task)
+        if effective_auto_start and self.orchestrator is not None:
             logger.info("Task scheduled for immediate run task_id=%s", task.id)
             asyncio.create_task(self.orchestrator.run_task(task.id))
         return task.id

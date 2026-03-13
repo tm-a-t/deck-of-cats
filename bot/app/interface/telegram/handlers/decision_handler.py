@@ -29,6 +29,9 @@ def build_router(
 
     @router.callback_query(lambda c: bool(c.data and c.data.startswith("dec|")))
     async def on_decision(callback: CallbackQuery, state: FSMContext) -> None:
+        if callback.message is None:
+            await callback.answer("Chat context missing", show_alert=True)
+            return
         # formats:
         # legacy: dec|<public_id>|<decision>|<token>|<signature>
         # current: dec|<public_id>|<decision>|<token>|<signature>|<stage>
@@ -77,7 +80,7 @@ def build_router(
             return
 
         with uow_factory() as tx:
-            task = tx.tasks.find_by_short_id(public_id)
+            task = tx.tasks.find_by_short_id(public_id, chat_id=callback.message.chat.id)
             if task is None:
                 await callback.answer("Task not found", show_alert=True)
                 return
@@ -126,6 +129,10 @@ def build_router(
         with uow_factory() as tx:
             task = tx.tasks.get(task_id)
             if task is None:
+                await state.clear()
+                await message.answer(f"Задача {public_id or task_id} не найдена.")
+                return
+            if task.chat_id != message.chat.id:
                 await state.clear()
                 await message.answer(f"Задача {public_id or task_id} не найдена.")
                 return

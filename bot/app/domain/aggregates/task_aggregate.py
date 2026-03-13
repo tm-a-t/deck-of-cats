@@ -28,6 +28,7 @@ class TaskAggregate:
     id: str
     public_id: str
     author_id: int
+    chat_id: int
     title: str
     body: str
     correlation_id: str
@@ -54,6 +55,7 @@ class TaskAggregate:
         title: str,
         body: str,
         correlation_id: str,
+        chat_id: int | None = None,
         author_username: str | None = None,
         author_display_name: str | None = None,
     ) -> "TaskAggregate":
@@ -62,6 +64,7 @@ class TaskAggregate:
             id=task_id,
             public_id=public_id,
             author_id=author_id,
+            chat_id=author_id if chat_id is None else chat_id,
             author_username=author_username,
             author_display_name=author_display_name,
             title=title,

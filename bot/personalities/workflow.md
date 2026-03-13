@@ -6,6 +6,7 @@ This document defines how the current multi-agent setup collaborates on Deck of 
 
 | Agent | File | Invoke | Role |
 |-------|------|--------|------|
+| **Chat Agent** | `bot/personalities/chat-agent.md` | plain chat | Per-chat concierge: accepts free-form messages, rewrites new tasks into English, and routes task/status/log requests |
 | **Lead** | `bot/personalities/lead.md` | `/lead` | Prioritises work, reviews proposals and implementations, decides when a feature ships |
 | **Researcher** | `bot/personalities/researcher.md` | `/researcher` | Maps constraints, studies the codebase, and writes decision-support briefs before design or implementation |
 | **Game Designer** | `bot/personalities/game-designer.md` | `/game-designer` | Invents mechanics, pirates, islands, captains; writes design proposals |
@@ -18,6 +19,7 @@ This document defines how the current multi-agent setup collaborates on Deck of 
 
 ```mermaid
 flowchart TD
+    Chat["💬 Chat Agent\nFree-form intake · Per-chat memory"]
     Lead["🎯 Lead\nPrioritises · Reviews · Ships"]
     Research["🔎 Researcher\nFindings · Constraints · Options"]
     GD["🎨 Game Designer\nInvents mechanics & content"]
@@ -26,6 +28,7 @@ flowchart TD
     Test["🧪 Tester\nCLI validation · Regression checks"]
     Mkt["📣 Marketing\nRelease notes & positioning"]
 
+    Chat -- "0. Structured English tasks\n(bot chat)" --> Dev
     Lead -- "1. Questions / priorities" --> Research
     Research -- "2. Research brief\n(bot/personalities/research/)" --> Lead
     Research -- "2a. Constraints / findings" --> GD
@@ -43,6 +46,7 @@ flowchart TD
     Lead -- "10. Ship decision" --> Mkt
     Mkt -- "11. Release notes\n(bot/personalities/releases/)" --> Lead
 
+    style Chat fill:#334155,stroke:#94a3b8,color:#fff
     style Lead fill:#7c3aed,stroke:#a78bfa,color:#fff
     style Research fill:#0f766e,stroke:#5eead4,color:#fff
     style GD fill:#2563eb,stroke:#60a5fa,color:#fff

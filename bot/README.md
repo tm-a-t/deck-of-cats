@@ -30,6 +30,8 @@ python -m app.main_all_in_one
 
 Основной сценарий без slash-команд:
 
+- Просто напиши сообщение в чат. `chat-agent` сам поймёт: это новая задача, запрос статуса, список открытых задач или просьба показать логи.
+- Для новых задач `chat-agent` сам структурирует требования на английском и создаёт downstream task без мастера кнопок.
 - `➕ Новая задача` - запуск пошагового мастера
 - `📂 Открытые задачи` - список задач и переход в карточки
 - `❓ Помощь` - краткая инструкция
@@ -55,18 +57,12 @@ cd bot
 RUN_CODEX_E2E=1 pytest tests/integration/test_codex_smoke_sum.py -q
 ```
 
-Prefer the project interpreter for all bot tests:
-
-```bash
-cd bot
-./.venv/bin/python -m pytest tests/integration/test_codex_smoke_sum.py -q
-```
-
 Тест вызывает реальный `codex exec`, проверяет что создан `sum.py`, что в ответе есть `RESULT: PASS`, и удаляет `sum.py` после проверки.
 
 ## Важно
 
 - Это production-oriented каркас с упором на OOP, идемпотентность и расширяемость.
+- Для каждого Telegram `chat_id` у `chat-agent` хранится отдельная Codex session, поэтому у каждой беседы своя память и своя “личность”.
 - Для реальной работы нужны токены Telegram/GitHub и доступ к API.
 - Для GitHub-интеграции заполни: `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_TOKEN`, `GITHUB_REMOTE_NAME`.
 - Шаг preview читает комментарии PR через GitHub API и берет первую найденную ссылку (приоритет у `netlify` ссылок).

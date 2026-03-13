@@ -16,14 +16,13 @@ def _task() -> TaskAggregate:
     return task
 
 
-def test_validate_prompt_includes_playwright_guide_path() -> None:
+def test_validate_prompt_includes_backend_and_playwright_guides() -> None:
     prompt = CodexPromptBuilder().build_validate_prompt(_task())
 
-    assert "bot/docs/codex-playwright-validation-guide.md" in prompt
     assert "bot/docs/codex-python-validation-guide.md" in prompt
+    assert "bot/docs/codex-playwright-validation-guide.md" in prompt
+    assert "./.venv/bin/python -m pytest" in prompt
     assert "Before any browser check, read and follow this guide exactly" in prompt
-    assert "always run tests from `bot/` and use `./.venv/bin/python -m pytest ...`" in prompt
-    assert "Never use plain `pytest` or `python3 -m pytest`" in prompt
     assert "bot/app/di.py" in prompt
     assert "Use that list to focus your checks first" in prompt
 
@@ -59,6 +58,22 @@ def test_implement_prompt_tells_developer_not_to_run_tests() -> None:
     assert "Do not run tests, browser validation, or broad verification commands" in prompt
     assert '"Tester feedback history:"' in prompt
     assert '"Lead review history:"' in prompt
+
+
+def test_chat_agent_prompt_mentions_chat_turn_and_json_contract() -> None:
+    prompt = CodexPromptBuilder().build_chat_agent_prompt(
+        personality_key="chat-agent:123",
+        guide_path="bot/personalities/chat-agent.md",
+        is_new_session=True,
+        chat_id=123,
+        user_message="Покажи мои задачи",
+        active_tasks=[{"public_id": "T-AAAA1111", "status": "NEW", "title": "Add direct chat agent"}],
+    )
+
+    assert "This is a new chat turn." in prompt
+    assert "bot/personalities/chat-agent.md" in prompt
+    assert '"action": "create_task|list_tasks|show_task|show_logs|help|reply"' in prompt
+    assert "T-AAAA1111 | NEW | Add direct chat agent" in prompt
 
 
 def test_lead_review_prompt_contains_structured_decision_contract() -> None:
