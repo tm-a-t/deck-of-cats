@@ -25,6 +25,26 @@ class GithubMergeAdapter:
         self._dry_run = dry_run
         self._timeout_seconds = timeout_seconds
 
+    async def approve_pr(self, task: TaskAggregate) -> None:
+        if self._dry_run:
+            return
+        pr_number = self._require_pr_number(task)
+        self._ensure_github_config()
+
+        url = f"{self._api_base_url}/repos/{self._owner}/{self._repo}/pulls/{pr_number}/reviews"
+        payload = {"event": "APPROVE"}
+        timeout = httpx.Timeout(self._timeout_seconds)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, headers=self._github_headers(), json=payload)
+        except httpx.HTTPError as exc:
+            raise ExternalIntegrationError(f"GitHub approve PR request failed: {exc}") from exc
+
+        if response.status_code not in {200, 201}:
+            raise ExternalIntegrationError(
+                f"GitHub approve PR failed (status={response.status_code}): {self._safe_response_text(response)}"
+            )
+
     async def merge_pr(self, task: TaskAggregate) -> None:
         if self._dry_run:
             return

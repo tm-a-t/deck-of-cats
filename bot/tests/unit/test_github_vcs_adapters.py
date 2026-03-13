@@ -228,6 +228,7 @@ async def test_github_pr_adapter_returns_existing_open_pr_on_422(monkeypatch: py
 
 async def test_github_merge_adapter_calls_merge_and_close_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeAsyncClient:
+        post_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
         put_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
         patch_calls: list[tuple[str, dict[str, str], dict[str, str]]] = []
 
@@ -240,6 +241,10 @@ async def test_github_merge_adapter_calls_merge_and_close_endpoints(monkeypatch:
         async def __aexit__(self, exc_type, exc, tb) -> bool:
             _ = exc_type, exc, tb
             return False
+
+        async def post(self, url: str, headers: dict[str, str], json: dict[str, str]) -> httpx.Response:
+            self.post_calls.append((url, headers, json))
+            return _http_response(method="POST", status_code=200, payload={"state": "APPROVED"})
 
         async def put(self, url: str, headers: dict[str, str], json: dict[str, str]) -> httpx.Response:
             self.put_calls.append((url, headers, json))
@@ -263,9 +268,12 @@ async def test_github_merge_adapter_calls_merge_and_close_endpoints(monkeypatch:
         timeout_seconds=30,
     )
 
+    await adapter.approve_pr(task)
     await adapter.merge_pr(task)
     await adapter.close_pr(task)
 
+    assert _FakeAsyncClient.post_calls[0][0].endswith("/repos/octo/deck/pulls/19/reviews")
+    assert _FakeAsyncClient.post_calls[0][2]["event"] == "APPROVE"
     assert _FakeAsyncClient.put_calls[0][0].endswith("/repos/octo/deck/pulls/19/merge")
     assert _FakeAsyncClient.patch_calls[0][0].endswith("/repos/octo/deck/pulls/19")
     assert _FakeAsyncClient.put_calls[0][2]["merge_method"] == "squash"

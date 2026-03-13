@@ -24,6 +24,9 @@ class AcceptMergeDecisionUseCase:
     merge_port: MergePort
     notifier: NotifierPort
     worktree_cleanup: Callable[[str], None] | None = None
+    self_approve_prs: bool = False
+    self_restart_scheduler: Callable[[], str] | None = None
+    exit_handler: Callable[[int], None] | None = None
 
     async def execute(self, task_id: str, decision: MergeDecision, decision_token: str) -> None:
         logger.info("Decision received task_id=%s decision=%s", task_id, decision.value)
@@ -58,6 +61,9 @@ class AcceptMergeDecisionUseCase:
 
         try:
             if decision == MergeDecision.MERGE:
+                if self.self_approve_prs:
+                    logger.info("Self-approving PR task_id=%s pr_number=%s", task_id, side_effect_task.pr_number)
+                    await self.merge_port.approve_pr(side_effect_task)
                 logger.info("Merging PR task_id=%s pr_number=%s", task_id, side_effect_task.pr_number)
                 await self.merge_port.merge_pr(side_effect_task)
             elif decision == MergeDecision.CLOSE:
@@ -100,3 +106,14 @@ class AcceptMergeDecisionUseCase:
 
         logger.info("Decision applied successfully task_id=%s decision=%s", task_id, decision.value)
         await self.notifier.notify_task_finished(task)
+
+        if decision == MergeDecision.MERGE and self.self_approve_prs and self.self_restart_scheduler is not None:
+            try:
+                script_path = self.self_restart_scheduler()
+                logger.info("Self-restart queued task_id=%s script=%s", task_id, script_path)
+            except Exception:  # pragma: no cover - restart scheduling must not hide merge success
+                logger.exception("Failed to schedule self-restart task_id=%s", task_id)
+                return
+
+            if self.exit_handler is not None:
+                self.exit_handler(0)

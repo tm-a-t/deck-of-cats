@@ -6,6 +6,9 @@ from app.domain.aggregates.task_aggregate import TaskAggregate
 
 
 class MergePort(Protocol):
+    async def approve_pr(self, task: TaskAggregate) -> None:
+        ...
+
     async def merge_pr(self, task: TaskAggregate) -> None:
         ...
 

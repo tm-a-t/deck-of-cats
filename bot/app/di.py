@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +24,7 @@ from app.infrastructure.codex.codex_cli_adapter import CodexCliAdapter
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 from app.infrastructure.codex.result_parser import CodexResultParser
 from app.infrastructure.execution.process_runner import ProcessRunner
+from app.infrastructure.execution.self_restart_scheduler import DetachedSelfRestartScheduler
 from app.infrastructure.execution.sandbox_runner import SandboxRunner
 from app.infrastructure.execution.worktree_manager import WorktreeManager
 from app.infrastructure.notifier.telegram_notifier import TelegramNotifier
@@ -33,6 +35,7 @@ from app.infrastructure.preview.netlify_query_adapter import NetlifyQueryAdapter
 from app.infrastructure.vcs.github_branch_adapter import GithubBranchAdapter
 from app.infrastructure.vcs.github_merge_adapter import GithubMergeAdapter
 from app.infrastructure.vcs.github_pr_adapter import GithubPullRequestAdapter
+from app.infrastructure.vcs.base_branch_resolver import resolve_base_branch
 from app.settings import Settings
 from app.shared.enums import StepName
 from app.shared.security import CallbackSigner
@@ -56,6 +59,9 @@ class Container:
     use_cases: UseCases
 
 
+def _exit_current_process(code: int) -> None:
+    raise SystemExit(code)
+
 
 def build_container(settings: Settings) -> Container:
     bot = Bot(token=settings.telegram_bot_token)
@@ -63,7 +69,12 @@ def build_container(settings: Settings) -> Container:
 
     process_runner = ProcessRunner()
     sandbox_runner = SandboxRunner()
-    worktree_manager = WorktreeManager(settings.repo_path, settings.default_base_branch)
+    resolved_base_branch = resolve_base_branch(
+        settings.repo_path,
+        settings.default_base_branch,
+        settings.bot_use_current_branch,
+    )
+    worktree_manager = WorktreeManager(settings.repo_path, resolved_base_branch)
 
     db_path = Path(settings.bot_db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +108,7 @@ def build_container(settings: Settings) -> Container:
         token=settings.github_token,
         api_base_url=settings.github_api_base_url,
         remote_name=settings.github_remote_name,
-        base_branch=settings.default_base_branch,
+        base_branch=resolved_base_branch,
         git_author_name=settings.git_author_name,
         git_author_email=settings.git_author_email,
         dry_run=settings.bot_dry_run,
@@ -141,6 +152,15 @@ def build_container(settings: Settings) -> Container:
         decision_ttl_seconds=settings.bot_decision_ttl_seconds,
     )
 
+    restart_scheduler = DetachedSelfRestartScheduler(
+        repo_path=settings.repo_path,
+        bot_path=str(Path(settings.repo_path) / "bot"),
+        base_branch=resolved_base_branch,
+        remote_name=settings.github_remote_name,
+        python_executable=sys.executable,
+        restart_module=settings.bot_self_restart_module,
+    )
+
     use_cases = UseCases(
         submit_change_request=SubmitChangeRequestUseCase(
             uow_factory=uow_factory,
@@ -155,6 +175,9 @@ def build_container(settings: Settings) -> Container:
             merge_port=merge_port,
             notifier=notifier,
             worktree_cleanup=worktree_manager.cleanup,
+            self_approve_prs=settings.bot_self_approve_prs,
+            self_restart_scheduler=restart_scheduler.enqueue if settings.bot_self_approve_prs else None,
+            exit_handler=_exit_current_process if settings.bot_self_approve_prs else None,
         ),
     )
 
