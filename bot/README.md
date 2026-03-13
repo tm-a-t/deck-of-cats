@@ -55,6 +55,13 @@ cd bot
 RUN_CODEX_E2E=1 pytest tests/integration/test_codex_smoke_sum.py -q
 ```
 
+Prefer the project interpreter for all bot tests:
+
+```bash
+cd bot
+./.venv/bin/python -m pytest tests/integration/test_codex_smoke_sum.py -q
+```
+
 Тест вызывает реальный `codex exec`, проверяет что создан `sum.py`, что в ответе есть `RESULT: PASS`, и удаляет `sum.py` после проверки.
 
 ## Важно

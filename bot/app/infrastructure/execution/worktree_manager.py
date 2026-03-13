@@ -39,6 +39,7 @@ class WorktreeManager:
                     f"Failed to create worktree: {result.stderr.strip() or result.stdout.strip()}"
                 )
 
+        self._ensure_bot_venv_link(worktree_path)
         return str(worktree_path), branch
 
     def cleanup(self, task_id: str) -> None:
@@ -54,3 +55,22 @@ class WorktreeManager:
                 raise ExternalIntegrationError(
                     f"Failed to cleanup worktree: {result.stderr.strip() or result.stdout.strip()}"
                 )
+
+    def _ensure_bot_venv_link(self, worktree_path: Path) -> None:
+        source_venv = self._repo_path / "bot" / ".venv"
+        target_bot_dir = worktree_path / "bot"
+        target_venv = target_bot_dir / ".venv"
+
+        if not source_venv.exists() or not target_bot_dir.exists():
+            return
+        if target_venv.is_symlink():
+            try:
+                if target_venv.resolve() == source_venv.resolve():
+                    return
+            except OSError:
+                pass
+            target_venv.unlink()
+        elif target_venv.exists():
+            return
+
+        target_venv.symlink_to(source_venv, target_is_directory=True)

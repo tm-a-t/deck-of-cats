@@ -20,7 +20,10 @@ def test_validate_prompt_includes_playwright_guide_path() -> None:
     prompt = CodexPromptBuilder().build_validate_prompt(_task())
 
     assert "bot/docs/codex-playwright-validation-guide.md" in prompt
+    assert "bot/docs/codex-python-validation-guide.md" in prompt
     assert "Before any browser check, read and follow this guide exactly" in prompt
+    assert "always run tests from `bot/` and use `./.venv/bin/python -m pytest ...`" in prompt
+    assert "Never use plain `pytest` or `python3 -m pytest`" in prompt
     assert "bot/app/di.py" in prompt
     assert "Use that list to focus your checks first" in prompt
 

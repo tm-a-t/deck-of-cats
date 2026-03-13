@@ -68,6 +68,11 @@ class CodexPromptBuilder:
             - Verify implementation completeness against task request.
             - The developer already reported the changed files above. Use that list to focus your checks first.
             - Run relevant tests/checks, including browser checks when applicable.
+            - For Python/backend validation inside `bot/`, always run tests from `bot/` and use `./.venv/bin/python -m pytest ...`.
+            - Never use plain `pytest` or `python3 -m pytest` for `bot/` tests.
+            - If `bot/.venv/bin/python` is missing, return FAIL with that exact missing-path error instead of guessing another interpreter.
+            - Before any Python/backend check inside `bot/`, read and follow this guide exactly:
+              bot/docs/codex-python-validation-guide.md
             - Before any browser check, read and follow this guide exactly:
               bot/docs/codex-playwright-validation-guide.md
             - Use fail-fast behavior: avoid long exploratory loops and stop after repeated tool-syntax errors.
