@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from app.infrastructure.codex.chat_agent_parser import ChatAgentDecision, ChatAgentParser
+from app.infrastructure.codex.chat_agent_parser import ChatAgentAction, ChatAgentDecision, ChatAgentParser
 from app.infrastructure.codex.json_output_parser import CodexJsonOutputParseError, CodexJsonOutputParser
 from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
@@ -45,6 +45,7 @@ class CodexChatAgentAdapter:
         approval_policy: str = "never",
         guide_path: str = "bot/personalities/chat-agent.md",
         personality_key_prefix: str = "chat-agent",
+        conversation_reply_model: str | None = None,
     ) -> None:
         self._runner = runner
         self._prompt_builder = prompt_builder
@@ -58,8 +59,17 @@ class CodexChatAgentAdapter:
         self._approval_policy = approval_policy
         self._guide_path = guide_path
         self._personality_key_prefix = personality_key_prefix
+        self._conversation_reply_model = (conversation_reply_model or "").strip() or None
 
     async def plan(self, request: ChatAgentRequest) -> ChatAgentDecision:
+        decision = await self._plan_routing(request)
+        if decision.action != ChatAgentAction.REPLY or not self._conversation_reply_model:
+            return decision
+
+        reply_text = await self._generate_reply(request, model=self._conversation_reply_model)
+        return replace(decision, reply_text=reply_text)
+
+    async def _plan_routing(self, request: ChatAgentRequest) -> ChatAgentDecision:
         personality_key = f"{self._personality_key_prefix}:{request.chat_id}"
         stored = self._personality_store.get(personality_key)
         use_resume = stored is not None and bool(stored.session_id)
@@ -84,6 +94,28 @@ class CodexChatAgentAdapter:
             return self._parser.parse(parsed_output.final_message)
         except Exception as exc:
             raise ChatAgentAdapterError(f"chat agent parse failed: {exc}") from exc
+
+    async def _generate_reply(self, request: ChatAgentRequest, model: str) -> str:
+        personality_key = f"{self._personality_key_prefix}-reply:{request.chat_id}"
+        stored = self._personality_store.get(personality_key)
+        use_resume = stored is not None and bool(stored.session_id)
+        prompt = self._prompt_builder.build_chat_reply_prompt(
+            personality_key=personality_key,
+            guide_path=self._guide_path,
+            is_new_session=not use_resume,
+            chat_id=request.chat_id,
+            user_message=request.user_message,
+        )
+        parsed_output = await self._run_prompt(
+            personality_key=personality_key,
+            prompt=prompt,
+            session_id=stored.session_id if use_resume and stored else None,
+            model=model,
+        )
+        final_message = (parsed_output.final_message or "").strip()
+        if not final_message:
+            raise ChatAgentAdapterError("chat agent returned no conversational reply")
+        return final_message
 
     async def explain_logs(self, request: ChatAgentLogSummaryRequest) -> str:
         personality_key = f"{self._personality_key_prefix}:{request.chat_id}"
@@ -110,8 +142,14 @@ class CodexChatAgentAdapter:
             raise ChatAgentAdapterError("chat agent returned no log explanation")
         return final_message
 
-    async def _run_prompt(self, personality_key: str, prompt: str, session_id: str | None):
-        args = self._build_args(prompt=prompt, session_id=session_id)
+    async def _run_prompt(
+        self,
+        personality_key: str,
+        prompt: str,
+        session_id: str | None,
+        model: str | None = None,
+    ):
+        args = self._build_args(prompt=prompt, session_id=session_id, model=model)
         result = await self._runner.run(
             args=args,
             cwd=self._repo_path,
@@ -128,15 +166,17 @@ class CodexChatAgentAdapter:
             )
         return parsed_output
 
-    def _build_args(self, prompt: str, session_id: str | None) -> list[str]:
+    def _build_args(self, prompt: str, session_id: str | None, model: str | None = None) -> list[str]:
         args = [
             self._codex_executable,
             "-a",
             self._approval_policy,
             "-s",
             self._sandbox_mode,
-            "exec",
         ]
+        if model:
+            args.extend(["-m", model])
+        args.append("exec")
         if session_id:
             args.extend(["resume", "--json", session_id, prompt])
             return args

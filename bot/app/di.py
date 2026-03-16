@@ -47,6 +47,9 @@ from app.shared.enums import StepName
 from app.shared.security import CallbackSigner
 
 
+CONVERSATION_REPLY_MODEL = "gpt-5.3-codex-spark"
+
+
 @dataclass
 class UseCases:
     submit_change_request: SubmitChangeRequestUseCase
@@ -121,6 +124,7 @@ def build_container(settings: Settings) -> Container:
         codex_executable=settings.codex_cli_executable,
         sandbox_mode=settings.codex_cli_sandbox_mode,
         approval_policy=settings.codex_cli_approval_policy,
+        conversation_reply_model=CONVERSATION_REPLY_MODEL,
     )
 
     branch_port = GithubBranchAdapter(
