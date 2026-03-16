@@ -53,18 +53,21 @@ function measureWrappedHeight(ctx, text, maxW, lineH) {
 
 function buildCardTexture(scene, typeKey, L) {
   const k = L.k;
+  const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
   const cw = Math.round(CARD.W * k);
   const ch = Math.round(CARD.H * k);
   const r = Math.round(CARD.RADIUS * k);
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
-  const texKey = '_card_' + typeKey + '_' + cw + 'x' + ch;
+  const texKey = '_card_' + typeKey + '_' + cw + 'x' + ch + '@' + textureResolution;
 
-  if (scene.textures.exists(texKey)) return { texKey, cw, ch };
+  if (scene.textures.exists(texKey)) return { texKey, cw, ch, textureResolution };
 
   const canvas = document.createElement('canvas');
-  canvas.width = cw;
-  canvas.height = ch;
+  canvas.width = cw * textureResolution;
+  canvas.height = ch * textureResolution;
   const ctx = canvas.getContext('2d');
+  ctx.setTransform(textureResolution, 0, 0, textureResolution, 0, 0);
+  ctx.imageSmoothingEnabled = false;
 
   ctx.clearRect(0, 0, cw, ch);
   roundRect(ctx, 0, 0, cw, ch, r);
@@ -150,7 +153,7 @@ function buildCardTexture(scene, typeKey, L) {
 
   scene.textures.addCanvas(texKey, canvas);
   scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
-  return { texKey, cw, ch };
+  return { texKey, cw, ch, textureResolution };
 }
 
 function createPirateCard(scene, opts) {
@@ -165,6 +168,9 @@ function createPirateCard(scene, opts) {
 
   const built = buildCardTexture(scene, opts.type, L);
   const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
+  if (built.textureResolution > 1) {
+    cardImg.setScale(1 / built.textureResolution);
+  }
   const ct = scene.add.container(x, y, [cardImg]);
   ct.setRotation(rotation);
   ct.setDepth(depth);
