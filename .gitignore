@@ -1,6 +1,12 @@
 .idea/
 /bot/.env
 /bot/.venv/
+/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
 /bot/runtime/
 /bot/deck_of_cats_telegram_dev_bot.egg-info/
 .playwright-cli/

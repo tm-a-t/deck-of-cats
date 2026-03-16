@@ -234,7 +234,7 @@ async def test_lead_review_uses_persistent_lead_personality_and_returns_decision
     assert "DECISION: MERGE|RERUN_TESTS|CLOSE" in prompt
 
 
-async def test_validate_changed_files_ignores_runtime_python_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_validate_changed_files_ignores_gitignored_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         CodexCliAdapter,
         "_collect_changed_files",
@@ -248,6 +248,18 @@ async def test_validate_changed_files_ignores_runtime_python_artifacts(monkeypat
                 ],
                 None,
             )
+        ),
+    )
+    ignored_paths = {
+        "bot/.venv",
+        "bot/app/__pycache__/__init__.cpython-314.pyc",
+        "bot/.pytest_cache/v/cache/nodeids",
+    }
+    monkeypatch.setattr(
+        CodexCliAdapter,
+        "_git_ignored_paths",
+        staticmethod(
+            lambda worktree_path, paths: ({path for path in paths if path in ignored_paths}, None)
         ),
     )
 
@@ -284,6 +296,11 @@ async def test_implement_uses_actual_git_changed_files_when_declared_list_is_inc
             )
         ),
     )
+    monkeypatch.setattr(
+        CodexCliAdapter,
+        "_git_ignored_paths",
+        staticmethod(lambda worktree_path, paths: (set(), None)),
+    )
 
     result = await adapter.implement(_task())
 
@@ -294,3 +311,21 @@ async def test_implement_uses_actual_git_changed_files_when_declared_list_is_inc
         "bot/app/application/use_cases/list_active_tasks.py",
     ]
     assert "CHANGED_FILES auto-reconciled to git diff/status." in result.details
+
+
+async def test_filter_changed_files_returns_error_when_gitignore_check_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        CodexCliAdapter,
+        "_git_ignored_paths",
+        staticmethod(lambda worktree_path, paths: (set(), "Failed to evaluate gitignore rules: boom")),
+    )
+
+    filtered, error = CodexCliAdapter._filter_changed_files(
+        "/tmp/codex-worktree",
+        ["bot/README.md"],
+    )
+
+    assert filtered == []
+    assert error == "Failed to evaluate gitignore rules: boom"

@@ -16,21 +16,6 @@ from app.shared.enums import StepName
 
 
 class CodexCliAdapter:
-    _IGNORED_CHANGED_FILE_PREFIXES = (
-        "bot/.venv",
-        "bot/.pytest_cache",
-        "bot/.mypy_cache",
-        "bot/.ruff_cache",
-        "bot/.hypothesis",
-    )
-    _IGNORED_CHANGED_FILE_PARTS = {
-        "__pycache__",
-    }
-    _IGNORED_CHANGED_FILE_SUFFIXES = (
-        ".pyc",
-        ".pyo",
-    )
-
     def __init__(
         self,
         runner: ProcessRunner,
@@ -206,7 +191,29 @@ class CodexCliAdapter:
                     ),
                 )
 
-            resolved_changed_files = self._filter_changed_files(actual_files)
+            resolved_changed_files, ignore_error = self._filter_changed_files(worktree_path, actual_files)
+            if ignore_error is not None:
+                formatted_output = self._format_output(
+                    personality=personality,
+                    run_mode="resume" if use_resume else "exec",
+                    session_id=parsed_output.session_id or stored_session_id,
+                    branch=branch,
+                    worktree_path=worktree_path,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                )
+                return StepResult(
+                    ok=False,
+                    summary="codex changed files mismatch",
+                    details=f"{ignore_error}\n\n{formatted_output}",
+                    metadata=self._build_metadata(
+                        branch=branch,
+                        worktree_path=worktree_path,
+                        personality=personality,
+                        run_mode="resume" if use_resume else "exec",
+                        session_id=parsed_output.session_id or stored_session_id,
+                    ),
+                )
             if not resolved_changed_files:
                 formatted_output = self._format_output(
                     personality=personality,
@@ -361,15 +368,32 @@ class CodexCliAdapter:
         actual_files, inspect_error = cls._collect_changed_files(worktree_path)
         if inspect_error is not None:
             return inspect_error
-        actual_files = cls._filter_changed_files(actual_files)
+        actual_files, filter_error = cls._filter_changed_files(worktree_path, actual_files)
+        if filter_error is not None:
+            return filter_error
         if not actual_files:
             return "No changed files found in git diff/status"
+
+        declared_files, filter_error = cls._filter_changed_files(worktree_path, declared_files)
+        if filter_error is not None:
+            return filter_error
 
         return cls._describe_changed_files_mismatch(declared_files=declared_files, actual_files=actual_files)
 
     @classmethod
-    def _filter_changed_files(cls, paths: list[str]) -> list[str]:
-        return [path for path in paths if not cls._is_ignored_changed_file(path)]
+    def _filter_changed_files(cls, worktree_path: str, paths: list[str]) -> tuple[list[str], str | None]:
+        normalized_paths: list[str] = []
+        seen: set[str] = set()
+        for path in paths:
+            normalized = cls._normalize_path(path)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                normalized_paths.append(normalized)
+
+        ignored_paths, inspect_error = cls._git_ignored_paths(worktree_path, normalized_paths)
+        if inspect_error is not None:
+            return [], inspect_error
+        return [path for path in normalized_paths if path not in ignored_paths], None
 
     @classmethod
     def _describe_changed_files_mismatch(cls, declared_files: list[str], actual_files: list[str]) -> str | None:
@@ -379,7 +403,7 @@ class CodexCliAdapter:
         declared_set: set[str] = set()
         for path in declared_files:
             normalized = cls._normalize_path(path)
-            if normalized and not cls._is_ignored_changed_file(normalized):
+            if normalized:
                 declared_set.add(normalized)
 
         actual_set: set[str] = set()
@@ -427,7 +451,7 @@ class CodexCliAdapter:
         for chunk in (diff_result.stdout, untracked_result.stdout):
             for raw_line in chunk.splitlines():
                 normalized = CodexCliAdapter._normalize_path(raw_line)
-                if normalized and not CodexCliAdapter._is_ignored_changed_file(normalized):
+                if normalized:
                     files.add(normalized)
         return sorted(files), None
 
@@ -438,16 +462,25 @@ class CodexCliAdapter:
             normalized = normalized[2:]
         return normalized
 
-    @classmethod
-    def _is_ignored_changed_file(cls, path: str) -> bool:
-        if any(
-            path == prefix or path.startswith(f"{prefix}/")
-            for prefix in cls._IGNORED_CHANGED_FILE_PREFIXES
-        ):
-            return True
+    @staticmethod
+    def _git_ignored_paths(worktree_path: str, paths: list[str]) -> tuple[set[str], str | None]:
+        if not paths:
+            return set(), None
 
-        parts = [part for part in path.split("/") if part]
-        if any(part in cls._IGNORED_CHANGED_FILE_PARTS for part in parts):
-            return True
+        result = subprocess.run(
+            ["git", "-C", worktree_path, "check-ignore", "--no-index", "--stdin"],
+            input="\n".join(paths) + "\n",
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode not in {0, 1}:
+            message = result.stderr.strip() or result.stdout.strip() or "git check-ignore failed"
+            return set(), f"Failed to evaluate gitignore rules: {message}"
 
-        return path.endswith(cls._IGNORED_CHANGED_FILE_SUFFIXES)
+        ignored_paths: set[str] = set()
+        for raw_line in result.stdout.splitlines():
+            normalized = CodexCliAdapter._normalize_path(raw_line)
+            if normalized:
+                ignored_paths.add(normalized)
+        return ignored_paths, None
