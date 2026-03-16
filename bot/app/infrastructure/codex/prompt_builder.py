@@ -170,6 +170,49 @@ class CodexPromptBuilder:
             """
         ).strip()
 
+    def build_chat_reply_prompt(
+        self,
+        personality_key: str,
+        guide_path: str,
+        is_new_session: bool,
+        chat_id: int,
+        user_message: str,
+    ) -> str:
+        session_instruction = (
+            "You are starting a new Codex agent personality for this repository."
+            if is_new_session
+            else "Continue as the existing Codex agent personality for this repository."
+        )
+        guide_instruction = (
+            "Before doing any work, read and follow this guide exactly:"
+            if is_new_session
+            else "If you are not fully sure you remember the role or workflow, re-read this guide:"
+        )
+        return textwrap.dedent(
+            f"""
+            {session_instruction}
+            Personality: {personality_key}
+            This is a new chat turn.
+            {guide_instruction}
+            - {guide_path}
+
+            You are handling a Telegram bot message for chat_id={chat_id}.
+            The routing layer has already decided this message is plain conversation, not task creation, task status, or log analysis.
+
+            Latest user message:
+            {user_message}
+
+            Reply requirements:
+            - Reply in Russian only.
+            - Be concise, natural, and helpful.
+            - Do not return JSON.
+            - Do not wrap the reply in markdown fences.
+            - Do not create tasks or mention internal routing unless the user explicitly asks.
+
+            Return plain text only.
+            """
+        ).strip()
+
     def build_validate_prompt(self, task: TaskAggregate) -> str:
         changed_files_block = self._changed_files_block(task)
         return textwrap.dedent(

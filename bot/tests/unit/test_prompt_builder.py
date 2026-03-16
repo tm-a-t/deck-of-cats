@@ -95,6 +95,20 @@ def test_chat_agent_log_summary_prompt_requires_russian_paraphrase_without_raw_d
     assert "Backend-only change; browser validation skipped." in prompt
 
 
+def test_chat_reply_prompt_requests_plain_text_for_conversation_only() -> None:
+    prompt = CodexPromptBuilder().build_chat_reply_prompt(
+        personality_key="chat-agent-reply:123",
+        guide_path="bot/personalities/chat-agent.md",
+        is_new_session=True,
+        chat_id=123,
+        user_message="Как дела?",
+    )
+
+    assert "plain conversation, not task creation, task status, or log analysis" in prompt
+    assert "Reply in Russian only." in prompt
+    assert "Return plain text only." in prompt
+
+
 def test_lead_review_prompt_contains_structured_decision_contract() -> None:
     prompt = CodexPromptBuilder().build_lead_review_prompt(_task())
 
