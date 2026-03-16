@@ -23,5 +23,9 @@ class TaskRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def list_recent(self, limit: int, chat_id: int | None = None) -> list[TaskAggregate]:
+        raise NotImplementedError
+
+    @abstractmethod
     def find_by_short_id(self, short_id: str, chat_id: int | None = None) -> TaskAggregate | None:
         raise NotImplementedError

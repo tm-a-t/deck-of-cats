@@ -98,3 +98,24 @@ def test_parse_validate_ignores_trailing_lines_after_details() -> None:
     assert parsed.ok is True
     assert parsed.summary == "Validation completed"
     assert parsed.details == "Checks passed"
+
+
+def test_parse_research_supports_multiline_details_block() -> None:
+    parser = CodexResultParser()
+
+    parsed = parser.parse_research(
+        """
+        RESULT: PASS
+        SUMMARY: Research completed
+        DETAILS:
+        Problems:
+        - The bot retries the wrong path.
+        Missing features:
+        - No dedicated research button.
+        """
+    )
+
+    assert parsed.ok is True
+    assert parsed.summary == "Research completed"
+    assert "Problems:" in parsed.details
+    assert "No dedicated research button." in parsed.details

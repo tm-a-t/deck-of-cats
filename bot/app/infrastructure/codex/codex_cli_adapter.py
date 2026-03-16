@@ -12,7 +12,7 @@ from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 from app.infrastructure.codex.result_parser import CodexResultParseError, CodexResultParser
 from app.infrastructure.execution.process_runner import ProcessRunner
 from app.infrastructure.execution.worktree_manager import WorktreeManager
-from app.shared.enums import StepName
+from app.shared.enums import StepName, TaskKind
 
 
 class CodexCliAdapter:
@@ -47,6 +47,9 @@ class CodexCliAdapter:
     async def implement(self, task: TaskAggregate) -> StepResult:
         return await self._run(task, step=StepName.CODEX_IMPLEMENT, require_changed_files=True)
 
+    async def research(self, task: TaskAggregate) -> StepResult:
+        return await self._run(task, step=StepName.RESEARCH, require_changed_files=False)
+
     async def validate(self, task: TaskAggregate) -> StepResult:
         return await self._run(task, step=StepName.CODEX_VALIDATE, require_changed_files=False)
 
@@ -54,7 +57,8 @@ class CodexCliAdapter:
         return await self._run(task, step=StepName.LEAD_REVIEW, require_changed_files=False)
 
     async def _run(self, task: TaskAggregate, step: StepName, require_changed_files: bool) -> StepResult:
-        worktree_path, branch = self._worktree_manager.create(task.id)
+        branch_prefix = "research" if task.kind == TaskKind.RESEARCH else "task"
+        worktree_path, branch = self._worktree_manager.create(task.id, branch_prefix=branch_prefix)
         personality = self._personality_registry.for_step(step)
         stored_session_id = self._load_session_id(personality)
         use_resume = bool(personality.persist_session and stored_session_id)
@@ -115,7 +119,10 @@ class CodexCliAdapter:
             )
 
         try:
-            if step == StepName.CODEX_IMPLEMENT:
+            if step == StepName.RESEARCH:
+                parsed = self._result_parser.parse_research(message)
+                parsed_review = None
+            elif step == StepName.CODEX_IMPLEMENT:
                 parsed = self._result_parser.parse_implement(message)
                 parsed_review = None
             elif step == StepName.CODEX_VALIDATE:
@@ -304,12 +311,16 @@ class CodexCliAdapter:
             is_new_session=is_new_session,
         )
         base_prompt = (
-            self._prompt_builder.build_implement_prompt(task)
-            if step == StepName.CODEX_IMPLEMENT
+            self._prompt_builder.build_research_prompt(task)
+            if step == StepName.RESEARCH
             else (
-                self._prompt_builder.build_validate_prompt(task)
-                if step == StepName.CODEX_VALIDATE
-                else self._prompt_builder.build_lead_review_prompt(task)
+                self._prompt_builder.build_implement_prompt(task)
+                if step == StepName.CODEX_IMPLEMENT
+                else (
+                    self._prompt_builder.build_validate_prompt(task)
+                    if step == StepName.CODEX_VALIDATE
+                    else self._prompt_builder.build_lead_review_prompt(task)
+                )
             )
         )
         return f"{preamble}\n\n{base_prompt}"

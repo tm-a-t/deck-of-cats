@@ -11,12 +11,17 @@ from app.domain.events.domain_events import (
     TaskCreated,
     TaskStatusChanged,
 )
-from app.shared.enums import MergeDecision, TaskStatus
+from app.shared.enums import MergeDecision, TaskKind, TaskStatus
 from app.shared.errors import InvalidTransitionError
 from app.shared.time import utcnow
 
 
-TERMINAL_STATUSES = {TaskStatus.MERGED, TaskStatus.CLOSED, TaskStatus.DEAD_LETTER}
+TERMINAL_STATUSES = {
+    TaskStatus.RESEARCH_COMPLETED,
+    TaskStatus.MERGED,
+    TaskStatus.CLOSED,
+    TaskStatus.DEAD_LETTER,
+}
 EXPECTED_HEAD_SHA_FRAGMENT_KEY = "bot_expected_head_sha"
 REWORK_HISTORY_HEADER = "Rework history:"
 TESTER_FEEDBACK_HISTORY_HEADER = "Tester feedback history:"
@@ -27,6 +32,7 @@ LEAD_REVIEW_HISTORY_HEADER = "Lead review history:"
 class TaskAggregate:
     id: str
     public_id: str
+    kind: TaskKind
     author_id: int
     chat_id: int
     title: str
@@ -55,6 +61,7 @@ class TaskAggregate:
         title: str,
         body: str,
         correlation_id: str,
+        kind: TaskKind = TaskKind.CHANGE,
         chat_id: int | None = None,
         author_username: str | None = None,
         author_display_name: str | None = None,
@@ -63,6 +70,7 @@ class TaskAggregate:
         task = cls(
             id=task_id,
             public_id=public_id,
+            kind=kind,
             author_id=author_id,
             chat_id=author_id if chat_id is None else chat_id,
             author_username=author_username,
@@ -117,6 +125,15 @@ class TaskAggregate:
             raise InvalidTransitionError(
                 f"Cannot '{action}' from status '{self.status.value}', allowed: {allowed}"
             )
+
+    def start_research(self) -> None:
+        self._ensure({TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}, "start_research")
+        self._set_status(TaskStatus.RESEARCH_RUNNING)
+
+    def mark_research_completed(self) -> None:
+        self._ensure({TaskStatus.RESEARCH_RUNNING}, "mark_research_completed")
+        self.last_error = None
+        self._set_status(TaskStatus.RESEARCH_COMPLETED)
 
     def start_codex_implement(self) -> None:
         self._ensure({TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}, "start_codex_implement")

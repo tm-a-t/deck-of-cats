@@ -16,6 +16,29 @@ class ParsedCodexResult:
 
 
 class CodexResultParser:
+    def parse_research(self, output: str) -> ParsedCodexResult:
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if not lines:
+            raise CodexResultParseError("Empty output")
+
+        result_index = self._find_last_result_line(lines)
+        block = lines[result_index:]
+        if len(block) < 4:
+            raise CodexResultParseError("Output does not contain full RESULT/SUMMARY/DETAILS block")
+
+        raw_result = self._extract_value(block[0].strip(), "RESULT:")
+        summary = self._extract_value(block[1].strip(), "SUMMARY:")
+        details = self._extract_multiline_details(block[2:])
+
+        if raw_result not in {"PASS", "FAIL"}:
+            raise CodexResultParseError(f"Unsupported RESULT value: {raw_result}")
+        if not summary:
+            raise CodexResultParseError("SUMMARY must be non-empty")
+        if not details:
+            raise CodexResultParseError("DETAILS must be non-empty")
+
+        return ParsedCodexResult(ok=raw_result == "PASS", summary=summary, details=details, changed_files=None)
+
     def parse_validate(self, output: str) -> ParsedCodexResult:
         return self._parse(output, require_changed_files=False)
 
@@ -83,3 +106,13 @@ class CodexResultParser:
         if not line.startswith(prefix):
             raise CodexResultParseError(f"Expected '{prefix}' line")
         return line.split(":", 1)[1].strip()
+
+    @classmethod
+    def _extract_multiline_details(cls, lines: list[str]) -> str:
+        first_line = lines[0].strip()
+        if first_line == "DETAILS:":
+            details_lines = [line.strip() for line in lines[1:]]
+        else:
+            details_value = cls._extract_value(first_line, "DETAILS:")
+            details_lines = [details_value, *[line.strip() for line in lines[1:]]]
+        return "\n".join(line for line in details_lines if line.strip()).strip()

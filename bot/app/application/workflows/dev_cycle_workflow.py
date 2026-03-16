@@ -4,7 +4,7 @@ from string import hexdigits
 
 from app.application.workflows.models import StepResult
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.shared.enums import StepName, TaskStatus
+from app.shared.enums import StepName, TaskKind, TaskStatus
 
 
 class DevCycleWorkflow:
@@ -12,6 +12,14 @@ class DevCycleWorkflow:
         self._auto_lead_review = auto_lead_review
 
     def next_step(self, task: TaskAggregate) -> StepName | None:
+        if task.kind == TaskKind.RESEARCH:
+            if task.status in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}:
+                task.start_research()
+                return StepName.RESEARCH
+            if task.status == TaskStatus.RESEARCH_RUNNING:
+                return StepName.RESEARCH
+            return None
+
         if task.status in {TaskStatus.NEW, TaskStatus.RETRY_SCHEDULED}:
             task.start_codex_implement()
             return StepName.CODEX_IMPLEMENT
@@ -33,6 +41,9 @@ class DevCycleWorkflow:
         result: StepResult,
         decision_ttl_seconds: int,
     ) -> None:
+        if step == StepName.RESEARCH:
+            task.mark_research_completed()
+            return
         if step == StepName.CODEX_IMPLEMENT:
             changed_files_raw = (result.metadata or {}).get("changed_files")
             changed_files = changed_files_raw if isinstance(changed_files_raw, list) else []

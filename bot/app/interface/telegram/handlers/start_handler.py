@@ -7,6 +7,7 @@ from aiogram.types import Message
 from app.interface.telegram.keyboards.main_menu_keyboard import (
     HELP_BUTTON,
     MENU_BUTTON,
+    RESEARCH_BUTTON,
     build_main_menu_keyboard,
 )
 
@@ -20,6 +21,7 @@ def build_router() -> Router:
             "Dev bot ready.\n"
             "Можешь просто писать в чат обычным текстом.\n"
             "Я сам пойму: это новая задача, запрос статуса, список задач или просьба показать логи.\n"
+            "Кнопка Research запускает отдельный обзор логов и недостающих фич.\n"
             "Кнопки внизу остаются как fallback.",
             reply_markup=build_main_menu_keyboard(),
         )
@@ -30,6 +32,7 @@ def build_router() -> Router:
         await message.answer(
             "Как пользоваться:\n"
             "• Просто напиши задачу обычным сообщением — я переведу и структурирую её для пайплайна\n"
+            f"• «{RESEARCH_BUTTON}» — запустить отдельный research-run по логам и пробелам в поведении бота\n"
             "• Напиши «какие задачи открыты», «статус T-XXXXXXX» или «логи T-XXXXXXX»\n"
             "• «➕ Новая задача» — пошаговое создание\n"
             "• «📂 Открытые задачи» — список и карточки\n"

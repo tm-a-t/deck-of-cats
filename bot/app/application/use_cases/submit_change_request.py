@@ -12,6 +12,7 @@ from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.domain.events.domain_events import DomainEvent
 from app.domain.value_objects.correlation_id import CorrelationId
 from app.domain.value_objects.task_id import TaskId
+from app.shared.enums import TaskKind
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class SubmitChangeRequestUseCase:
         chat_id: int | None,
         title: str,
         body: str,
+        task_kind: TaskKind = TaskKind.CHANGE,
         author_username: str | None = None,
         author_display_name: str | None = None,
         notify_started: bool = True,
@@ -47,6 +49,7 @@ class SubmitChangeRequestUseCase:
             task_id=task_id,
             author_id=author_id,
             chat_id=chat_id,
+            kind=task_kind,
             title=normalized_title,
             body=normalized_body,
             correlation_id=correlation_id,
@@ -62,8 +65,9 @@ class SubmitChangeRequestUseCase:
             uow.commit()
 
         logger.info(
-            "Task created task_id=%s author_id=%s chat_id=%s title=%r auto_start=%s",
+            "Task created task_id=%s kind=%s author_id=%s chat_id=%s title=%r auto_start=%s",
             task.id,
+            task.kind.value,
             task.author_id,
             task.chat_id,
             task.title,

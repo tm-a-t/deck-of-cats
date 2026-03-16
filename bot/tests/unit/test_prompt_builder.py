@@ -60,6 +60,16 @@ def test_implement_prompt_tells_developer_not_to_run_tests() -> None:
     assert '"Lead review history:"' in prompt
 
 
+def test_research_prompt_demands_analysis_without_code_changes() -> None:
+    prompt = CodexPromptBuilder().build_research_prompt(_task())
+
+    assert "running a research task" in prompt
+    assert "Do not edit files, run tests, create commits, or open PRs" in prompt
+    assert "best 3-5 ideas" in prompt or "few ideas" in prompt
+    assert "RESULT: PASS|FAIL" in prompt
+    assert "DETAILS:" in prompt
+
+
 def test_chat_agent_prompt_mentions_chat_turn_and_json_contract() -> None:
     prompt = CodexPromptBuilder().build_chat_agent_prompt(
         personality_key="chat-agent:123",
@@ -67,13 +77,13 @@ def test_chat_agent_prompt_mentions_chat_turn_and_json_contract() -> None:
         is_new_session=True,
         chat_id=123,
         user_message="Покажи мои задачи",
-        active_tasks=[{"public_id": "T-AAAA1111", "status": "NEW", "title": "Add direct chat agent"}],
+        active_tasks=[{"public_id": "T-AAAA1111", "kind": "research", "status": "NEW", "title": "Add direct chat agent"}],
     )
 
     assert "This is a new chat turn." in prompt
     assert "bot/personalities/chat-agent.md" in prompt
     assert '"action": "create_task|list_tasks|show_task|show_logs|help|reply"' in prompt
-    assert "T-AAAA1111 | NEW | Add direct chat agent" in prompt
+    assert "T-AAAA1111 | research | NEW | Add direct chat agent" in prompt
 
 
 def test_chat_agent_log_summary_prompt_requires_russian_paraphrase_without_raw_dump() -> None:

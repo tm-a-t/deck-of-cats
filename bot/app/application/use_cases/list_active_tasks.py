@@ -17,6 +17,7 @@ class ListActiveTasksUseCase:
                 {
                     "task_id": task.id,
                     "public_id": task.public_id,
+                    "kind": task.kind.value,
                     "title": task.title,
                     "status": task.status.value,
                     "updated_at": task.updated_at.isoformat(),

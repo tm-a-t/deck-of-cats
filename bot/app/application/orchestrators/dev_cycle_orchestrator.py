@@ -158,10 +158,7 @@ class DevCycleOrchestrator:
                 if should_wait_for_user_decision or final_state.status in {
                     TaskStatus.RETRY_SCHEDULED,
                     TaskStatus.FAILED,
-                    TaskStatus.DEAD_LETTER,
-                    TaskStatus.MERGED,
-                    TaskStatus.CLOSED,
-                }:
+                } or final_state.is_terminal():
                     logger.info("Task run reached terminal/waiting state task_id=%s status=%s", final_state.id, final_state.status.value)
                     await self._notifier.notify_task_finished(final_state)
                     return

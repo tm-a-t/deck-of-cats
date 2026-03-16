@@ -14,7 +14,7 @@ from app.infrastructure.notifier.null_notifier import NullNotifier
 from app.infrastructure.persistence.sqlite.lock_repository_impl import SQLiteLockRepository
 from app.infrastructure.persistence.sqlite.models import init_db
 from app.infrastructure.persistence.sqlite.uow import SqliteUnitOfWork
-from app.shared.enums import MergeDecision, StepName, TaskStatus
+from app.shared.enums import MergeDecision, StepName, TaskKind, TaskStatus
 
 
 pytestmark = pytest.mark.asyncio
@@ -35,6 +35,14 @@ class _FakeAutoDecisionUseCase:
 
     async def execute_system(self, task_id: str, decision: MergeDecision, feedback: str | None = None) -> None:
         self.calls.append((task_id, decision, feedback or ""))
+
+
+class _Notifier(NullNotifier):
+    def __init__(self) -> None:
+        self.finished: list[TaskAggregate] = []
+
+    async def notify_task_finished(self, task: TaskAggregate) -> None:
+        self.finished.append(task)
 
 
 def _task() -> TaskAggregate:
@@ -144,3 +152,51 @@ async def test_auto_lead_review_calls_system_decision_use_case(tmp_path: Path) -
     assert auto_decision.calls == [
         (task.id, MergeDecision.RERUN_TESTS, "The code is close, but not ready")
     ]
+
+
+async def test_research_task_reaches_completed_terminal_state_and_notifies(tmp_path: Path) -> None:
+    db_path = tmp_path / "bot.sqlite3"
+    uow_factory = lambda: SqliteUnitOfWork(str(db_path))
+    lock_conn = sqlite3.connect(":memory:")
+    init_db(lock_conn)
+    lock_port = SQLiteLockRepository(lock_conn)
+    notifier = _Notifier()
+
+    task = TaskAggregate.create(
+        task_id="34343434-3434-3434-3434-343434343434",
+        author_id=1,
+        title="Research the bot",
+        body="Analyze repeated failures",
+        correlation_id="corr-research",
+        kind=TaskKind.RESEARCH,
+    )
+    with uow_factory() as uow:
+        uow.tasks.add(task)
+        uow.commit()
+
+    orchestrator = DevCycleOrchestrator(
+        uow_factory=uow_factory,
+        workflow=DevCycleWorkflow(),
+        steps={
+            StepName.RESEARCH: _Step(
+                StepResult(
+                    ok=True,
+                    summary="Research completed",
+                    details="Top ideas ready",
+                )
+            ),
+        },
+        lock_port=lock_port,
+        notifier=notifier,
+        max_retries=3,
+        decision_ttl_seconds=60,
+    )
+
+    await orchestrator.run_task(task.id)
+
+    with uow_factory() as uow:
+        stored = uow.tasks.get(task.id)
+
+    assert stored is not None
+    assert stored.status == TaskStatus.RESEARCH_COMPLETED
+    assert [item.id for item in notifier.finished] == [task.id]

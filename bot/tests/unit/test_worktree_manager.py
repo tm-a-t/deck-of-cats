@@ -39,3 +39,28 @@ def test_create_links_bot_venv_into_worktree(monkeypatch, tmp_path: Path) -> Non
     target_venv = Path(worktree_path) / "bot" / ".venv"
     assert target_venv.is_symlink()
     assert target_venv.resolve() == source_venv.resolve()
+
+
+def test_create_supports_research_branch_prefix(monkeypatch, tmp_path: Path) -> None:
+    repo_path = tmp_path / "repo"
+    (repo_path / "bot").mkdir(parents=True)
+
+    def _fake_run(args, check, capture_output, text):
+        _ = check, capture_output, text
+        worktree_path = Path(args[7])
+        (worktree_path / "bot").mkdir(parents=True)
+
+        class _Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return _Result()
+
+    monkeypatch.setattr(worktree_module.subprocess, "run", _fake_run)
+
+    manager = WorktreeManager(str(repo_path), "codex-evolve")
+
+    _, branch = manager.create("abcdef12-1234-1234-1234-1234567890ab", branch_prefix="research")
+
+    assert branch == "bot/research-abcdef12"

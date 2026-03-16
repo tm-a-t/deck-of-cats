@@ -6,7 +6,7 @@ import sqlite3
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.domain.repositories.task_repository import TaskRepository
-from app.shared.enums import TaskStatus
+from app.shared.enums import TaskKind, TaskStatus
 from app.shared.errors import ConcurrencyError
 
 
@@ -18,14 +18,15 @@ class SQLiteTaskRepository(TaskRepository):
         self._conn.execute(
             """
             INSERT INTO tasks (
-                id, public_id, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
+                id, public_id, task_kind, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
                 task.public_id,
+                task.kind.value,
                 task.author_id,
                 task.chat_id,
                 task.author_username,
@@ -51,7 +52,7 @@ class SQLiteTaskRepository(TaskRepository):
         row = self._conn.execute(
             """
             SELECT
-                id, public_id, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
+                id, public_id, task_kind, author_id, chat_id, author_username, author_display_name, title, body, changed_files_json, correlation_id, status, version,
                 pr_url, pr_number, preview_url, decision_token_hash,
                 decision_expires_at, last_error, created_at, updated_at
             FROM tasks
@@ -66,24 +67,25 @@ class SQLiteTaskRepository(TaskRepository):
         return TaskAggregate(
             id=row[0],
             public_id=row[1] or TaskAggregate.derive_public_id(row[0]),
-            author_id=row[2],
-            chat_id=row[3] or row[2],
-            author_username=row[4],
-            author_display_name=row[5],
-            title=row[6],
-            body=row[7],
-            changed_files=_json_list(row[8]),
-            correlation_id=row[9],
-            status=TaskStatus(row[10]),
-            version=row[11],
-            pr_url=row[12],
-            pr_number=row[13],
-            preview_url=row[14],
-            decision_token_hash=row[15],
-            decision_expires_at=_dt(row[16]),
-            last_error=row[17],
-            created_at=_dt(row[18]) or datetime.utcnow(),
-            updated_at=_dt(row[19]) or datetime.utcnow(),
+            kind=_task_kind(row[2]),
+            author_id=row[3],
+            chat_id=row[4] or row[3],
+            author_username=row[5],
+            author_display_name=row[6],
+            title=row[7],
+            body=row[8],
+            changed_files=_json_list(row[9]),
+            correlation_id=row[10],
+            status=TaskStatus(row[11]),
+            version=row[12],
+            pr_url=row[13],
+            pr_number=row[14],
+            preview_url=row[15],
+            decision_token_hash=row[16],
+            decision_expires_at=_dt(row[17]),
+            last_error=row[18],
+            created_at=_dt(row[19]) or datetime.utcnow(),
+            updated_at=_dt(row[20]) or datetime.utcnow(),
         )
 
     def update(self, task: TaskAggregate) -> None:
@@ -96,6 +98,7 @@ class SQLiteTaskRepository(TaskRepository):
                 body = ?,
                 changed_files_json = ?,
                 public_id = ?,
+                task_kind = ?,
                 chat_id = ?,
                 author_username = ?,
                 author_display_name = ?,
@@ -115,6 +118,7 @@ class SQLiteTaskRepository(TaskRepository):
                 task.body,
                 _json(task.changed_files),
                 task.public_id,
+                task.kind.value,
                 task.chat_id,
                 task.author_username,
                 task.author_display_name,
@@ -137,13 +141,25 @@ class SQLiteTaskRepository(TaskRepository):
     def list_active(self, chat_id: int | None = None) -> list[TaskAggregate]:
         query = """
             SELECT id FROM tasks
-            WHERE status NOT IN ('MERGED', 'CLOSED', 'DEAD_LETTER')
+            WHERE status NOT IN ('RESEARCH_COMPLETED', 'MERGED', 'CLOSED', 'DEAD_LETTER')
         """
         params: tuple[object, ...] = ()
         if chat_id is not None:
             query += " AND chat_id = ?"
             params = (chat_id,)
         query += " ORDER BY updated_at DESC"
+        rows = self._conn.execute(query, params).fetchall()
+        return [task for row in rows if (task := self.get(row[0])) is not None]
+
+    def list_recent(self, limit: int, chat_id: int | None = None) -> list[TaskAggregate]:
+        safe_limit = max(1, int(limit))
+        query = "SELECT id FROM tasks"
+        params: tuple[object, ...] = ()
+        if chat_id is not None:
+            query += " WHERE chat_id = ?"
+            params = (chat_id,)
+        query += " ORDER BY updated_at DESC LIMIT ?"
+        params += (safe_limit,)
         rows = self._conn.execute(query, params).fetchall()
         return [task for row in rows if (task := self.get(row[0])) is not None]
 
@@ -194,3 +210,10 @@ def _json_list(value: str | None) -> list[str]:
     if not isinstance(parsed, list):
         return []
     return [str(item) for item in parsed if isinstance(item, str)]
+
+
+def _task_kind(value: str | None) -> TaskKind:
+    try:
+        return TaskKind(value or TaskKind.CHANGE.value)
+    except ValueError:
+        return TaskKind.CHANGE

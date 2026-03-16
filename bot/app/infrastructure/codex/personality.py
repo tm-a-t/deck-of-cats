@@ -20,6 +20,11 @@ class CodexPersonalityRegistry:
     def default(cls) -> "CodexPersonalityRegistry":
         return cls(
             {
+                StepName.RESEARCH: CodexPersonality(
+                    key="researcher",
+                    guide_path="bot/personalities/researcher.md",
+                    persist_session=True,
+                ),
                 StepName.CODEX_IMPLEMENT: CodexPersonality(
                     key="developer",
                     guide_path="bot/personalities/developer.md",

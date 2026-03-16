@@ -7,6 +7,7 @@ import pytest
 from app.application.use_cases.submit_change_request import SubmitChangeRequestUseCase
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.infrastructure.persistence.sqlite.uow import SqliteUnitOfWork
+from app.shared.enums import TaskKind
 
 
 pytestmark = pytest.mark.asyncio
@@ -64,5 +65,6 @@ async def test_submit_change_request_can_target_chat_and_autostart_without_notif
 
     assert stored is not None
     assert stored.chat_id == 99
+    assert stored.kind == TaskKind.CHANGE
     assert notifier.started == []
     assert orchestrator.calls == [task_id]

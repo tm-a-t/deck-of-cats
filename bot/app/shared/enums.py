@@ -3,8 +3,15 @@ from __future__ import annotations
 from enum import Enum
 
 
+class TaskKind(str, Enum):
+    CHANGE = "change"
+    RESEARCH = "research"
+
+
 class TaskStatus(str, Enum):
     NEW = "NEW"
+    RESEARCH_RUNNING = "RESEARCH_RUNNING"
+    RESEARCH_COMPLETED = "RESEARCH_COMPLETED"
     CODEX_IMPLEMENT_RUNNING = "CODEX_IMPLEMENT_RUNNING"
     CODEX_VALIDATE_RUNNING = "CODEX_VALIDATE_RUNNING"
     PR_CREATING = "PR_CREATING"
@@ -20,6 +27,7 @@ class TaskStatus(str, Enum):
 
 
 class StepName(str, Enum):
+    RESEARCH = "research"
     CODEX_IMPLEMENT = "codex_implement"
     CODEX_VALIDATE = "codex_validate"
     PR = "pr"

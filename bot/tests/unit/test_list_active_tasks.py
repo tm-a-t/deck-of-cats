@@ -30,6 +30,7 @@ def test_list_active_tasks_can_filter_by_chat_id(tmp_path) -> None:
     tasks = use_case.execute(chat_id=100)
 
     assert [task["public_id"] for task in tasks] == ["T-11111111"]
+    assert [task["kind"] for task in tasks] == ["change"]
     assert [task["title"] for task in tasks] == ["Chat 100 task"]
 
 

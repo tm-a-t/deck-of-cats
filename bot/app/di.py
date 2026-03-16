@@ -11,12 +11,14 @@ from aiogram import Bot
 from app.application.orchestrators.dev_cycle_orchestrator import DevCycleOrchestrator
 from app.application.ports.unit_of_work import UnitOfWork
 from app.application.use_cases.accept_merge_decision import AcceptMergeDecisionUseCase
+from app.application.use_cases.launch_research_project import LaunchResearchProjectUseCase
 from app.application.use_cases.list_active_tasks import ListActiveTasksUseCase
 from app.application.use_cases.request_task_status import RequestTaskStatusUseCase
 from app.application.use_cases.submit_change_request import SubmitChangeRequestUseCase
 from app.application.workflows.dev_cycle_workflow import DevCycleWorkflow
 from app.application.workflows.steps.codex_implement_step import CodexImplementStep
 from app.application.workflows.steps.codex_lead_review_step import CodexLeadReviewStep
+from app.application.workflows.steps.codex_research_step import CodexResearchStep
 from app.application.workflows.steps.codex_validate_step import CodexValidateStep
 from app.application.workflows.steps.decision_step import DecisionStep
 from app.application.workflows.steps.preview_step import PreviewStep
@@ -50,6 +52,7 @@ from app.shared.security import CallbackSigner
 @dataclass
 class UseCases:
     submit_change_request: SubmitChangeRequestUseCase
+    launch_research_project: LaunchResearchProjectUseCase
     request_task_status: RequestTaskStatusUseCase
     list_active_tasks: ListActiveTasksUseCase
     accept_merge_decision: AcceptMergeDecisionUseCase
@@ -161,6 +164,7 @@ def build_container(settings: Settings) -> Container:
 
     workflow = DevCycleWorkflow(auto_lead_review=settings.bot_enable_lead_autoreview)
     steps = {
+        StepName.RESEARCH: CodexResearchStep(codex_adapter),
         StepName.CODEX_IMPLEMENT: CodexImplementStep(codex_adapter),
         StepName.CODEX_VALIDATE: CodexValidateStep(codex_adapter),
         StepName.LEAD_REVIEW: CodexLeadReviewStep(codex_adapter),
@@ -199,12 +203,18 @@ def build_container(settings: Settings) -> Container:
         auto_decision_use_case=accept_merge_decision if settings.bot_enable_lead_autoreview else None,
     )
 
+    submit_change_request = SubmitChangeRequestUseCase(
+        uow_factory=uow_factory,
+        notifier=notifier,
+        orchestrator=orchestrator,
+        auto_start=settings.bot_auto_start_tasks,
+    )
+
     use_cases = UseCases(
-        submit_change_request=SubmitChangeRequestUseCase(
+        submit_change_request=submit_change_request,
+        launch_research_project=LaunchResearchProjectUseCase(
             uow_factory=uow_factory,
-            notifier=notifier,
-            orchestrator=orchestrator,
-            auto_start=settings.bot_auto_start_tasks,
+            submit_change_request=submit_change_request,
         ),
         request_task_status=RequestTaskStatusUseCase(uow_factory=uow_factory),
         list_active_tasks=ListActiveTasksUseCase(uow_factory=uow_factory),

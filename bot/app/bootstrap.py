@@ -6,6 +6,7 @@ from app.di import Container
 from app.interface.telegram.bot_factory import build_dispatcher
 from app.interface.telegram.handlers.chat_agent_handler import build_router as build_chat_agent_router
 from app.interface.telegram.handlers.decision_handler import build_router as build_decision_router
+from app.interface.telegram.handlers.research_handler import build_router as build_research_router
 from app.interface.telegram.handlers.start_handler import build_router as build_start_router
 from app.interface.telegram.handlers.status_handler import build_router as build_status_router
 from app.interface.telegram.handlers.task_handler import build_router as build_task_router
@@ -17,6 +18,7 @@ def build_app_dispatcher(container: Container) -> Dispatcher:
 
     dispatcher.include_router(build_start_router())
     dispatcher.include_router(build_task_router(container.use_cases.submit_change_request))
+    dispatcher.include_router(build_research_router(container.use_cases.launch_research_project))
     dispatcher.include_router(
         build_status_router(
             container.use_cases.list_active_tasks,

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.shared.enums import TaskStatus
+from app.shared.enums import TaskKind, TaskStatus
 
 
 STATUS_LABELS: dict[TaskStatus, str] = {
     TaskStatus.NEW: "NEW",
+    TaskStatus.RESEARCH_RUNNING: "RUNNING",
+    TaskStatus.RESEARCH_COMPLETED: "DONE",
     TaskStatus.CODEX_IMPLEMENT_RUNNING: "RUNNING",
     TaskStatus.CODEX_VALIDATE_RUNNING: "RUNNING",
     TaskStatus.PR_CREATING: "RUNNING",
@@ -23,6 +25,8 @@ STATUS_LABELS: dict[TaskStatus, str] = {
 
 CURRENT_STEP_LABELS: dict[TaskStatus, str] = {
     TaskStatus.NEW: "ожидает запуска",
+    TaskStatus.RESEARCH_RUNNING: "research",
+    TaskStatus.RESEARCH_COMPLETED: "research завершён",
     TaskStatus.CODEX_IMPLEMENT_RUNNING: "codex implement",
     TaskStatus.CODEX_VALIDATE_RUNNING: "codex validate",
     TaskStatus.PR_CREATING: "создание PR",
@@ -46,25 +50,28 @@ def short_title(value: str, limit: int = 46) -> str:
 
 def render_task_list_row(task: dict[str, str]) -> str:
     public_id = task.get("public_id") or task.get("task_id", "")[:8]
+    kind = task.get("kind", "")
     status = task.get("status", "-")
     title = short_title(task.get("title", ""))
-    return f"{public_id} · {status} · {title}"
+    prefix = "🔎 " if kind == TaskKind.RESEARCH.value else ""
+    return f"{prefix}{public_id} · {status} · {title}"
 
 
 def render_task_card(task: TaskAggregate) -> str:
     status_label = STATUS_LABELS.get(task.status, task.status.value)
     current = CURRENT_STEP_LABELS.get(task.status, task.status.value)
-    pr_value = task.pr_url or "еще не создан"
-    preview_value = task.preview_url or "еще не готов"
+    header = "🔎 Research" if task.kind == TaskKind.RESEARCH else "🧩 Задача"
 
     lines = [
-        f"🧩 Задача {task.public_id} · {status_label}",
+        f"{header} {task.public_id} · {status_label}",
         short_title(task.title, limit=96),
         "",
         f"Сейчас: {current}",
-        f"PR: {pr_value}",
-        f"Preview: {preview_value}",
     ]
+    if task.kind != TaskKind.RESEARCH:
+        pr_value = task.pr_url or "еще не создан"
+        preview_value = task.preview_url or "еще не готов"
+        lines.extend([f"PR: {pr_value}", f"Preview: {preview_value}"])
     if task.last_error:
         lines.append(f"Ошибка: {short_title(task.last_error, limit=180)}")
     lines.append(f"Обновлено: {task.updated_at.strftime('%Y-%m-%d %H:%M:%S')} UTC")

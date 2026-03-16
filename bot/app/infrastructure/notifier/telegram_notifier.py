@@ -5,7 +5,7 @@ from aiogram import Bot
 from app.domain.aggregates.task_aggregate import TaskAggregate
 from app.interface.telegram.keyboards.decision_keyboard import build_decision_request_keyboard
 from app.interface.telegram.presenters.task_card import render_task_card
-from app.shared.enums import TaskStatus
+from app.shared.enums import TaskKind, TaskStatus
 from app.shared.security import CallbackSigner
 
 
@@ -19,10 +19,11 @@ class TelegramNotifier:
         return task.chat_id or task.author_id
 
     async def notify_task_started(self, task: TaskAggregate) -> None:
+        noun = "Research-задача" if task.kind == TaskKind.RESEARCH else "Задача"
         await self._bot.send_message(
             chat_id=self._target_chat_id(task),
             text=(
-                f"🆕 Задача создана: {task.public_id}\n"
+                f"🆕 {noun} создана: {task.public_id}\n"
                 f"{task.title}\n"
                 "Открой «📂 Открытые задачи» и выбери карточку."
             ),
@@ -51,7 +52,9 @@ class TelegramNotifier:
 
     async def notify_task_finished(self, task: TaskAggregate) -> None:
         status_line = f"ℹ️ Статус задачи {task.public_id}: {task.status.value}"
-        if task.status == TaskStatus.MERGED:
+        if task.status == TaskStatus.RESEARCH_COMPLETED:
+            status_line = f"🔎 Research {task.public_id} завершён"
+        elif task.status == TaskStatus.MERGED:
             status_line = f"✅ Задача {task.public_id} завершена (merged)"
         elif task.status == TaskStatus.CLOSED:
             status_line = f"🛑 Задача {task.public_id} закрыта"

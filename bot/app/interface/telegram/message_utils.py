@@ -5,6 +5,7 @@ from app.interface.telegram.keyboards.main_menu_keyboard import (
     MENU_BUTTON,
     NEW_TASK_BUTTON,
     OPEN_TASKS_BUTTON,
+    RESEARCH_BUTTON,
 )
 
 
@@ -13,8 +14,9 @@ SYSTEM_MENU_TEXTS = {
     HELP_BUTTON,
     MENU_BUTTON,
     NEW_TASK_BUTTON,
+    RESEARCH_BUTTON,
 }
-SYSTEM_MENU_COMMANDS = ("/tasks", "/active", "/status", "/task", "/start", "/help", "/new")
+SYSTEM_MENU_COMMANDS = ("/tasks", "/active", "/status", "/task", "/start", "/help", "/new", "/research")
 
 
 def is_command_message(text: str, command: str) -> bool:

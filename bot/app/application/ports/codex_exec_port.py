@@ -7,6 +7,9 @@ from app.domain.aggregates.task_aggregate import TaskAggregate
 
 
 class CodexExecPort(Protocol):
+    async def research(self, task: TaskAggregate) -> StepResult:
+        ...
+
     async def implement(self, task: TaskAggregate) -> StepResult:
         ...
 

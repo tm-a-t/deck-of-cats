@@ -11,6 +11,7 @@ from app.infrastructure.codex.personality_store import JsonPersonalityStore
 from app.infrastructure.codex.prompt_builder import CodexPromptBuilder
 from app.infrastructure.codex.result_parser import CodexResultParser
 from app.infrastructure.execution.process_runner import ProcessResult
+from app.shared.enums import TaskKind
 
 
 pytestmark = pytest.mark.asyncio
@@ -47,9 +48,9 @@ class _FakeRunner:
 
 
 class _FakeWorktreeManager:
-    def create(self, task_id: str) -> tuple[str, str]:
+    def create(self, task_id: str, branch_prefix: str = "task") -> tuple[str, str]:
         _ = task_id
-        return ("/tmp/codex-worktree", "bot/task-55555555")
+        return ("/tmp/codex-worktree", f"bot/{branch_prefix}-55555555")
 
 
 def _implement_json(session_id: str) -> str:
@@ -92,6 +93,16 @@ def _lead_review_json(session_id: str) -> str:
     )
 
 
+def _research_json(session_id: str) -> str:
+    return "\n".join(
+        [
+            f'{{"type":"thread.started","thread_id":"{session_id}"}}',
+            '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"RESULT: PASS\\nSUMMARY: Research completed\\nDETAILS:\\nProblems:\\n- The bot hides the root cause.\\nMissing features:\\n- Add a research button."}}',
+            '{"type":"turn.completed"}',
+        ]
+    )
+
+
 async def test_implement_starts_new_developer_personality_and_persists_session(tmp_path: Path) -> None:
     store = JsonPersonalityStore(str(tmp_path / "agent_personalities.json"))
     runner = _FakeRunner(stdout=_implement_json("session-dev-1"))
@@ -128,6 +139,41 @@ async def test_implement_starts_new_developer_personality_and_persists_session(t
     assert "This is a new task." in prompt
     assert "bot/personalities/developer.md" in prompt
     assert "read and follow this guide exactly" in prompt
+
+
+async def test_research_uses_researcher_personality_and_research_branch_prefix(tmp_path: Path) -> None:
+    store = JsonPersonalityStore(str(tmp_path / "agent_personalities.json"))
+    runner = _FakeRunner(stdout=_research_json("session-research-1"))
+    adapter = CodexCliAdapter(
+        runner=runner,
+        worktree_manager=_FakeWorktreeManager(),
+        prompt_builder=CodexPromptBuilder(),
+        result_parser=CodexResultParser(),
+        timeout_seconds=30,
+        personality_registry=CodexPersonalityRegistry.default(),
+        personality_store=store,
+    )
+    task = TaskAggregate.create(
+        task_id="77777777-7777-7777-7777-777777777777",
+        author_id=1,
+        title="Research the bot",
+        body="Analyze behavior gaps and missing features",
+        correlation_id="corr-research",
+        kind=TaskKind.RESEARCH,
+    )
+
+    result = await adapter.research(task)
+
+    stored = store.get("researcher")
+    assert stored is not None
+    assert stored.session_id == "session-research-1"
+    assert result.ok is True
+    assert result.metadata is not None
+    assert result.metadata["personality_key"] == "researcher"
+    assert result.metadata["branch"] == "bot/research-55555555"
+    prompt = runner.calls[0]["args"][4]
+    assert "bot/personalities/researcher.md" in prompt
+    assert "running a research task" in prompt
 
 
 async def test_implement_resumes_existing_developer_personality(tmp_path: Path) -> None:

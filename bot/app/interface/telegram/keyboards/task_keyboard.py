@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.shared.enums import TaskStatus
+from app.shared.enums import TaskKind, TaskStatus
 
 
 def build_task_list_keyboard(
@@ -15,9 +15,11 @@ def build_task_list_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     for item in items:
         public_id = item.get("public_id", "")
+        kind = item.get("kind", "")
         title = item.get("title", "")
         status = item.get("status", "")
-        text = f"{public_id} · {status} · {title}"
+        prefix = "🔎 " if kind == TaskKind.RESEARCH.value else ""
+        text = f"{prefix}{public_id} · {status} · {title}"
         if len(text) > 58:
             text = text[:57] + "…"
         rows.append([InlineKeyboardButton(text=text, callback_data=f"task|{public_id}|open")])

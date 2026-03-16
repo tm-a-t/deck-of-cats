@@ -13,8 +13,9 @@ class WorktreeManager:
         self._runtime_root = self._repo_path / "bot" / "runtime" / "worktrees"
         self._runtime_root.mkdir(parents=True, exist_ok=True)
 
-    def create(self, task_id: str) -> tuple[str, str]:
-        branch = f"bot/task-{task_id[:8]}"
+    def create(self, task_id: str, branch_prefix: str = "task") -> tuple[str, str]:
+        normalized_prefix = (branch_prefix or "task").strip().lower().replace(" ", "-")
+        branch = f"bot/{normalized_prefix}-{task_id[:8]}"
         worktree_path = self._runtime_root / task_id
 
         if not worktree_path.exists():

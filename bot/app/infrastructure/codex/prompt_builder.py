@@ -53,6 +53,32 @@ class CodexPromptBuilder:
             """
         ).strip()
 
+    def build_research_prompt(self, task: TaskAggregate) -> str:
+        return textwrap.dedent(
+            f"""
+            You are running a research task for this repository and Telegram bot workflow.
+            Task ID: {task.id}
+            Title: {task.title}
+            Research request:
+            {task.body}
+
+            Requirements:
+            - Treat the task body and embedded task/log excerpts as the primary evidence set.
+            - Read repository files when needed to verify the true root cause behind repeated bot mistakes.
+            - Do not edit files, run tests, create commits, or open PRs.
+            - Focus on two outputs:
+              1. Where the bot/agent pipeline behaves incorrectly and what behavior should change.
+              2. Which product/workflow features are missing and which few ideas would help most.
+            - Prioritize concrete, high-leverage recommendations over broad brainstorming.
+            - Return the final answer strictly in the format below.
+
+            RESULT: PASS|FAIL
+            SUMMARY: <one line>
+            DETAILS:
+            <multi-line research report with concrete recommendations>
+            """
+        ).strip()
+
     def build_chat_agent_prompt(
         self,
         personality_key: str,
@@ -242,9 +268,11 @@ class CodexPromptBuilder:
         lines = []
         for item in active_tasks[:20]:
             public_id = item.get("public_id", "").strip() or "<unknown>"
+            kind = item.get("kind", "").strip()
             status = item.get("status", "").strip() or "<unknown>"
             title = item.get("title", "").strip() or "<untitled>"
-            lines.append(f"- {public_id} | {status} | {title}")
+            prefix = f"{kind} | " if kind else ""
+            lines.append(f"- {public_id} | {prefix}{status} | {title}")
         return "\n".join(lines)
 
     @staticmethod

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain.aggregates.task_aggregate import TaskAggregate
-from app.shared.enums import MergeDecision, TaskStatus
+from app.shared.enums import MergeDecision, TaskKind, TaskStatus
 
 
 def test_task_aggregate_happy_path() -> None:
@@ -95,3 +95,21 @@ def test_task_aggregate_lead_rework_finalization_schedules_retry() -> None:
     assert task.status == TaskStatus.RETRY_SCHEDULED
     assert "Lead review history:" in task.body
     assert "Lead says the code still misses an important edge case" in task.body
+
+
+def test_research_task_can_complete_without_pr_flow() -> None:
+    task = TaskAggregate.create(
+        task_id="dddddddd-dddd-dddd-dddd-dddddddddddd",
+        author_id=1,
+        title="Research title",
+        body="Research body",
+        correlation_id="corr",
+        kind=TaskKind.RESEARCH,
+    )
+
+    task.start_research()
+    task.mark_research_completed()
+
+    assert task.kind == TaskKind.RESEARCH
+    assert task.status == TaskStatus.RESEARCH_COMPLETED
+    assert task.is_terminal() is True
