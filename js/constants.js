@@ -2,7 +2,108 @@
    PIRATES — Constants & Pirate Definitions
    ============================================================ */
 
-const BG_COLOR = '#0d1b2a';
+const UI_THEME = {
+  colors: {
+    gameBg: '#220e09',
+    sand: '#e5c9ae',
+    sandEdge: '#d6ab7d',
+    sandBorder: '#b3895d',
+    cocoa: '#734f38',
+    cocoaDark: '#5b3d2b',
+    ink: '#482919',
+    paper: '#efe9e4',
+    mutedPaper: '#dcccbf',
+    outline: '#8e6346',
+    disabled: '#bfa68e',
+    shadow: '#170804',
+  },
+  fonts: {
+    heading: '"Amarante", Georgia, serif',
+    headingMinPx: 16,
+    body: '"Lora", Georgia, serif',
+    bodyPx: 14,
+  },
+};
+
+const BG_COLOR = UI_THEME.colors.gameBg;
+
+function uiColorInt(hex) {
+  return Phaser.Display.Color.HexStringToColor(hex).color;
+}
+
+function uiLineSpacingPx(L, fontPx, lineHeightPx) {
+  return Math.round(Math.max(0, lineHeightPx - fontPx) * L.k);
+}
+
+function uiHeadingStyle(L, px, color = UI_THEME.colors.paper, extra = {}) {
+  const headingPx = Math.max(UI_THEME.fonts.headingMinPx, px);
+  return Object.assign({
+    fontFamily: UI_THEME.fonts.heading,
+    fontSize: L.fs(headingPx),
+    color,
+    lineSpacing: uiLineSpacingPx(L, headingPx, headingPx),
+  }, extra);
+}
+
+function uiBodyStyle(L, color = UI_THEME.colors.paper, extra = {}) {
+  return Object.assign({
+    fontFamily: UI_THEME.fonts.body,
+    fontSize: L.fs(UI_THEME.fonts.bodyPx),
+    color,
+    lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 16),
+  }, extra);
+}
+
+function handCardsTopY(L) {
+  return L.Y_HAND_CENTER - 198 * L.k * 0.45;
+}
+
+function makeUiPill(scene, cfg = {}) {
+  const L = cfg.L || scene.L;
+  const style = Object.assign(
+    {},
+    uiHeadingStyle(L, cfg.textPx || 16, cfg.textColor || UI_THEME.colors.paper),
+    cfg.textStyle || {}
+  );
+  const label = scene.add.text(0, cfg.textOffsetY || 0, cfg.label || '', style).setOrigin(0.5);
+  const padX = cfg.padX != null ? cfg.padX : 20 * L.k;
+  const padY = cfg.padY != null ? cfg.padY : 12 * L.k;
+  const width = Math.max(cfg.minW || 0, label.width + padX * 2);
+  const height = Math.max(cfg.minH || 0, label.height + padY * 2);
+  const radius = cfg.radius != null ? cfg.radius : height / 2;
+  const fillAlpha = cfg.fillAlpha != null ? cfg.fillAlpha : 1;
+  const strokeAlpha = cfg.strokeAlpha != null ? cfg.strokeAlpha : 1;
+  const strokeWidth = cfg.strokeWidth != null ? cfg.strokeWidth : Math.max(1, Math.round(2 * L.k));
+
+  const bg = scene.add.graphics();
+  const draw = (fill, stroke) => {
+    bg.clear();
+    if (fill) {
+      bg.fillStyle(uiColorInt(fill), fillAlpha);
+      bg.fillRoundedRect(-width / 2, -height / 2, width, height, radius);
+    }
+    if (stroke) {
+      bg.lineStyle(strokeWidth, uiColorInt(stroke), strokeAlpha);
+      bg.strokeRoundedRect(-width / 2, -height / 2, width, height, radius);
+    }
+  };
+
+  draw(cfg.fill || UI_THEME.colors.cocoa, cfg.stroke || null);
+
+  const ct = scene.add.container(cfg.x || 0, cfg.y || 0, [bg, label]);
+  ct.setSize(width, height);
+  ct.width = width;
+  ct.height = height;
+  ct.uiBg = bg;
+  ct.uiLabel = label;
+  ct.setPillStyle = ({ fill, stroke, textColor }) => {
+    draw(fill || null, stroke || null);
+    if (textColor) label.setColor(textColor);
+  };
+
+  if (cfg.container) cfg.container.add(ct);
+  return ct;
+}
 
 const RES_EMOJI = { wood: '🪵', stone: '🪨', gold: '🪙', map: '🗺️', enthusiasm: '☠️' };
 

@@ -119,7 +119,7 @@ function initTutorialState() {
       shop: [],
       hints: {
         sending: 'Send 2 pirates for resources',
-        shopping: 'Tap Next turn',
+        shopping: 'Continue to shop',
       },
     },
     {
@@ -135,7 +135,7 @@ function initTutorialState() {
       hints: {
         sending: 'Send 2 pirates for resources',
         ship: 'Nice! You got the expected loot.',
-        shopping: 'Tap Next turn',
+        shopping: 'Continue to shop',
       },
     },
     {
@@ -175,7 +175,7 @@ function initTutorialState() {
       hints: {
         sending: 'Send 2 pirates; keep your new pirate on ship',
         ship: 'Use ship skills from your bought pirate',
-        shopping: 'Tap Next turn',
+        shopping: 'Continue to shop',
       },
     },
     {

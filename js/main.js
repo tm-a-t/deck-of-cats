@@ -66,8 +66,11 @@ function patchHiDpiText(resolution) {
   }
 }
 
+let isSyncingCanvasResolution = false;
+
 function syncCanvasResolution(game) {
   if (!game || !game.canvas || !game.renderer || !game.scale) return;
+  if (isSyncingCanvasResolution) return;
 
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const vp = (typeof resolveViewportSize === 'function')
@@ -80,8 +83,23 @@ function syncCanvasResolution(game) {
 
   if (!renderWidth || !renderHeight) return;
 
-  game.scale.setZoom(1 / dpr);
-  game.scale.resize(renderWidth, renderHeight);
+  const targetZoom = 1 / dpr;
+  const needsZoom = Math.abs((game.scale.zoom || 0) - targetZoom) > 0.0001;
+  const needsResize = game.scale.width !== renderWidth || game.scale.height !== renderHeight;
+
+  if (!needsZoom && !needsResize) return;
+
+  isSyncingCanvasResolution = true;
+  try {
+    if (needsZoom) {
+      game.scale.setZoom(targetZoom);
+    }
+    if (needsResize) {
+      game.scale.resize(renderWidth, renderHeight);
+    }
+  } finally {
+    isSyncingCanvasResolution = false;
+  }
 
   const scenes = (game.scene && Array.isArray(game.scene.scenes)) ? game.scene.scenes : [];
   for (const scene of scenes) {
@@ -127,50 +145,64 @@ function applyViewportMode() {
   };
 }
 
-applyViewportMode();
-window.addEventListener('resize', applyViewportMode);
-window.addEventListener('orientationchange', applyViewportMode);
+function bootPhaserGame() {
+  applyViewportMode();
+  window.addEventListener('resize', applyViewportMode);
+  window.addEventListener('orientationchange', applyViewportMode);
 
-const dpr = Math.max(1, window.devicePixelRatio || 1);
-const initialViewport = (typeof resolveViewportSize === 'function')
-  ? resolveViewportSize(window.innerWidth || 0, window.innerHeight || 0)
-  : { w: window.innerWidth || 0, h: window.innerHeight || 0 };
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const initialViewport = (typeof resolveViewportSize === 'function')
+    ? resolveViewportSize(window.innerWidth || 0, window.innerHeight || 0)
+    : { w: window.innerWidth || 0, h: window.innerHeight || 0 };
 
-patchHiDpiText(dpr);
+  patchHiDpiText(dpr);
 
-const phaserGame = new Phaser.Game({
-  type: Phaser.AUTO,
-  antialias: true,
-  roundPixels: false,
-  resolution: dpr,
-  scale: {
-    parent: 'game',
-    mode: Phaser.Scale.NONE,
-    width: Math.round((initialViewport.w || 0) * dpr),
-    height: Math.round((initialViewport.h || 0) * dpr),
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    autoRound: true,
-    zoom: 1 / dpr,
-  },
-  scene: [MenuScene, GameScene, MapScene, ShopScene, CostumesScene, AllPiratesScene],
-});
+  const phaserGame = new Phaser.Game({
+    type: Phaser.AUTO,
+    antialias: true,
+    roundPixels: false,
+    resolution: dpr,
+    scale: {
+      parent: 'game',
+      mode: Phaser.Scale.NONE,
+      width: Math.round((initialViewport.w || 0) * dpr),
+      height: Math.round((initialViewport.h || 0) * dpr),
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      autoRound: true,
+      zoom: 1 / dpr,
+    },
+    scene: [MenuScene, GameScene, MapScene, ShopScene, DrawPileScene, DiscardPileScene, CostumesScene, AllPiratesScene],
+  });
 
-phaserGame.scale.on('resize', () => {
-  syncCanvasResolution(phaserGame);
-});
+  window.addEventListener('resize', () => {
+    syncCanvasResolution(phaserGame);
+  });
 
-window.addEventListener('resize', () => {
-  syncCanvasResolution(phaserGame);
-});
+  window.addEventListener('orientationchange', () => {
+    syncCanvasResolution(phaserGame);
+  });
 
-window.addEventListener('orientationchange', () => {
-  syncCanvasResolution(phaserGame);
-});
+  requestAnimationFrame(() => {
+    syncCanvasResolution(phaserGame);
+  });
 
-requestAnimationFrame(() => {
-  syncCanvasResolution(phaserGame);
-});
-
-if (typeof window !== 'undefined') {
-  window.__PHASER_GAME__ = phaserGame;
+  if (typeof window !== 'undefined') {
+    window.__PHASER_GAME__ = phaserGame;
+  }
 }
+
+function waitForUiFonts() {
+  if (!document.fonts || typeof document.fonts.load !== 'function') {
+    return Promise.resolve();
+  }
+
+  return Promise.allSettled([
+    document.fonts.load('64px "Amarante"'),
+    document.fonts.load('14px "Lora"'),
+    document.fonts.ready,
+  ]).then(() => undefined);
+}
+
+waitForUiFonts().finally(() => {
+  bootPhaserGame();
+});

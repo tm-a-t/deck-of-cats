@@ -6,7 +6,7 @@ class MenuScene extends Phaser.Scene {
   constructor() { super('menu'); }
 
   create() {
-    this.cameras.main.setBackgroundColor(BG_COLOR);
+    this.cameras.main.setBackgroundColor(UI_THEME.colors.sand);
     this.L = computeLayout(this.scale.width, this.scale.height);
 
     this.root = this.add.container(0, 0);
@@ -26,71 +26,44 @@ class MenuScene extends Phaser.Scene {
   renderMenu() {
     const L = this.L;
 
-    const title = this.add.text(L.cx, L.H * 0.22, 'Deck of Cats', {
-      fontFamily: 'monospace',
-      fontSize: L.fsPx(72),
-      color: '#d7c08f',
-      stroke: '#31220f',
-      strokeThickness: 8 * L.k,
-    }).setOrigin(0.5);
+    const titleY = L.H * 0.46;
+    const title = this.add.text(L.cx, titleY, 'Deck of Cats', uiHeadingStyle(L, 64, UI_THEME.colors.ink, {
+      align: 'center',
+      wordWrap: { width: Math.min(L.W - 72 * L.k, 560 * L.k) },
+    })).setOrigin(0.5, 1);
     this.root.add(title);
 
-    const sub = this.add.text(L.cx, L.H * 0.29, 'Deck Builder', {
-      fontFamily: 'monospace',
-      fontSize: L.fsPx(30),
-      color: '#9fc3e0',
-    }).setOrigin(0.5);
-    this.root.add(sub);
+    const playY = titleY + 74 * L.k;
+    this.mkBtn(L.cx, playY, 'Play', () => this.startGame(), {
+      minW: 160 * L.k,
+      minH: 66 * L.k,
+    });
 
-    const ship = this.add.text(L.cx, L.H * 0.38, '🚢 ☠️ ⚓', {
-      fontFamily: 'monospace',
-      fontSize: L.fsPx(40),
-      color: '#ffffff',
-    }).setOrigin(0.5);
-    this.root.add(ship);
-
-    const startY = L.H * 0.54;
-    const gap = 90 * L.k;
-    this.mkBtn(L.cx, startY, 'Start', () => this.startGame(), {
-      bg: '#1e4535',
-      hoverBg: '#2a6545',
-      color: '#d7f0d7',
-    });
-    this.mkBtn(L.cx, startY + gap, 'Tutorial', () => this.startTutorial(), {
-      bg: '#2b3f52',
-      hoverBg: '#35536f',
-      color: '#d1e4f8',
-    });
-    this.mkBtn(L.cx, startY + gap * 2, 'Costumes', () => this.scene.start('costumes'), {
-      bg: '#3b2b42',
-      hoverBg: '#553d5f',
-      color: '#e4d1f8',
-    });
-    this.mkBtn(L.cx, startY + gap * 3, 'All Pirates', () => this.scene.start('allPirates'), {
-      bg: '#42352b',
-      hoverBg: '#5f4d35',
-      color: '#f8ddd1',
+    const links = [
+      { label: 'Tutorial', cb: () => this.startTutorial() },
+      { label: 'Costumes', cb: () => this.scene.start('costumes') },
+      { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
+    ];
+    const linksY = playY + 82 * L.k;
+    links.forEach((item, idx) => {
+      const link = this.add.text(L.cx, linksY + idx * 28 * L.k, item.label, uiBodyStyle(L, UI_THEME.colors.cocoa, {
+        fontStyle: idx === 0 ? 'bold' : 'normal',
+      })).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      link.on('pointerover', () => link.setColor(UI_THEME.colors.ink));
+      link.on('pointerout', () => link.setColor(UI_THEME.colors.cocoa));
+      link.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        item.cb();
+      });
+      this.root.add(link);
     });
 
     const streak = getStreak();
     const streakLabel = `Streak: ${streak} day${streak !== 1 ? 's' : ''}`;
-    const streakTxt = this.add.text(L.cx, L.H * 0.44, streakLabel, {
-      fontFamily: 'monospace',
-      fontSize: L.fsPx(22),
-      color: streak >= 7 ? '#ffd740' : streak >= 3 ? '#ffab40' : '#8da0b3',
-    }).setOrigin(0.5);
+    const streakTxt = this.add.text(L.cx, L.H - 54 * L.k, streakLabel, uiBodyStyle(L, UI_THEME.colors.cocoa))
+      .setOrigin(0.5)
+      .setAlpha(0.85);
     this.root.add(streakTxt);
-
-    const hint = this.add.text(L.cx, L.H * 0.82,
-      'Hire pirates, arm your ship, and win boardings',
-      {
-        fontFamily: 'monospace',
-        fontSize: L.fsPx(20),
-        color: '#8da0b3',
-        wordWrap: { width: L.W - 80 * L.k },
-        align: 'center',
-      }).setOrigin(0.5);
-    this.root.add(hint);
   }
 
   startGame() {
@@ -124,19 +97,26 @@ class MenuScene extends Phaser.Scene {
   }
 
   mkBtn(x, y, label, cb, opts = {}) {
-    const L = this.L;
-    const bg = opts.bg || '#1e4535';
-    const hoverBg = opts.hoverBg || '#2a6545';
-    const color = opts.color || '#d7f0d7';
-    const btn = this.add.text(x, y, label, {
-      fontFamily: 'monospace',
-      fontSize: L.fsPx(30),
-      color,
-      backgroundColor: bg,
-      padding: { x: 42 * L.k, y: 18 * L.k },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: bg }));
+    const btn = makeUiPill(this, {
+      x,
+      y,
+      label,
+      L: this.L,
+      minW: opts.minW,
+      minH: opts.minH,
+      fill: opts.bg || UI_THEME.colors.cocoa,
+      textColor: opts.color || UI_THEME.colors.paper,
+      textPx: opts.textPx || 24,
+    }).setInteractive({ useHandCursor: true });
+    const hoverFill = opts.hoverBg || UI_THEME.colors.cocoaDark;
+    btn.on('pointerover', () => btn.setPillStyle({
+      fill: hoverFill,
+      textColor: opts.color || UI_THEME.colors.paper,
+    }));
+    btn.on('pointerout', () => btn.setPillStyle({
+      fill: opts.bg || UI_THEME.colors.cocoa,
+      textColor: opts.color || UI_THEME.colors.paper,
+    }));
     btn.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
       cb();

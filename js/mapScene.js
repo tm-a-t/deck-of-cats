@@ -30,6 +30,13 @@ class MapScene extends Phaser.Scene {
     this.scrollToCurrentLayer(false);
     this.animateOpen();
 
+    this.input.on('pointerdown', (ptr) => {
+      if (ptr.y > this.panel.h) {
+        ptr.event.stopPropagation();
+        this.scene.stop();
+      }
+    });
+
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
       this.scene.restart();
@@ -44,7 +51,7 @@ class MapScene extends Phaser.Scene {
     const offset = 30 * this.L.k;
     [this.panelLayer, this.mapGfx, this.uiLayer].forEach(c => {
       const origY = c.y;
-      c.setAlpha(0).setY(origY + offset);
+      c.setAlpha(0).setY(origY - offset);
       this.tweens.add({
         targets: c,
         alpha: 1, y: origY,
@@ -56,13 +63,12 @@ class MapScene extends Phaser.Scene {
 
   computePanel() {
     const L = this.L;
-    const sidePad = 18 * L.k;
-    const top = L.Y_INV + 56 * L.k;
-    const bottom = L.Y_HAND - 112 * L.k;
-    const w = L.W - sidePad * 2;
-    const h = Math.max(300 * L.k, bottom - top);
-    const x = sidePad;
-    const y = top;
+    const handTop = handCardsTopY(L);
+    const maxH = Math.min(L.H * 0.64, handTop - 16 * L.k);
+    const h = Math.max(320 * L.k, maxH);
+    const x = 0;
+    const y = 0;
+    const w = L.W;
     const pad = L.MAP_PANEL_PAD;
     const headH = L.MAP_HEAD_H;
     const footH = L.MAP_FOOT_H;
@@ -81,17 +87,17 @@ class MapScene extends Phaser.Scene {
     const L = this.L;
     const m = this.panel;
 
-    const paper = this.add.graphics();
-    paper.fillStyle(0xd9c9a2, 1);
-    paper.fillRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
-    paper.lineStyle(3, 0x6a5838, 1);
-    paper.strokeRoundedRect(m.x, m.y, m.w, m.h, 18 * L.k);
-    this.panelLayer.add(paper);
+    const shadow = this.add.graphics();
+    shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.18);
+    shadow.fillRect(m.x, m.h - 10 * L.k, m.w, 20 * L.k);
+    this.panelLayer.add(shadow);
 
-    const sep = this.add.graphics();
-    sep.lineStyle(2, 0x8c7850, 1);
-    sep.lineBetween(m.x + 16 * L.k, m.y + m.headH, m.x + m.w - 16 * L.k, m.y + m.headH);
-    this.panelLayer.add(sep);
+    const paper = this.add.graphics();
+    paper.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
+    paper.fillRect(m.x, m.y, m.w, m.h);
+    paper.lineStyle(Math.max(1, 3 * L.k), uiColorInt(UI_THEME.colors.sandEdge), 1);
+    paper.lineBetween(m.x, m.h, m.w, m.h);
+    this.panelLayer.add(paper);
   }
 
   // ──────────── MAP GRAPH ────────────
@@ -121,6 +127,8 @@ class MapScene extends Phaser.Scene {
     const available = new Set(getAvailableNodes(map));
     const visited = new Set(map.visited);
     const selecting = G.phase === 'map';
+    const activePath = uiColorInt(UI_THEME.colors.cocoa);
+    const dimPath = uiColorInt(UI_THEME.colors.outline);
 
     const pathGfx = this.add.graphics();
     this.mapGfx.add(pathGfx);
@@ -152,7 +160,7 @@ class MapScene extends Phaser.Scene {
         : (visited.has(node.id) || node.id === map.currentNodeId);
       pathGfx.lineStyle(
         isActive ? 3 : 2,
-        isActive ? 0x5588aa : 0x1e3040,
+        isActive ? activePath : dimPath,
         1
       );
       pathGfx.beginPath();
@@ -172,7 +180,7 @@ class MapScene extends Phaser.Scene {
             || (visited.has(node.id) && visited.has(connId));
           pathGfx.lineStyle(
             isActive ? 3 : 2,
-            isActive ? 0x5588aa : 0x1e3040,
+            isActive ? activePath : dimPath,
             1
           );
           pathGfx.beginPath();
@@ -200,39 +208,38 @@ class MapScene extends Phaser.Scene {
         const g = this.add.graphics();
 
         if (isCurrent) {
-          g.fillStyle(0x44aadd, 1);
+          g.fillStyle(uiColorInt(UI_THEME.colors.sandEdge), 1);
           g.fillCircle(nx, ny, r + 8);
         }
 
         if (isAvail) {
-          g.fillStyle(0x33aaff, 1);
+          g.fillStyle(uiColorInt(UI_THEME.colors.cocoa), 1);
           g.fillCircle(nx, ny, r + 6);
         }
 
         if (isShip) {
-          g.fillStyle(isFinal ? 0x8a2020 : 0x3a1010, 1);
+          g.fillStyle(uiColorInt(isFinal ? UI_THEME.colors.cocoa : UI_THEME.colors.cocoaDark), 1);
           g.fillCircle(nx, ny, r);
           if (isFinal) {
-            g.lineStyle(3, 0xff4444, 1);
+            g.lineStyle(3, uiColorInt(UI_THEME.colors.ink), 1);
             g.strokeCircle(nx, ny, r + 4);
           }
         } else {
-          const island = ISLANDS[node.islandIdx];
-          g.fillStyle(island.accent, 1);
+          g.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
           g.fillCircle(nx, ny, r);
         }
 
         if (isAvail) {
-          g.lineStyle(3, 0x44ddff, 1);
+          g.lineStyle(3, uiColorInt(UI_THEME.colors.ink), 1);
           g.strokeCircle(nx, ny, r);
         } else if (isCurrent) {
-          g.lineStyle(3, 0x44aadd, 1);
+          g.lineStyle(3, uiColorInt(UI_THEME.colors.ink), 1);
           g.strokeCircle(nx, ny, r);
         } else if (isVisited) {
-          g.lineStyle(2, 0x334455, 1);
+          g.lineStyle(2, uiColorInt(UI_THEME.colors.cocoa), 1);
           g.strokeCircle(nx, ny, r);
         } else {
-          g.lineStyle(2, 0x1e3040, 1);
+          g.lineStyle(2, uiColorInt(UI_THEME.colors.sandBorder), 1);
           g.strokeCircle(nx, ny, r);
         }
 
@@ -241,18 +248,18 @@ class MapScene extends Phaser.Scene {
         // Emoji label
         const emoji = isShip ? '🏴‍☠️' : ISLANDS[node.islandIdx].emoji;
         const label = this.add.text(nx, ny, emoji, {
-          fontFamily: 'monospace',
-          fontSize: L.UI_FS,
-          color: '#ffffff',
+          fontFamily: UI_THEME.fonts.heading,
+          fontSize: L.fs(24),
+          color: isShip ? UI_THEME.colors.paper : UI_THEME.colors.ink,
         }).setOrigin(0.5);
         this.mapGfx.add(label);
 
         // Ship strength label
         if (isShip) {
           const strTxt = this.add.text(nx, ny + r + 8, node.strength + '⚔️', {
-            fontFamily: 'monospace',
-            fontSize: L.UI_FS,
-            color: '#ff8a80',
+            fontFamily: UI_THEME.fonts.body,
+            fontSize: L.fs(14),
+            color: UI_THEME.colors.ink,
           }).setOrigin(0.5, 0);
           this.mapGfx.add(strTxt);
         }
@@ -260,9 +267,9 @@ class MapScene extends Phaser.Scene {
         // Layer number (small, to the side)
         if (ni === 0) {
           const layerNum = this.add.text(this.panel.innerX + 8, ny, '' + (li + 1), {
-            fontFamily: 'monospace',
-            fontSize: L.UI_FS,
-            color: '#69532f',
+            fontFamily: UI_THEME.fonts.body,
+            fontSize: L.fs(14),
+            color: UI_THEME.colors.ink,
           }).setOrigin(0, 0.5);
           this.mapGfx.add(layerNum);
         }
@@ -286,26 +293,26 @@ class MapScene extends Phaser.Scene {
       const g = this.add.graphics();
 
       if (startIsCurrent) {
-        g.fillStyle(0x44aadd, 1);
+        g.fillStyle(uiColorInt(UI_THEME.colors.sandEdge), 1);
         g.fillCircle(startX, startY, r + 8);
       }
 
-      g.fillStyle(0x3070a0, 1);
+      g.fillStyle(uiColorInt(UI_THEME.colors.cocoa), 1);
       g.fillCircle(startX, startY, r);
 
       if (startIsCurrent) {
-        g.lineStyle(3, 0x44aadd, 1);
+        g.lineStyle(3, uiColorInt(UI_THEME.colors.ink), 1);
       } else {
-        g.lineStyle(2, 0x334455, 1);
+        g.lineStyle(2, uiColorInt(UI_THEME.colors.sandBorder), 1);
       }
       g.strokeCircle(startX, startY, r);
 
       this.mapGfx.add(g);
 
       const label = this.add.text(startX, startY, '🚢', {
-        fontFamily: 'monospace',
-        fontSize: L.UI_FS,
-        color: '#ffffff',
+        fontFamily: UI_THEME.fonts.heading,
+        fontSize: L.fs(24),
+        color: UI_THEME.colors.paper,
       }).setOrigin(0.5);
       this.mapGfx.add(label);
     }
@@ -314,11 +321,16 @@ class MapScene extends Phaser.Scene {
   renderHeader() {
     const L = this.L;
     const m = this.panel;
-    const selecting = G.phase === 'map';
-    this.uiTxt(m.x + m.w / 2, m.y + 14 * L.k,
-      selecting ? 'Map - choose destination' : 'Map - route preview',
-      { fontSize: L.fs(24), color: '#2b2b2b' });
-
+    const title = this.add.text(28 * L.k, 32 * L.k, 'Map', uiHeadingStyle(L, 40, UI_THEME.colors.ink))
+      .setOrigin(0, 0);
+    const close = this.add.text(m.w - 28 * L.k, 32 * L.k, '×', uiHeadingStyle(L, 40, UI_THEME.colors.ink))
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true });
+    close.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      this.scene.stop();
+    });
+    this.uiLayer.add([title, close]);
   }
 
   // ──────────── SCROLLING ────────────
@@ -424,9 +436,7 @@ class MapScene extends Phaser.Scene {
   // ──────────── HELPERS ────────────
 
   uiTxt(x, y, str, style) {
-    const L = this.L;
-    const base = { fontFamily: 'monospace', fontSize: L.fs(24), color: '#2b2b2b' };
-    const t = this.add.text(x, y, str, Object.assign(base, style)).setOrigin(0.5, 0);
+    const t = this.add.text(x, y, str, Object.assign(uiBodyStyle(this.L, UI_THEME.colors.ink), style)).setOrigin(0.5, 0);
     this.uiLayer.add(t);
     return t;
   }

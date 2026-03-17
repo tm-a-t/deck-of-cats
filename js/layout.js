@@ -2,11 +2,13 @@
    PIRATES — Dynamic Layout
    ============================================================ */
 
-const REF_W = 960;
-const REF_H = 1440;
-const UI_SCALE_BOOST = 1.20;
-const CHARACTER_SCALE_BOOST = 1.45;
-const BASE_TEXT_SIZE_FROM_PIRATES = 30;
+const REF_W = 400;
+const REF_H = 800;
+const UI_SCALE_BOOST = 1.0;
+const MIN_UI_SCALE = 1.0;
+const MAX_UI_SCALE = 3.2;
+const CHARACTER_SCALE_BOOST = 1.55;
+const BASE_TEXT_SIZE_FROM_PIRATES = 32;
 
 function resolveViewportSize(fallbackW, fallbackH) {
   let w = fallbackW || 0;
@@ -35,19 +37,23 @@ function isPortraitMobile(w, h) {
 
 function computeLayout(w, h) {
   const isMobile = isPortraitMobile(w, h);
-  const k = Math.min(w / REF_W, h / REF_H) * UI_SCALE_BOOST;
+  const rawScale = Math.min(w / REF_W, h / REF_H) * UI_SCALE_BOOST;
+  const k = Math.max(MIN_UI_SCALE, Math.min(MAX_UI_SCALE, rawScale));
+  const fontPx = (px = BASE_TEXT_SIZE_FROM_PIRATES) => `${Math.round(px * k)}px`;
   const narrowContentShiftY = isMobile ? 120 * k : 0;
-  const handBaseOffset = isMobile ? 380 : 240;
-  const navBaseOffset = 50;
-  const uniformFontPx = (BASE_TEXT_SIZE_FROM_PIRATES * k) + 'px';
+  const handNavBaseOffset = 50;
+  const navBaseOffset = 26;
   const centerY = h * 0.43;
-  const handY = h - handBaseOffset * k;
   const yPhase = centerY + 194 * k - narrowContentShiftY;
-  const yDiv2Raw = handY - 136 * k - (isMobile ? 200 * k : 0);
-  const yDiv2 = Math.max(yDiv2Raw, yPhase + 24 * k);
   const yNav = h - navBaseOffset * k;
-  const handShipSpace = yNav - yPhase;
-  const yHandCenter = yPhase + handShipSpace * 0.6;
+  const handShipSpace = (h - handNavBaseOffset * k) - yPhase;
+  const handFooterClearance = 60 * k;
+  const handHalfH = 198 * k * 0.55;
+  const footerAnchoredHandCenter = yNav - handFooterClearance - handHalfH;
+  const flowHandCenter = yPhase + handShipSpace * 0.4;
+  const yHandCenter = Math.max(footerAnchoredHandCenter, flowHandCenter);
+  const yDiv2Raw = yHandCenter - 136 * k - (isMobile ? 200 * k : 0);
+  const yDiv2 = Math.max(yDiv2Raw, yPhase + 24 * k);
   const yShipRow = yPhase + handShipSpace * 0.82;
   return {
     W: w, H: h, k,
@@ -62,17 +68,17 @@ function computeLayout(w, h) {
     Y_ISL_LBL: centerY + 140 * k - narrowContentShiftY,
     Y_PHASE:   yPhase,
     Y_DIV2:    yDiv2,
-    Y_HAND:    handY - 60 * k,
-    Y_HLBL:    handY - 60 * k + 54 * k,
+    Y_HAND:    yHandCenter,
+    Y_HLBL:    yHandCenter + 54 * k,
     Y_HAND_CENTER: yHandCenter,
     Y_SHIP_ROW: yShipRow,
     Y_NAV:     yNav,
     NARROW_HAND_SPLIT: isMobile,
     SC:    10 * k * CHARACTER_SCALE_BOOST,
     SC_SM: 5 * k * CHARACTER_SCALE_BOOST,
-    UI_FS: uniformFontPx,
-    fs: () => uniformFontPx,
-    fsPx: () => uniformFontPx,
+    UI_FS: fontPx(BASE_TEXT_SIZE_FROM_PIRATES),
+    fs: (px = BASE_TEXT_SIZE_FROM_PIRATES) => fontPx(px),
+    fsPx: (px = BASE_TEXT_SIZE_FROM_PIRATES) => fontPx(px),
 
     // Map panel layout
     MAP_PANEL_PAD:  24 * k,

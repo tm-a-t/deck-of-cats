@@ -21,10 +21,9 @@ class GameScene extends Phaser.Scene {
     if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
 
     this.ct = {};
-    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'tip', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
+    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
       this.ct[k] = this.add.container(0, 0);
     });
-    this.ct.tip.setDepth(100).setVisible(false);
     this.ct.fx.setDepth(50);
     this.ct.tutorialHint.setDepth(170).setVisible(false);
     this.ct.tutorial.setDepth(180).setVisible(false);
@@ -37,23 +36,12 @@ class GameScene extends Phaser.Scene {
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
 
-    this._tipRect = null;
-    this._tipJustOpened = false;
     this._tutorialPopupOpen = false;
     this._tutorialHintTimer = null;
     this._mapPanelOpen = false;
     this._shopPanelOpen = false;
-    this.input.on('pointerdown', (ptr) => {
-      if (this._tipJustOpened) {
-        this._tipJustOpened = false;
-        return;
-      }
-      if (this.ct.tip.visible) {
-        if (!this._tipRect || !this._tipRect.contains(ptr.x, ptr.y)) {
-          this.ct.tip.setVisible(false);
-        }
-      }
-    });
+    this._drawPilePanelOpen = false;
+    this._discardPilePanelOpen = false;
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
@@ -61,24 +49,36 @@ class GameScene extends Phaser.Scene {
     };
     this.scale.on('resize', this._onResize);
 
-    this._onMapPanelShutdown = () => {
-      this._mapPanelOpen = false;
-      this.renderNav();
+    this._panelShutdownHandlers = {
+      map: () => {
+        this._mapPanelOpen = false;
+        this.refreshPanelUi();
+      },
+      shopModal: () => {
+        this._shopPanelOpen = false;
+        this.refreshPanelUi();
+      },
+      drawPileModal: () => {
+        this._drawPilePanelOpen = false;
+        this.refreshPanelUi();
+      },
+      discardPileModal: () => {
+        this._discardPilePanelOpen = false;
+        this.refreshPanelUi();
+      },
     };
-    this._onShopPanelShutdown = () => {
-      this._shopPanelOpen = false;
-      this.renderNav();
-    };
-    this.scene.get('map').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onMapPanelShutdown);
-    this.scene.get('shopModal').events.on(Phaser.Scenes.Events.SHUTDOWN, this._onShopPanelShutdown);
+    Object.entries(this._panelShutdownHandlers).forEach(([key, handler]) => {
+      this.scene.get(key).events.on(Phaser.Scenes.Events.SHUTDOWN, handler);
+    });
 
     if (window.PokiBridge) {
       window.PokiBridge.markGameReady();
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
-      this.scene.get('map').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onMapPanelShutdown);
-      this.scene.get('shopModal').events.off(Phaser.Scenes.Events.SHUTDOWN, this._onShopPanelShutdown);
+      Object.entries(this._panelShutdownHandlers || {}).forEach(([key, handler]) => {
+        this.scene.get(key).events.off(Phaser.Scenes.Events.SHUTDOWN, handler);
+      });
       if (this._cardHand) this._cardHand.destroy();
       if (window.PokiBridge) window.PokiBridge.gameplayStop();
     });
@@ -284,37 +284,27 @@ class GameScene extends Phaser.Scene {
     const y = 28 * L.k;
 
     const bg = this.add.graphics();
-    bg.fillStyle(0x112336, 0.96);
+    bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 0.98);
     bg.fillRoundedRect(x, y, w, h, 16 * L.k);
-    bg.lineStyle(3 * L.k, 0x5f91b6, 1);
+    bg.lineStyle(3 * L.k, uiColorInt(UI_THEME.colors.cocoa), 1);
     bg.strokeRoundedRect(x, y, w, h, 16 * L.k);
     this.addTo('tutorialHint', bg);
 
-    const title = this.add.text(x + 22 * L.k, y + 16 * L.k, copy.title, {
-      fontFamily: 'monospace',
-      fontSize: L.fs(24),
-      color: '#ffe082',
-    }).setOrigin(0, 0);
+    const title = this.add.text(x + 22 * L.k, y + 16 * L.k, copy.title, uiHeadingStyle(L, 24, UI_THEME.colors.ink))
+      .setOrigin(0, 0);
     this.addTo('tutorialHint', title);
 
-    const body = this.add.text(x + 22 * L.k, y + 56 * L.k, copy.body.join('\n'), {
-      fontFamily: 'monospace',
-      fontSize: L.fs(20),
-      color: '#d6e5f3',
-      lineSpacing: 10 * L.k,
+    const body = this.add.text(x + 22 * L.k, y + 56 * L.k, copy.body.join('\n'), uiBodyStyle(L, UI_THEME.colors.ink, {
+      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 18),
       wordWrap: { width: w - 84 * L.k },
-    }).setOrigin(0, 0);
+    })).setOrigin(0, 0);
     this.addTo('tutorialHint', body);
 
-    const close = this.add.text(x + w - 14 * L.k, y + 12 * L.k, '✕', {
-      fontFamily: 'monospace',
-      fontSize: L.fs(22),
-      color: '#8eb3cf',
-      backgroundColor: '#112336',
-      padding: { x: 6 * L.k, y: 3 * L.k },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    close.on('pointerover', () => close.setStyle({ color: '#c1d8ea' }));
-    close.on('pointerout', () => close.setStyle({ color: '#8eb3cf' }));
+    const close = this.add.text(x + w - 14 * L.k, y + 12 * L.k, '✕', uiHeadingStyle(L, 22, UI_THEME.colors.ink))
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true });
+    close.on('pointerover', () => close.setColor(UI_THEME.colors.cocoa));
+    close.on('pointerout', () => close.setColor(UI_THEME.colors.ink));
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
       this.closeTutorialHint();
@@ -364,38 +354,40 @@ class GameScene extends Phaser.Scene {
     this.addTo('tutorial', shadow);
 
     const paper = this.add.graphics();
-    paper.fillStyle(0x1a2534, 1);
+    paper.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
     paper.fillRoundedRect(x, y, w, h, 22 * L.k);
-    paper.lineStyle(4, 0xd6b36d, 1);
+    paper.lineStyle(4, uiColorInt(UI_THEME.colors.cocoa), 1);
     paper.strokeRoundedRect(x, y, w, h, 22 * L.k);
     this.addTo('tutorial', paper);
 
-    const title = this.add.text(L.cx, y + 24 * L.k, copy.title, {
-      fontFamily: 'monospace',
-      fontSize: L.fs(32),
-      color: '#ffd78a',
-    }).setOrigin(0.5, 0);
+    const title = this.add.text(L.cx, y + 24 * L.k, copy.title, uiHeadingStyle(L, 32, UI_THEME.colors.ink))
+      .setOrigin(0.5, 0);
     this.addTo('tutorial', title);
 
-    const body = this.add.text(x + 34 * L.k, y + 94 * L.k, copy.body.join('\n'), {
-      fontFamily: 'monospace',
-      fontSize: L.fs(22),
-      color: '#d8e2ef',
-      lineSpacing: 14 * L.k,
+    const body = this.add.text(x + 34 * L.k, y + 94 * L.k, copy.body.join('\n'), uiBodyStyle(L, UI_THEME.colors.ink, {
+      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 20),
       wordWrap: { width: w - 68 * L.k },
-    }).setOrigin(0, 0);
+    })).setOrigin(0, 0);
     this.addTo('tutorial', body);
 
-    const btn = this.add.text(L.cx, y + h - 72 * L.k, '[ Got it ]', {
-      fontFamily: 'monospace',
-      fontSize: L.fs(24),
-      color: '#d9f1db',
-      backgroundColor: '#264f38',
-      padding: { x: 24 * L.k, y: 12 * L.k },
-    }).setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#35714e' }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#264f38' }));
+    const btn = makeUiPill(this, {
+      x: L.cx,
+      y: y + h - 72 * L.k,
+      label: 'Got it',
+      L,
+      minW: 140 * L.k,
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+      textPx: 18,
+    }).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setPillStyle({
+      fill: UI_THEME.colors.cocoaDark,
+      textColor: UI_THEME.colors.paper,
+    }));
+    btn.on('pointerout', () => btn.setPillStyle({
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+    }));
     btn.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
       this.closeTutorialPopup();
@@ -489,7 +481,7 @@ class GameScene extends Phaser.Scene {
         requiredSent: 2,
         hints: {
           sending: 'Send 2 pirates',
-          shopping: 'Tap Next turn',
+          shopping: 'Continue to shop',
         },
       },
       {
@@ -501,7 +493,7 @@ class GameScene extends Phaser.Scene {
         requiredSent: 2,
         hints: {
           sending: 'Send 2 pirates',
-          shopping: 'Tap Next turn',
+          shopping: 'Continue to shop',
         },
       },
       {
@@ -528,7 +520,7 @@ class GameScene extends Phaser.Scene {
         forcedMismatch: { cardRef: 'L3', res: 'gold', n: 1, targetRes: 'wood' },
         hints: {
           sending: `Send 2 pirates; keep ${featuredName} on ship`,
-          shopping: 'Tap Next turn',
+          shopping: 'Continue to shop',
         },
       },
       {
@@ -748,7 +740,6 @@ class GameScene extends Phaser.Scene {
     this._sacrificedIds.clear();
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
-    this.ct.tip.setVisible(false);
     this.closeTutorialHint();
 
     if (Array.isArray(turn.shop)) {
@@ -789,7 +780,6 @@ class GameScene extends Phaser.Scene {
 
     if (!opts.deferRender) {
       this.renderAll();
-      if (G.phase === 'shopping') this.openShopPanel();
       this.maybeShowTurnStartTutorialPopup(cur);
     }
   }
@@ -835,8 +825,6 @@ class GameScene extends Phaser.Scene {
     this._sacrificedIds.clear();
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
-    this.ct.tip.setVisible(false);
-
     if (node.type === 'ship') {
       G.boardingCount++;
       G.phase = 'boarding';
@@ -871,7 +859,7 @@ class GameScene extends Phaser.Scene {
   }
 
   panelSceneKeys() {
-    return ['map', 'shopModal'];
+    return ['map', 'shopModal', 'drawPileModal', 'discardPileModal'];
   }
 
   closePanels(exceptKey = null) {
@@ -880,48 +868,85 @@ class GameScene extends Phaser.Scene {
       if (!this.scene.isActive(key)) return;
       if (key === 'map') this._mapPanelOpen = false;
       if (key === 'shopModal') this._shopPanelOpen = false;
+      if (key === 'drawPileModal') this._drawPilePanelOpen = false;
+      if (key === 'discardPileModal') this._discardPilePanelOpen = false;
       this.scene.stop(key);
     });
   }
 
+  panelFlagKey(sceneKey) {
+    const map = {
+      map: '_mapPanelOpen',
+      shopModal: '_shopPanelOpen',
+      drawPileModal: '_drawPilePanelOpen',
+      discardPileModal: '_discardPilePanelOpen',
+    };
+    return map[sceneKey] || null;
+  }
+
+  setPanelOpen(sceneKey, isOpen) {
+    const flagKey = this.panelFlagKey(sceneKey);
+    if (flagKey) this[flagKey] = !!isOpen;
+    this.refreshPanelUi();
+  }
+
+  refreshPanelUi() {
+    if (!this.sys || !this.sys.isActive()) return;
+    this.renderPhase();
+    this.renderBtn();
+    this.renderNav();
+  }
+
+  openPanel(sceneKey) {
+    if (this.isTutorialPopupOpen()) return;
+    this.closePanels(sceneKey);
+    if (this.scene.isActive(sceneKey)) return;
+    this.scene.launch(sceneKey);
+    this.scene.bringToTop(sceneKey);
+    this.setPanelOpen(sceneKey, true);
+  }
+
   openMapPanel() {
     if (this.isTutorial()) return;
-    this.closePanels('map');
-    if (this.scene.isActive('map')) return;
-    this.scene.launch('map');
-    this.scene.bringToTop('map');
-    this._mapPanelOpen = true;
-    this.renderNav();
+    this.openPanel('map');
   }
 
   openShopPanel() {
-    if (this.isTutorialPopupOpen()) return;
-    this.closePanels('shopModal');
-    if (this.scene.isActive('shopModal')) return;
-    this.scene.launch('shopModal');
-    this.scene.bringToTop('shopModal');
-    this._shopPanelOpen = true;
-    this.renderNav();
+    this.openPanel('shopModal');
+  }
+
+  openDrawPilePanel() {
+    this.openPanel('drawPileModal');
+  }
+
+  openDiscardPilePanel() {
+    this.openPanel('discardPileModal');
   }
 
   toggleMapPanel() {
-    if (this._mapPanelOpen) {
-      this._mapPanelOpen = false;
-      this.scene.stop('map');
-      this.renderNav();
-      return;
-    }
-    this.openMapPanel();
+    if (this.isTutorial()) return;
+    this.togglePanel('map');
   }
 
   toggleShopPanel() {
-    if (this._shopPanelOpen) {
-      this._shopPanelOpen = false;
-      this.scene.stop('shopModal');
-      this.renderNav();
+    this.togglePanel('shopModal');
+  }
+
+  toggleDrawPilePanel() {
+    this.togglePanel('drawPileModal');
+  }
+
+  toggleDiscardPilePanel() {
+    this.togglePanel('discardPileModal');
+  }
+
+  togglePanel(sceneKey) {
+    if (this.scene.isActive(sceneKey)) {
+      this.setPanelOpen(sceneKey, false);
+      this.scene.stop(sceneKey);
       return;
     }
-    this.openShopPanel();
+    this.openPanel(sceneKey);
   }
 
   maxSend() {
@@ -932,8 +957,37 @@ class GameScene extends Phaser.Scene {
 
   sentOffsetX(si) {
     const m = this.maxSend();
-    const sp = this.L && this.L.IS_MOBILE ? 130 : 110;
-    return (si - (m - 1) / 2) * sp;
+    if (!this.L || m <= 1) return 0;
+    const L = this.L;
+    const cardW = CARD.W * this.sentCardScale() * L.k;
+    const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
+    const maxStep = (outlineW - cardW) / Math.max(m - 1, 1);
+    const desiredStep = cardW + 8 * L.k;
+    const step = Math.max(0, Math.min(desiredStep, maxStep));
+    return (si - (m - 1) / 2) * step;
+  }
+
+  islandCenterY() {
+    const L = this.L;
+    return Math.min(L.Y_ISL_CY, L.H * (L.IS_MOBILE ? 0.34 : 0.37));
+  }
+
+  sentCardScale() {
+    return 1;
+  }
+
+  sentCardRotation(si) {
+    return 0;
+  }
+
+  sentCardPlacement(si) {
+    const L = this.L;
+    return {
+      x: L.cx + this.sentOffsetX(si),
+      y: this.islandCenterY() - 22 * L.k,
+      rotation: this.sentCardRotation(si),
+      scale: this.sentCardScale(),
+    };
   }
 
   sendToIsland(idx, fromPos) {
@@ -941,7 +995,6 @@ class GameScene extends Phaser.Scene {
     if (G.phase !== 'sending') return;
     if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
 
-    this.ct.tip.setVisible(false);
     const p = G.hand[idx];
     const def = TYPES[p.type];
     const L = this.L;
@@ -971,8 +1024,9 @@ class GameScene extends Phaser.Scene {
 
     const fromX = fromPos ? fromPos.x : handPos.x;
     const fromY = fromPos ? fromPos.y : handPos.y;
-    const toX = L.cx + this.sentOffsetX(G.sent.length - 1) * L.k;
-    const toY = L.Y_ISL_CY;
+    const placement = this.sentCardPlacement(G.sent.length - 1);
+    const toX = placement.x;
+    const toY = placement.y;
 
     const { texKey: sendTex } = buildCardTexture(this, p.type, L);
     const ghost = this.add.image(fromX, fromY, sendTex);
@@ -983,8 +1037,8 @@ class GameScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: ghost, x: toX, y: toY,
-      displayWidth: cardStartW * 0.5, displayHeight: cardStartH * 0.5,
-      rotation: -0.1 + Math.random() * 0.2,
+      displayWidth: cardStartW * placement.scale, displayHeight: cardStartH * placement.scale,
+      rotation: placement.rotation,
       duration: 350, ease: 'Power2',
       onComplete: () => {
         ghost.destroy();
@@ -1204,6 +1258,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
     this._pendingEndSending = false;
+    this.closePanels();
     if (this.isTutorial()) {
       const requiredSent = this.tutorialRequiredSent(this.getTutorialTurn());
       if (G.sent.length < requiredSent) {
@@ -1214,7 +1269,6 @@ class GameScene extends Phaser.Scene {
     }
     G.phase = 'ship';
     G.busy = true;
-    this.ct.tip.setVisible(false);
     this._shipResolvedSet = new Set();
 
     this._shipQueue = [];
@@ -1239,17 +1293,10 @@ class GameScene extends Phaser.Scene {
             if (G.enthusiasm < needed) G.enthusiasm = needed;
           }
         }
+        this.closePanels();
         G.phase = 'shopping';
         G.busy = false;
         this.renderAll();
-        if (!this.isTutorial() && !this.canAffordAnyShopPirate()) {
-          this.time.delayedCall(120, () => {
-            if (G.phase !== 'shopping' || G.busy || this.isTutorial()) return;
-            this.advanceFromShopping();
-          });
-          return;
-        }
-        this.openShopPanel();
         if (this.isTutorial() && this.getTutorialCurrentTurn() === 3) {
           this.showTutorialHint('turn3_shop_hint');
         }
@@ -1262,6 +1309,8 @@ class GameScene extends Phaser.Scene {
     const pirate = G.hand[hi];
     const def = TYPES[pirate.type];
     const L = this.L;
+    const shipEffectSuccessColor = '#177C05';
+    const shipEffectFailColor = '#CE2E25';
 
     this._cardHand.highlightShipCard(hi, true);
 
@@ -1285,21 +1334,21 @@ class GameScene extends Phaser.Scene {
       G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
       G.deck = G.deck.filter(p => p.id !== pirate.id);
       G.discard = G.discard.filter(p => p.id !== pirate.id);
-      this._cardHand.showShipEffectOverlay(hi, '💀 Lost!', '#c060ff');
+      this._cardHand.showShipEffectOverlay(hi, '💀 Lost!', shipEffectSuccessColor);
       resolveAndContinue(600);
       return;
     }
 
     if (def.ship && def.ship.removeFromDeck) {
       if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
-        this._cardHand.showShipEffectOverlay(hi, '—', '#546e7a');
+        this._cardHand.showShipEffectOverlay(hi, '—', shipEffectFailColor);
         resolveAndContinue(500);
         return;
       }
       const handIds = new Set(G.hand.map(p => p.id));
       const targets = G.allCrew.filter(p => !handIds.has(p.id));
       if (targets.length === 0) {
-        this._cardHand.showShipEffectOverlay(hi, 'No one to exile', '#ffa726');
+        this._cardHand.showShipEffectOverlay(hi, 'No one to exile', shipEffectFailColor);
         resolveAndContinue(500);
         return;
       }
@@ -1307,7 +1356,7 @@ class GameScene extends Phaser.Scene {
         G.res[def.ship.cRes] -= def.ship.cN;
         this.animateResourceSpend(x, y, [{ emoji: RES_EMOJI[def.ship.cRes], count: def.ship.cN }]);
       }
-      this._cardHand.showShipEffectOverlay(hi, 'Exile a pirate!', '#ff8a80');
+      this._cardHand.showShipEffectOverlay(hi, 'Exile a pirate!', shipEffectSuccessColor);
       this.time.delayedCall(500, () => {
         this._cardHand.highlightShipCard(hi, false);
         this._shipResolvedSet.add(hi);
@@ -1319,7 +1368,7 @@ class GameScene extends Phaser.Scene {
     }
 
     if (!def.ship) {
-      this._cardHand.showShipEffectOverlay(hi, '—', '#546e7a');
+      this._cardHand.showShipEffectOverlay(hi, '—', shipEffectFailColor);
       resolveAndContinue(500);
       return;
     }
@@ -1354,7 +1403,7 @@ class GameScene extends Phaser.Scene {
     } else {
       msg = '—';
     }
-    this._cardHand.showShipEffectOverlay(hi, msg, r.ok ? '#80cbc4' : '#546e7a');
+    this._cardHand.showShipEffectOverlay(hi, msg, r.ok ? shipEffectSuccessColor : shipEffectFailColor);
     let spendDuration = 0;
     if (r.ok) {
       const spendItems = [];
@@ -1397,11 +1446,10 @@ class GameScene extends Phaser.Scene {
     G.discard = G.discard.filter(p => p.id !== pirateId);
 
     const L = this.L;
-    this.float(L.cx, L.Y_INV + 20 * L.k, '💀 Exiled!', '#ff8a80');
+    this.float(L.cx, this.inventoryLayout().rowY - 10 * L.k, '💀 Exiled!', '#ff8a80');
 
     G.phase = 'ship';
     G.busy = true;
-    this.ct.tip.setVisible(false);
     this.renderAll();
     this.processNextShip();
   }
@@ -1500,7 +1548,6 @@ class GameScene extends Phaser.Scene {
       G.shop.push(randomShopType(G.round));
     }
     if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
-    this.ct.tip.setVisible(false);
     G.shopAnimating = false;
     if (opts.deferRender) return;
     this.renderAll();
@@ -1509,11 +1556,17 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  canAffordAnyShopPirate() {
-    return G.shop.some((type) => {
-      const def = TYPES[type];
-      return def && def.cost != null && G.enthusiasm >= def.cost;
-    });
+  handleShoppingContinue() {
+    if (this.isTutorial()) {
+      this.ensureTutorialFlow();
+      const turn = this.getTutorialTurn();
+      const needFeatured = !!(turn && turn.requireFeaturedPurchase);
+      if (needFeatured && !(G.tutorial.featured && G.tutorial.featured.bought)) {
+        this.float(this.L.cx, this.L.Y_ISL_CY - 40 * this.L.k, `Buy ${this.tutorialFeaturedName()} to continue`, '#ffa726');
+        return;
+      }
+    }
+    this.advanceFromShopping();
   }
 
   advanceFromShopping() {
@@ -1546,7 +1599,6 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
-    this.ct.tip.setVisible(false);
     G.hand = drawCards(5);
     this.enterMapPhase();
   }
@@ -1563,8 +1615,6 @@ class GameScene extends Phaser.Scene {
     }
     if (G.phase !== 'boarding' || G.busy) return;
     G.busy = true;
-    this.ct.tip.setVisible(false);
-
     const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
     const totalStr = crewStr + this.shipBonusStr();
     const shipStr = G.enemyShip.strength;
@@ -1577,8 +1627,6 @@ class GameScene extends Phaser.Scene {
         G.busy = false;
         G.discard.push(...G.hand);
         G.hand = [];
-        this.ct.tip.setVisible(false);
-
         if (G.map.currentLayer >= MAP_LAYERS - 1) {
           this.showVictory();
           return;
@@ -1601,7 +1649,6 @@ class GameScene extends Phaser.Scene {
   resolveTutorialBoarding() {
     if (G.phase !== 'boarding' || G.busy) return;
     G.busy = true;
-    this.ct.tip.setVisible(false);
     const L = this.L;
     const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
     const totalStr = crewStr + this.shipBonusStr();
@@ -1643,21 +1690,28 @@ class GameScene extends Phaser.Scene {
     });
     this.addTo('gameover', overlay);
 
-    this.txt('gameover', L.cx, L.H * 0.28, 'Tutorial Complete',
-      { fontSize: L.fs(44), color: '#ffd740' });
+    this.addTo('gameover', this.add.text(L.cx, L.H * 0.28, 'Tutorial Complete',
+      uiHeadingStyle(L, 40, UI_THEME.colors.paper)).setOrigin(0.5, 0));
     this.txt('gameover', L.cx, L.H * 0.38,
       'You won the scripted boarding fight on turn 5.',
-      { fontSize: L.fs(24), color: '#b0b8c8' });
+      { color: UI_THEME.colors.mutedPaper });
     this.txt('gameover', L.cx, L.H * 0.44,
       'Start a real run and build your own deck.',
-      { fontSize: L.fs(24), color: '#a0d0a0' });
+      { color: UI_THEME.colors.mutedPaper });
 
-    const btn = this.add.text(L.cx, L.H * 0.56, '[ Start Real Game ]', {
-      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    const btn = makeUiPill(this, {
+      x: L.cx,
+      y: L.H * 0.56,
+      label: 'Start Real Game',
+      L,
+      minW: 220 * L.k,
+      minH: 56 * L.k,
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+      textPx: 18,
+    }).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
+    btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
       this.closePanels();
@@ -1679,24 +1733,31 @@ class GameScene extends Phaser.Scene {
     overlay.fillRect(0, 0, L.W, L.H);
     this.addTo('gameover', overlay);
 
-    this.txt('gameover', L.cx, L.H * 0.32, '☠️ DEFEATED ☠️',
-      { fontSize: L.fs(48), color: '#ff5252' });
+    this.addTo('gameover', this.add.text(L.cx, L.H * 0.32, 'Defeated',
+      uiHeadingStyle(L, 44, '#ff8a80')).setOrigin(0.5, 0));
     this.txt('gameover', L.cx, L.H * 0.40,
       `Survived ${G.round} rounds  ·  ${G.boardingCount} boarding${G.boardingCount !== 1 ? 's' : ''}`,
-      { fontSize: L.fs(26), color: '#b0b8c8' });
+      { color: UI_THEME.colors.mutedPaper });
 
     const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
     const totalStr = crewStr + this.shipBonusStr();
     this.txt('gameover', L.cx, L.H * 0.46,
       `Your crew ${totalStr}⚔️  vs  Enemy ${G.enemyShip.strength}⚔️`,
-      { fontSize: L.fs(24), color: '#ff8a80' });
+      { color: '#ff8a80' });
 
-    const btn = this.add.text(L.cx, L.H * 0.56, '[ Try Again ]', {
-      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    const btn = makeUiPill(this, {
+      x: L.cx,
+      y: L.H * 0.56,
+      label: 'Try Again',
+      L,
+      minW: 180 * L.k,
+      minH: 56 * L.k,
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+      textPx: 18,
+    }).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
+    btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
       this.closePanels();
@@ -1718,14 +1779,14 @@ class GameScene extends Phaser.Scene {
     overlay.fillRect(0, 0, L.W, L.H);
     this.addTo('gameover', overlay);
 
-    this.txt('gameover', L.cx, L.H * 0.28, '🏆 VICTORY! 🏆',
-      { fontSize: L.fs(48), color: '#ffd740' });
+    this.addTo('gameover', this.add.text(L.cx, L.H * 0.28, 'Victory!',
+      uiHeadingStyle(L, 44, UI_THEME.colors.paper)).setOrigin(0.5, 0));
     this.txt('gameover', L.cx, L.H * 0.36,
       'You conquered all 10 enemy ships!',
-      { fontSize: L.fs(26), color: '#b0b8c8' });
+      { color: UI_THEME.colors.mutedPaper });
     this.txt('gameover', L.cx, L.H * 0.42,
       `${G.round} rounds  ·  Crew of ${G.allCrew.length}`,
-      { fontSize: L.fs(24), color: '#a0d0a0' });
+      { color: UI_THEME.colors.mutedPaper });
 
     let inv = '';
     ['wood', 'stone', 'gold'].forEach(r => {
@@ -1734,15 +1795,22 @@ class GameScene extends Phaser.Scene {
     if (G.cannons > 0) inv += ` ${G.cannons}💣`;
     if (inv) {
       this.txt('gameover', L.cx, L.H * 0.48, 'Final stash:' + inv,
-        { fontSize: L.fs(22), color: '#80cbc4' });
+        { color: UI_THEME.colors.mutedPaper });
     }
 
-    const btn = this.add.text(L.cx, L.H * 0.58, '[ Play Again ]', {
-      fontFamily: 'monospace', fontSize: L.fs(32), color: '#a0d0a0',
-      backgroundColor: '#1e4535', padding: { x: 40 * L.k, y: 20 * L.k },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#2a6545' }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#1e4535' }));
+    const btn = makeUiPill(this, {
+      x: L.cx,
+      y: L.H * 0.58,
+      label: 'Play Again',
+      L,
+      minW: 180 * L.k,
+      minH: 56 * L.k,
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+      textPx: 18,
+    }).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
+    btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
     btn.on('pointerdown', () => {
       this.clearCt('gameover');
       this.closePanels();
@@ -1809,9 +1877,215 @@ class GameScene extends Phaser.Scene {
 
   txt(k, x, y, str, style) {
     const L = this.L;
-    const base = { fontFamily: 'monospace', fontSize: L.fs(24), color: '#b0b8c8' };
+    const base = uiBodyStyle(L, UI_THEME.colors.paper);
     const t = this.add.text(x, y, str, Object.assign(base, style)).setOrigin(0.5, 0);
     return this.addTo(k, t);
+  }
+
+  currentStrengthState() {
+    const crew = G.hand.reduce((sum, pirate) => sum + (TYPES[pirate.type].str || 0), 0);
+    return {
+      crew,
+      bonus: this.shipBonusStr(),
+      total: crew + this.shipBonusStr(),
+    };
+  }
+
+  currentGoalState() {
+    if (G.enemyShip) {
+      return {
+        icon: '😈',
+        line1: 'Enemy now.',
+        line2: `Reach ⚔️ ${G.enemyShip.strength}`,
+      };
+    }
+
+    if (this.isTutorial()) {
+      const currentTurn = this.getTutorialCurrentTurn();
+      for (let i = currentTurn; i < this.getTutorialTurnCount(); i++) {
+        const turn = this.getTutorialTurn(i + 1);
+        if (!turn || !(turn.phase === 'boarding' || turn.enemyShip)) continue;
+        const strength = (turn.enemyShip && turn.enemyShip.strength != null)
+          ? turn.enemyShip.strength
+          : (turn.enemyStrength != null ? turn.enemyStrength : 0);
+        const turnsAway = i + 1 - currentTurn;
+        return {
+          icon: '😈',
+          line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
+          line2: `Reach ⚔️ ${strength}`,
+        };
+      }
+      return { icon: '⭐', line1: 'Final stretch.', line2: 'Keep building strength' };
+    }
+
+    if (!G.map || !Array.isArray(G.map.layers)) {
+      return { icon: '🗺️', line1: 'Choose a route.', line2: 'Open the map' };
+    }
+
+    const currentLayer = G.map.currentLayer;
+    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
+      const layer = G.map.layers[li];
+      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+      const turnsAway = li - currentLayer;
+      return {
+        icon: '😈',
+        line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
+        line2: `Reach ⚔️ ${layer[0].strength}`,
+      };
+    }
+
+    return { icon: '⭐', line1: 'No more battles.', line2: 'Sail to the end' };
+  }
+
+  islandDescription() {
+    if (!G.island) return 'Choose a route on the map';
+    if (G.island.bonus === 'wood') return 'Pirates gain twice more wood';
+    if (G.island.bonus === 'stone') return 'Pirates gain twice more stone';
+    if (G.island.bonus === 'gold') return 'Pirates gain twice more gold';
+    if (G.island.extraSend) return 'You can send one extra pirate';
+    if (G.island.maxSend != null) return `Send up to ${G.island.maxSend} pirates`;
+    if (G.island.bonusEnthusiasm) return `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
+    if (G.island.sacrifice) return 'Pirates sent here are lost forever';
+    if (G.island.tutorialDesc) return G.island.tutorialDesc;
+    return 'Set sail and gather what you can';
+  }
+
+  inventoryDisplayItems(extraKeys = []) {
+    const keep = new Set(extraKeys);
+    return [
+      { key: 'wood', emoji: RES_EMOJI.wood, count: G.res.wood || 0 },
+      { key: 'stone', emoji: RES_EMOJI.stone, count: G.res.stone || 0 },
+      { key: 'gold', emoji: RES_EMOJI.gold, count: G.res.gold || 0 },
+      { key: 'map', emoji: RES_EMOJI.map, count: G.res.map || 0 },
+      { key: 'enthusiasm', emoji: '☠️', count: G.enthusiasm || 0 },
+      { key: 'weapons', emoji: '🗡️', count: G.weapons || 0 },
+      { key: 'cannons', emoji: '💣', count: G.cannons || 0 },
+    ].filter((item) => item.count > 0 || keep.has(item.key));
+  }
+
+  currentIslandAction() {
+    if (G.busy || this.isTutorialPopupOpen()) return null;
+    if (G.phase === 'boarding') {
+      return { label: 'Board!', onClick: () => this.resolveBoarding() };
+    }
+    if (G.phase === 'sending' && G.sent.length < this.maxSend()) {
+      return { label: 'Skip', onClick: () => this.endSending(), variant: 'skip' };
+    }
+    if (G.phase === 'shopping' && !this._shopPanelOpen) {
+      return { label: 'Continue', onClick: () => this.openShopPanel(), variant: 'continue' };
+    }
+    return null;
+  }
+
+  islandActionY() {
+    return this.L.Y_ISL_LBL + 78 * this.L.k;
+  }
+
+  islandContinueY() {
+    const handTopY = handCardsTopY(this.L);
+    return handTopY - 48 * this.L.k;
+  }
+
+  skipActionY() {
+    return this.L.Y_HAND_CENTER - CARD.H * this.L.k * 0.56;
+  }
+
+  measurePillWidth(label, opts = {}) {
+    if (!label) return 0;
+    const L = this.L;
+    const probe = this.add.text(0, -9999, label, uiHeadingStyle(L, opts.textPx || 16, opts.textColor || UI_THEME.colors.paper));
+    const padX = opts.padX != null ? opts.padX : 20 * L.k;
+    const width = Math.max(opts.minW || 0, probe.width + padX * 2);
+    probe.destroy();
+    return width;
+  }
+
+  footerPileBtnOpts() {
+    const L = this.L;
+    return {
+      textPx: 16,
+      padX: 12 * L.k,
+      padY: 8 * L.k,
+      minH: 0,
+    };
+  }
+
+  inventoryLayout(extraKeys = []) {
+    const L = this.L;
+    const pileBtnOpts = this.footerPileBtnOpts();
+    const items = this.inventoryDisplayItems(extraKeys);
+    const slotW = 30 * L.k;
+    const slotH = 32 * L.k;
+    const gap = 4 * L.k;
+    const emojiOffsetX = -4 * L.k;
+    const countOffsetX = 7 * L.k;
+    const totalWidth = items.length > 0 ? items.length * slotW + (items.length - 1) * gap : 0;
+
+    const left = 22 * L.k;
+    const footerGap = 14 * L.k;
+    const drawWidth = this.measurePillWidth('Draw Pile', pileBtnOpts);
+    const discardWidth = this.measurePillWidth('Discard', pileBtnOpts);
+    const leftEdge = left + drawWidth + footerGap;
+    const rightEdge = L.W - 22 * L.k - discardWidth - footerGap;
+    const centeredLeft = L.cx - totalWidth / 2;
+    const centeredRight = L.cx + totalWidth / 2;
+    const inline = totalWidth > 0 && centeredLeft >= leftEdge && centeredRight <= rightEdge;
+    const rowY = inline ? (L.Y_NAV + slotH * 0.5) : (L.Y_NAV - 20 * L.k);
+    const centerX = L.cx;
+    const startX = centerX - totalWidth / 2 + slotW / 2;
+    return { items, slotW, slotH, gap, rowY, totalWidth, startX, emojiOffsetX, countOffsetX };
+  }
+
+  inventoryTargetForItem(itemOrEmoji) {
+    const emoji = typeof itemOrEmoji === 'string' ? itemOrEmoji : itemOrEmoji.emoji;
+    const key = (typeof itemOrEmoji === 'object' && itemOrEmoji.key) || ({
+      [RES_EMOJI.wood]: 'wood',
+      [RES_EMOJI.stone]: 'stone',
+      [RES_EMOJI.gold]: 'gold',
+      [RES_EMOJI.map]: 'map',
+      '☠️': 'enthusiasm',
+      '🗡️': 'weapons',
+      '💣': 'cannons',
+    })[emoji];
+    const layout = this.inventoryLayout(key ? [key] : []);
+    const idx = layout.items.findIndex((item) => item.key === key);
+    const safeIdx = idx >= 0 ? idx : 0;
+    return {
+      x: layout.startX + safeIdx * (layout.slotW + layout.gap) + layout.emojiOffsetX,
+      y: layout.rowY - layout.slotH * 0.45,
+    };
+  }
+
+  renderInventory() {
+    const L = this.L;
+    const layout = this.inventoryLayout();
+    if (layout.items.length === 0) return;
+    const counterStyle = uiBodyStyle(L, UI_THEME.colors.paper, {
+      fontSize: L.fs(14),
+      stroke: UI_THEME.colors.shadow,
+      strokeThickness: Math.max(2, Math.round(2 * L.k)),
+    });
+
+    layout.items.forEach((item, idx) => {
+      const x = layout.startX + idx * (layout.slotW + layout.gap);
+      const y = layout.rowY;
+
+      const emoji = this.add.text(
+        x + layout.emojiOffsetX,
+        y,
+        item.emoji,
+        uiHeadingStyle(L, 32, UI_THEME.colors.paper)
+      ).setOrigin(0.5, 1);
+      this.addTo('nav', emoji);
+
+      const counter = this.add.text(
+        x + layout.countOffsetX,
+        y - 1 * L.k,
+        String(item.count),
+        counterStyle
+      ).setOrigin(0, 1);
+      this.addTo('nav', counter);
+    });
   }
 
   // ──────────── RENDERING ────────────
@@ -1828,181 +2102,144 @@ class GameScene extends Phaser.Scene {
   renderTop() {
     this.clearCt('top');
     const L = this.L;
+    const pad = 18 * L.k;
+    const labelY = 18 * L.k;
+    const valueY = 40 * L.k;
+    const sectionGap = 16 * L.k;
+    const iconTextGap = 8 * L.k;
+    const goal = this.currentGoalState();
+    const strength = this.currentStrengthState();
 
-    this.txt('top', L.cx, L.Y_ROUND,
-      `Round ${G.round}`,
-      { fontSize: L.fs(26) });
+    const strengthLabel = this.add.text(pad, labelY, 'Strength', uiHeadingStyle(L, 16, UI_THEME.colors.paper))
+      .setOrigin(0, 0);
+    const strengthValue = this.add.text(pad, valueY, `⚔️${strength.total}`, uiHeadingStyle(L, 32, UI_THEME.colors.paper))
+      .setOrigin(0, 0);
+    const strengthBlockWidth = Math.max(strengthLabel.width, strengthValue.width);
+    const goalX = pad + strengthBlockWidth + sectionGap;
+    const goalLabel = this.add.text(goalX, labelY, 'Current goal', uiHeadingStyle(L, 16, UI_THEME.colors.paper))
+      .setOrigin(0, 0);
+    const goalIcon = this.add.text(goalX, valueY - 2 * L.k, goal.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
+      .setOrigin(0, 0);
+    const goalTextX = goalX + goalIcon.width + iconTextGap;
+    const goalWidth = Math.max(96 * L.k, L.W - pad - goalTextX);
+    const goalText = this.add.text(goalTextX, valueY + 1 * L.k, `${goal.line1}\n${goal.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
+      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
+      wordWrap: { width: goalWidth },
+    })).setOrigin(0, 0);
 
-    let resIcons = '';
-    ['wood', 'stone', 'gold', 'map'].forEach(r => {
-      for (let i = 0; i < Math.min(G.res[r], 30); i++) resIcons += RES_EMOJI[r];
+    [strengthLabel, strengthValue, goalLabel, goalIcon, goalText].forEach((node) => {
+      this.addTo('top', node);
     });
-    const invParts = [];
-    if (resIcons) invParts.push(resIcons);
-    if (G.enthusiasm > 0) invParts.push(`☠️${G.enthusiasm}`);
-    if (G.weapons > 0) invParts.push(`🗡️${G.weapons}`);
-    if (G.cannons > 0) invParts.push(`💣${G.cannons}`);
-    const inv = invParts.join('  ') || '—';
-    this.txt('top', L.cx, L.Y_INV, inv,
-      { fontSize: L.fs(24), color: '#d0d0d0', wordWrap: { width: L.W - 40 } });
-
-    const dv = this.add.graphics();
-    dv.lineStyle(2, 0x1e3040);
-    dv.lineBetween(40, L.Y_INV + 44 * L.k, L.W - 40, L.Y_INV + 44 * L.k);
-    this.addTo('top', dv);
   }
 
   renderIsland() {
     this.clearCt('island');
     const L = this.L;
-    const cx = L.cx, cy = L.Y_ISL_CY;
+    const cx = L.cx;
+    const cy = this.islandCenterY();
+    const titleY = cy + 96 * L.k;
+    const titleDescMargin = 8 * L.k;
+    const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
+    const outlineH = 144 * L.k;
 
     if (G.enemyShip) {
-      const g = this.add.graphics();
-      g.fillStyle(0x1a0808, 1);
-      g.fillEllipse(cx, cy, 600 * L.k, 340 * L.k);
-      g.fillStyle(0x3a1010, 1);
-      g.fillEllipse(cx, cy, 440 * L.k, 220 * L.k);
-      g.fillStyle(0x8a2020, 1);
-      g.fillEllipse(cx - 50 * L.k, cy - 16 * L.k, 140 * L.k, 80 * L.k);
-      this.addTo('island', g);
+      const title = this.add.text(cx, cy, 'Enemy Ship', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
+        align: 'center',
+        wordWrap: { width: L.W - 72 * L.k },
+      })).setOrigin(0.5);
+      this.addTo('island', title);
 
-      this.txt('island', cx, cy - 120 * L.k, '🏴‍☠️', { fontSize: L.fsPx(56) });
-      this.txt('island', cx, cy - 30 * L.k, `${G.enemyShip.strength}⚔️`,
-        { fontSize: L.fs(40), color: '#ff6b6b' });
-
-      const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-      const bonusStr = this.shipBonusStr();
-      const totalStr = crewStr + bonusStr;
-      const winning = totalStr >= G.enemyShip.strength;
-      let strLabel = `Crew ${crewStr}⚔️`;
-      if (G.weapons > 0) strLabel += ` +🗡️${G.weapons}`;
-      if (G.cannons > 0) strLabel += ` +💣${G.cannons}`;
-      strLabel += ` = ${totalStr}⚔️ vs ${G.enemyShip.strength}⚔️`;
-      this.txt('island', cx, L.Y_ISL_LBL, strLabel,
-        { fontSize: L.fs(22), color: winning ? '#66bb6a' : '#ff8a80' });
+      if (G.enemyShip.strength != null) {
+        this.addTo('island', this.add.text(
+          cx,
+          cy + title.height * 0.5 + 10 * L.k,
+          `You need ${G.enemyShip.strength}⚔️ to win`,
+          uiBodyStyle(L, UI_THEME.colors.paper, {
+            align: 'center',
+            wordWrap: { width: L.W - 120 * L.k },
+          })
+        ).setOrigin(0.5, 0));
+      }
       return;
     }
 
     if (!G.island) {
-      const g = this.add.graphics();
-      g.fillStyle(0x0b1f33, 1);
-      g.fillEllipse(cx, cy, 640 * L.k, 360 * L.k);
-      g.fillStyle(0x113252, 1);
-      g.fillEllipse(cx, cy + 10 * L.k, 540 * L.k, 250 * L.k);
-      this.addTo('island', g);
-      this.txt('island', cx, cy - 120 * L.k, '🌊', { fontSize: L.fsPx(56) });
-      this.txt('island', cx, L.Y_ISL_LBL, 'Open sea',
-        { fontSize: L.fs(22), color: '#9fc3e0' });
+      const title = this.add.text(cx, titleY, 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
+        align: 'center',
+      })).setOrigin(0.5, 0);
+      this.addTo('island', title);
+      this.addTo('island', this.add.text(cx, titleY + title.height + titleDescMargin, 'Choose the next place to sail', uiBodyStyle(L, UI_THEME.colors.paper))
+        .setOrigin(0.5, 0));
       return;
     }
 
-    const g = this.add.graphics();
-    g.fillStyle(0x0f2a40, 1);
-    g.fillEllipse(cx, cy, 600 * L.k, 340 * L.k);
-    g.fillStyle(G.island.accent, 1);
-    g.fillEllipse(cx, cy, 440 * L.k, 220 * L.k);
-    this.addTo('island', g);
+    const outline = this.add.graphics();
+    outline.lineStyle(Math.max(2, 6 * L.k), uiColorInt(UI_THEME.colors.outline), 1);
+    outline.strokeEllipse(cx, cy, outlineW, outlineH);
+    this.addTo('island', outline);
 
-    this.txt('island', cx, cy - 120 * L.k, G.island.emoji, { fontSize: L.fsPx(56) });
-
-    let islDesc;
-    if (G.island.bonus) {
-      const bm = { wood: '2x 🪵', stone: '2x 🪨', gold: '2x 🪙' };
-      islDesc = bm[G.island.bonus];
-    } else if (G.island.extraSend) {
-      islDesc = '+1 pirate ashore';
-    } else if (G.island.maxSend != null) {
-      islDesc = `max ${G.island.maxSend} ashore`;
-    } else if (G.island.bonusEnthusiasm) {
-      islDesc = '+' + G.island.bonusEnthusiasm + '☠️';
-    } else if (G.island.sacrifice) {
-      islDesc = 'pirates lost forever';
-    } else if (G.island.tutorialDesc) {
-      islDesc = G.island.tutorialDesc;
-    }
-    const islandLine = islDesc ? `${G.island.name}: ${islDesc}` : G.island.name;
-    this.txt('island', cx, L.Y_ISL_LBL, islandLine,
-      { fontSize: L.fs(22), color: '#ffe082' });
+    const title = this.add.text(cx, titleY, G.island.name, uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
+      align: 'center',
+      wordWrap: { width: L.W - 72 * L.k },
+    })).setOrigin(0.5, 0);
+    this.addTo('island', title);
+    this.addTo('island', this.add.text(cx, titleY + title.height + titleDescMargin, this.islandDescription(), uiBodyStyle(L, UI_THEME.colors.paper, {
+      align: 'center',
+      wordWrap: { width: L.W - 120 * L.k },
+    })).setOrigin(0.5, 0));
 
     G.sent.forEach((hi, si) => {
       if (this._sendingToIsland.has(hi)) return;
       const p = G.hand[hi];
-      const px = cx + this.sentOffsetX(si) * L.k;
-      const spr = addCatSprite(this, px, cy, p.type);
-      spr.setScale(L.SC);
-      if (this._sacrificedIds.has(p.id)) spr.setAlpha(0.35);
-      spr.setInteractive({ useHandCursor: true });
-      spr.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.showTip(p.type, px, cy - 100 * L.k, { fromClick: true });
+      const placement = this.sentCardPlacement(si);
+      const cardView = createPirateCard(this, {
+        type: p.type,
+        x: placement.x,
+        y: placement.y,
+        rotation: placement.rotation,
+        scale: placement.scale,
+        depth: 12 + si,
+        L,
+        container: this.ct.island,
       });
-      spr.on('pointerover', () => {
-        if (this.ct.tip.visible) this.showTip(p.type, px, cy - 100 * L.k);
-      });
-      this.addTo('island', spr);
+      if (this._sacrificedIds.has(p.id)) {
+        cardView.container.setAlpha(0.35);
+      }
     });
   }
 
   renderPhase() {
     this.clearCt('phase');
+    if (G.phase !== 'removing') return;
     const L = this.L;
-    const statusY = L.Y_ISL_LBL + 30 * L.k;
-    let str;
-    let col = '#8090a0';
+    const crew = [...G.allCrew].sort((a, b) => {
+      const ca = TYPES[a.type].cost ?? -1;
+      const cb = TYPES[b.type].cost ?? -1;
+      if (ca !== cb) return ca - cb;
+      return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
+    });
+    const handIds = new Set(G.hand.map(p => p.id));
+    const selectable = crew.filter(p => !handIds.has(p.id));
+    const rowY = L.Y_ISL_LBL + 172 * L.k;
+    const scale = L.SC_SM * 0.86;
+    const maxSp = 52 * L.k;
+    const sp = Math.min(maxSp, (L.W - 80) / Math.max(selectable.length, 1));
+    const sx = L.cx - ((selectable.length - 1) * sp) / 2;
 
-    if (G.phase === 'boarding') {
-      str = 'Boarding! Prepare for battle!';
-      col = '#ff8a80';
-    } else if (G.phase === 'map') {
-      str = 'Choose the destination on the map';
-      col = '#9fc3e0';
-    } else if (G.phase === 'sending') {
-      const r = this.maxSend() - G.sent.length;
-      str = `Drag a card to island (${r} left)`;
-    } else if (G.phase === 'ship') {
-      str = 'Ship at work…';
-      col = '#80cbc4';
-    } else if (G.phase === 'removing') {
-      str = 'Choose a pirate to exile';
-      col = '#ff8a80';
-    } else {
-      const canHire = G.shop.some(t => G.enthusiasm >= TYPES[t].cost);
-      str = canHire ? 'You can hire new crew' : 'Not enough ☠️ to hire';
-      col = canHire ? '#ce93d8' : '#8090a0';
-    }
-    this.txt('phase', L.cx, statusY, str, { fontSize: L.fs(22), color: col });
-
-    if (G.phase === 'removing') {
-      const crew = [...G.allCrew].sort((a, b) => {
-        const ca = TYPES[a.type].cost ?? -1;
-        const cb = TYPES[b.type].cost ?? -1;
-        if (ca !== cb) return ca - cb;
-        return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
+    selectable.forEach((p, i) => {
+      const cx = sx + i * sp;
+      const spr = addCatSprite(this, cx, rowY, p.type);
+      spr.setScale(scale);
+      spr.setTint(0xff6666);
+      spr.setInteractive({ useHandCursor: true });
+      spr.on('pointerover', () => spr.setScale(scale + 1));
+      spr.on('pointerout', () => spr.setScale(scale));
+      spr.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        this.completeRemoval(p.id);
       });
-      const handIds = new Set(G.hand.map(p => p.id));
-      const selectable = crew.filter(p => !handIds.has(p.id));
-      const rowY = statusY + 56 * L.k;
-      const scale = L.SC_SM * 0.86;
-      const maxSp = 52 * L.k;
-      const sp = Math.min(maxSp, (L.W - 80) / Math.max(selectable.length, 1));
-      const sx = L.cx - ((selectable.length - 1) * sp) / 2;
-
-      selectable.forEach((p, i) => {
-        const cx = sx + i * sp;
-        const spr = addCatSprite(this, cx, rowY, p.type);
-        spr.setScale(scale);
-        spr.setTint(0xff6666);
-        spr.setInteractive({ useHandCursor: true });
-        spr.on('pointerover', () => spr.setScale(scale + 1));
-        spr.on('pointerout', () => spr.setScale(scale));
-        spr.on('pointerdown', (ptr) => {
-          ptr.event.stopPropagation();
-          this.completeRemoval(p.id);
-        });
-        this.addTo('phase', spr);
-      });
-    }
+      this.addTo('phase', spr);
+    });
   }
 
   renderHand() {
@@ -2046,257 +2283,152 @@ class GameScene extends Phaser.Scene {
 
   renderBtn() {
     this.clearCt('btn');
+    const action = this.currentIslandAction();
+    if (!action) return;
     const L = this.L;
-    if (G.busy) return;
-    const x = L.W - 20 * L.k;
-    const y = L.Y_NAV;
-    const right = { originX: 1 };
-
-    if (G.phase === 'boarding') {
-      this.mkBtn('btn', x, y, 'Board!', () => this.resolveBoarding(), right);
-    } else if (G.phase === 'sending') {
-      this.mkBtn('btn', x, y, 'End landing', () => this.endSending(), right);
-    } else if (G.phase === 'shopping') {
-      const nextLabel = this.isTutorial() ? 'Next turn' : 'Next round';
-      this.mkBtn('btn', x, y, nextLabel, () => {
-        if (this.isTutorial()) {
-          this.ensureTutorialFlow();
-          const turn = this.getTutorialTurn();
-          const needFeatured = !!(turn && turn.requireFeaturedPurchase);
-          if (needFeatured && !(G.tutorial.featured && G.tutorial.featured.bought)) {
-            this.float(L.cx, L.Y_ISL_CY - 40 * L.k, `Buy ${this.tutorialFeaturedName()} to continue`, '#ffa726');
-            return;
-          }
-          this.advanceFromShopping();
-          return;
-        }
-        this.advanceFromShopping();
-      }, right);
+    if (action.variant === 'skip') {
+      const color = '#DEBEA2';
+      const skip = this.add.text(L.W - 24 * L.k, this.skipActionY(), action.label, uiHeadingStyle(L, 16, color))
+        .setOrigin(1, 0.5)
+        .setInteractive({ useHandCursor: true });
+      skip.on('pointerover', () => skip.setColor(UI_THEME.colors.paper));
+      skip.on('pointerout', () => skip.setColor(color));
+      skip.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        action.onClick();
+      });
+      this.addTo('btn', skip);
+      return;
     }
+    const actionY = action.variant === 'continue' ? this.islandContinueY() : this.islandActionY();
+    this.mkBtn('btn', L.cx, actionY, action.label, action.onClick, {
+      minH: 48 * L.k,
+      minW: 122 * L.k,
+      textPx: 16,
+    });
   }
 
   renderNav() {
     this.clearCt('nav');
     const L = this.L;
+    this.renderInventory();
 
-    const mapEnabled = !this.isTutorial();
-    const shopEnabled = !G.busy && (!this.isTutorial() || G.phase === 'shopping');
-    const left = 20 * L.k;
-    const gap = 12 * L.k;
-    const leftOpts = { originX: 0 };
+    const panelEnabled = !this.isTutorialPopupOpen();
+    const mapEnabled = panelEnabled && !this.isTutorial();
+    const shopEnabled = panelEnabled && !G.busy && (!this.isTutorial() || G.phase === 'shopping');
+    const pileEnabled = panelEnabled && !G.busy;
+    const topGap = 10 * L.k;
+    const topY = 60 * L.k;
+    const iconOpts = {
+      originX: 1,
+      textPx: 20,
+      minW: 50 * L.k,
+      minH: 50 * L.k,
+      padX: 12 * L.k,
+      padY: 10 * L.k,
+    };
+    const footerY = L.Y_NAV;
+    const pileBtnOpts = this.footerPileBtnOpts();
 
     const mapOpen = this._mapPanelOpen;
-    const mapLabel = mapOpen ? '[Map]' : 'Map';
-    const mapBtn = this.mkBtn('nav', left, L.Y_NAV, mapLabel, () => {
-      if (!mapEnabled) {
-        this.float(L.cx, L.Y_NAV - 40 * L.k, 'Map is available between rounds', '#8090a0');
-        return;
-      }
-      this.toggleMapPanel();
-    }, {
-      ...leftOpts,
-      enabled: mapEnabled,
-      bg: '#2b3f52',
-      hoverBg: '#35536f',
-      disabledBg: '#1a2630',
-      color: '#c0d8f0',
-      disabledColor: '#5a6570',
-    });
-
     const shopOpen = this._shopPanelOpen;
-    const shopLabel = shopOpen ? '[Shop]' : 'Shop';
-    this.mkBtn('nav', left + mapBtn.width + gap, L.Y_NAV, shopLabel, () => {
+    const shopBtn = this.mkBtn('nav', L.W - 22 * L.k, topY, '🛒', () => {
       this.toggleShopPanel();
     }, {
-      ...leftOpts,
+      ...iconOpts,
       enabled: shopEnabled,
-      bg: '#3a2a48',
-      hoverBg: '#55406b',
-      disabledBg: '#261d30',
-      color: '#e0c8f0',
-      disabledColor: '#6c6074',
+      bg: shopOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
+    });
+
+    this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
+      this.toggleMapPanel();
+    }, {
+      ...iconOpts,
+      enabled: mapEnabled,
+      bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
+    });
+
+    const drawPileOpen = this._drawPilePanelOpen;
+    this.mkBtn('nav', 22 * L.k, footerY, 'Draw Pile', () => {
+      this.toggleDrawPilePanel();
+    }, {
+      ...pileBtnOpts,
+      originX: 0,
+      enabled: pileEnabled,
+      bg: drawPileOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
+    });
+
+    const discardOpen = this._discardPilePanelOpen;
+    this.mkBtn('nav', L.W - 22 * L.k, footerY, 'Discard', () => {
+      this.toggleDiscardPilePanel();
+    }, {
+      ...pileBtnOpts,
+      originX: 1,
+      enabled: pileEnabled,
+      bg: discardOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
     });
   }
 
   mkBtn(k, x, y, label, cb, opts = {}) {
-    const L = this.L;
     const enabled = opts.enabled !== false;
-    const bg = opts.bg || '#1e4535';
-    const hoverBg = opts.hoverBg || '#2a6545';
-    const disabledBg = opts.disabledBg || '#1a2630';
-    const color = opts.color || '#c0d8c0';
-    const disabledColor = opts.disabledColor || '#607080';
-    const t = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: L.fs(24), color: enabled ? color : disabledColor,
-      backgroundColor: enabled ? bg : disabledBg, padding: { x: 32 * L.k, y: 16 * L.k },
-    }).setOrigin(opts.originX != null ? opts.originX : 0.5, 0.5);
+    const fill = enabled ? (opts.bg || UI_THEME.colors.cocoa) : (opts.disabledBg || UI_THEME.colors.disabled);
+    const textColor = enabled ? (opts.color || UI_THEME.colors.paper) : (opts.disabledColor || UI_THEME.colors.ink);
+    const btn = makeUiPill(this, {
+      x,
+      y,
+      label,
+      L: this.L,
+      fill,
+      textColor,
+      textPx: opts.textPx != null ? opts.textPx : 16,
+      minH: opts.minH != null ? opts.minH : 48 * this.L.k,
+      minW: opts.minW,
+      padX: opts.padX,
+      padY: opts.padY,
+      radius: opts.radius,
+    });
+    btn.setPosition(
+      x + (0.5 - (opts.originX != null ? opts.originX : 0.5)) * btn.width,
+      y
+    );
     if (enabled) {
-      t.setInteractive({ useHandCursor: true });
-    } else {
-      t.setAlpha(1);
+      btn.setInteractive({ useHandCursor: true });
+      btn.on('pointerover', () => btn.setPillStyle({
+        fill: opts.hoverBg || UI_THEME.colors.cocoaDark,
+        textColor,
+      }));
+      btn.on('pointerout', () => btn.setPillStyle({ fill, textColor }));
+      btn.on('pointerdown', (ptr) => { ptr.event.stopPropagation(); cb(); });
     }
-    t.on('pointerover', () => {
-      if (enabled) t.setStyle({ backgroundColor: hoverBg });
-    });
-    t.on('pointerout', () => {
-      if (enabled) t.setStyle({ backgroundColor: bg });
-    });
-    t.on('pointerdown', (ptr) => { ptr.event.stopPropagation(); cb(); });
-    this.addTo(k, t);
-    return t;
-  }
-
-  // ──────────── TOOLTIP (CARD) ────────────
-
-  showTip(type, tx, ty, opts = {}) {
-    const L = this.L;
-    if (opts.fromClick) this._tipJustOpened = true;
-    if (!this._tipDragAnchor) this.ct.tip.setPosition(0, 0);
-    this.clearCt('tip');
-    const def = TYPES[type];
-    const tipFs = L.fs(20);
-    const headFs = L.fs(24);
-    const sectionFs = L.fs(18);
-    const pad = 18 * L.k;
-    const innerPad = 12 * L.k;
-    const sectionGap = 8 * L.k;
-
-    const nameText = def.name + '  ' + (def.str || 0) + '⚔️';
-    const islandText = def.dI || '—';
-    const shipText = def.dS || '—';
-    const costText = def.cost !== null ? '☠️' + def.cost : '';
-    let extraText = '';
-    if (type === 'smuggler' && G.res.map > 0) {
-      extraText = '🗺️ +30% gold chance';
-    }
-
-    const cardW = Math.min(320 * L.k, L.W - 40 * L.k);
-
-    const measure = (str, fs) => {
-      const t = this.add.text(0, -9999, str, {
-        fontFamily: 'monospace', fontSize: fs, wordWrap: { width: cardW - pad * 2 },
-      });
-      const h = t.height;
-      t.destroy();
-      return h;
-    };
-
-    const nameH = measure(nameText, headFs);
-    const divH = 2 * L.k;
-    const islLabelH = measure('🏝️ Island', sectionFs);
-    const islH = measure(islandText, tipFs);
-    const shipLabelH = measure('⛵ Ship', sectionFs);
-    const shipH = measure(shipText, tipFs);
-    const costH = costText ? measure(costText, sectionFs) + sectionGap : 0;
-    const extraH = extraText ? measure(extraText, sectionFs) + sectionGap : 0;
-
-    const cardH = pad + nameH + sectionGap + divH + sectionGap
-      + islLabelH + innerPad + islH + sectionGap
-      + divH + sectionGap
-      + shipLabelH + innerPad + shipH + sectionGap
-      + costH + extraH + pad;
-
-    let bx = tx - cardW / 2;
-    let by = ty - cardH - 12 * L.k;
-    if (bx < 6 * L.k) bx = 6 * L.k;
-    if (bx + cardW > L.W - 6 * L.k) bx = L.W - cardW - 6 * L.k;
-    if (by < 6 * L.k) by = ty + 50 * L.k;
-
-    const bg = this.add.graphics();
-    bg.fillStyle(0x0e1a28, 0.97);
-    bg.fillRoundedRect(bx, by, cardW, cardH, 12 * L.k);
-    bg.lineStyle(2 * L.k, 0x3a5a7a);
-    bg.strokeRoundedRect(bx, by, cardW, cardH, 12 * L.k);
-    this.addTo('tip', bg);
-
-    let cy = by + pad;
-
-    const nameObj = this.add.text(bx + pad, cy, nameText, {
-      fontFamily: 'monospace', fontSize: headFs, color: '#ffd78a',
-      wordWrap: { width: cardW - pad * 2 },
-    }).setOrigin(0, 0);
-    this.addTo('tip', nameObj);
-    cy += nameH + sectionGap;
-
-    bg.lineStyle(1, 0x3a5a7a, 0.6);
-    bg.lineBetween(bx + pad, cy, bx + cardW - pad, cy);
-    cy += divH + sectionGap;
-
-    const islLabel = this.add.text(bx + pad, cy, 'On island:', {
-      fontFamily: 'monospace', fontSize: sectionFs, color: '#7a9a6a',
-    }).setOrigin(0, 0);
-    this.addTo('tip', islLabel);
-    cy += islLabelH + innerPad;
-
-    const islObj = this.add.text(bx + pad + 10 * L.k, cy, islandText, {
-      fontFamily: 'monospace', fontSize: tipFs, color: '#c8e0c0',
-      wordWrap: { width: cardW - pad * 2 - 10 * L.k },
-    }).setOrigin(0, 0);
-    this.addTo('tip', islObj);
-    cy += islH + sectionGap;
-
-    bg.lineBetween(bx + pad, cy, bx + cardW - pad, cy);
-    cy += divH + sectionGap;
-
-    const shipLabel = this.add.text(bx + pad, cy, 'On ship:', {
-      fontFamily: 'monospace', fontSize: sectionFs, color: '#6a8a9a',
-    }).setOrigin(0, 0);
-    this.addTo('tip', shipLabel);
-    cy += shipLabelH + innerPad;
-
-    const shipObj = this.add.text(bx + pad + 10 * L.k, cy, shipText, {
-      fontFamily: 'monospace', fontSize: tipFs, color: '#b0d0e0',
-      wordWrap: { width: cardW - pad * 2 - 10 * L.k },
-    }).setOrigin(0, 0);
-    this.addTo('tip', shipObj);
-    cy += shipH + sectionGap;
-
-    if (costText) {
-      const costObj = this.add.text(bx + pad, cy, 'Cost: ' + costText, {
-        fontFamily: 'monospace', fontSize: sectionFs, color: '#ce93d8',
-      }).setOrigin(0, 0);
-      this.addTo('tip', costObj);
-      cy += costH;
-    }
-
-    if (extraText) {
-      const exObj = this.add.text(bx + pad, cy, extraText, {
-        fontFamily: 'monospace', fontSize: sectionFs, color: '#ffd54f',
-      }).setOrigin(0, 0);
-      this.addTo('tip', exObj);
-      cy += extraH;
-    }
-
-    let btnAreaH = 0;
-
-    if (opts.canBuy && G.phase === 'shopping') {
-      const btnY = by + cardH + 6 * L.k;
-      const bb = this.add.text(bx + cardW / 2, btnY, 'Buy', {
-        fontFamily: 'monospace', fontSize: L.fs(22), color: '#a0d8a0',
-        backgroundColor: '#1a3a28', padding: { x: 20 * L.k, y: 10 * L.k },
-      }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
-      bb.on('pointerover', () => bb.setStyle({ backgroundColor: '#2a5a38' }));
-      bb.on('pointerout', () => bb.setStyle({ backgroundColor: '#1a3a28' }));
-      bb.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.buyPirate(opts.shopIdx);
-      });
-      this.addTo('tip', bb);
-      btnAreaH = 50 * L.k;
-    }
-
-    this._tipRect = new Phaser.Geom.Rectangle(bx, by, cardW, cardH + btnAreaH);
-    this.ct.tip.setVisible(true);
+    this.addTo(k, btn);
+    return btn;
   }
 
   // ──────────── RESOURCE ANIMATIONS ────────────
 
   animateResourceGain(fromX, fromY, items) {
     const L = this.L;
-    const targetX = L.cx;
-    const targetY = L.Y_INV;
     let delay = 0;
     for (const item of items) {
+      const target = this.inventoryTargetForItem(item);
+      const targetX = target.x;
+      const targetY = target.y;
       const n = Math.min(item.count || 1, 8);
       for (let i = 0; i < n; i++) {
         this.time.delayedCall(delay, () => {
@@ -2344,12 +2476,13 @@ class GameScene extends Phaser.Scene {
 
   animateResourceSpend(toX, toY, items) {
     const L = this.L;
-    const startX = L.cx;
-    const startY = L.Y_INV;
     let delay = 0;
     let totalEmojis = 0;
     for (const item of items) totalEmojis += Math.min(item.count || 1, 8);
     for (const item of items) {
+      const start = this.inventoryTargetForItem(item);
+      const startX = start.x;
+      const startY = start.y;
       const n = Math.min(item.count || 1, 8);
       for (let i = 0; i < n; i++) {
         this.time.delayedCall(delay, () => {
@@ -2398,8 +2531,8 @@ class GameScene extends Phaser.Scene {
   effectText(x, y, str, col, hold = true) {
     const L = this.L;
     const t = this.add.text(x, y, str, {
-      fontFamily: 'monospace', fontSize: L.fs(28), color: col || '#fff',
-      stroke: '#000', strokeThickness: 4 * L.k,
+      fontFamily: UI_THEME.fonts.heading, fontSize: L.fs(24), color: col || UI_THEME.colors.paper,
+      stroke: UI_THEME.colors.shadow, strokeThickness: 3 * L.k,
     }).setOrigin(0.5).setDepth(60);
     this.tweens.add({
       targets: t,
@@ -2417,8 +2550,8 @@ class GameScene extends Phaser.Scene {
   float(x, y, str, col) {
     const L = this.L;
     const t = this.add.text(x, y, str, {
-      fontFamily: 'monospace', fontSize: L.fs(28), color: col || '#fff',
-      stroke: '#000', strokeThickness: 4 * L.k,
+      fontFamily: UI_THEME.fonts.heading, fontSize: L.fs(24), color: col || UI_THEME.colors.paper,
+      stroke: UI_THEME.colors.shadow, strokeThickness: 3 * L.k,
     }).setOrigin(0.5).setDepth(60);
     this.tweens.add({
       targets: t, y: y - 70 * L.k, alpha: 0,
