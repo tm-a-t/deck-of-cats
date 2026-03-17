@@ -137,6 +137,13 @@ const TYPES = {
     cost: null,
     dI: '1🪨, reliable', dS: '4🪨 → 2☠️',
   },
+  armsman: {
+    name: 'Armsman', cat: [1,14,39,27,16,8], str: 1, canIsland: true,
+    island: { guaranteed: { weapons: 1 } },
+    ship:   null,
+    cost: null,
+    dI: '→ 1🗡️', dS: '—',
+  },
   // ---- tutorial-only pirates ----
   tutorialForager: {
     name: 'Trail Forager', cat: [6,36,42,16,0,5], str: 1, canIsland: true,

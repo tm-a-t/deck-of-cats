@@ -16,8 +16,9 @@ Genre: deck-building with pirate cats. Player assembles a crew (deck), sails a b
 
 | Name | Count |
 |------|-------|
-| Rigger | 5 |
-| Ballaster | 5 |
+| Rigger | 4 |
+| Ballaster | 4 |
+| Armsman | 2 |
 
 Hand size: draw up to 5. When the deck is empty, the discard pile is shuffled back into the deck. If fewer than 5 crew remain, the new hand is smaller.
 
@@ -54,7 +55,7 @@ If the selected node is an island:
 
 **Shopping phase**:
 - After ship effects finish, the round enters shopping.
-- Player may buy pirates for ☠️.
+- Player may buy pirates for ☠️; bought pirates go straight to the discard pile, not the hand.
 - When the player continues from shopping:
   1. The first pirate in the shop window is removed, remaining shift left, a new random pirate enters from the right.
   2. Hand goes to discard (only pirates still in the crew; exiled pirates are gone).
@@ -86,8 +87,9 @@ Total: **50 layers**, yielding **10 enemy ships** total.
 
 Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 layers.
 
-- 3 parallel non-intersecting paths through each segment.
-- All 3 paths converge at the battle node at the end of each segment.
+- Segment 1 (layers 0–3) is a single mandatory path with no route choice before the first battle.
+- Segments 2 and 3 use 3 parallel non-intersecting paths.
+- All available paths converge at the battle node at the end of each segment.
 - After a battle, paths fan back out to 3 for the next segment.
 
 **Island restrictions in early game:**
@@ -184,7 +186,7 @@ Both are summed with crew strength during boarding.
 - **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
 - **Regular-run pool**: all non-starter, non-tutorial pirate types (26 types).
 - **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
-- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
+- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
 - **Next round rotation**: in regular runs, the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
 
 ---
@@ -197,6 +199,7 @@ Both are summed with crew strength during boarding.
 |------|-----|--------|------|
 | Rigger | 1 | 1🪵 (90%) | 4🪵 → 2☠️ |
 | Ballaster | 1 | 1🪨 (90%) | 4🪨 → 2☠️ |
+| Armsman | 1 | → 1🗡️ | — |
 
 ### Tutorial-Only
 

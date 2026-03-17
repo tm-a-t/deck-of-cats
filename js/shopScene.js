@@ -270,7 +270,7 @@ class ShopScene extends Phaser.Scene {
     const game = this.scene.get('game');
     const enabled = !G.busy && !G.shopAnimating;
     const action = makeUiPill(this, {
-      x: panel.x + panel.w / 2,
+      x: 0,
       y: panel.y + panel.h - 42 * L.k,
       label: 'Continue',
       L,
@@ -279,6 +279,7 @@ class ShopScene extends Phaser.Scene {
       fill: enabled ? UI_THEME.colors.cocoa : UI_THEME.colors.disabled,
       textColor: enabled ? UI_THEME.colors.paper : UI_THEME.colors.ink,
     });
+    action.setPosition(panel.x + panel.w - 28 * L.k - action.width / 2, action.y);
     this.panelLayer.add(action);
 
     if (!enabled) return;
@@ -295,6 +296,39 @@ class ShopScene extends Phaser.Scene {
       ptr.event.stopPropagation();
       game.handleShoppingContinue();
     });
+  }
+
+  animateGhostToDiscard(cardView, cardScale) {
+    const game = this.scene.get('game');
+    const target = game.pileButtonCenter('discard');
+    const startX = cardView.container.x;
+    const startY = cardView.container.y;
+    const endRot = Phaser.Math.FloatBetween(-0.14, 0.14);
+    const cpX = (startX + target.x) / 2 + 56 * this.L.k;
+    const cpY = Math.min(startY, target.y) - 110 * this.L.k;
+    const endScale = Math.min(cardScale, 0.34);
+    const dur = 460;
+
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: dur,
+      ease: 'Cubic.easeInOut',
+      onUpdate: (tw) => {
+        if (!cardView.container || !cardView.container.scene) return;
+        const p = tw.getValue();
+        const q = 1 - p;
+        const x = q * q * startX + 2 * q * p * cpX + p * p * target.x;
+        const y = q * q * startY + 2 * q * p * cpY + p * p * target.y;
+        cardView.container.setPosition(x, y);
+        cardView.container.setRotation(Phaser.Math.Linear(0, endRot, p));
+        const scale = Phaser.Math.Linear(cardScale, endScale, p);
+        cardView.container.setScale(scale);
+        cardView.container.setAlpha(Phaser.Math.Linear(1, 0.2, p));
+      },
+    });
+
+    return dur;
   }
 
   animateBuyTransition(shopIdx, panel, cardScale = 1) {
@@ -348,13 +382,7 @@ class ShopScene extends Phaser.Scene {
     const newN = G.shop.length;
 
     const removed = ghosts[shopIdx];
-    this.tweens.add({
-      targets: removed.container,
-      y: removed.container.y - 100 * L.k,
-      alpha: 0,
-      duration: dur,
-      ease: 'Power2',
-    });
+    const buyDur = this.animateGhostToDiscard(removed, cardScale);
 
     let ni = 0;
     for (let i = 0; i < oldN; i++) {
@@ -394,7 +422,7 @@ class ShopScene extends Phaser.Scene {
       });
     }
 
-    this.time.delayedCall(dur + 100, () => {
+    this.time.delayedCall(Math.max(dur, buyDur) + 100, () => {
       ghosts.forEach(g => {
         if (g.container) g.container.destroy();
       });

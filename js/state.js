@@ -39,23 +39,31 @@ function initialShop(n, round) {
 
 let G = {};
 
-function drawCards(n) {
+function drawCardsWithMeta(n) {
   const out = [];
+  const reshuffles = [];
   for (let i = 0; i < n; i++) {
     if (G.deck.length === 0) {
       if (G.discard.length === 0) break;
-      G.deck = Phaser.Utils.Array.Shuffle([...G.discard]);
+      const cards = [...G.discard];
+      reshuffles.push({ cards, count: cards.length });
+      G.deck = Phaser.Utils.Array.Shuffle(cards);
       G.discard = [];
     }
     out.push(G.deck.pop());
   }
-  return out;
+  return { cards: out, reshuffles };
+}
+
+function drawCards(n) {
+  return drawCardsWithMeta(n).cards;
 }
 
 function initState() {
   const crew = [];
-  for (let i = 0; i < 5; i++) crew.push(mkP('lumberjack'));
-  for (let i = 0; i < 5; i++) crew.push(mkP('miner'));
+  for (let i = 0; i < 4; i++) crew.push(mkP('lumberjack'));
+  for (let i = 0; i < 4; i++) crew.push(mkP('miner'));
+  for (let i = 0; i < 2; i++) crew.push(mkP('armsman'));
 
   G = {
     allCrew: [...crew],

@@ -7,20 +7,26 @@ const EARLY_SEGMENTS = 3;
 const EARLY_PATHS = 3;
 const STEPS_PER_SEGMENT = 4;
 const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
+const FIRST_LINEAR_SEGMENTS = 1;
+
+function earlyPathCount(seg) {
+  return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
+}
 
 function generateMap() {
   const layers = [];
   let nextId = 0;
 
-  // Early game: 3 non-intersecting paths of 4 islands before each battle
+  // Early game: first segment is linear, later segments use 3 non-intersecting paths
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
+    const pathCount = earlyPathCount(seg);
     for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
       const li = seg * (STEPS_PER_SEGMENT + 1) + step;
       const available = (li < 9)
         ? ISLANDS.map((_, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
         : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice);
       const layer = [];
-      for (let pi = 0; pi < EARLY_PATHS; pi++) {
+      for (let pi = 0; pi < pathCount; pi++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];
         layer.push({ id: nextId++, type: 'island', islandIdx, conns: [] });
       }
@@ -60,10 +66,11 @@ function generateMap() {
   // Connections: early segments — straight non-intersecting paths
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
     const base = seg * (STEPS_PER_SEGMENT + 1);
+    const pathCount = earlyPathCount(seg);
     for (let step = 0; step < STEPS_PER_SEGMENT - 1; step++) {
       const cur = layers[base + step];
       const nxt = layers[base + step + 1];
-      for (let pi = 0; pi < EARLY_PATHS; pi++) {
+      for (let pi = 0; pi < pathCount; pi++) {
         cur[pi].conns = [nxt[pi].id];
       }
     }

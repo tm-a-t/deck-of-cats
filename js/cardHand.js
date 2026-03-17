@@ -352,6 +352,7 @@ class CardHand {
       }
 
       const prevPos = opts.prevPositions && opts.prevPositions[handIdx];
+      const appearFrom = opts.appearFrom && opts.appearFrom[handIdx];
       if (prevPos) {
         ct.setPosition(prevPos.x, prevPos.y);
         ct.setRotation(prevPos.rotation);
@@ -359,6 +360,25 @@ class CardHand {
           targets: ct,
           x: slot.x, y: slot.y, rotation: slot.rotation,
           duration: 300, ease: 'Cubic.easeOut',
+        });
+      } else if (appearFrom) {
+        const startScale = appearFrom.startScale != null ? appearFrom.startScale : 0.38;
+        const startRotation = appearFrom.rotation != null ? appearFrom.rotation : slot.rotation - 0.16;
+        ct.setPosition(appearFrom.x, appearFrom.y);
+        ct.setRotation(startRotation);
+        ct.setScale(startScale);
+        ct.setAlpha(0);
+        scene.tweens.add({
+          targets: ct,
+          x: slot.x,
+          y: slot.y,
+          rotation: slot.rotation,
+          scaleX: 1,
+          scaleY: 1,
+          alpha: 1,
+          delay: appearFrom.delay || 0,
+          duration: 420,
+          ease: 'Cubic.easeOut',
         });
       }
 

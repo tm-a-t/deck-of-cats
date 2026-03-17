@@ -18,7 +18,8 @@ class GameScene extends Phaser.Scene {
     ensureCatTextures(this);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
-    if (!G.map && !(G.tutorial && G.tutorial.active)) initState();
+    const needsFreshState = !G.map && !(G.tutorial && G.tutorial.active);
+    if (needsFreshState) initState();
 
     this.ct = {};
     ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
@@ -35,6 +36,8 @@ class GameScene extends Phaser.Scene {
     this._shipQueueTotal = 0;
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
+    this._pendingHandAppearById = null;
+    this._animateInitialMapHand = needsFreshState && !this.isTutorial();
 
     this._tutorialPopupOpen = false;
     this._tutorialHintTimer = null;
@@ -749,6 +752,9 @@ class GameScene extends Phaser.Scene {
     }
 
     G.hand = hand.slice(0, 5);
+    this.queueHandAppear(G.hand, {
+      delay: opts.handEntranceDelay != null ? opts.handEntranceDelay : 60,
+    });
 
     const phase = turn.phase || (turn.enemyShip ? 'boarding' : 'sending');
     G.phase = phase;
@@ -794,7 +800,9 @@ class GameScene extends Phaser.Scene {
       this.ensureTutorialFlow();
       this.applyTutorialTurn(this.getTutorialCurrentTurn(), { deferRender: true });
     }
-    this.renderAll();
+    if (!(this._animateInitialMapHand && !this.isTutorial() && G.phase === 'map')) {
+      this.renderAll();
+    }
     if (this.isTutorial()) this.maybeShowTurnStartTutorialPopup();
   }
 
@@ -848,6 +856,10 @@ class GameScene extends Phaser.Scene {
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
+    if (this._animateInitialMapHand) {
+      this.queueHandAppear(G.hand, { delay: 80 });
+      this._animateInitialMapHand = false;
+    }
     this.renderAll();
 
     const available = getAvailableNodes(G.map);
@@ -1107,9 +1119,8 @@ class GameScene extends Phaser.Scene {
     }
 
     if (def.island.draw) {
-      const drawn = drawCards(def.island.draw);
-      G.hand.push(...drawn);
-      return { ok: drawn.length > 0, drawn: drawn.length };
+      const meta = this.drawCardsIntoHand(def.island.draw, { append: true });
+      return { ok: meta.cards.length > 0, drawn: meta.cards.length };
     }
 
     if (def.island.guaranteed) {
@@ -1523,7 +1534,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm -= def.cost;
     const p = mkP(type);
     G.allCrew.push(p);
-    G.deck.push(p);
+    G.discard.push(p);
 
     if (this.isTutorial()) {
       this.ensureTutorialFlow();
@@ -1549,11 +1560,12 @@ class GameScene extends Phaser.Scene {
     }
     if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
     G.shopAnimating = false;
-    if (opts.deferRender) return;
+    if (opts.deferRender) return p;
     this.renderAll();
     if (!opts.skipPanelRefresh && this.scene.isActive('shopModal')) {
       this.scene.get('shopModal').renderPanel();
     }
+    return p;
   }
 
   handleShoppingContinue() {
@@ -1580,6 +1592,7 @@ class GameScene extends Phaser.Scene {
   prepareNextRound() {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'shopping') return;
+    const discardAnimEnd = this.animateCurrentHandToDiscard();
     if (this.isTutorial()) {
       this.ensureTutorialFlow();
       const tut = this.tutorialState();
@@ -1587,7 +1600,9 @@ class GameScene extends Phaser.Scene {
       if (tut.currentTurn >= totalTurns) return;
       this.closePanels();
       tut.currentTurn += 1;
-      this.applyTutorialTurn(tut.currentTurn);
+      this.applyTutorialTurn(tut.currentTurn, {
+        handEntranceDelay: discardAnimEnd + 80,
+      });
       return;
     }
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
@@ -1599,7 +1614,7 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this._shipResolvedSet = new Set();
     this._shipQueueTotal = 0;
-    G.hand = drawCards(5);
+    this.drawCardsIntoHand(5, { delay: discardAnimEnd + 80 });
     this.enterMapPhase();
   }
 
@@ -1623,6 +1638,7 @@ class GameScene extends Phaser.Scene {
     if (totalStr >= shipStr) {
       this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
       this.time.delayedCall(1000, () => {
+        const discardAnimEnd = this.animateCurrentHandToDiscard();
         G.weapons = 0;
         G.busy = false;
         G.discard.push(...G.hand);
@@ -1632,7 +1648,7 @@ class GameScene extends Phaser.Scene {
           return;
         }
 
-        G.hand = drawCards(5);
+        this.drawCardsIntoHand(5, { delay: discardAnimEnd + 80 });
         this.enterMapPhase();
       });
     } else {
@@ -1657,7 +1673,11 @@ class GameScene extends Phaser.Scene {
     if (totalStr >= shipStr) {
       this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
       this.time.delayedCall(1000, () => {
+        this.animateCurrentHandToDiscard();
         G.weapons = 0;
+        G.discard.push(...G.hand);
+        G.hand = [];
+        G.sent = [];
         G.phase = 'tutorialOutro';
         G.busy = true;
         this.renderAll();
@@ -2056,6 +2076,217 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  pileButtonCenter(kind) {
+    const L = this.L;
+    const pileBtnOpts = this.footerPileBtnOpts();
+    if (kind === 'draw') {
+      const width = this.measurePillWidth('Draw Pile', pileBtnOpts);
+      return { x: 22 * L.k + width / 2, y: L.Y_NAV };
+    }
+    const width = this.measurePillWidth('Discard', pileBtnOpts);
+    return { x: L.W - 22 * L.k - width / 2, y: L.Y_NAV };
+  }
+
+  queueHandAppear(cards, opts = {}) {
+    if (!Array.isArray(cards) || cards.length === 0) return;
+    const from = opts.from || this.pileButtonCenter('draw');
+    const delay = opts.delay || 0;
+    const stagger = opts.stagger != null ? opts.stagger : 70;
+    const startScale = opts.startScale != null ? opts.startScale : 0.38;
+    if (!this._pendingHandAppearById || typeof this._pendingHandAppearById !== 'object') {
+      this._pendingHandAppearById = {};
+    }
+    cards.forEach((pirate, idx) => {
+      if (!pirate) return;
+      this._pendingHandAppearById[pirate.id] = {
+        x: from.x,
+        y: from.y,
+        delay: delay + idx * stagger,
+        startScale,
+        rotation: -0.18 + idx * 0.05,
+      };
+    });
+  }
+
+  consumeHandAppear() {
+    if (!this._pendingHandAppearById) return null;
+    const byId = this._pendingHandAppearById;
+    const byIdx = {};
+    let found = false;
+    G.hand.forEach((pirate, handIdx) => {
+      if (!pirate || !byId[pirate.id]) return;
+      byIdx[handIdx] = byId[pirate.id];
+      found = true;
+    });
+    this._pendingHandAppearById = null;
+    return found ? byIdx : null;
+  }
+
+  snapshotHandCardsForDiscard() {
+    const visibleByIdx = {};
+    (this._cardHand.cards || []).forEach((card) => {
+      visibleByIdx[card.handIdx] = card;
+    });
+    const sentSlotByIdx = new Map();
+    G.sent.forEach((handIdx, sentIdx) => {
+      sentSlotByIdx.set(handIdx, sentIdx);
+    });
+
+    const cards = [];
+    G.hand.forEach((pirate, handIdx) => {
+      if (!pirate) return;
+      const visible = visibleByIdx[handIdx];
+      if (visible) {
+        cards.push({
+          type: pirate.type,
+          x: visible.container.x,
+          y: visible.container.y,
+          rotation: visible.container.rotation,
+          scale: visible.container.scaleX || 1,
+        });
+        return;
+      }
+      if (!sentSlotByIdx.has(handIdx)) return;
+      const placement = this.sentCardPlacement(sentSlotByIdx.get(handIdx));
+      cards.push({
+        type: pirate.type,
+        x: placement.x,
+        y: placement.y,
+        rotation: placement.rotation || 0,
+        scale: placement.scale != null ? placement.scale : 1,
+      });
+    });
+    return cards;
+  }
+
+  animateCardGhost(card, target, opts = {}) {
+    const L = this.L;
+    const delay = opts.delay || 0;
+    const duration = opts.duration != null ? opts.duration : 360;
+    const startScale = card.scale != null ? card.scale : 1;
+    const endScale = opts.endScale != null ? opts.endScale : 0.34;
+    const startRotation = card.rotation || 0;
+    const endRotation = opts.endRotation != null ? opts.endRotation : Phaser.Math.FloatBetween(-0.14, 0.14);
+    const endAlpha = opts.endAlpha != null ? opts.endAlpha : 0.16;
+    const scatterX = opts.scatterX != null ? opts.scatterX : 16 * L.k;
+    const scatterY = opts.scatterY != null ? opts.scatterY : 10 * L.k;
+    const targetX = target.x + (Math.random() - 0.5) * scatterX;
+    const targetY = target.y - (Math.random() * scatterY);
+    const cpX = (card.x + targetX) / 2 + (Math.random() - 0.5) * (opts.arcSpreadX != null ? opts.arcSpreadX : 80 * L.k);
+    const cpY = Math.min(card.y, targetY) - (opts.arcHeight != null ? opts.arcHeight : 80 * L.k);
+
+    this.time.delayedCall(delay, () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      const built = buildCardTexture(this, card.type, L);
+      const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
+      const ghost = this.add.image(card.x, card.y, built.texKey)
+        .setOrigin(0.5, 0.5)
+        .setDepth(65)
+        .setRotation(startRotation)
+        .setScale(startScale * baseScale);
+      this.ct.fx.add(ghost);
+
+      let destroyed = false;
+      const destroyGhost = () => {
+        if (destroyed) return;
+        destroyed = true;
+        if (ghost && ghost.scene && ghost.scene.sys) {
+          ghost.destroy();
+        }
+      };
+
+      this.tweens.addCounter({
+        from: 0,
+        to: 1,
+        duration,
+        ease: opts.ease || 'Cubic.easeInOut',
+        onUpdate: (tw) => {
+          if (!ghost || !ghost.scene || !ghost.scene.sys) return;
+          const p = tw.getValue();
+          const q = 1 - p;
+          const x = q * q * card.x + 2 * q * p * cpX + p * p * targetX;
+          const y = q * q * card.y + 2 * q * p * cpY + p * p * targetY;
+          ghost.setPosition(x, y);
+          ghost.setRotation(Phaser.Math.Linear(startRotation, endRotation, p));
+          const scale = Phaser.Math.Linear(startScale, endScale, p);
+          ghost.setScale(scale * baseScale);
+          ghost.setAlpha(Phaser.Math.Linear(1, endAlpha, p));
+        },
+        onStop: destroyGhost,
+        onComplete: destroyGhost,
+      });
+    });
+
+    return delay + duration;
+  }
+
+  animateCardsToDiscard(cards, opts = {}) {
+    if (!Array.isArray(cards) || cards.length === 0) return opts.delay || 0;
+    const target = this.pileButtonCenter('discard');
+    const baseDelay = opts.delay || 0;
+    const stagger = opts.stagger != null ? opts.stagger : 55;
+    let endAt = baseDelay;
+    cards.forEach((card, idx) => {
+      endAt = Math.max(endAt, this.animateCardGhost(card, target, {
+        delay: baseDelay + idx * stagger,
+        duration: 380,
+        arcHeight: 120 * this.L.k,
+        arcSpreadX: 70 * this.L.k,
+        endScale: 0.34,
+        endAlpha: 0.18,
+      }));
+    });
+    return endAt;
+  }
+
+  animateCurrentHandToDiscard(opts = {}) {
+    return this.animateCardsToDiscard(this.snapshotHandCardsForDiscard(), opts);
+  }
+
+  animateReshuffleToDraw(reshuffles, opts = {}) {
+    if (!Array.isArray(reshuffles) || reshuffles.length === 0) return opts.delay || 0;
+    const from = this.pileButtonCenter('discard');
+    const to = this.pileButtonCenter('draw');
+    let cursor = opts.delay || 0;
+
+    reshuffles.forEach((entry) => {
+      const cards = (entry.cards || []).slice(-Math.min((entry.cards || []).length, 4));
+      let batchEnd = cursor;
+      cards.forEach((pirate, idx) => {
+        batchEnd = Math.max(batchEnd, this.animateCardGhost({
+          type: pirate.type,
+          x: from.x + (idx - (cards.length - 1) / 2) * 10 * this.L.k,
+          y: from.y - idx * 4 * this.L.k,
+          rotation: -0.12 + idx * 0.06,
+          scale: 0.34,
+        }, to, {
+          delay: cursor + idx * 45,
+          duration: 320,
+          arcHeight: 34 * this.L.k,
+          arcSpreadX: 24 * this.L.k,
+          endScale: 0.34,
+          endAlpha: 0.22,
+          scatterX: 10 * this.L.k,
+          scatterY: 6 * this.L.k,
+          ease: 'Sine.easeInOut',
+        }));
+      });
+      cursor = batchEnd + 60;
+    });
+
+    return cursor;
+  }
+
+  drawCardsIntoHand(n, opts = {}) {
+    const meta = drawCardsWithMeta(n);
+    const shuffleEnd = this.animateReshuffleToDraw(meta.reshuffles, { delay: opts.delay || 0 });
+    const handDelay = meta.reshuffles.length > 0 ? shuffleEnd + 40 : (opts.delay || 0);
+    if (opts.append) G.hand.push(...meta.cards);
+    else G.hand = meta.cards;
+    this.queueHandAppear(meta.cards, { delay: handDelay });
+    return meta;
+  }
+
   renderInventory() {
     const L = this.L;
     const layout = this.inventoryLayout();
@@ -2244,6 +2475,7 @@ class GameScene extends Phaser.Scene {
 
   renderHand() {
     const prevPositions = this._cardHand.getCardPositions();
+    const appearFrom = this.consumeHandAppear();
     this.clearCt('hand');
     this._cardHand.destroy();
     this._handSprites = {};
@@ -2273,6 +2505,7 @@ class GameScene extends Phaser.Scene {
       shipResolvedSet: this._shipResolvedSet,
       isSending,
       prevPositions,
+      appearFrom,
       tutorialBlocked: (p) => this.isTutorial() && G.phase === 'sending' &&
         this.isTutorialIslandBlockedPirate(p, tutorialTurn),
       tutorialTargetIdx,
@@ -2301,7 +2534,9 @@ class GameScene extends Phaser.Scene {
       return;
     }
     const actionY = action.variant === 'continue' ? this.islandContinueY() : this.islandActionY();
-    this.mkBtn('btn', L.cx, actionY, action.label, action.onClick, {
+    const actionX = action.variant === 'continue' ? (L.W - 24 * L.k) : L.cx;
+    this.mkBtn('btn', actionX, actionY, action.label, action.onClick, {
+      originX: action.variant === 'continue' ? 1 : 0.5,
       minH: 48 * L.k,
       minW: 122 * L.k,
       textPx: 16,
