@@ -2370,12 +2370,14 @@ class GameScene extends Phaser.Scene {
     const cy = this.islandCenterY();
     const titleY = cy + 96 * L.k;
     const titleDescMargin = 8 * L.k;
+    const titleLineSpacing = Math.round(-18 * L.k);
     const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
     const outlineH = 144 * L.k;
 
     if (G.enemyShip) {
       const title = this.add.text(cx, cy, 'Enemy Ship', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
         align: 'center',
+        lineSpacing: titleLineSpacing,
         wordWrap: { width: L.W - 72 * L.k },
       })).setOrigin(0.5);
       this.addTo('island', title);
@@ -2397,6 +2399,7 @@ class GameScene extends Phaser.Scene {
     if (!G.island) {
       const title = this.add.text(cx, titleY, 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
         align: 'center',
+        lineSpacing: titleLineSpacing,
       })).setOrigin(0.5, 0);
       this.addTo('island', title);
       this.addTo('island', this.add.text(cx, titleY + title.height + titleDescMargin, 'Choose the next place to sail', uiBodyStyle(L, UI_THEME.colors.paper))
@@ -2411,6 +2414,7 @@ class GameScene extends Phaser.Scene {
 
     const title = this.add.text(cx, titleY, G.island.name, uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
       align: 'center',
+      lineSpacing: titleLineSpacing,
       wordWrap: { width: L.W - 72 * L.k },
     })).setOrigin(0.5, 0);
     this.addTo('island', title);

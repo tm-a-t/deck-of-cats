@@ -24,7 +24,7 @@ const CARD = {
   SHIP_GLOW: uiColorInt(UI_THEME.colors.cocoa),
   SHIP_GLOW_ALPHA: 0.45,
 
-  NEIGHBOR_SPREAD: 22,
+  NEIGHBOR_SPREAD: 44,
   MOBILE_DRAG_PULL: 48,
 };
 
@@ -39,6 +39,16 @@ function fitCanvasFontSize(ctx, text, maxW, startPx, fontFamily, fontStyle = '',
   return floorPx;
 }
 
+function cardTextHash(text) {
+  let hash = 2166136261;
+  const src = String(text || '');
+  for (let i = 0; i < src.length; i++) {
+    hash ^= src.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function buildCardTexture(scene, typeKey, L) {
   const k = L.k;
   const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
@@ -46,7 +56,12 @@ function buildCardTexture(scene, typeKey, L) {
   const ch = Math.round(CARD.H * k);
   const r = Math.round(CARD.RADIUS * k);
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
-  const texKey = '_card_' + typeKey + '_' + cw + 'x' + ch + '@' + textureResolution;
+
+  const def = TYPES[typeKey];
+  const islandDesc = pirateIslandDesc(def);
+  const shipDesc = pirateShipDesc(def);
+  const textHash = cardTextHash(`${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
+  const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
 
   if (scene.textures.exists(texKey)) return { texKey, cw, ch, textureResolution };
 
@@ -65,7 +80,6 @@ function buildCardTexture(scene, typeKey, L) {
   ctx.lineWidth = bw;
   ctx.stroke();
 
-  const def = TYPES[typeKey];
   const pad = Math.round(10 * k);
   const maxTxtW = cw - pad * 2;
   const lineY = Math.round(31 * k);
@@ -91,8 +105,8 @@ function buildCardTexture(scene, typeKey, L) {
     '',
     UI_THEME.fonts.headingMinPx
   );
-  const islandFs = fitCanvasFontSize(ctx, def.dI || '—', maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
-  const shipFs = fitCanvasFontSize(ctx, def.dS || '—', maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
+  const islandFs = fitCanvasFontSize(ctx, islandDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
+  const shipFs = fitCanvasFontSize(ctx, shipDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
   const topTextY = Math.round(7 * k);
   const nameY = Math.round(123 * k);
   const statY = Math.round(143 * k);
@@ -121,7 +135,7 @@ function buildCardTexture(scene, typeKey, L) {
   ctx.fillStyle = UI_THEME.colors.ink;
 
   ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
-  ctx.fillText(def.dI || '—', cw / 2, topTextY);
+  ctx.fillText(islandDesc, cw / 2, topTextY);
 
   ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
   ctx.fillText(def.name, cw / 2, nameY);
@@ -130,7 +144,7 @@ function buildCardTexture(scene, typeKey, L) {
   ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
 
   ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
-  ctx.fillText(def.dS || '—', cw / 2, bottomTextY);
+  ctx.fillText(shipDesc, cw / 2, bottomTextY);
 
   scene.textures.addCanvas(texKey, canvas);
   scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);

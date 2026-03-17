@@ -106,11 +106,11 @@ class AllPiratesScene extends Phaser.Scene {
   _pirateLines(def) {
     const lines = [];
     if (def.canIsland) {
-      lines.push('🏝️ ' + def.dI);
+      lines.push('🏝️ ' + pirateIslandDesc(def));
     } else {
-      lines.push('🏝️ Can\'t land');
+      lines.push('🏝️ ' + pirateIslandDesc(def, { cantLandText: 'Can\'t land' }));
     }
-    lines.push('⛵ ' + def.dS);
+    lines.push('⛵ ' + pirateShipDesc(def));
     lines.push('⚔️ ' + (def.str || 0));
     if (def.cost !== null) lines.push('☠️ ' + def.cost);
     return lines;

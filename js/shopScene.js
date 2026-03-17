@@ -92,10 +92,12 @@ class ShopScene extends Phaser.Scene {
 
   startFeaturedTicker(panel, def) {
     const L = this.L;
+    const islandDesc = pirateIslandDesc(def);
+    const shipDesc = pirateShipDesc(def);
     const lines = [
       `Featured: ${def.name}`,
-      `Island: ${def.dI}`,
-      `Ship: ${def.dS}`,
+      `Island: ${islandDesc}`,
+      `Ship: ${shipDesc}`,
       `Power: ${(def.str || 0)}⚔️`,
       `Cost: ☠️${def.cost}`,
     ];

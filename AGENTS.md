@@ -18,6 +18,13 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 - `GameScene` redraws its main UI via `renderAll()` after state changes; overlay panels live in separate scenes.
 - The active hand is rendered by `CardHand`, which owns the fan layout, hover, drag-to-island, and ship-effect overlays.
 
+## UI Copy
+
+- Pirate descriptions must be derived from the pirate definitions in `TYPES` via shared helpers in `js/constants.js`.
+- Do not hand-maintain separate description strings as a second source of truth.
+- If a pirate needs specific wording like `reliable`, `safe`, `risky`, `decent odds`, or `very risky`, store that wording in the pirate definition metadata and let the shared helpers render it. Do not switch those descriptions to raw percentages.
+- When formatting resource/item counts inside those generated descriptions, use repeated emoji for counts 1–3 and numeric counts only for 4+.
+
 ### Scenes
 
 | Scene | Key | Role |
