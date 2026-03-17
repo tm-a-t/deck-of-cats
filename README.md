@@ -1,60 +1,66 @@
 🇬🇧 English above  
 🇷🇺 Русская версия ниже
 
-play at https://pirate-islands.netlify.app/.
+Play at https://pirate-islands.netlify.app/.
 
 ---
 
-## — Current Rules —
+## Deck of Cats
 
-**Goal:** defeat 10 ships. To do that, you need to survive 50 rounds.
+Browser deck-builder about pirate cats, built with Phaser 3.
 
-**Islands:** at the start of each round, five pirates from your crew appear, and you sail to an island. You can send two pirates onto the island to gather resources, while the others perform actions on the ship. Each pirate has an **island effect** (for example, bringing back a stone) and a **ship effect** (for example, turning a stone into a cannon).
+### Current Build
 
-**Gambling:** pirates who go to gather resources do not always bring back what you need. Sometimes they bring something completely useless. Such effects are marked with words like *reliable* (fairly dependable) and *risky* (50/50).
+- Sail a 50-layer branching map with 10 boarding fights.
+- Draw up to 5 pirates each turn.
+- On island turns, send up to 2 pirates ashore (3 on Port Island); pirates left on ship resolve ship actions.
+- On boarding turns, total strength = crew strength + 🗡️ weapons + 💣 cannons.
+- The shop has 4 slots; bought pirates go into the deck; the shop rotates at the end of shopping.
+- The redesigned wood-and-parchment UI keeps strength and the current goal in the header, the island or ship in the center, a fan hand at the bottom, `🗺️` and `🛒` in the top-right, and `Draw Pile` / `Discard` panels in the footer.
 
-**Buying:** at the end of a normal round, you can buy a pirate for your crew using skulls. After that, your skulls are spent.
+Full gameplay rules and the complete pirate list live in [rules.md](rules.md).
 
-**Battle:** every fifth round you board an enemy ship. If your total strength is **less than the round number**, you lose. As in normal rounds, you draw five pirates and then sum their strength. **Swords** and **cannons (bombs)** that you obtained earlier add to your strength. Swords are consumed after one battle, while cannons remain for future battles.
+### Local Run
 
-**Map:** sometimes before a round begins you can choose which island to sail to. Different islands have different properties.
+No build step. Serve the repo root with any static file server, for example:
 
-**Crew:** this is a **deckbuilding** game. You recruit pirates into your crew, and they appear regularly in your draws. Your entire crew is shown in the bar at the top. Each round you draw five pirates from your crew, then they go to the discard pile — discarded pirates will not appear again until you have drawn all the others; after that the discard resets.
+```bash
+python3 -m http.server 8000
+```
 
----
+Then open `http://localhost:8000`.
 
-## — What to Test —
+### Notes
 
-This is a **prototype** meant to test the core mechanics. Therefore it will **not** include: major interface changes or fixes, an online leaderboard, etc. The final game, if it happens, will likely look different.
-
-However, you are welcome to **report balance issues**, and **suggest new pirates or mechanics**.
-
-The game is being **rebalanced and updated continuously**.
-
----
-
-## — Текущие правила —
-
-**Цель:** победить 10 кораблей. Для этого нужно пройти 50 раундов.
-
-**Острова:** в начале раунда в вашем распоряжении появляются пять пиратов из вашей команды, и вы плывёте на остров. Двух пиратов вы можете отправить на остров за ресурсами, а остальные выполняют команды на корабле. У каждого пирата есть эффект на острове (например, принести камень) и «корабельный» эффект (например, сделать из камня пушку).
-
-**Гэмблинг:** пираты, которые отправляются за ресурсами, не всегда приносят то, что нужно. Иногда приносят то, что совсем не нужно. Такие эффекты помечены словами вроде reliable (достаточно надёжно) и risky (50 на 50).
-
-**Покупка:** в конце обычного раунда вы можете купить себе пирата в команду за черепушки. После этого ваши черепушки сгорают.
-
-**Бой:** каждый пятый раунд вы берёте корабль на абордаж. Если вы не наберёте силу >= номеру раунда, вы проигрываете. Как и в обычном раунде, вы вытягиваете пять пиратов, а потом суммируете их силу. Мечи и пушки (бомбочки), которые вы получили до этого, прибавляются к вашей силе. Мечи сгорают после одной битвы, а пушки остаются для будущих битв.
-
-**Карта:** иногда перед началом раунда вы можете выбрать, на какой остров поплыть. У разных островов разные свойства.
-
-**Команда:** это декбилдинг. Вы набираете себе в команду пиратов, а потом они регулярно вам выпадают. Вся ваша команда отображается в строке сверху. В каждом раунде вы вытягиваете пять пиратов из своей команды, а потом они уходят в сброс — сброшенных пиратов вы больше не увидите, пока не вытянете всех остальных; затем сброс обнуляется.
+Balance and content are still being adjusted. Feedback on balance, pacing, and pirate design is useful.
 
 ---
 
-## — Что тестировать —
+## Deck of Cats
 
-Это прототип, чтобы потестить основные механики. Поэтому не будет: больших изменений и фиксов в интерфейсе, онлайн-лидерборда и тэдэ. Финальная игра, если будет, будет выглядеть по-другому.
+Браузерный декбилдер про пиратских котов на Phaser 3.
 
-Зато можно репортить проблемы с балансом, предлагать новых пиратов и новые механики!
+### Текущая версия
 
-Игра по ссылке **ребалансится и обновляется**.
+- Плавание по ветвящейся карте на 50 слоёв с 10 абордажами.
+- Каждый ход вы тянете до 5 пиратов.
+- На островах можно отправить до 2 пиратов на берег (3 на Port Island); оставшиеся на корабле разыгрывают корабельные эффекты.
+- В абордаже общая сила = сила команды + 🗡️ оружие + 💣 пушки.
+- В магазине 4 слота; купленные пираты идут в колоду; в конце шопинга витрина сдвигается.
+- В обновлённом деревянно-пергаментном интерфейсе сверху показаны сила и текущая цель, в центре остров или вражеский корабль, снизу веер карт, справа сверху `🗺️` и `🛒`, а в футере панели `Draw Pile` и `Discard`.
+
+Полные правила и полный список пиратов находятся в [rules.md](rules.md).
+
+### Локальный запуск
+
+Сборки нет. Достаточно раздать корень репозитория любым статическим сервером, например:
+
+```bash
+python3 -m http.server 8000
+```
+
+После этого откройте `http://localhost:8000`.
+
+### Примечание
+
+Баланс и контент ещё меняются. Особенно полезен фидбек по балансу, темпу игры и новым пиратам.

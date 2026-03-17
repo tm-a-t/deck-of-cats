@@ -106,50 +106,9 @@ function syncCanvasResolution(game) {
     if (!scene || !scene.sys || !scene.sys.isActive() || !scene.cameras || !scene.cameras.main) continue;
     scene.cameras.main.setViewport(0, 0, renderWidth, renderHeight);
   }
-
-  if (typeof window !== 'undefined') {
-    window.__PHASER_RESOLUTION_DEBUG__ = {
-      dpr,
-      zoom: 1 / dpr,
-      renderWidth,
-      renderHeight,
-      displayWidth,
-      displayHeight,
-      canvasWidth: game.canvas.width,
-      canvasHeight: game.canvas.height,
-      clientWidth: game.canvas.clientWidth,
-      clientHeight: game.canvas.clientHeight,
-    };
-  }
-}
-
-function applyViewportMode() {
-  const w = window.innerWidth || 0;
-  const h = window.innerHeight || 0;
-  const vp = (typeof resolveViewportSize === 'function') ? resolveViewportSize(w, h) : { w, h };
-  const isMobileViewport = isPortraitMobile(w, h);
-  if (typeof document !== 'undefined' && document.body) {
-    document.body.classList.toggle('mobile-mode', isMobileViewport);
-  }
-  if (typeof document !== 'undefined' && document.documentElement) {
-    document.documentElement.dataset.viewportMode = isMobileViewport ? 'mobile' : 'desktop';
-  }
-  window.__VIEWPORT_MODE__ = isMobileViewport ? 'mobile' : 'desktop';
-  window.__VIEWPORT_MODE_DEBUG__ = {
-    windowWidth: w,
-    windowHeight: h,
-    checkWidth: vp.w,
-    checkHeight: vp.h,
-    aspect: vp.w > 0 ? (vp.h / vp.w) : 0,
-    isMobile: isMobileViewport,
-  };
 }
 
 function bootPhaserGame() {
-  applyViewportMode();
-  window.addEventListener('resize', applyViewportMode);
-  window.addEventListener('orientationchange', applyViewportMode);
-
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const initialViewport = (typeof resolveViewportSize === 'function')
     ? resolveViewportSize(window.innerWidth || 0, window.innerHeight || 0)
@@ -185,10 +144,6 @@ function bootPhaserGame() {
   requestAnimationFrame(() => {
     syncCanvasResolution(phaserGame);
   });
-
-  if (typeof window !== 'undefined') {
-    window.__PHASER_GAME__ = phaserGame;
-  }
 }
 
 function waitForUiFonts() {

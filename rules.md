@@ -28,9 +28,8 @@ Hand size: draw up to 5. When the deck is empty, the discard pile is shuffled ba
 ### 1. Map Phase
 
 Player picks the next node on the map.
-- If only 1 available node → auto-selected (no map page needed).
-- If 2+ available → map page opens automatically for manual selection.
-- The **Map** button is always visible in the top-right panel controls; outside the map phase it opens the map in read-only preview mode.
+- If only 1 available node → auto-selected.
+- If 2+ available → player chooses among the available nodes.
 
 ### 2a. Island Round
 
@@ -43,10 +42,8 @@ If the selected node is an island:
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
 - Each pirate's island ability resolves on arrival (resource gathering, conversion, recall, etc.).
 - Send animation/effect resolution is non-blocking: while one pirate is traveling/resolving, player may send another immediately.
-- Ship phase starts only after all in-flight island send animations/effects are finished.
-- While the player can still send more pirates, the main island button is hidden; a small **Skip** action appears above the right side of the hand instead.
-- Player ends the phase by pressing **Skip**, or it ends automatically when the maximum number of pirates have been sent.
-- The displayed **current strength** for the round counts all pirates currently in hand for that round, even after some are sent to the island.
+- Ship phase starts only after all already-triggered island actions finish resolving.
+- Player may stop sending early, or the phase ends automatically when the maximum number of pirates have been sent.
 
 **Ship phase**:
 - Each pirate remaining on the ship (not sent to island) executes their ship action sequentially, in hand order.
@@ -56,10 +53,9 @@ If the selected node is an island:
 - All others attempt to spend input resources and produce output resources/enthusiasm/weapons/cannons.
 
 **Shopping phase**:
-- Shop page does not open automatically. After ship effects finish, a **Continue** button appears below the island and opens the shop.
-- During shopping, the shop panel itself contains a **Continue** button to advance.
-- Player may reopen the Shop page to buy pirates for ☠️.
-- When **Continue** is pressed in the shop:
+- After ship effects finish, the round enters shopping.
+- Player may buy pirates for ☠️.
+- When the player continues from shopping:
   1. The first pirate in the shop window is removed, remaining shift left, a new random pirate enters from the right.
   2. Hand goes to discard (only pirates still in the crew; exiled pirates are gone).
   3. Enthusiasm resets to 0; resources persist.
@@ -186,7 +182,6 @@ Both are summed with crew strength during boarding.
 ## Shop
 
 - **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
-- **UI panel behavior**: only one page panel can be open at a time (Map/Shop/Draw Pile/Discard/other future panels). Opening one closes the others. Panels close automatically when arriving at a new island or ship node.
 - **Regular-run pool**: all non-starter, non-tutorial pirate types (26 types).
 - **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
 - **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the deck (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.

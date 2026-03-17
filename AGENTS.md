@@ -13,18 +13,21 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 ## Architecture
 
 - No build step; plain JS files loaded via `<script>` tags in `index.html`.
-- Resolution adapts to viewport via `Phaser.Scale.RESIZE`.
+- Phaser runs in `Phaser.Scale.NONE`; `js/main.js` manually syncs canvas size/zoom for HiDPI viewports.
 - Global mutable state in object `G`, initialized by `initState()` or `initTutorialState()`.
-- UI redraws entirely via `renderAll()` on every state change.
+- `GameScene` redraws its main UI via `renderAll()` after state changes; overlay panels live in separate scenes.
+- The active hand is rendered by `CardHand`, which owns the fan layout, hover, drag-to-island, and ship-effect overlays.
 
 ### Scenes
 
 | Scene | Key | Role |
 |-------|-----|------|
-| `MenuScene` | `menu` | Start menu: Start, Tutorial, Costumes, All Pirates |
-| `GameScene` | `game` | Main gameplay loop |
-| `MapScene` | `map` | Modal: route map (selection or preview) |
-| `ShopScene` | `shopModal` | Modal: pirate shop |
+| `MenuScene` | `menu` | Start menu: Play, Tutorial, Costumes, All Pirates |
+| `GameScene` | `game` | Main gameplay loop and HUD |
+| `MapScene` | `map` | Top parchment panel for route selection or preview |
+| `ShopScene` | `shopModal` | Top parchment panel for pirate buying and round advance |
+| `DrawPileScene` | `drawPileModal` | Top parchment panel for current draw pile |
+| `DiscardPileScene` | `discardPileModal` | Top parchment panel for current discard pile |
 | `CostumesScene` | `costumes` | Gallery of random cat costumes |
 | `AllPiratesScene` | `allPirates` | Scrollable list of all pirate types |
 
@@ -32,17 +35,20 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 
 | File | Contents |
 |------|----------|
-| `js/constants.js` | `BG_COLOR`, `RES_EMOJI`, `ISLANDS`, `TYPES`, `SHOP_POOL` |
+| `js/constants.js` | `UI_THEME`, UI text/pill helpers, `RES_EMOJI`, `ISLANDS`, `TYPES`, `SHOP_POOL` |
 | `js/state.js` | `G`, `mkP`, `initState`, `initTutorialState`, `randomShopType`, `initialShop`, `drawCards` |
 | `js/map.js` | Map generation: `generateMap`, `getAvailableNodes`, `mapNodeById`, connection logic |
-| `js/layout.js` | `REF_H`, `computeLayout` — dynamic layout calculations |
-| `js/scene.js` | `GameScene` — game loop, phases, island/ship resolution, boarding, rendering |
-| `js/mapScene.js` | `MapScene` — map modal with scrolling, node selection |
-| `js/shopScene.js` | `ShopScene` — shop modal, buy animations |
-| `js/menuScene.js` | `MenuScene` — start menu with streak display |
+| `js/layout.js` | Viewport helpers and `computeLayout` — dynamic layout calculations |
+| `js/menuScene.js` | `MenuScene` — start menu with streak display and gallery links |
+| `js/mapScene.js` | `MapScene` — scrollable route panel with node selection |
+| `js/shopScene.js` | `ShopScene` — shop panel, featured ticker, buy animations |
+| `js/pileScene.js` | `DrawPileScene` and `DiscardPileScene` — scrollable pile panels |
+| `js/cardHand.js` | Pirate card texture builder, `createPirateCard`, `CardHand` |
 | `js/costumesScene.js` | Cat sprite compositor (`ensureCatTextures`, `addCatSprite`, `FUR_PALETTE`) + `CostumesScene` |
 | `js/allPiratesScene.js` | `AllPiratesScene` — scrollable pirate gallery |
-| `js/main.js` | `Phaser.Game` initialization |
+| `js/scene.js` | `GameScene` — phases, tutorial flow, island/ship resolution, rendering, panel toggles |
+| `js/main.js` | Font wait, HiDPI text/canvas sync, `Phaser.Game` initialization |
+| `js/pokiBridge.js` | Poki SDK bridge used by the web build |
 
 ### Global State (`G`) Fields
 
@@ -62,24 +68,26 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | `island` | `object\|null` | Current island definition |
 | `enemyShip` | `{strength}\|null` | Enemy ship if boarding round |
 | `boardingCount` | `int` | Total boardings fought |
+| `gameOver` | `bool` | Lose-state flag used by overlays |
 | `shop` | `Array<string>` | 4 type-keys in the shop window |
 | `shopAnimating` | `bool` | Lock during buy animation |
 | `busy` | `bool` | Lock during phase transitions |
-| `map` | `object` | `{layers, visited, currentNodeId, currentLayer}` |
+| `map` | `object\|null` | `{layers, visited, currentNodeId, currentLayer}` in regular runs, `null` in tutorial |
 | `tutorial` | `object\|null` | Tutorial state when active |
 
 ### GameScene Containers
 
-`top`, `island`, `phase`, `hand`, `btn`, `nav`, `tip` (depth 100), `fx` (depth 50), `gameover` (depth 200).
+`top`, `island`, `phase`, `hand`, `btn`, `nav`, `fx` (depth 50), `tutorialHint` (depth 170), `tutorial` (depth 180), `gameover` (depth 200).
 
-### Layout
+### Main Screen Layout
 
-- Top: round number, resource inventory, full crew display, shop preview.
-- Center: current island / enemy ship / open sea.
-- Below center: phase status text.
-- Lower: pirate hand (5 cards; 2 rows on screens ≤760px wide).
-- Bottom: Map and Shop buttons (left), action button (right).
-- Modals (Map, Shop): close by clicking outside the paper area or ✕.
+- Top: current total strength on the left and the current strategic goal on the right.
+- Center: current island, enemy ship, or open sea; pirates already sent ashore are shown here.
+- Around the center: context actions such as `Board!`, `Continue`, and floating combat/resource feedback.
+- Lower: pirate hand rendered as a fanned row of cards; during the sending phase cards drag upward onto the island.
+- Top-right: `🗺️` map and `🛒` shop buttons.
+- Bottom: `Draw Pile` and `Discard` buttons framing the live resource inventory.
+- Panels (`Map`, `Shop`, `Draw Pile`, `Discard`): only one can be open at a time; they slide down from the top and close on outside click or `×`.
 
 ### Cat Sprite System
 

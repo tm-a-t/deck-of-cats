@@ -12,8 +12,6 @@ const CARD = {
   BG: uiColorInt(UI_THEME.colors.sand),
   BG_ALPHA: 1,
   BORDER_COLOR: uiColorInt(UI_THEME.colors.sandBorder),
-  BORDER_HOVER: uiColorInt(UI_THEME.colors.cocoa),
-  BORDER_ACTIVE: uiColorInt(UI_THEME.colors.cocoa),
 
   FAN_CURVE: 0.022,
   FAN_ROTATION: 0.02,
@@ -29,24 +27,6 @@ const CARD = {
   NEIGHBOR_SPREAD: 22,
   MOBILE_DRAG_PULL: 48,
 };
-
-function measureWrappedHeight(ctx, text, maxW, lineH) {
-  if (ctx.measureText(text).width <= maxW) return lineH;
-  const words = text.split(' ');
-  let line = '';
-  let h = 0;
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxW && line) {
-      h += lineH;
-      line = w;
-    } else {
-      line = test;
-    }
-  }
-  if (line) h += lineH;
-  return h;
-}
 
 function fitCanvasFontSize(ctx, text, maxW, startPx, fontFamily, fontStyle = '', minPx = 10) {
   let size = startPx;
@@ -193,29 +173,6 @@ function createPirateCard(scene, opts) {
     cw: built.cw,
     ch: built.ch,
   };
-}
-
-function drawWrappedReturn(ctx, text, x, y, maxW, lineH) {
-  const measured = ctx.measureText(text).width;
-  if (measured <= maxW) {
-    ctx.fillText(text, x, y);
-    return y + lineH;
-  }
-  const words = text.split(' ');
-  let line = '';
-  let cy = y;
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxW && line) {
-      ctx.fillText(line, x, cy);
-      cy += lineH;
-      line = w;
-    } else {
-      line = test;
-    }
-  }
-  if (line) { ctx.fillText(line, x, cy); cy += lineH; }
-  return cy;
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -611,7 +568,7 @@ class CardHand {
     const isTouchPointer = (pointer) =>
       !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
     const isMobileViewport = () =>
-      typeof window !== 'undefined' && window.__VIEWPORT_MODE__ === 'mobile';
+      !!(scene.L && scene.L.IS_MOBILE);
 
     const beginDragVisual = (pointer) => {
       if (dragActivated) return;
