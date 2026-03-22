@@ -27,6 +27,26 @@ const UI_THEME = {
 
 const BG_COLOR = UI_THEME.colors.gameBg;
 
+const CARD_MOTION = {
+  handAppearDelay: 80,
+  handAppearStagger: 90,
+  handAppearDuration: 560,
+  handReflowDuration: 420,
+  sendToIslandDuration: 520,
+  ghostDuration: 500,
+  discardStagger: 70,
+  discardDuration: 560,
+  reshuffleStagger: 60,
+  reshuffleDuration: 460,
+  reshuffleSettleDelay: 90,
+  sequenceGap: 70,
+  betweenTurnsDelay: 120,
+  hoverInDuration: 240,
+  hoverOutDuration: 300,
+  highlightInDuration: 380,
+  highlightOutDuration: 260,
+};
+
 function uiColorInt(hex) {
   return Phaser.Display.Color.HexStringToColor(hex).color;
 }
@@ -159,9 +179,9 @@ function pirateIslandDesc(def, opts = {}) {
 
   if (island.guaranteed) {
     const gain = island.guaranteed;
-    if (gain.weapons) return normalizePirateDescText(pirateDescWithSuffix(`→ ${pirateDescCount('weapons', gain.weapons)}`, pirateIslandDescSuffix(island)));
-    if (gain.cannons) return normalizePirateDescText(pirateDescWithSuffix(`→ ${pirateDescCount('cannons', gain.cannons)}`, pirateIslandDescSuffix(island)));
-    if (gain.res) return normalizePirateDescText(pirateDescWithSuffix(`→ ${pirateDescCount(gain.res, gain.amt)}`, pirateIslandDescSuffix(island)));
+    if (gain.weapons) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount('weapons', gain.weapons), pirateIslandDescSuffix(island)));
+    if (gain.cannons) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount('cannons', gain.cannons), pirateIslandDescSuffix(island)));
+    if (gain.res) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount(gain.res, gain.amt), pirateIslandDescSuffix(island)));
     return '—';
   }
 
@@ -225,7 +245,7 @@ function pirateShipDesc(def) {
 
   const gain = pirateShipGainDesc(ship);
   if (cost && gain) return normalizePirateDescText(`${cost} → ${gain}`);
-  if (gain) return normalizePirateDescText(`→ ${gain}`);
+  if (gain) return normalizePirateDescText(gain);
   return '—';
 }
 

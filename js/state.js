@@ -42,17 +42,32 @@ let G = {};
 function drawCardsWithMeta(n) {
   const out = [];
   const reshuffles = [];
+  const steps = [];
+  let pendingDraw = [];
+
+  const flushDrawStep = () => {
+    if (pendingDraw.length === 0) return;
+    steps.push({ type: 'draw', cards: pendingDraw });
+    pendingDraw = [];
+  };
+
   for (let i = 0; i < n; i++) {
     if (G.deck.length === 0) {
+      flushDrawStep();
       if (G.discard.length === 0) break;
       const cards = [...G.discard];
-      reshuffles.push({ cards, count: cards.length });
+      const reshuffle = { cards, count: cards.length };
+      reshuffles.push(reshuffle);
+      steps.push({ type: 'reshuffle', cards, count: cards.length });
       G.deck = Phaser.Utils.Array.Shuffle(cards);
       G.discard = [];
     }
-    out.push(G.deck.pop());
+    const card = G.deck.pop();
+    out.push(card);
+    pendingDraw.push(card);
   }
-  return { cards: out, reshuffles };
+  flushDrawStep();
+  return { cards: out, reshuffles, steps };
 }
 
 function drawCards(n) {

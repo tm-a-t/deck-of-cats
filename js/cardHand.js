@@ -373,11 +373,12 @@ class CardHand {
         scene.tweens.add({
           targets: ct,
           x: slot.x, y: slot.y, rotation: slot.rotation,
-          duration: 300, ease: 'Cubic.easeOut',
+          duration: CARD_MOTION.handReflowDuration, ease: 'Cubic.easeOut',
         });
       } else if (appearFrom) {
         const startScale = appearFrom.startScale != null ? appearFrom.startScale : 0.38;
         const startRotation = appearFrom.rotation != null ? appearFrom.rotation : slot.rotation - 0.16;
+        const appearDuration = appearFrom.duration != null ? appearFrom.duration : CARD_MOTION.handAppearDuration;
         ct.setPosition(appearFrom.x, appearFrom.y);
         ct.setRotation(startRotation);
         ct.setScale(startScale);
@@ -391,7 +392,7 @@ class CardHand {
           scaleY: 1,
           alpha: 1,
           delay: appearFrom.delay || 0,
-          duration: 420,
+          duration: appearDuration,
           ease: 'Cubic.easeOut',
         });
       }
@@ -455,10 +456,11 @@ class CardHand {
         targets: card.container,
         scaleX: 1.08, scaleY: 1.08,
         y: card.slot.y - 20 * k,
-        duration: 300, ease: 'Back.easeOut',
+        duration: CARD_MOTION.highlightInDuration,
+        ease: 'Back.easeOut',
       });
 
-      this._tweenNeighborSpread(card, k, 300, 'Back.easeOut');
+      this._tweenNeighborSpread(card, k, CARD_MOTION.highlightInDuration, 'Back.easeOut');
     } else {
       this._shipHighlightedIdx = -1;
       if (card._shipGlow) {
@@ -466,15 +468,15 @@ class CardHand {
         card._shipGlow = null;
       }
       card.container.setDepth(10 + card.slotIndex);
-      card.targetY = card.slot.y;
       scene.tweens.add({
         targets: card.container,
         scaleX: 1, scaleY: 1,
         y: card.slot.y,
-        duration: 200, ease: 'Sine.easeOut',
+        duration: CARD_MOTION.highlightOutDuration,
+        ease: 'Sine.easeOut',
       });
 
-      this._tweenNeighborSpread(null, k, 200, 'Sine.easeOut');
+      this._tweenNeighborSpread(null, k, CARD_MOTION.highlightOutDuration, 'Sine.easeOut');
     }
   }
 
@@ -709,7 +711,7 @@ class CardHand {
         scaleX: CARD.HOVER_SCALE,
         scaleY: CARD.HOVER_SCALE,
         rotation: 0,
-        duration: 200,
+        duration: CARD_MOTION.hoverInDuration,
         ease: 'Back.easeOut',
       });
     } else {
@@ -724,7 +726,7 @@ class CardHand {
         scaleX: 1,
         scaleY: 1,
         rotation: cardData.slot.rotation,
-        duration: 250,
+        duration: CARD_MOTION.hoverOutDuration,
         ease: 'Sine.easeOut',
       });
     }
