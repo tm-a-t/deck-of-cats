@@ -67,14 +67,35 @@ If the selected node is an island:
 
 If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
-- **Crew strength** = sum of all hand pirates' ⚔️.
-- **Ship bonus** = 🗡️ weapons + 💣 cannons.
-- **Total strength** = crew strength + ship bonus.
-- **Victory** (total ≥ enemy strength):
-  - 🗡️ weapons reset to 0; 💣 cannons persist.
+- Boarding starts with a **setup step**:
+  - Player may assign up to 1🗡️ to each pirate by tapping the corner slot on that pirate's card.
+  - Pirate order is fixed in this prototype; reordering is currently disabled.
+  - Each assigned 🗡️ is consumed when the player presses `Fight!`.
+- Pirate combat stats in this prototype:
+  - Damage = the pirate's printed ⚔️.
+  - HP = 9 for every pirate.
+  - Attack speed = one shared base speed for all pirates.
+  - A sword gives that pirate **+1 damage** and **+50% attack speed** for this battle.
+- Enemy boarding parties are generated independently of the map node's legacy `strength` value:
+  - Encounters use 3–5 generic enemies.
+  - Difficulty scales by **boarding count**.
+  - Tutorial turn 5 uses a fixed training encounter.
+- Combat resolution:
+  - Both rows attack automatically once `Fight!` is pressed.
+  - When combat starts, both sides switch from the setup cards to compact mini cards so all fighters stay visible at once.
+  - Every fighter gets a tiny random initial delay, then keeps attacking until dead.
+  - Across the whole boarding, only one attack may start every **0.3s**.
+  - A fighter's own attack cooldown is still based on that fighter's attack speed from its previous attack.
+  - A fighter cannot begin an attack while another attack is currently targeting them.
+  - Each attack targets a random living enemy in that fighter's positional band.
+  - Positional band rule: if a fighter is position `X` out of `N` living allies and the opposing row has `M` living enemies, the target band is the enemy indices from `floor((X-1)*M/N)` through `ceil(X*M/N)-1`, clamped to the living enemy row.
+- **Victory**:
+  - All remaining 🗡️ reset to 0; 💣 cannons persist.
+  - No combat casualties persist.
   - Hand discarded, draw up to 5 new pirates, proceed to map phase.
   - If this was the final map node → **Victory screen**.
-- **Defeat** (total < enemy strength):
+- **Defeat**:
+  - All remaining 🗡️ reset to 0.
   - **Game Over** screen.
 
 ---
@@ -96,13 +117,10 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 - Layers 0–8: no Treasure Island, no Skull Island, no Siren Island.
 - Layers 9–14: no Siren Island (Treasure and Skull are allowed).
 
-**Early ship strength:**
-
-| Ship # | Layer | Strength |
-|--------|-------|----------|
-| 1 | 4 | 6 |
-| 2 | 9 | 11 |
-| 3 | 14 | 16 |
+**Boarding difficulty note:**
+- Ship nodes still appear at the same layers.
+- The old map `strength` values are currently ignored by boarding resolution.
+- Prototype boarding difficulty scales with **boarding count** instead.
 
 ### Mid/Late Game (layers 15–49)
 
@@ -110,18 +128,6 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 - Ship nodes at layers 19, 24, 29, 34, 39, 44, 49 (every 5th layer).
 - Siren Island can appear starting at layer 15 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
-
-**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 4 + 2)`
-
-| Ship # | Layer | Strength |
-|--------|-------|----------|
-| 4 | 19 | 23 |
-| 5 | 24 | 29 |
-| 6 | 29 | 36 |
-| 7 | 34 | 43 |
-| 8 | 39 | 50 |
-| 9 | 44 | 57 |
-| 10 | 49 | 65 |
 
 ### Victory Condition
 
@@ -173,10 +179,8 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Type | Emoji | Effect | Persistence |
 |------|-------|--------|-------------|
-| Weapons | 🗡️ | +1⚔️ per weapon in next boarding; some ship actions can spend them | Reset to 0 after boarding (win or lose) |
-| Cannons | 💣 | +1⚔️ per cannon in every boarding; some ship actions can spend them | Not reset after boarding |
-
-Both are summed with crew strength during boarding.
+| Weapons | 🗡️ | During boarding setup, assign 1 to a pirate for +1 damage and +50% attack speed in that fight; some ship actions can spend them | Reset to 0 after boarding (win or lose) |
+| Cannons | 💣 | Persistent resource used by some ship actions; no direct boarding effect in this prototype | Not reset after boarding |
 
 ---
 
@@ -284,8 +288,8 @@ Both are summed with crew strength during boarding.
 | 🪙 | Gold | Ship actions input; high-tier conversions |
 | 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-| 🗡️ | Weapons | Temporary ⚔️ bonus; also spendable by some ship actions |
-| 💣 | Cannons | Persistent ⚔️ bonus; not reset after boarding, but some ship actions can spend them |
+| 🗡️ | Weapons | Boarding swords; can be assigned one-per-pirate during boarding setup and can also be spent by some ship actions |
+| 💣 | Cannons | Persistent ship resource; no direct boarding bonus in this prototype, but some ship actions can spend them |
 
 ---
 
@@ -301,7 +305,10 @@ Activated from the menu:
 - Turns 3–4 island: Calm Atoll (no island bonus).
 - Turn 3 shop: only Admiral Blackpowder is offered, and the tutorial does not continue until it is bought.
 - Turn 4 includes a scripted mismatch: one Rigger brings back 1🪙 instead of 1🪵, and Admiral Blackpowder is blocked from landing so it stays on ship.
-- Turn 5 is a boarding fight against 9⚔️.
+- Turn 5 is a scripted boarding tutorial:
+  - Arm pirates from the corner sword slots.
+  - Optionally assign any available 🗡️.
+  - Tap `Fight!` and watch the autoplay fight.
 - Winning the final tutorial boarding shows the tutorial outro; losing shows the normal game-over screen.
 - After outro, player can start a real game.
 

@@ -254,9 +254,9 @@ class MapScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.mapGfx.add(label);
 
-        // Ship strength label
+        // Boarding label
         if (isShip) {
-          const strTxt = this.add.text(nx, ny + r + 8, node.strength + '⚔️', {
+          const strTxt = this.add.text(nx, ny + r + 8, 'Board', {
             fontFamily: UI_THEME.fonts.body,
             fontSize: L.fs(14),
             color: UI_THEME.colors.ink,

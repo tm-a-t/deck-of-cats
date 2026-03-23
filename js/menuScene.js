@@ -39,12 +39,19 @@ class MenuScene extends Phaser.Scene {
       minH: 66 * L.k,
     });
 
+    const battleTestY = playY + 76 * L.k;
+    this.mkBtn(L.cx, battleTestY, 'Battle Test', () => this.startBattleTest(), {
+      minW: 200 * L.k,
+      minH: 58 * L.k,
+      textPx: 20,
+    });
+
     const links = [
       { label: 'Tutorial', cb: () => this.startTutorial() },
       { label: 'Costumes', cb: () => this.scene.start('costumes') },
       { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
     ];
-    const linksY = playY + 82 * L.k;
+    const linksY = battleTestY + 62 * L.k;
     links.forEach((item, idx) => {
       const link = this.add.text(L.cx, linksY + idx * 28 * L.k, item.label, uiBodyStyle(L, UI_THEME.colors.cocoa, {
         fontStyle: idx === 0 ? 'bold' : 'normal',
@@ -66,16 +73,20 @@ class MenuScene extends Phaser.Scene {
     this.root.add(streakTxt);
   }
 
+  resetGameScenes() {
+    ['map', 'shopModal', 'drawPileModal', 'discardPileModal'].forEach((key) => {
+      if (this.scene.isActive(key)) this.scene.stop(key);
+    });
+  }
+
   startGame() {
-    if (this.scene.isActive('map')) this.scene.stop('map');
-    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+    this.resetGameScenes();
     initState();
     this.scene.start('game');
   }
 
   startTutorial() {
-    if (this.scene.isActive('map')) this.scene.stop('map');
-    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+    this.resetGameScenes();
     let tutorialReady = false;
     try {
       if (typeof initTutorialState === 'function') {
@@ -93,6 +104,12 @@ class MenuScene extends Phaser.Scene {
       initState();
     }
 
+    this.scene.start('game');
+  }
+
+  startBattleTest() {
+    this.resetGameScenes();
+    initBattleTestState();
     this.scene.start('game');
   }
 

@@ -37,6 +37,30 @@ function initialShop(n, round) {
   return arr;
 }
 
+function battleTestTypePool() {
+  return Object.keys(TYPES).filter(type => !type.startsWith('tutorial'));
+}
+
+function randomBattleTestType() {
+  const pool = battleTestTypePool();
+  return Phaser.Utils.Array.GetRandom(pool.length ? pool : Object.keys(TYPES));
+}
+
+function buildBattleTestCrew(count) {
+  const crew = [];
+  const fighterCount = Math.max(3, Number(count) || 0);
+  for (let i = 0; i < fighterCount; i++) crew.push(mkP(randomBattleTestType()));
+
+  if (!crew.some(pirate => (TYPES[pirate.type] && TYPES[pirate.type].str) > 0)) {
+    const damagingPool = battleTestTypePool().filter(type => (TYPES[type] && TYPES[type].str) > 0);
+    if (damagingPool.length) {
+      crew[0] = mkP(Phaser.Utils.Array.GetRandom(damagingPool));
+    }
+  }
+
+  return crew;
+}
+
 let G = {};
 
 function drawCardsWithMeta(n) {
@@ -81,6 +105,7 @@ function initState() {
   for (let i = 0; i < 2; i++) crew.push(mkP('armsman'));
 
   G = {
+    mode: 'run',
     allCrew: [...crew],
     deck: Phaser.Utils.Array.Shuffle([...crew]),
     discard: [],
@@ -94,6 +119,7 @@ function initState() {
     sent: [],
     island: null,
     enemyShip: null,
+    combat: null,
     boardingCount: 0,
     gameOver: false,
     shop: initialShop(4, 0),
@@ -104,6 +130,38 @@ function initState() {
   };
 
   G.hand = drawCards(5);
+}
+
+function initBattleTestState() {
+  const fighterCount = Phaser.Math.Between(3, 5);
+  const crew = buildBattleTestCrew(fighterCount);
+  const encounterNo = Phaser.Math.Between(1, 6);
+  const weapons = Phaser.Math.Between(1, crew.length);
+
+  G = {
+    mode: 'battleTest',
+    allCrew: [...crew],
+    deck: [],
+    discard: [],
+    hand: [...crew],
+    res: { wood: 0, stone: 0, gold: 0, map: 0 },
+    weapons,
+    cannons: 0,
+    enthusiasm: 0,
+    round: encounterNo,
+    phase: 'boarding',
+    sent: [],
+    island: null,
+    enemyShip: { encounterNo, strength: encounterNo },
+    combat: null,
+    boardingCount: encounterNo,
+    gameOver: false,
+    shop: [],
+    shopAnimating: false,
+    busy: false,
+    map: null,
+    tutorial: null,
+  };
 }
 
 function initTutorialState() {
@@ -206,9 +264,9 @@ function initTutorialState() {
       phase: 'boarding',
       handRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
       shop: [],
-      enemyShip: { strength: 9 },
+      enemyShip: { preset: 'tutorial-final' },
       hints: {
-        boarding: 'Tap Board (10⚔️ vs 9⚔️)',
+        boarding: 'Arm pirates, then Fight',
       },
     },
   ];
@@ -241,6 +299,7 @@ function initTutorialState() {
   const drawPile = [...remainingTopToBottom].reverse().map(ref => cards[ref]);
 
   G = {
+    mode: 'tutorial',
     allCrew: [...crew],
     deck: drawPile,
     discard: [],
@@ -254,6 +313,7 @@ function initTutorialState() {
     sent: [],
     island: { ...firstTurn.island },
     enemyShip: null,
+    combat: null,
     boardingCount: 0,
     gameOver: false,
     shop: [],

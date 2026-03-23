@@ -18,7 +18,8 @@ class GameScene extends Phaser.Scene {
     ensureCatTextures(this);
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
-    const needsFreshState = !G.map && !(G.tutorial && G.tutorial.active);
+    const hasBattleTestState = G && G.mode === 'battleTest';
+    const needsFreshState = !hasBattleTestState && !G.map && !(G.tutorial && G.tutorial.active);
     if (needsFreshState) initState();
 
     this.ct = {};
@@ -32,6 +33,10 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland = new Set();
     this._pendingEndSending = false;
     this._sacrificedIds = new Set();
+    this._combatTickTimer = null;
+    this._combatEnemyViews = {};
+    this._combatPlayerViews = {};
+    this._combatNodes = {};
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
     this._pendingHandAppearById = null;
@@ -80,6 +85,7 @@ class GameScene extends Phaser.Scene {
       Object.entries(this._panelShutdownHandlers || {}).forEach(([key, handler]) => {
         this.scene.get(key).events.off(Phaser.Scenes.Events.SHUTDOWN, handler);
       });
+      this.clearCombatState();
       if (this._cardHand) this._cardHand.destroy();
       if (window.PokiBridge) window.PokiBridge.gameplayStop();
     });
@@ -92,6 +98,10 @@ class GameScene extends Phaser.Scene {
 
   isTutorial() {
     return !!(G.tutorial && G.tutorial.active);
+  }
+
+  isBattleTest() {
+    return !!(G && G.mode === 'battleTest');
   }
 
   tutorialState() {
@@ -193,9 +203,10 @@ class GameScene extends Phaser.Scene {
       turn5_start: {
         title: 'Final Boarding',
         body: [
-          'Boarding power = crew ⚔️ + cannons 💣.',
-          'If your power is at least enemy power, you win.',
-          'Tap Board.',
+          'All 5 drawn pirates fight in a row.',
+          'Tap card-corner slots to arm pirates with swords.',
+          'Swords give +1 attack and faster swings.',
+          'Tap Fight to watch the battle play out.',
         ],
       },
     };
@@ -251,9 +262,9 @@ class GameScene extends Phaser.Scene {
       turn5_boarding_hint: {
         title: 'Final Boarding',
         body: [
-          'Power = crew ⚔️ + cannons 💣.',
-          'If your power is at least enemy power, you win.',
-          'Tap Board.',
+          'Arm pirates from the card corners.',
+          'Combat switches to a compact mini-card view.',
+          'Boarding now resolves as an autoplay fight.',
         ],
         autoHideMs: 8000,
       },
@@ -550,9 +561,9 @@ class GameScene extends Phaser.Scene {
         phase: 'boarding',
         handRefs: [featuredRef, 'L1', 'L2', 'L3', 'S1'],
         shop: [],
-        enemyShip: { strength: 4 },
+        enemyShip: { preset: 'tutorial-final' },
         hints: {
-          boarding: 'Tap Board',
+          boarding: 'Arm pirates, then Fight',
         },
       },
     ];
@@ -748,6 +759,7 @@ class GameScene extends Phaser.Scene {
     G.round = turn.round || cur;
     G.sent = [];
     G.busy = false;
+    this.clearCombatState();
     G.enthusiasm = turn.startEnthusiasm || 0;
     if (turn.startRes && typeof turn.startRes === 'object') {
       ['wood', 'stone', 'gold', 'map'].forEach((resKey) => {
@@ -776,10 +788,7 @@ class GameScene extends Phaser.Scene {
     const phase = turn.phase || (turn.enemyShip ? 'boarding' : 'sending');
     G.phase = phase;
     if (phase === 'boarding') {
-      const strength =
-        (turn.enemyShip && turn.enemyShip.strength != null) ? turn.enemyShip.strength :
-          (turn.enemyStrength != null ? turn.enemyStrength : Math.max(1, G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0) - 1));
-      G.enemyShip = { strength };
+      G.enemyShip = Object.assign({}, turn.enemyShip || {});
       G.island = null;
       G.boardingCount = Math.max(G.boardingCount || 0, 1);
     } else {
@@ -838,6 +847,7 @@ class GameScene extends Phaser.Scene {
     G.sent = [];
     G.enthusiasm = 0;
     G.busy = false;
+    this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
@@ -845,7 +855,7 @@ class GameScene extends Phaser.Scene {
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
-      G.enemyShip = { strength: node.strength };
+      G.enemyShip = { strength: node.strength, encounterNo: G.boardingCount };
     } else {
       G.phase = 'sending';
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
@@ -864,6 +874,7 @@ class GameScene extends Phaser.Scene {
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
+    this.clearCombatState();
     if (this._animateInitialMapHand) {
       this.queueHandAppear(G.hand, { delay: CARD_MOTION.handAppearDelay });
       this._animateInitialMapHand = false;
@@ -1632,6 +1643,7 @@ class GameScene extends Phaser.Scene {
       this.closePanels();
       G.hand = [];
       G.sent = [];
+      this.clearCombatState();
       this._sendingToIsland.clear();
       this._pendingEndSending = false;
       this.renderAll();
@@ -1649,6 +1661,7 @@ class GameScene extends Phaser.Scene {
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
+    this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this.renderAll();
@@ -1660,90 +1673,526 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  shipBonusStr() {
-    return G.weapons + G.cannons;
+  clearCombatTimers() {
+    if (this._combatTickTimer && !this._combatTickTimer.hasDispatched) {
+      this._combatTickTimer.remove(false);
+    }
+    this._combatTickTimer = null;
   }
 
-  resolveBoarding() {
-    if (this.isTutorialPopupOpen()) return;
-    if (this.isTutorial()) {
-      this.resolveTutorialBoarding();
+  clearCombatState() {
+    this.clearCombatTimers();
+    this._combatEnemyViews = {};
+    this._combatPlayerViews = {};
+    this._combatNodes = {};
+    G.combat = null;
+  }
+
+  currentBoardingNumber() {
+    return Math.max(1, (G.enemyShip && G.enemyShip.encounterNo) || G.boardingCount || 1);
+  }
+
+  generateCombatEncounter() {
+    const preset = G.enemyShip && G.enemyShip.preset;
+    if (preset === 'tutorial-final') {
+      return {
+        name: 'Training Boarders',
+        enemies: [
+          { id: 'tutorial_rat', name: 'Training Rat', emoji: '🐀', hp: 5, maxHp: 5, damage: 1, attackMs: 1150, color: '#d4a26b' },
+          { id: 'tutorial_hook_1', name: 'Hookhand', emoji: '🪝', hp: 6, maxHp: 6, damage: 1, attackMs: 1350, color: '#d67d4d' },
+          { id: 'tutorial_hook_2', name: 'Hookhand', emoji: '🪝', hp: 6, maxHp: 6, damage: 1, attackMs: 1350, color: '#d67d4d' },
+        ],
+      };
+    }
+
+    const boardingNo = this.currentBoardingNumber();
+    const count = Phaser.Math.Clamp(2 + Math.floor((boardingNo + 1) / 2), COMBAT.enemyCountMin, COMBAT.enemyCountMax);
+    const enemies = [];
+    const tier = Math.max(1, boardingNo);
+    const rosterCap = Math.min(COMBAT.enemyArchetypes.length, 2 + Math.floor((tier - 1) / 2));
+
+    for (let i = 0; i < count; i++) {
+      const archetype = COMBAT.enemyArchetypes[(i + tier) % rosterCap];
+      const hpBonus = Math.floor((tier - 1) / 2) + (archetype.key === 'brute' ? Math.floor((tier - 1) / 3) : 0);
+      const damageBonus = Math.floor((tier - 1) / 4);
+      enemies.push({
+        id: `${archetype.key}_${boardingNo}_${i}`,
+        name: archetype.name,
+        emoji: archetype.emoji,
+        hp: archetype.hp + hpBonus,
+        maxHp: archetype.hp + hpBonus,
+        damage: archetype.damage + damageBonus,
+        attackMs: Math.max(650, archetype.attackMs - (tier - 1) * 35),
+        color: archetype.color,
+      });
+    }
+
+    return {
+      name: `Boarding Party ${boardingNo}`,
+      enemies,
+    };
+  }
+
+  ensureBoardingCombat() {
+    if (G.phase !== 'boarding') return null;
+    if (G.combat && Array.isArray(G.combat.enemyParty)) return G.combat;
+
+    const encounter = this.generateCombatEncounter();
+    G.combat = {
+      mode: 'setup',
+      selectedPirateId: null,
+      swordPirateIds: [],
+      enemyName: encounter.name,
+      enemyParty: encounter.enemies,
+      playerFighters: null,
+      enemyFighters: null,
+      result: null,
+    };
+    return G.combat;
+  }
+
+  combatAssignedSwordCount(combat = G.combat) {
+    return combat && Array.isArray(combat.swordPirateIds) ? combat.swordPirateIds.length : 0;
+  }
+
+  combatPirateHasSword(pirate, combat = G.combat) {
+    if (!pirate || !combat || !Array.isArray(combat.swordPirateIds)) return false;
+    return combat.swordPirateIds.includes(pirate.id);
+  }
+
+  toggleCombatSword(handIdx) {
+    const combat = this.ensureBoardingCombat();
+    if (!combat || combat.mode !== 'setup' || G.busy) return;
+    const pirate = G.hand[handIdx];
+    if (!pirate) return;
+
+    if (this.combatPirateHasSword(pirate, combat)) {
+      combat.swordPirateIds = combat.swordPirateIds.filter((id) => id !== pirate.id);
+      this.renderAll();
       return;
     }
-    if (G.phase !== 'boarding' || G.busy) return;
-    G.busy = true;
-    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-    const totalStr = crewStr + this.shipBonusStr();
-    const shipStr = G.enemyShip.strength;
-    const L = this.L;
 
-    if (totalStr >= shipStr) {
-      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
-      this.time.delayedCall(1000, () => {
-        const discardAnimEnd = this.animateCurrentHandToDiscard();
-        const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
-        G.weapons = 0;
-        G.discard.push(...G.hand);
-        G.hand = [];
-        G.sent = [];
-        this._sendingToIsland.clear();
-        this._pendingEndSending = false;
-        this.renderAll();
-        if (G.map.currentLayer >= MAP_LAYERS - 1) {
-          G.busy = false;
-          this.showVictory();
-          return;
+    if (this.combatAssignedSwordCount(combat) >= (G.weapons || 0)) {
+      this.float(this.L.cx, this.islandCenterY() + 90 * this.L.k, 'No swords left', '#ffa726');
+      return;
+    }
+
+    combat.swordPirateIds.push(pirate.id);
+    this.renderAll();
+  }
+
+  selectCombatPirate(handIdx) {
+    const combat = this.ensureBoardingCombat();
+    if (!combat || combat.mode !== 'setup' || G.busy) return;
+    const pirate = G.hand[handIdx];
+    if (!pirate) return;
+
+    if (combat.selectedPirateId === pirate.id) {
+      combat.selectedPirateId = null;
+      this.renderAll();
+      return;
+    }
+
+    if (!combat.selectedPirateId) {
+      combat.selectedPirateId = pirate.id;
+      this.renderAll();
+      return;
+    }
+
+    const selectedIdx = G.hand.findIndex((card) => card && card.id === combat.selectedPirateId);
+    if (selectedIdx < 0) {
+      combat.selectedPirateId = pirate.id;
+      this.renderAll();
+      return;
+    }
+
+    const tmp = G.hand[selectedIdx];
+    G.hand[selectedIdx] = G.hand[handIdx];
+    G.hand[handIdx] = tmp;
+    combat.selectedPirateId = null;
+    this.renderAll();
+  }
+
+  buildPlayerCombatFighter(pirate, slot, combat) {
+    const sword = this.combatPirateHasSword(pirate, combat);
+    return {
+      id: `player_${pirate.id}`,
+      side: 'player',
+      pirateId: pirate.id,
+      type: pirate.type,
+      slot,
+      alive: true,
+      hp: COMBAT.pirateHp,
+      maxHp: COMBAT.pirateHp,
+      damage: (TYPES[pirate.type].str || 0) + (sword ? COMBAT.swordDamageBonus : 0),
+      attackMs: Math.round(COMBAT.pirateAttackMs / (sword ? COMBAT.swordSpeedMultiplier : 1)),
+      sword,
+    };
+  }
+
+  buildEnemyCombatFighter(enemy, slot) {
+    return {
+      id: enemy.id,
+      side: 'enemy',
+      name: enemy.name,
+      emoji: enemy.emoji,
+      slot,
+      alive: true,
+      hp: enemy.hp,
+      maxHp: enemy.maxHp,
+      damage: enemy.damage,
+      attackMs: enemy.attackMs,
+      color: enemy.color,
+    };
+  }
+
+  combatFighters(side) {
+    const combat = G.combat;
+    if (!combat) return [];
+    if (side === 'player') return Array.isArray(combat.playerFighters) ? combat.playerFighters : [];
+    return Array.isArray(combat.enemyFighters) ? combat.enemyFighters : [];
+  }
+
+  combatLiving(side) {
+    return this.combatFighters(side)
+      .filter((fighter) => fighter && fighter.alive)
+      .sort((a, b) => a.slot - b.slot);
+  }
+
+  combatFindFighter(fighterId) {
+    const all = [...this.combatFighters('player'), ...this.combatFighters('enemy')];
+    return all.find((fighter) => fighter && fighter.id === fighterId) || null;
+  }
+
+  combatPlayerRowY() {
+    return this.L.Y_HAND_CENTER - 8 * this.L.k;
+  }
+
+  combatPlayerRowSlots() {
+    return cardRowLayout(G.hand.length, this.L, {
+      y: this.combatPlayerRowY(),
+      maxStep: 160 * this.L.k,
+      edgePad: 18 * this.L.k,
+    });
+  }
+
+  combatEnemyRowSlots(total) {
+    return cardRowLayout(total, this.L, {
+      y: this.islandCenterY() - 18 * this.L.k,
+      maxStep: 136 * this.L.k,
+      edgePad: 34 * this.L.k,
+      scale: 0.82,
+    });
+  }
+
+  combatMiniEnemySlots(total) {
+    return cardRowLayout(total, this.L, {
+      y: this.islandCenterY() - 52 * this.L.k,
+      maxStep: 64 * this.L.k,
+      edgePad: 40 * this.L.k,
+      scale: 0.5,
+    });
+  }
+
+  combatMiniPlayerSlots(total) {
+    return cardRowLayout(total, this.L, {
+      y: this.islandCenterY() + 64 * this.L.k,
+      maxStep: 64 * this.L.k,
+      edgePad: 28 * this.L.k,
+      scale: 0.5,
+    });
+  }
+
+  combatWorldPoint(fighter) {
+    if (!fighter) return { x: this.L.cx, y: this.islandCenterY() };
+    if (fighter.side === 'player') {
+      if (this._combatPlayerViews && this._combatPlayerViews[fighter.id]) {
+        return this._combatPlayerViews[fighter.id];
+      }
+      const cardPos = this._cardHand && this._cardHand.getCardPosition ? this._cardHand.getCardPosition(fighter.slot) : null;
+      if (cardPos) return { x: cardPos.x, y: cardPos.y - 10 * this.L.k };
+      const slots = this.combatPlayerRowSlots();
+      const slot = slots[fighter.slot] || slots[0];
+      return { x: slot ? slot.x : this.L.cx, y: slot ? slot.y : this.combatPlayerRowY() };
+    }
+    if (this._combatEnemyViews && this._combatEnemyViews[fighter.id]) {
+      return this._combatEnemyViews[fighter.id];
+    }
+    const slots = this.combatEnemyRowSlots(this.combatFighters('enemy').length || ((G.combat && G.combat.enemyParty && G.combat.enemyParty.length) || 1));
+    const slot = slots[fighter.slot] || slots[0];
+    return { x: slot ? slot.x : this.L.cx, y: slot ? slot.y : this.islandCenterY() - 18 * this.L.k };
+  }
+
+  combatTargetFor(attacker) {
+    const allies = this.combatLiving(attacker.side);
+    const enemies = this.combatLiving(attacker.side === 'player' ? 'enemy' : 'player');
+    if (!enemies.length) return null;
+
+    const allyPos = Math.max(0, allies.findIndex((fighter) => fighter.id === attacker.id));
+    const X = allyPos + 1;
+    const N = Math.max(1, allies.length);
+    const M = enemies.length;
+    const start = Phaser.Math.Clamp(Math.floor((X - 1) * M / N), 0, M - 1);
+    const end = Phaser.Math.Clamp(Math.ceil(X * M / N) - 1, start, M - 1);
+    const band = enemies.slice(start, end + 1).filter((fighter) => fighter.alive);
+    const pool = band.length ? band : enemies;
+    return Phaser.Utils.Array.GetRandom(pool);
+  }
+
+  showCombatAttackFx(attacker, target, damage, onComplete) {
+    const start = this.combatWorldPoint(attacker);
+    const end = this.combatWorldPoint(target);
+    const attackerNode = this._combatNodes ? this._combatNodes[attacker.id] : null;
+    const impactDelay = Math.max(40, Math.round(COMBAT.attackFxMs / 2));
+    let impactShown = false;
+    const showImpact = () => {
+      if (impactShown) return;
+      impactShown = true;
+      const dmgText = damage > 0 ? `-${damage}` : '0';
+      this.effectText(end.x, end.y - 44 * this.L.k, dmgText, attacker.side === 'player' ? '#ffd54f' : '#ff8a80', false);
+    };
+    const finish = () => {
+      showImpact();
+      if (onComplete) onComplete();
+    };
+
+    this.time.delayedCall(impactDelay, () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      showImpact();
+    });
+
+    if (!attackerNode || !attackerNode.active) {
+      finish();
+      return;
+    }
+
+    attackerNode.setDepth(65);
+    attackerNode.x = start.x;
+    attackerNode.y = start.y;
+    this.tweens.add({
+      targets: attackerNode,
+      x: end.x,
+      y: end.y,
+      angle: attacker.side === 'player' ? 10 : -10,
+      duration: impactDelay,
+      ease: 'Cubic.easeIn',
+      yoyo: true,
+      hold: 0,
+      onComplete: () => {
+        if (attackerNode && attackerNode.active) {
+          attackerNode.x = start.x;
+          attackerNode.y = start.y;
+          attackerNode.angle = 0;
+          attackerNode.setDepth(0);
         }
-
-        this.time.delayedCall(nextTurnDelay, () => {
-          if (!this.sys || !this.sys.isActive()) return;
-          G.busy = false;
-          this.drawCardsIntoHand(5);
-          this.enterMapPhase();
-        });
-      });
-    } else {
-      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
-      this.time.delayedCall(1200, () => {
-        G.weapons = 0;
-        G.busy = false;
-        this.renderAll();
-        this.showGameOver();
-      });
-    }
+        finish();
+      },
+    });
   }
 
-  resolveTutorialBoarding() {
-    if (G.phase !== 'boarding' || G.busy) return;
-    G.busy = true;
-    const L = this.L;
-    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-    const totalStr = crewStr + this.shipBonusStr();
-    const shipStr = G.enemyShip ? G.enemyShip.strength : 0;
+  startCombatAutoplay() {
+    this.clearCombatTimers();
+    const combat = G.combat;
+    if (!combat || combat.mode !== 'fighting') return;
+    const now = this.time.now;
+    combat.nextAttackStartAt = now;
+    const fighters = [...this.combatFighters('player'), ...this.combatFighters('enemy')];
+    fighters.forEach((fighter) => {
+      fighter.nextAttackAt = now + Phaser.Math.Between(COMBAT.initialDelayMin, COMBAT.initialDelayMax);
+      fighter.incomingUntil = 0;
+    });
+    this.scheduleNextCombatAttack();
+  }
 
-    if (totalStr >= shipStr) {
-      this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '⚔️ Victory!', '#66bb6a');
-      this.time.delayedCall(1000, () => {
-        this.animateCurrentHandToDiscard();
-        G.weapons = 0;
-        G.discard.push(...G.hand);
-        G.hand = [];
-        G.sent = [];
-        G.phase = 'tutorialOutro';
-        G.busy = true;
-        this.renderAll();
-        this.showTutorialOutro();
-      });
+  scheduleNextCombatAttack() {
+    if (this._combatTickTimer && !this._combatTickTimer.hasDispatched) {
+      this._combatTickTimer.remove(false);
+    }
+    this._combatTickTimer = null;
+
+    const combat = G.combat;
+    if (!combat || combat.mode !== 'fighting') return;
+
+    const livingPlayers = this.combatLiving('player');
+    const livingEnemies = this.combatLiving('enemy');
+    if (!livingPlayers.length || !livingEnemies.length) {
+      this.finishBoardingCombat(livingPlayers.length > 0 ? 'win' : 'loss');
       return;
     }
 
-    this.float(L.cx, L.Y_ISL_CY - 80 * L.k, '💀 Defeated…', '#ff5252');
+    const now = this.time.now;
+    const nextGlobalAttackAt = combat.nextAttackStartAt || 0;
+    const living = [...livingPlayers, ...livingEnemies];
+    const ready = nextGlobalAttackAt <= now
+      ? living.filter((fighter) => (fighter.nextAttackAt || 0) <= now && (fighter.incomingUntil || 0) <= now)
+      : [];
+
+    if (ready.length) {
+      let earliestReadyAt = Infinity;
+      ready.forEach((fighter) => {
+        earliestReadyAt = Math.min(earliestReadyAt, fighter.nextAttackAt || 0);
+      });
+      const candidates = ready.filter((fighter) => (fighter.nextAttackAt || 0) === earliestReadyAt);
+      const nextAttacker = candidates.length === 1 ? candidates[0] : Phaser.Utils.Array.GetRandom(candidates);
+      this.performCombatAttack(nextAttacker.id);
+      return;
+    }
+
+    let nextAllowedAt = Infinity;
+    living.forEach((fighter) => {
+      const earliestAttackAt = Math.max(
+        nextGlobalAttackAt,
+        fighter.nextAttackAt || 0,
+        fighter.incomingUntil || 0
+      );
+      nextAllowedAt = Math.min(nextAllowedAt, earliestAttackAt);
+    });
+    if (!Number.isFinite(nextAllowedAt)) return;
+
+    const delay = Math.max(0, Math.ceil(nextAllowedAt - now));
+    this._combatTickTimer = this.time.delayedCall(delay, () => {
+      this._combatTickTimer = null;
+      this.scheduleNextCombatAttack();
+    });
+  }
+
+  performCombatAttack(fighterId) {
+    const combat = G.combat;
+    if (!combat || combat.mode !== 'fighting') return;
+
+    const now = this.time.now;
+    const attacker = this.combatFindFighter(fighterId);
+    if (!attacker || !attacker.alive) {
+      this.scheduleNextCombatAttack();
+      return;
+    }
+    if ((attacker.incomingUntil || 0) > now) {
+      this.scheduleNextCombatAttack();
+      return;
+    }
+
+    const target = this.combatTargetFor(attacker);
+    if (!target) {
+      this.finishBoardingCombat(attacker.side === 'player' ? 'win' : 'loss');
+      return;
+    }
+
+    // Per-fighter cooldown still comes from that fighter's own attack speed.
+    attacker.nextAttackAt = now + Math.max(0, attacker.attackMs || 0);
+    combat.nextAttackStartAt = now + COMBAT.attackStartGapMs;
+    target.incomingUntil = now + COMBAT.attackFxMs;
+
+    const damage = Math.max(0, attacker.damage || 0);
+    target.hp = Math.max(0, target.hp - damage);
+
+    let deathPos = null;
+    if (target.hp <= 0 && target.alive) {
+      target.alive = false;
+      target.incomingUntil = 0;
+      deathPos = this.combatWorldPoint(target);
+    }
+
+    const livingPlayers = this.combatLiving('player');
+    const livingEnemies = this.combatLiving('enemy');
+    const combatResult = !livingPlayers.length || !livingEnemies.length
+      ? (livingPlayers.length > 0 ? 'win' : 'loss')
+      : null;
+
+    this.showCombatAttackFx(attacker, target, damage, () => {
+      if (deathPos) this.effectText(deathPos.x, deathPos.y - 6 * this.L.k, 'Down!', '#ff8a80', 220);
+      this.renderAll();
+      if (combatResult) {
+        this.finishBoardingCombat(combatResult);
+        return;
+      }
+      this.scheduleNextCombatAttack();
+    });
+  }
+
+  finishBoardingCombat(result) {
+    const combat = G.combat;
+    if (!combat || combat.mode === 'resolved') return;
+    combat.mode = 'resolved';
+    combat.result = result;
+    this.clearCombatTimers();
+    G.busy = true;
+    this.renderAll();
+
+    if (result === 'win') {
+      this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '⚔️ Victory!', '#66bb6a');
+      this.time.delayedCall(900, () => this.handleBoardingVictory());
+      return;
+    }
+
+    this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '💀 Defeated…', '#ff5252');
     this.time.delayedCall(1200, () => {
       G.weapons = 0;
       G.busy = false;
       this.renderAll();
       this.showGameOver();
     });
+  }
+
+  handleBoardingVictory() {
+    if (!this.sys || !this.sys.isActive()) return;
+    if (this.isBattleTest()) {
+      G.busy = false;
+      this.renderAll();
+      this.showBattleTestOverlay('win');
+      return;
+    }
+
+    const discardAnimEnd = this.animateCurrentHandToDiscard();
+    const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
+    G.weapons = 0;
+    G.discard.push(...G.hand);
+    G.hand = [];
+    G.sent = [];
+    this._sendingToIsland.clear();
+    this._pendingEndSending = false;
+
+    if (this.isTutorial()) {
+      this.clearCombatState();
+      G.phase = 'tutorialOutro';
+      G.busy = true;
+      this.renderAll();
+      this.showTutorialOutro();
+      return;
+    }
+
+    G.phase = 'map';
+    G.enemyShip = null;
+    this.clearCombatState();
+    this.renderAll();
+    if (G.map.currentLayer >= MAP_LAYERS - 1) {
+      G.busy = false;
+      this.showVictory();
+      return;
+    }
+
+    this.time.delayedCall(nextTurnDelay, () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      G.busy = false;
+      this.drawCardsIntoHand(5);
+      this.enterMapPhase();
+    });
+  }
+
+  resolveBoarding() {
+    if (this.isTutorialPopupOpen()) return;
+    if (G.phase !== 'boarding' || G.busy) return;
+    const combat = this.ensureBoardingCombat();
+    if (!combat || combat.mode !== 'setup') return;
+
+    G.busy = true;
+    G.weapons = Math.max(0, (G.weapons || 0) - this.combatAssignedSwordCount(combat));
+    combat.mode = 'fighting';
+    combat.selectedPirateId = null;
+    combat.result = null;
+    combat.playerFighters = G.hand.map((pirate, slot) => this.buildPlayerCombatFighter(pirate, slot, combat));
+    combat.enemyFighters = combat.enemyParty.map((enemy, slot) => this.buildEnemyCombatFighter(enemy, slot));
+    this.renderAll();
+    this.startCombatAutoplay();
   }
 
   showTutorialOutro() {
@@ -1764,7 +2213,7 @@ class GameScene extends Phaser.Scene {
     this.addTo('gameover', this.add.text(L.cx, L.H * 0.28, 'Tutorial Complete',
       uiHeadingStyle(L, 40, UI_THEME.colors.paper)).setOrigin(0.5, 0));
     this.txt('gameover', L.cx, L.H * 0.38,
-      'You won the scripted boarding fight on turn 5.',
+      'You arranged the crew and won the tutorial boarding.',
       { color: UI_THEME.colors.mutedPaper });
     this.txt('gameover', L.cx, L.H * 0.44,
       'Start a real run and build your own deck.',
@@ -1792,7 +2241,69 @@ class GameScene extends Phaser.Scene {
     this.addTo('gameover', btn);
   }
 
+  restartCurrentMode() {
+    this.clearCt('gameover');
+    this.closePanels();
+    if (this.isBattleTest()) {
+      initBattleTestState();
+    } else {
+      initState();
+    }
+    this.scene.restart();
+  }
+
+  showBattleTestOverlay(result) {
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
+    this.clearCt('gameover');
+    const L = this.L;
+    const won = result === 'win';
+    const combat = G.combat;
+    const playerTotal = Math.max(1, (combat && Array.isArray(combat.playerFighters) ? combat.playerFighters.length : G.hand.length) || 1);
+    const enemyTotal = Math.max(1, (combat && Array.isArray(combat.enemyParty) ? combat.enemyParty.length : 0) || 1);
+    const playerAlive = combat ? this.combatLiving('player').length : playerTotal;
+    const enemyAlive = combat ? this.combatLiving('enemy').length : enemyTotal;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 1);
+    overlay.fillRect(0, 0, L.W, L.H);
+    this.addTo('gameover', overlay);
+
+    this.addTo('gameover', this.add.text(L.cx, L.H * 0.31,
+      won ? 'Battle Test Won' : 'Battle Test Lost',
+      uiHeadingStyle(L, 42, won ? '#8bd17c' : '#ff8a80')).setOrigin(0.5, 0));
+    this.txt('gameover', L.cx, L.H * 0.40,
+      `Boarding #${this.currentBoardingNumber()}  ·  ${playerAlive}/${playerTotal} cats standing`,
+      { color: UI_THEME.colors.mutedPaper });
+    this.txt('gameover', L.cx, L.H * 0.46,
+      won
+        ? `Cleared ${enemyTotal} foe${enemyTotal === 1 ? '' : 's'} from the deck`
+        : `${enemyAlive}/${enemyTotal} foe${enemyTotal === 1 ? '' : 's'} still standing`,
+      { color: won ? '#8bd17c' : '#ff8a80' });
+
+    const btn = makeUiPill(this, {
+      x: L.cx,
+      y: L.H * 0.57,
+      label: 'Another Battle',
+      L,
+      minW: 210 * L.k,
+      minH: 56 * L.k,
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+      textPx: 18,
+    }).setInteractive({ useHandCursor: true });
+    btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
+    btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
+    btn.on('pointerdown', () => this.restartCurrentMode());
+    this.addTo('gameover', btn);
+  }
+
   showGameOver() {
+    if (this.isBattleTest()) {
+      this.showBattleTestOverlay('loss');
+      return;
+    }
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStop();
     }
@@ -1810,10 +2321,12 @@ class GameScene extends Phaser.Scene {
       `Survived ${G.round} rounds  ·  ${G.boardingCount} boarding${G.boardingCount !== 1 ? 's' : ''}`,
       { color: UI_THEME.colors.mutedPaper });
 
-    const crewStr = G.hand.reduce((s, p) => s + (TYPES[p.type].str || 0), 0);
-    const totalStr = crewStr + this.shipBonusStr();
+    const combat = G.combat;
+    const enemyCount = combat && Array.isArray(combat.enemyParty) ? combat.enemyParty.length : 0;
+    const enemyAlive = combat ? this.combatLiving('enemy').length : enemyCount;
+    const enemyTotal = Math.max(1, enemyCount, enemyAlive);
     this.txt('gameover', L.cx, L.H * 0.46,
-      `Your crew ${totalStr}⚔️  vs  Enemy ${G.enemyShip.strength}⚔️`,
+      `Boarding #${this.currentBoardingNumber()}  ·  ${enemyAlive}/${enemyTotal} foes still standing`,
       { color: '#ff8a80' });
 
     const btn = makeUiPill(this, {
@@ -1829,16 +2342,15 @@ class GameScene extends Phaser.Scene {
     }).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
     btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
-    btn.on('pointerdown', () => {
-      this.clearCt('gameover');
-      this.closePanels();
-      initState();
-      this.scene.restart();
-    });
+    btn.on('pointerdown', () => this.restartCurrentMode());
     this.addTo('gameover', btn);
   }
 
   showVictory() {
+    if (this.isBattleTest()) {
+      this.showBattleTestOverlay('win');
+      return;
+    }
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStop();
     }
@@ -1882,12 +2394,7 @@ class GameScene extends Phaser.Scene {
     }).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoaDark, textColor: UI_THEME.colors.paper }));
     btn.on('pointerout', () => btn.setPillStyle({ fill: UI_THEME.colors.cocoa, textColor: UI_THEME.colors.paper }));
-    btn.on('pointerdown', () => {
-      this.clearCt('gameover');
-      this.closePanels();
-      initState();
-      this.scene.restart();
-    });
+    btn.on('pointerdown', () => this.restartCurrentMode());
     this.addTo('gameover', btn);
   }
 
@@ -1957,17 +2464,42 @@ class GameScene extends Phaser.Scene {
     const crew = G.hand.reduce((sum, pirate) => sum + (TYPES[pirate.type].str || 0), 0);
     return {
       crew,
-      bonus: this.shipBonusStr(),
-      total: crew + this.shipBonusStr(),
+      bonus: 0,
+      total: crew,
     };
   }
 
+  mapBoardingNumberForLayer(layerIdx) {
+    if (!G.map || !Array.isArray(G.map.layers)) return 1;
+    let count = 0;
+    for (let li = 0; li <= layerIdx; li++) {
+      const layer = G.map.layers[li];
+      if (layer && layer.length === 1 && layer[0].type === 'ship') count++;
+    }
+    return Math.max(1, count);
+  }
+
   currentGoalState() {
-    if (G.enemyShip) {
+    if (G.phase === 'boarding' && G.enemyShip) {
+      const combat = this.ensureBoardingCombat();
+      if (combat && combat.mode === 'fighting') {
+        return {
+          icon: '⚔️',
+          line1: 'Boarding underway.',
+          line2: `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes`,
+        };
+      }
+      if (combat && combat.mode === 'resolved') {
+        return {
+          icon: combat.result === 'win' ? '⚔️' : '💀',
+          line1: combat.result === 'win' ? 'Deck cleared.' : 'Boarding lost.',
+          line2: combat.result === 'win' ? 'Taking the ship' : 'The crew fell',
+        };
+      }
       return {
-        icon: '😈',
-        line1: 'Enemy now.',
-        line2: `Reach ⚔️ ${G.enemyShip.strength}`,
+        icon: '🏴‍☠️',
+        line1: 'Arm your pirates.',
+        line2: `${combat && combat.enemyParty ? combat.enemyParty.length : 0} foes on deck`,
       };
     }
 
@@ -1976,14 +2508,11 @@ class GameScene extends Phaser.Scene {
       for (let i = currentTurn; i < this.getTutorialTurnCount(); i++) {
         const turn = this.getTutorialTurn(i + 1);
         if (!turn || !(turn.phase === 'boarding' || turn.enemyShip)) continue;
-        const strength = (turn.enemyShip && turn.enemyShip.strength != null)
-          ? turn.enemyShip.strength
-          : (turn.enemyStrength != null ? turn.enemyStrength : 0);
         const turnsAway = i + 1 - currentTurn;
         return {
           icon: '😈',
           line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-          line2: `Reach ⚔️ ${strength}`,
+          line2: 'Arm pirates, then fight',
         };
       }
       return { icon: '⭐', line1: 'Final stretch.', line2: 'Keep building strength' };
@@ -1998,10 +2527,11 @@ class GameScene extends Phaser.Scene {
       const layer = G.map.layers[li];
       if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
       const turnsAway = li - currentLayer;
+      const shipNo = this.mapBoardingNumberForLayer(li);
       return {
         icon: '😈',
         line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: `Reach ⚔️ ${layer[0].strength}`,
+        line2: `Boarding #${shipNo}`,
       };
     }
 
@@ -2037,7 +2567,9 @@ class GameScene extends Phaser.Scene {
   currentIslandAction() {
     if (G.busy || this.isTutorialPopupOpen()) return null;
     if (G.phase === 'boarding') {
-      return { label: 'Board!', onClick: () => this.resolveBoarding(), variant: 'continue' };
+      const combat = this.ensureBoardingCombat();
+      if (!combat || combat.mode !== 'setup') return null;
+      return { label: 'Fight!', onClick: () => this.resolveBoarding(), variant: 'continue' };
     }
     if (G.phase === 'sending') {
       if (G.sent.length >= this.maxSend()) {
@@ -2206,6 +2738,10 @@ class GameScene extends Phaser.Scene {
     (this._cardHand.cards || []).forEach((card) => {
       visibleByIdx[card.handIdx] = card;
     });
+    const combatByPirateId = new Map(
+      ((G.combat && Array.isArray(G.combat.playerFighters)) ? G.combat.playerFighters : [])
+        .map((fighter) => [fighter.pirateId, fighter])
+    );
     const sentSlotByIdx = new Map();
     G.sent.forEach((handIdx, sentIdx) => {
       sentSlotByIdx.set(handIdx, sentIdx);
@@ -2222,6 +2758,22 @@ class GameScene extends Phaser.Scene {
           y: visible.container.y,
           rotation: visible.container.rotation,
           scale: visible.container.scaleX || 1,
+          cardMode: visible.cardMode || 'default',
+          slotState: this.combatPirateHasSword(pirate) ? 'armed' : 'empty',
+        });
+        return;
+      }
+      const combatFighter = combatByPirateId.get(pirate.id);
+      if (combatFighter && this._combatPlayerViews && this._combatPlayerViews[combatFighter.id]) {
+        const view = this._combatPlayerViews[combatFighter.id];
+        cards.push({
+          type: pirate.type,
+          x: view.x,
+          y: view.y,
+          rotation: 0,
+          scale: 0.5,
+          cardMode: 'battle',
+          slotState: combatFighter.sword ? 'armed' : 'empty',
         });
         return;
       }
@@ -2233,6 +2785,8 @@ class GameScene extends Phaser.Scene {
         y: placement.y,
         rotation: placement.rotation || 0,
         scale: placement.scale != null ? placement.scale : 1,
+        cardMode: 'default',
+        slotState: 'none',
       });
     });
     return cards;
@@ -2256,7 +2810,10 @@ class GameScene extends Phaser.Scene {
 
     this.time.delayedCall(delay, () => {
       if (!this.sys || !this.sys.isActive()) return;
-      const built = buildCardTexture(this, card.type, L);
+      const built = buildCardTexture(this, card.type, L, {
+        mode: card.cardMode || 'default',
+        slotState: card.slotState || 'none',
+      });
       const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
       const ghost = this.add.image(card.x, card.y, built.texKey)
         .setOrigin(0.5, 0.5)
@@ -2414,9 +2971,216 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  combatPreviewStats(pirate, combat = G.combat) {
+    const sword = this.combatPirateHasSword(pirate, combat);
+    return {
+      hp: COMBAT.pirateHp,
+      damage: (TYPES[pirate.type].str || 0) + (sword ? COMBAT.swordDamageBonus : 0),
+      attackMs: Math.round(COMBAT.pirateAttackMs / (sword ? COMBAT.swordSpeedMultiplier : 1)),
+      sword,
+    };
+  }
+
+  combatPlayerFighterByPirateId(pirateId) {
+    return this.combatFighters('player').find((fighter) => fighter && fighter.pirateId === pirateId) || null;
+  }
+
+  addCombatHpBar(container, opts = {}) {
+    const L = this.L;
+    const x = opts.x || 0;
+    const y = opts.y || 0;
+    const width = opts.width || 0;
+    const height = opts.height || 8 * L.k;
+    const radius = opts.radius != null ? opts.radius : height / 2;
+    const pad = opts.pad != null ? opts.pad : Math.max(1, Math.round(1 * L.k));
+    const ratio = Phaser.Math.Clamp(opts.ratio || 0, 0, 1);
+    const bgColor = uiColorInt(opts.bgColor || UI_THEME.colors.shadow);
+    const fillColor = uiColorInt(opts.fillColor || '#66bb6a');
+    const bar = this.add.graphics();
+
+    bar.fillStyle(bgColor, opts.bgAlpha != null ? opts.bgAlpha : 0.5);
+    bar.fillRoundedRect(x - width / 2, y, width, height, radius);
+
+    const innerWidth = Math.max(0, width - pad * 2);
+    const innerHeight = Math.max(0, height - pad * 2);
+    const fillWidth = Math.max(0, innerWidth * ratio);
+    if (fillWidth > 0 && innerHeight > 0) {
+      bar.fillStyle(fillColor, 1);
+      bar.fillRoundedRect(
+        x - width / 2 + pad,
+        y + pad,
+        fillWidth,
+        innerHeight,
+        Math.max(1, radius - pad)
+      );
+    }
+
+    container.add(bar);
+    return bar;
+  }
+
+  renderCombatHandDecorations(combat) {
+    if (!combat || combat.mode !== 'setup') return;
+    const L = this.L;
+
+    (this._cardHand.cards || []).forEach((card) => {
+      const cardW = CARD.W * L.k;
+      const cardH = CARD.H * L.k;
+      const slot = this.add.zone(
+        -cardW / 2 + 16 * L.k,
+        -cardH / 2 + 16 * L.k,
+        32 * L.k,
+        32 * L.k
+      ).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      slot.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        this.toggleCombatSword(card.handIdx);
+      });
+      card.container.add(slot);
+    });
+  }
+
+  renderCombatMiniCard(containerKey, x, y, opts = {}) {
+    const L = this.L;
+    const w = 60 * L.k;
+    const h = 99 * L.k;
+    const r = 4 * L.k;
+    const maxHp = Math.max(1, opts.maxHp || opts.hp || 1);
+    const hp = Math.max(0, opts.hp || 0);
+    const hpRatio = hp / maxHp;
+    const ct = this.add.container(x, y);
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
+    bg.fillRoundedRect(-w / 2, -h / 2, w, h, r);
+    bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
+    bg.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+    ct.add(bg);
+
+    if (opts.side === 'player') {
+      const sprite = this.add.image(0, -8 * L.k, catTexKey(opts.pirateType)).setOrigin(0.5);
+      sprite.setDisplaySize(40 * L.k, 40 * L.k);
+      ct.add(sprite);
+    } else {
+      const emoji = this.add.text(0, -8 * L.k, opts.emoji || '☠️', uiHeadingStyle(L, 32, UI_THEME.colors.paper))
+        .setOrigin(0.5);
+      ct.add(emoji);
+    }
+
+    if (opts.sword) {
+      const sword = this.add.text(-w / 2 + 5 * L.k, -h / 2 + 4 * L.k, '🗡️', uiBodyStyle(L, UI_THEME.colors.ink, {
+        fontSize: L.fs(14),
+      })).setOrigin(0, 0);
+      ct.add(sword);
+    }
+
+    const hpLabel = this.add.text(0, h / 2 - 22 * L.k, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
+      fontSize: L.fs(12),
+      fontStyle: 'bold',
+    })).setOrigin(0.5, 0.5);
+    ct.add(hpLabel);
+    this.addCombatHpBar(ct, {
+      x: 0,
+      y: h / 2 - 12 * L.k,
+      width: w - 12 * L.k,
+      height: 8 * L.k,
+      ratio: hpRatio,
+      fillColor: opts.side === 'enemy' ? '#d67d4d' : '#66bb6a',
+    });
+
+    if (opts.side === 'player') this._combatPlayerViews[opts.id] = { x, y };
+    else this._combatEnemyViews[opts.id] = { x, y };
+    this._combatNodes[opts.id] = ct;
+    if (opts.alive === false) ct.setAlpha(0.4);
+    this.addTo(containerKey, ct);
+  }
+
+  renderBoardingEncounter() {
+    const combat = this.ensureBoardingCombat();
+    const L = this.L;
+    this._combatEnemyViews = {};
+    this._combatPlayerViews = {};
+    this._combatNodes = {};
+
+    if (!combat || combat.mode === 'setup') {
+      const fighters = (combat && combat.enemyParty) || [];
+      const slots = cardRowLayout(fighters.length || 1, this.L, {
+        y: this.islandCenterY() - 8 * L.k,
+        maxStep: 124 * L.k,
+        edgePad: 34 * L.k,
+        scale: 1,
+      });
+      const titleY = this.islandCenterY() + 126 * L.k;
+      const title = this.add.text(L.cx, titleY, 'Boarding', uiHeadingStyle(L, 40, UI_THEME.colors.paper, {
+        align: 'center',
+      })).setOrigin(0.5, 0.5);
+      const subtitle = this.add.text(L.cx, titleY + 38 * L.k, 'Arm your pirates', uiBodyStyle(L, UI_THEME.colors.paper, {
+        align: 'center',
+      })).setOrigin(0.5, 0);
+      this.addTo('island', title);
+      this.addTo('island', subtitle);
+
+      fighters.forEach((enemy, idx) => {
+        const pos = slots[idx] || slots[0];
+        this._combatEnemyViews[enemy.id] = { x: pos.x, y: pos.y };
+        const w = 120 * L.k;
+        const h = 198 * L.k;
+        const ct = this.add.container(pos.x, pos.y);
+        const bg = this.add.graphics();
+        bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
+        bg.fillRoundedRect(-w / 2, -h / 2, w, h, 8 * L.k);
+        bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
+        bg.strokeRoundedRect(-w / 2, -h / 2, w, h, 8 * L.k);
+        ct.add(bg);
+
+        const emoji = this.add.text(0, -26 * L.k, enemy.emoji || '☠️', uiHeadingStyle(L, 54, UI_THEME.colors.paper))
+          .setOrigin(0.5);
+        const name = this.add.text(0, 25 * L.k, enemy.name || 'Foe', uiHeadingStyle(L, 16, UI_THEME.colors.ink, {
+          align: 'center',
+          wordWrap: { width: w - 18 * L.k },
+        })).setOrigin(0.5, 0);
+        const stat = this.add.text(0, 48 * L.k, `⚔${enemy.damage}`, uiHeadingStyle(L, 16, UI_THEME.colors.ink))
+          .setOrigin(0.5, 0);
+        ct.add([emoji, name, stat]);
+        this.addTo('island', ct);
+      });
+      return;
+    }
+
+    const enemyFighters = combat.enemyFighters || [];
+    const playerFighters = combat.playerFighters || [];
+    const enemySlots = this.combatMiniEnemySlots(enemyFighters.length || 1);
+    const playerSlots = this.combatMiniPlayerSlots(playerFighters.length || 1);
+
+    enemyFighters.forEach((enemy, idx) => {
+      const pos = enemySlots[idx] || enemySlots[0];
+      this.renderCombatMiniCard('island', pos.x, pos.y, {
+        id: enemy.id,
+        side: 'enemy',
+        emoji: enemy.emoji,
+        hp: enemy.hp,
+        maxHp: enemy.maxHp,
+        alive: enemy.alive,
+      });
+    });
+
+    playerFighters.forEach((fighter, idx) => {
+      const pos = playerSlots[idx] || playerSlots[0];
+      this.renderCombatMiniCard('island', pos.x, pos.y, {
+        id: fighter.id,
+        side: 'player',
+        pirateType: fighter.type,
+        hp: fighter.hp,
+        maxHp: fighter.maxHp,
+        sword: fighter.sword,
+        alive: fighter.alive,
+      });
+    });
+  }
+
   // ──────────── RENDERING ────────────
 
   renderAll() {
+    if (G.phase === 'boarding') this.ensureBoardingCombat();
     this.renderTop();
     this.renderIsland();
     this.renderPhase();
@@ -2435,10 +3199,19 @@ class GameScene extends Phaser.Scene {
     const iconTextGap = 8 * L.k;
     const goal = this.currentGoalState();
     const strength = this.currentStrengthState();
+    const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
+    const boardingSetup = combat && combat.mode === 'setup';
+    const boardingFight = combat && combat.mode !== 'setup';
+    const leftLabel = boardingSetup ? 'Armed' : (boardingFight ? 'Boarding' : 'Strength');
+    const leftValue = boardingSetup
+      ? `🗡️${this.combatAssignedSwordCount(combat)}/${G.weapons || 0}`
+      : (boardingFight
+        ? `${this.combatLiving('player').length}v${this.combatLiving('enemy').length}`
+        : `⚔️${strength.total}`);
 
-    const strengthLabel = this.add.text(pad, labelY, 'Strength', uiHeadingStyle(L, 16, UI_THEME.colors.paper))
+    const strengthLabel = this.add.text(pad, labelY, leftLabel, uiHeadingStyle(L, 16, UI_THEME.colors.paper))
       .setOrigin(0, 0);
-    const strengthValue = this.add.text(pad, valueY, `⚔️${strength.total}`, uiHeadingStyle(L, 32, UI_THEME.colors.paper))
+    const strengthValue = this.add.text(pad, valueY, leftValue, uiHeadingStyle(L, 32, UI_THEME.colors.paper))
       .setOrigin(0, 0);
     const strengthBlockWidth = Math.max(strengthLabel.width, strengthValue.width);
     const goalX = pad + strengthBlockWidth + sectionGap;
@@ -2468,26 +3241,12 @@ class GameScene extends Phaser.Scene {
     const titleLineSpacing = Math.round(-18 * L.k);
     const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
     const outlineH = 144 * L.k;
+    this._combatEnemyViews = {};
+    this._combatPlayerViews = {};
+    this._combatNodes = {};
 
-    if (G.enemyShip) {
-      const title = this.add.text(cx, cy, 'Enemy Ship', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
-        align: 'center',
-        lineSpacing: titleLineSpacing,
-        wordWrap: { width: L.W - 72 * L.k },
-      })).setOrigin(0.5);
-      this.addTo('island', title);
-
-      if (G.enemyShip.strength != null) {
-        this.addTo('island', this.add.text(
-          cx,
-          cy + title.height * 0.5 + 10 * L.k,
-          `You need ${G.enemyShip.strength}⚔️ to win`,
-          uiBodyStyle(L, UI_THEME.colors.paper, {
-            align: 'center',
-            wordWrap: { width: L.W - 120 * L.k },
-          })
-        ).setOrigin(0.5, 0));
-      }
+    if (G.phase === 'boarding' && G.enemyShip) {
+      this.renderBoardingEncounter();
       return;
     }
 
@@ -2596,7 +3355,27 @@ class GameScene extends Phaser.Scene {
       : -1;
 
     const isSending = G.phase === 'sending';
-    const allowInteraction = isSending;
+    const isBoarding = G.phase === 'boarding';
+    const combat = isBoarding ? this.ensureBoardingCombat() : null;
+    const allowInteraction = isSending || (isBoarding && combat && combat.mode === 'setup');
+
+    if (isBoarding && combat) {
+      if (combat.mode !== 'setup') return;
+      this._cardHand.render({
+        hand: G.hand,
+        sent: [],
+        sendingSet: new Set(),
+        isSending: false,
+        allowInteraction: true,
+        cardModeForCard: () => 'battle',
+        cardSlotStateForCard: (pirate) => this.combatPirateHasSword(pirate, combat) ? 'armed' : 'empty',
+        prevPositions,
+        appearFrom,
+        container: this.ct.hand,
+      });
+      this.renderCombatHandDecorations(combat);
+      return;
+    }
 
     this._cardHand.render({
       hand: G.hand,
@@ -2659,7 +3438,7 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     this.renderInventory();
 
-    const panelEnabled = !this.isTutorialPopupOpen();
+    const panelEnabled = !this.isTutorialPopupOpen() && G.phase !== 'boarding';
     const mapEnabled = panelEnabled && !this.isTutorial();
     const shopEnabled = panelEnabled && !G.busy && (!this.isTutorial() || G.phase === 'shopping');
     const pileEnabled = panelEnabled && !G.busy;

@@ -45,6 +45,48 @@ const CARD_MOTION = {
   hoverOutDuration: 300,
 };
 
+const COMBAT = {
+  pirateHp: 9,
+  pirateAttackMs: 1350,
+  swordDamageBonus: 1,
+  swordSpeedMultiplier: 1.5,
+  initialDelayMin: 80,
+  initialDelayMax: 260,
+  attackStartGapMs: 300,
+  attackFxMs: 160,
+  enemyCountMin: 3,
+  enemyCountMax: 5,
+  enemyArchetypes: [
+    {
+      key: 'rat',
+      name: 'Reef Rat',
+      emoji: '🐀',
+      hp: 6,
+      damage: 1,
+      attackMs: 900,
+      color: '#d4a26b',
+    },
+    {
+      key: 'boarder',
+      name: 'Deck Boarder',
+      emoji: '🪝',
+      hp: 9,
+      damage: 1,
+      attackMs: 1250,
+      color: '#d67d4d',
+    },
+    {
+      key: 'brute',
+      name: 'Sea Brute',
+      emoji: '🦈',
+      hp: 12,
+      damage: 2,
+      attackMs: 1700,
+      color: '#a44734',
+    },
+  ],
+};
+
 function uiColorInt(hex) {
   return Phaser.Display.Color.HexStringToColor(hex).color;
 }

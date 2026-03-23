@@ -80,18 +80,20 @@ function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolu
   scene.textures.get(bandTexKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
 }
 
-function buildCardTexture(scene, typeKey, L) {
+function buildCardTexture(scene, typeKey, L, opts = {}) {
   const k = L.k;
   const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
   const cw = Math.round(CARD.W * k);
   const ch = Math.round(CARD.H * k);
   const r = Math.round(CARD.RADIUS * k);
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
+  const mode = opts.mode || 'default';
+  const slotState = opts.slotState || 'none';
 
   const def = TYPES[typeKey];
   const islandDesc = pirateIslandDesc(def);
   const shipDesc = pirateShipDesc(def);
-  const textHash = cardTextHash(`${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
+  const textHash = cardTextHash(`${mode}|${slotState}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
   const islandBand = cardIslandBandMetrics(ch, k);
   const islandBandTexKey = texKey + '_islandband';
@@ -156,21 +158,43 @@ function buildCardTexture(scene, typeKey, L) {
       ctx.drawImage(img, spriteX, spriteY, spriteSize, spriteSize);
     }
 
-    ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 0.9);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(Math.round(8 * k), lineY);
-    ctx.lineTo(cw - Math.round(8 * k), lineY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(Math.round(8 * k), shipBand.top);
-    ctx.lineTo(cw - Math.round(8 * k), shipBand.top);
-    ctx.stroke();
+    if (mode === 'default') {
+      ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 0.9);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(8 * k), lineY);
+      ctx.lineTo(cw - Math.round(8 * k), lineY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(Math.round(8 * k), shipBand.top);
+      ctx.lineTo(cw - Math.round(8 * k), shipBand.top);
+      ctx.stroke();
+    } else {
+      const slotW = Math.round(32 * k);
+      const slotH = Math.round(32 * k);
+      const slotR = Math.round(4 * k);
+      roundRect(ctx, 0, 0, slotW, slotH, slotR);
+      ctx.fillStyle = UI_THEME.colors.sandEdge;
+      ctx.fill();
+      ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 1);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (slotState === 'armed' || slotState === 'empty') {
+        ctx.fillStyle = UI_THEME.colors.ink;
+        ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round((slotState === 'armed' ? 16 : 18) * k))}px ${UI_THEME.fonts.heading}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(slotState === 'armed' ? '🗡️' : '+', slotW / 2, slotH / 2 + Math.round(1 * k));
+        ctx.textBaseline = 'top';
+      }
+    }
 
     ctx.fillStyle = UI_THEME.colors.ink;
 
-    ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
-    ctx.fillText(islandDesc, cw / 2, topTextY);
+    if (mode === 'default') {
+      ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
+      ctx.fillText(islandDesc, cw / 2, topTextY);
+    }
 
     ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
     ctx.fillText(def.name, cw / 2, nameY);
@@ -178,8 +202,10 @@ function buildCardTexture(scene, typeKey, L) {
     ctx.font = `${statFs}px ${UI_THEME.fonts.heading}`;
     ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
 
-    ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
-    ctx.fillText(shipDesc, cw / 2, bottomTextY);
+    if (mode === 'default') {
+      ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
+      ctx.fillText(shipDesc, cw / 2, bottomTextY);
+    }
 
     scene.textures.addCanvas(texKey, canvas);
     scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
@@ -188,8 +214,10 @@ function buildCardTexture(scene, typeKey, L) {
     sourceImage = scene.textures.get(texKey).getSourceImage();
   }
 
-  ensureCardBandTexture(scene, islandBandTexKey, sourceImage, cw, textureResolution, islandBand);
-  ensureCardBandTexture(scene, shipBandTexKey, sourceImage, cw, textureResolution, shipBand);
+  if (mode === 'default') {
+    ensureCardBandTexture(scene, islandBandTexKey, sourceImage, cw, textureResolution, islandBand);
+    ensureCardBandTexture(scene, shipBandTexKey, sourceImage, cw, textureResolution, shipBand);
+  }
 
   return {
     texKey,
@@ -211,7 +239,10 @@ function createPirateCard(scene, opts) {
   const depth = opts.depth != null ? opts.depth : 10;
   const scale = opts.scale != null ? opts.scale : 1;
 
-  const built = buildCardTexture(scene, opts.type, L);
+  const built = buildCardTexture(scene, opts.type, L, {
+    mode: opts.cardMode || 'default',
+    slotState: opts.slotState || 'none',
+  });
   const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
   if (built.textureResolution > 1) {
     cardImg.setScale(1 / built.textureResolution);
@@ -389,6 +420,26 @@ function cardHandLayout(n, L) {
   return slots;
 }
 
+function cardRowLayout(n, L, opts = {}) {
+  const k = L.k;
+  const scale = opts.scale != null ? opts.scale : 1;
+  const cardW = CARD.W * k * scale;
+  const y = opts.y != null ? opts.y : L.Y_HAND_CENTER;
+  const maxStep = opts.maxStep != null ? opts.maxStep : 170 * k;
+  const edgePad = opts.edgePad != null ? opts.edgePad : 22 * k;
+  const minX = edgePad + cardW / 2;
+  const maxX = L.W - minX;
+  const usableW = Math.max(0, maxX - minX);
+  const step = n <= 1 ? 0 : Math.min(maxStep, usableW / Math.max(n - 1, 1));
+  const rowW = step * Math.max(0, n - 1);
+  const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    slots.push({ x: startX + i * step, y, rotation: 0, index: i });
+  }
+  return slots;
+}
+
 
 // ─────────── CardHand class ───────────
 
@@ -444,6 +495,9 @@ class CardHand {
     const tutorialBlocked = opts.tutorialBlocked || (() => false);
     const tutorialTargetIdx = opts.tutorialTargetIdx;
     const onSendToIsland = opts.onSendToIsland;
+    const onCardPointerDown = opts.onCardPointerDown;
+    const cardModeForCard = opts.cardModeForCard || (() => 'default');
+    const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
     const container = opts.container;
 
     const visible = [];
@@ -452,7 +506,11 @@ class CardHand {
       visible.push({ pirate: p, handIdx: i });
     });
 
-    const slots = cardHandLayout(visible.length, L);
+    const slots = Array.isArray(opts.slots)
+      ? opts.slots
+      : (opts.layout === 'row'
+        ? cardRowLayout(visible.length, L, opts.rowLayout || {})
+        : cardHandLayout(visible.length, L));
 
     visible.forEach((entry, slotI) => {
       const { pirate, handIdx } = entry;
@@ -466,6 +524,8 @@ class CardHand {
         y: slot.y,
         rotation: slot.rotation,
         depth: 10 + slotI,
+        cardMode: cardModeForCard(pirate, handIdx),
+        slotState: cardSlotStateForCard(pirate, handIdx),
         L,
         container,
       });
@@ -483,6 +543,7 @@ class CardHand {
         slot,
         handIdx,
         pirate,
+        cardMode: cardModeForCard(pirate, handIdx),
         slotIndex: slotI,
         isBlocked,
         hovered: false,
@@ -494,6 +555,11 @@ class CardHand {
         if (isSending) {
           scene.input.setDraggable(cardImg, true);
           this._setupDrag(cardData, onSendToIsland, L);
+        } else if (onCardPointerDown) {
+          cardImg.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) pointer.event.stopPropagation();
+            onCardPointerDown(handIdx, pirate, cardData, pointer);
+          });
         }
 
         cardImg.on('pointerover', () => {
