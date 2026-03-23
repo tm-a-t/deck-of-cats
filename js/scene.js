@@ -122,6 +122,27 @@ class GameScene extends Phaser.Scene {
     return 'Featured pirate';
   }
 
+  buildIslandState(island, opts = {}) {
+    const src = island || {};
+    return {
+      name: src.name || opts.name || 'Training Cove',
+      emoji: src.emoji || opts.emoji || '🏝️',
+      accent: src.accent != null ? src.accent : (opts.accent != null ? opts.accent : 0x4b7d42),
+      bonus: src.bonus || null,
+      extraSend: src.extraSend || 0,
+      maxSend: src.maxSend != null ? src.maxSend : (opts.maxSend != null ? opts.maxSend : null),
+      bonusEnthusiasm: src.bonusEnthusiasm || 0,
+      sacrifice: !!src.sacrifice,
+      tutorialDesc: src.tutorialDesc || opts.tutorialDesc || null,
+    };
+  }
+
+  islandYieldAmount(res, amount, island = G.island) {
+    const base = Number(amount) || 0;
+    if (!res || !island || island.bonus !== res) return base;
+    return base * 2;
+  }
+
   isTutorialPopupOpen() {
     return !!this._tutorialPopupOpen;
   }
@@ -763,17 +784,10 @@ class GameScene extends Phaser.Scene {
       G.boardingCount = Math.max(G.boardingCount || 0, 1);
     } else {
       const island = turn.island || this.makeTutorialIsland(`send ${requiredSent} pirates here`);
-      G.island = {
-        name: island.name || 'Training Cove',
-        emoji: island.emoji || '🏝️',
-        accent: island.accent != null ? island.accent : 0x4b7d42,
-        bonus: island.bonus || null,
-        extraSend: island.extraSend || 0,
-        maxSend: island.maxSend != null ? island.maxSend : requiredSent,
-        bonusEnthusiasm: island.bonusEnthusiasm || 0,
-        sacrifice: !!island.sacrifice,
-        tutorialDesc: island.tutorialDesc || `send ${requiredSent} pirates here`,
-      };
+      G.island = this.buildIslandState(island, {
+        maxSend: requiredSent,
+        tutorialDesc: `send ${requiredSent} pirates here`,
+      });
       G.enemyShip = null;
       if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
     }
@@ -834,7 +848,7 @@ class GameScene extends Phaser.Scene {
       G.enemyShip = { strength: node.strength };
     } else {
       G.phase = 'sending';
-      G.island = ISLANDS[node.islandIdx];
+      G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
       G.enemyShip = null;
       if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
     }
@@ -1125,11 +1139,6 @@ class GameScene extends Phaser.Scene {
       return { ok: false, exileSent: true };
     }
 
-    if (def.island.draw) {
-      const meta = this.drawCardsIntoHand(def.island.draw, { append: true });
-      return { ok: meta.cards.length > 0, drawn: meta.cards.length };
-    }
-
     if (def.island.guaranteed) {
       const g = def.island.guaranteed;
       if (g.weapons) {
@@ -1144,8 +1153,7 @@ class GameScene extends Phaser.Scene {
     if (def.island.convert) {
       const c = def.island.convert;
       G.res[c.cRes] -= c.cN;
-      let amt = c.pN;
-      if (isl.bonus === c.pRes) amt *= 2;
+      const amt = this.islandYieldAmount(c.pRes, c.pN, isl);
       G.res[c.pRes] += amt;
       return { ok: true, convert: true, cRes: c.cRes, cN: c.cN, res: c.pRes, n: amt };
     }
@@ -1153,8 +1161,7 @@ class GameScene extends Phaser.Scene {
     if (def.island.multi) {
       const items = [];
       for (const m of def.island.multi) {
-        let amt = m.amt;
-        if (isl.bonus === m.res) amt *= 2;
+        const amt = this.islandYieldAmount(m.res, m.amt, isl);
         G.res[m.res] += amt;
         items.push({ res: m.res, n: amt });
       }
@@ -1162,9 +1169,8 @@ class GameScene extends Phaser.Scene {
     }
 
     if (this.isTutorial() && this.getTutorialCurrentTurn() <= 4 && def.island.chance != null) {
-      let amt = def.island.amt;
       const tgt = def.island.res;
-      if (isl.bonus === tgt) amt *= 2;
+      const amt = this.islandYieldAmount(tgt, def.island.amt, isl);
       const islBonusE = def.island.bonusEnthusiasm || 0;
       if (islBonusE) G.enthusiasm += islBonusE;
       G.res[tgt] += amt;
@@ -1172,14 +1178,13 @@ class GameScene extends Phaser.Scene {
     }
 
     let chance = def.island.chance;
-    let amt = def.island.amt;
     const tgt = def.island.res;
+    const amt = this.islandYieldAmount(tgt, def.island.amt, isl);
 
     if (tgt === 'gold' && G.res.map > 0) {
       chance = Math.min(chance + 0.30, 0.95);
       G.res.map--;
     }
-    if (isl.bonus === tgt) amt *= 2;
 
     const islBonusE = def.island.bonusEnthusiasm || 0;
     if (islBonusE) G.enthusiasm += islBonusE;
@@ -1195,8 +1200,7 @@ class GameScene extends Phaser.Scene {
     }
     const others = ['wood', 'stone', 'gold'].filter(r => r !== tgt);
     const alt = Phaser.Utils.Array.GetRandom(others);
-    let altAmt = 1;
-    if (isl.bonus === alt) altAmt *= 2;
+    const altAmt = this.islandYieldAmount(alt, 1, isl);
     G.res[alt] += altAmt;
     return { ok: false, res: alt, n: altAmt, bonusEnthusiasm: islBonusE };
   }
@@ -1256,16 +1260,6 @@ class GameScene extends Phaser.Scene {
       } else {
         this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
         this.effectText(x, fy, 'No one to exile', '#ffa726', 400);
-      }
-      return false;
-    }
-    if (r.drawn !== undefined) {
-      if (r.ok) {
-        this.showIslandEffectOverlay(pirate.type, sentSlot, '#80cbc4');
-        this.effectText(x, fy, '+1 pirate to hand!', '#80cbc4');
-      } else {
-        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
-        this.effectText(x, fy, 'Deck empty', '#ffa726', 400);
       }
       return false;
     }

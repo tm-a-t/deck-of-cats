@@ -148,10 +148,9 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 1. **Recall** (Quartermaster): returns the last-sent pirate from the island back to the hand.
 2. **Exile Sent** (Marooner): permanently removes the previously-sent pirate on the island from the game. No effect if no one was sent before.
-3. **Draw** (Lookout): draws 1 pirate from the deck into the hand.
-4. **Guaranteed**: produces fixed resources or weapons with no chance of failure.
-5. **Convert** (Trader, Profiteer): spends input resources, produces output resources. Output doubled by island bonus. Can only go ashore if the player has enough input resources.
-6. **Chance-based**: standard resource gathering.
+3. **Guaranteed**: produces fixed resources or weapons with no chance of failure.
+4. **Convert** (Trader, Profiteer): spends input resources, produces output resources. Output doubled by island bonus. Can only go ashore if the player has enough input resources.
+5. **Chance-based**: standard resource gathering.
    - If target is gold and player has 🗺️: chance increases by +30% (capped at 95%), consumes 1 🗺️.
    - Island bonus doubles yield amount.
    - Bonus enthusiasm (e.g. Survivalist) is always granted regardless of success.
@@ -184,7 +183,7 @@ Both are summed with crew strength during boarding.
 ## Shop
 
 - **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
-- **Regular-run pool**: all non-starter, non-tutorial pirate types (26 types).
+- **Regular-run pool**: all non-starter, non-tutorial pirate types (25 types).
 - **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
 - **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
 - **Next round rotation**: in regular runs, the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
@@ -225,7 +224,6 @@ Both are summed with crew strength during boarding.
 | Raider | 4 | 2 | → 3🗡️ | 💀 get lost |
 | Scrapper | 4 | 2 | → 2🗡️ | 1💣 → 4🪨+3☠️ |
 | Blacksmith | 4 | 2 | 1🪵 (90%) | 2🗡️ → 1💣+3☠️ |
-| Lookout | 4 | 0 | Draw 1 pirate | 1🪵 → 3🗡️ |
 | Bosun | 5 | 1 | Can't land | → 3☠️ |
 | Cutthroat | 5 | 3 | → 1☠️ | 2🪙 → exile pirate |
 | Profiteer | 5 | 1 | 1🪙 → 2🪙 | 💀 get lost |
@@ -235,7 +233,7 @@ Both are summed with crew strength during boarding.
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
 | Marooner | 6 | 0 | Exile previous pirate on island | → 3🗡️ |
-| Drifter | 6 | 0 | → 2🪵 | 💀 get lost |
+| Drifter | 6 | 0 | 2🪵 (90%) | 💀 get lost |
 | Trader | 7 | 1 | 3🪵 → 3🪨 | 1🪨 → 4☠️ |
 | Woodsman | 7 | 2 | 1🪵 (90%) | 2🪵 → 6🗡️+4☠️ |
 | Prospector | 7 | 2 | 1🪨 (90%) | 2🪨 → 2💣+4☠️ |
@@ -256,9 +254,9 @@ Both are summed with crew strength during boarding.
 
 **Exile Sent** (Marooner): when sent to island, permanently removes the previously-sent pirate on the island from the game. No effect if no one was sent before.
 
-**Draw** (Lookout): when sent to island, draws 1 pirate from the deck into the hand.
-
 **Convert** (Trader: 3🪵→3🪨; Profiteer: 1🪙→2🪙): converts resources. Output doubled by matching island bonus. Can only go ashore if the player has enough input resources.
+
+**Chance-based gatherers** (including Drifter: 2🪵 at 90%): follow the standard gather roll. On a miss, they may still bring back a different resource or a 🗺️.
 
 **Get Lost** (Raider, Profiteer, Drifter): ship action permanently removes them from the game. Their island action works normally.
 

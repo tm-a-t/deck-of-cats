@@ -173,7 +173,6 @@ function pirateIslandDesc(def, opts = {}) {
   const island = def.island;
   if (island.recall) return normalizePirateDescText(`recall ${island.recall} pirate${island.recall === 1 ? '' : 's'}`);
   if (island.exileSent) return 'exile previous';
-  if (island.draw) return `draw ${island.draw} pirate${island.draw === 1 ? '' : 's'}`;
 
   if (island.guaranteed) {
     const gain = island.guaranteed;
@@ -438,7 +437,7 @@ const TYPES = {
   },
   drifter: {
     name: 'Drifter', cat: [14,37,42,16,0,0], str: 0, canIsland: true,
-    island: { guaranteed: { res: 'wood', amt: 2 } },
+    island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
     ship:   { removeSelf: true },
     cost: 6,
   },
@@ -448,12 +447,6 @@ const TYPES = {
     island: { exileSent: true },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
     cost: 6,
-  },
-  lookout: {
-    name: 'Lookout', cat: [2,35,40,32,16,1], str: 0, canIsland: true,
-    island: { draw: 1 },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
-    cost: 4,
   },
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], str: 2, canIsland: true,
@@ -469,5 +462,5 @@ const SHOP_POOL = [
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
   'brute', 'deckhand', 'blacksmith', 'trader', 'scrapper',
   'whittler', 'corsair', 'privateer', 'herald',
-  'raider', 'profiteer', 'drifter', 'marooner', 'lookout', 'survivalist',
+  'raider', 'profiteer', 'drifter', 'marooner', 'survivalist',
 ];
