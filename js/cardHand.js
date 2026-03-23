@@ -15,16 +15,10 @@ const CARD = {
 
   FAN_CURVE: 0.022,
   FAN_ROTATION: 0.02,
-  HOVER_LIFT: 28,
+  HOVER_LIFT: 18,
   HOVER_SCALE: 1.04,
   DRAG_SCALE: 1.02,
-  IDLE_AMP: 0,
-  IDLE_ROT_AMP: 0,
-
-  SHIP_GLOW: uiColorInt(UI_THEME.colors.cocoa),
-  SHIP_GLOW_ALPHA: 0.45,
-
-  NEIGHBOR_SPREAD: 44,
+  NEIGHBOR_SPREAD: 33,
   MOBILE_DRAG_PULL: 48,
 };
 
@@ -49,6 +43,43 @@ function cardTextHash(text) {
   return (hash >>> 0).toString(36);
 }
 
+function cardShipBandMetrics(ch, k) {
+  const top = ch - Math.round(31 * k);
+  return {
+    top,
+    height: ch - top,
+  };
+}
+
+function cardIslandBandMetrics(ch, k) {
+  return {
+    top: 0,
+    height: Math.min(ch, Math.round(31 * k) + 1),
+  };
+}
+
+function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolution, band) {
+  if (scene.textures.exists(bandTexKey)) return;
+  const bandCanvas = document.createElement('canvas');
+  bandCanvas.width = cw * textureResolution;
+  bandCanvas.height = band.height * textureResolution;
+  const bandCtx = bandCanvas.getContext('2d');
+  bandCtx.imageSmoothingEnabled = false;
+  bandCtx.drawImage(
+    sourceImage,
+    0,
+    band.top * textureResolution,
+    cw * textureResolution,
+    band.height * textureResolution,
+    0,
+    0,
+    cw * textureResolution,
+    band.height * textureResolution
+  );
+  scene.textures.addCanvas(bandTexKey, bandCanvas);
+  scene.textures.get(bandTexKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
+}
+
 function buildCardTexture(scene, typeKey, L) {
   const k = L.k;
   const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
@@ -62,98 +93,118 @@ function buildCardTexture(scene, typeKey, L) {
   const shipDesc = pirateShipDesc(def);
   const textHash = cardTextHash(`${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
+  const islandBand = cardIslandBandMetrics(ch, k);
+  const islandBandTexKey = texKey + '_islandband';
+  const shipBand = cardShipBandMetrics(ch, k);
+  const shipBandTexKey = texKey + '_shipband';
 
-  if (scene.textures.exists(texKey)) return { texKey, cw, ch, textureResolution };
+  let sourceImage = null;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = cw * textureResolution;
-  canvas.height = ch * textureResolution;
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(textureResolution, 0, 0, textureResolution, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-
-  ctx.clearRect(0, 0, cw, ch);
-  roundRect(ctx, 0, 0, cw, ch, r);
-  ctx.fillStyle = hexToCSS(CARD.BG, CARD.BG_ALPHA);
-  ctx.fill();
-  ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 1);
-  ctx.lineWidth = bw;
-  ctx.stroke();
-
-  const pad = Math.round(10 * k);
-  const maxTxtW = cw - pad * 2;
-  const lineY = Math.round(31 * k);
-  const shipBandY = ch - Math.round(31 * k);
-  const spriteSize = Math.round(80 * k);
-  const spriteY = Math.round(37 * k);
-  const spriteX = Math.round((cw - spriteSize) / 2);
-  const nameFs = fitCanvasFontSize(
-    ctx,
-    def.name,
-    maxTxtW,
-    Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
-    UI_THEME.fonts.heading,
-    '',
-    UI_THEME.fonts.headingMinPx
-  );
-  const statFs = fitCanvasFontSize(
-    ctx,
-    `⚔️${def.str || 0}`,
-    maxTxtW,
-    Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
-    UI_THEME.fonts.heading,
-    '',
-    UI_THEME.fonts.headingMinPx
-  );
-  const islandFs = fitCanvasFontSize(ctx, islandDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
-  const shipFs = fitCanvasFontSize(ctx, shipDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
-  const topTextY = Math.round(7 * k);
-  const nameY = Math.round(123 * k);
-  const statY = Math.round(143 * k);
-  const bottomTextY = shipBandY + Math.round(8 * k);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const sprKey = catTexKey(typeKey);
-  if (scene.textures.exists(sprKey)) {
-    const img = scene.textures.get(sprKey).getSourceImage();
+  if (!scene.textures.exists(texKey)) {
+    const canvas = document.createElement('canvas');
+    canvas.width = cw * textureResolution;
+    canvas.height = ch * textureResolution;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(textureResolution, 0, 0, textureResolution, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, spriteX, spriteY, spriteSize, spriteSize);
+
+    ctx.clearRect(0, 0, cw, ch);
+    roundRect(ctx, 0, 0, cw, ch, r);
+    ctx.fillStyle = hexToCSS(CARD.BG, CARD.BG_ALPHA);
+    ctx.fill();
+    ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 1);
+    ctx.lineWidth = bw;
+    ctx.stroke();
+
+    const pad = Math.round(10 * k);
+    const maxTxtW = cw - pad * 2;
+    const lineY = Math.round(31 * k);
+    const spriteSize = Math.round(80 * k);
+    const spriteY = Math.round(37 * k);
+    const spriteX = Math.round((cw - spriteSize) / 2);
+    const nameFs = fitCanvasFontSize(
+      ctx,
+      def.name,
+      maxTxtW,
+      Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
+      UI_THEME.fonts.heading,
+      '',
+      UI_THEME.fonts.headingMinPx
+    );
+    const statFs = fitCanvasFontSize(
+      ctx,
+      `⚔️${def.str || 0}`,
+      maxTxtW,
+      Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
+      UI_THEME.fonts.heading,
+      '',
+      UI_THEME.fonts.headingMinPx
+    );
+    const islandFs = fitCanvasFontSize(ctx, islandDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
+    const shipFs = fitCanvasFontSize(ctx, shipDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
+    const topTextY = Math.round(7 * k);
+    const nameY = Math.round(123 * k);
+    const statY = Math.round(143 * k);
+    const bottomTextY = shipBand.top + Math.round(8 * k);
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const sprKey = catTexKey(typeKey);
+    if (scene.textures.exists(sprKey)) {
+      const img = scene.textures.get(sprKey).getSourceImage();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, spriteX, spriteY, spriteSize, spriteSize);
+    }
+
+    ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 0.9);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(Math.round(8 * k), lineY);
+    ctx.lineTo(cw - Math.round(8 * k), lineY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(Math.round(8 * k), shipBand.top);
+    ctx.lineTo(cw - Math.round(8 * k), shipBand.top);
+    ctx.stroke();
+
+    ctx.fillStyle = UI_THEME.colors.ink;
+
+    ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
+    ctx.fillText(islandDesc, cw / 2, topTextY);
+
+    ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
+    ctx.fillText(def.name, cw / 2, nameY);
+
+    ctx.font = `${statFs}px ${UI_THEME.fonts.heading}`;
+    ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
+
+    ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
+    ctx.fillText(shipDesc, cw / 2, bottomTextY);
+
+    scene.textures.addCanvas(texKey, canvas);
+    scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
+    sourceImage = canvas;
+  } else {
+    sourceImage = scene.textures.get(texKey).getSourceImage();
   }
 
-  ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 0.9);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(Math.round(8 * k), lineY);
-  ctx.lineTo(cw - Math.round(8 * k), lineY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(Math.round(8 * k), shipBandY);
-  ctx.lineTo(cw - Math.round(8 * k), shipBandY);
-  ctx.stroke();
+  ensureCardBandTexture(scene, islandBandTexKey, sourceImage, cw, textureResolution, islandBand);
+  ensureCardBandTexture(scene, shipBandTexKey, sourceImage, cw, textureResolution, shipBand);
 
-  ctx.fillStyle = UI_THEME.colors.ink;
-
-  ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
-  ctx.fillText(islandDesc, cw / 2, topTextY);
-
-  ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
-  ctx.fillText(def.name, cw / 2, nameY);
-
-  ctx.font = `${statFs}px ${UI_THEME.fonts.heading}`;
-  ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
-
-  ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
-  ctx.fillText(shipDesc, cw / 2, bottomTextY);
-
-  scene.textures.addCanvas(texKey, canvas);
-  scene.textures.get(texKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
-  return { texKey, cw, ch, textureResolution };
+  return {
+    texKey,
+    cw,
+    ch,
+    textureResolution,
+    islandBandTexKey,
+    islandBandH: islandBand.height,
+    shipBandTexKey,
+    shipBandH: shipBand.height,
+  };
 }
 
 function createPirateCard(scene, opts) {
   const L = opts.L || scene.L;
-  const k = L.k;
   const x = opts.x || 0;
   const y = opts.y || 0;
   const rotation = opts.rotation || 0;
@@ -187,6 +238,113 @@ function createPirateCard(scene, opts) {
     cw: built.cw,
     ch: built.ch,
   };
+}
+
+function createCardBandOverlay(scene, opts) {
+  const L = opts.L || scene.L;
+  const k = L.k;
+  const built = buildCardTexture(scene, opts.type, L);
+  const isIslandBand = opts.band === 'island';
+  const bandH = isIslandBand ? built.islandBandH : built.shipBandH;
+  const bandTexKey = isIslandBand ? built.islandBandTexKey : built.shipBandTexKey;
+  const visualScale = opts.scale != null ? opts.scale : 1;
+  const imageScale = (built.textureResolution > 1 ? 1 / built.textureResolution : 1) * visualScale;
+  const accentColor = uiColorInt(opts.color || UI_THEME.colors.cocoa);
+  const x = opts.x || 0;
+  const y = opts.y || 0;
+  const settleOffset = opts.settleOffset != null ? opts.settleOffset : Math.round(5 * k);
+  const accentPad = Math.round(2 * k);
+
+  const accent = scene.add.graphics();
+  accent.setPosition(x, y);
+  if (opts.depth != null) accent.setDepth(opts.depth + 1);
+  accent.fillStyle(accentColor, 0.22);
+  accent.fillRoundedRect(
+    -built.cw / 2 - accentPad,
+    -bandH / 2 - accentPad,
+    built.cw + accentPad * 2,
+    bandH + accentPad * 2,
+    Math.round((CARD.RADIUS + 1) * k)
+  );
+  accent.setScale(visualScale * 0.985).setAlpha(0);
+  accent.y += settleOffset;
+
+  const bandImg = scene.add.image(x, y, bandTexKey).setOrigin(0.5);
+  if (opts.depth != null) bandImg.setDepth(opts.depth);
+  bandImg.setScale(imageScale * 0.985).setAlpha(0);
+  bandImg.y += settleOffset;
+
+  if (opts.parentContainer) {
+    opts.parentContainer.add([bandImg, accent]);
+  }
+
+  return { accent, bandImg, visualScale, imageScale, x, y };
+}
+
+function showCardBandOverlay(scene, overlay, opts = {}) {
+  if (!overlay) return;
+  const showScale = opts.showScale != null ? opts.showScale : 1.045;
+  const duration = opts.duration != null ? opts.duration : 240;
+  const ease = opts.ease || 'Back.easeOut';
+  scene.tweens.add({
+    targets: overlay.accent,
+    scaleX: overlay.visualScale * showScale,
+    scaleY: overlay.visualScale * showScale,
+    y: overlay.y,
+    alpha: 1,
+    duration,
+    ease,
+  });
+  scene.tweens.add({
+    targets: overlay.bandImg,
+    scaleX: overlay.imageScale * showScale,
+    scaleY: overlay.imageScale * showScale,
+    y: overlay.y,
+    alpha: 1,
+    duration,
+    ease,
+  });
+}
+
+function destroyCardBandOverlay(scene, overlay) {
+  if (!overlay) return;
+  if (scene && scene.tweens) {
+    scene.tweens.killTweensOf(overlay.accent);
+    scene.tweens.killTweensOf(overlay.bandImg);
+  }
+  if (overlay.accent && overlay.accent.scene && overlay.accent.scene.sys) overlay.accent.destroy();
+  if (overlay.bandImg && overlay.bandImg.scene && overlay.bandImg.scene.sys) overlay.bandImg.destroy();
+}
+
+function hideCardBandOverlay(scene, overlay, opts = {}) {
+  if (!overlay) return;
+  const hideScale = opts.hideScale != null ? opts.hideScale : 1;
+  const exitOffset = opts.exitOffset != null ? opts.exitOffset : Math.round(4 * scene.L.k);
+  const duration = opts.duration != null ? opts.duration : 180;
+  const ease = opts.ease || 'Sine.easeIn';
+  if (scene && scene.tweens) {
+    scene.tweens.killTweensOf(overlay.accent);
+    scene.tweens.killTweensOf(overlay.bandImg);
+  }
+  scene.tweens.add({
+    targets: overlay.accent,
+    scaleX: overlay.visualScale * hideScale,
+    scaleY: overlay.visualScale * hideScale,
+    y: overlay.y - exitOffset,
+    alpha: 0,
+    duration,
+    ease,
+    onComplete: () => destroyCardBandOverlay(scene, overlay),
+  });
+  scene.tweens.add({
+    targets: overlay.bandImg,
+    scaleX: overlay.imageScale * hideScale,
+    scaleY: overlay.imageScale * hideScale,
+    y: overlay.y - exitOffset,
+    alpha: 0,
+    duration,
+    ease,
+  });
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -241,9 +399,7 @@ class CardHand {
     this._hoverIdx = -1;
     this._dragIdx = -1;
     this._dragGhost = null;
-    this._time = 0;
-    this._shipHighlightedIdx = -1;
-    this._shipHighlightTween = null;
+    this._spreadTweens = null;
   }
 
   destroy() {
@@ -252,17 +408,13 @@ class CardHand {
       if (tweens) {
         tweens.killTweensOf(c.container);
         tweens.killTweensOf(c.cardImg);
-        if (c._shipGlow) tweens.killTweensOf(c._shipGlow);
-        if (c._shipEffectOverlay) tweens.killTweensOf(c._shipEffectOverlay);
-        if (c._shipEffectParts) {
-          c._shipEffectParts.forEach(part => tweens.killTweensOf(part));
-        }
       }
+      this._clearShipEffectOverlay(c);
       if (c.container) c.container.destroy(true);
     });
+    this._killSpreadTweens();
     this.cards = [];
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
-    if (this._updateEvent) { this._updateEvent.remove(); this._updateEvent = null; }
     this._hoverIdx = -1;
     this._dragIdx = -1;
   }
@@ -287,8 +439,8 @@ class CardHand {
     const hand = opts.hand;
     const sent = opts.sent;
     const sendingSet = opts.sendingSet;
-    const shipResolvedSet = opts.shipResolvedSet;
     const isSending = opts.isSending;
+    const allowInteraction = opts.allowInteraction !== false;
     const tutorialBlocked = opts.tutorialBlocked || (() => false);
     const tutorialTargetIdx = opts.tutorialTargetIdx;
     const onSendToIsland = opts.onSendToIsland;
@@ -335,28 +487,26 @@ class CardHand {
         isBlocked,
         hovered: false,
         dragging: false,
-        targetY: slot.y,
-        targetScale: 1,
-        targetRot: slot.rotation,
-        currentScale: 1,
       };
 
-      cardImg.setInteractive({ useHandCursor: true });
-      if (isSending) {
-        scene.input.setDraggable(cardImg, true);
-        this._setupDrag(cardData, onSendToIsland, L);
+      if (allowInteraction) {
+        cardImg.setInteractive({ useHandCursor: true });
+        if (isSending) {
+          scene.input.setDraggable(cardImg, true);
+          this._setupDrag(cardData, onSendToIsland, L);
+        }
+
+        cardImg.on('pointerover', () => {
+          if (cardData.dragging) return;
+          this._setHoveredCard(slotI, L);
+        });
+
+        cardImg.on('pointerout', () => {
+          if (cardData.dragging) return;
+          if (this._hoverIdx !== slotI) return;
+          this._setHoveredCard(-1, L);
+        });
       }
-
-      cardImg.on('pointerover', () => {
-        if (cardData.dragging) return;
-        this._setHoveredCard(slotI, L);
-      });
-
-      cardImg.on('pointerout', () => {
-        if (cardData.dragging) return;
-        if (this._hoverIdx !== slotI) return;
-        this._setHoveredCard(-1, L);
-      });
 
       if (isTarget) {
         scene.tweens.add({
@@ -399,18 +549,12 @@ class CardHand {
 
       this.cards.push(cardData);
     });
-
-    this._time = 0;
-    this._updateEvent = scene.time.addEvent({
-      delay: 30,
-      loop: true,
-      callback: () => this._updateIdle(L),
-    });
   }
 
   _setHoveredCard(slotIndex, L) {
     if (this._hoverIdx === slotIndex) return;
 
+    const prevHoverIdx = this._hoverIdx;
     this.cards.forEach((c) => {
       if (c.dragging) return;
       const shouldHover = c.slotIndex === slotIndex;
@@ -419,174 +563,90 @@ class CardHand {
       this._animateHover(c, shouldHover, L);
     });
     this._hoverIdx = slotIndex;
+    const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
+    const duration = slotIndex >= 0 ? CARD_MOTION.hoverInDuration : CARD_MOTION.hoverOutDuration;
+    this._tweenNeighborSpread(slotIndex, L, duration, easing);
   }
 
   getCardPosition(handIdx) {
     const card = this.cards.find(c => c.handIdx === handIdx);
     if (!card) return null;
-    return { x: card.slot.x, y: card.slot.y };
+    return {
+      x: card.container.x,
+      y: card.container.y,
+      rotation: card.container.rotation,
+    };
   }
 
-  highlightShipCard(handIdx, active) {
+  highlightShipCard(handIdx, active, opts = {}) {
     const card = this.cards.find(c => c.handIdx === handIdx);
     if (!card) return;
-    const scene = this.scene;
-    const L = scene.L;
-    const k = L.k;
-
-    if (this._shipHighlightTween) {
-      this._shipHighlightTween.stop();
-      this._shipHighlightTween = null;
-    }
-
-    this._killSpreadTweens();
+    const L = this.scene.L;
 
     if (active) {
-      this._shipHighlightedIdx = handIdx;
-      const glow = scene.add.graphics();
-      const cw = Math.round(CARD.W * k);
-      const ch = Math.round(CARD.H * k);
-      glow.lineStyle(4 * k, CARD.SHIP_GLOW, CARD.SHIP_GLOW_ALPHA);
-      roundRectGraphics(glow, -cw / 2 - 3 * k, -ch / 2 - 3 * k, cw + 6 * k, ch + 6 * k, CARD.RADIUS * k + 2);
-      card.container.add(glow);
-      card._shipGlow = glow;
-
       card.container.setDepth(50);
-      this._shipHighlightTween = scene.tweens.add({
-        targets: card.container,
-        scaleX: 1.08, scaleY: 1.08,
-        y: card.slot.y - 20 * k,
-        duration: CARD_MOTION.highlightInDuration,
-        ease: 'Back.easeOut',
-      });
-
-      this._tweenNeighborSpread(card, k, CARD_MOTION.highlightInDuration, 'Back.easeOut');
-    } else {
-      this._shipHighlightedIdx = -1;
-      if (card._shipGlow) {
-        card._shipGlow.destroy();
-        card._shipGlow = null;
+      if (opts.spread !== false) {
+        this._tweenNeighborSpread(card.slotIndex, L, 180, 'Cubic.easeOut');
       }
+    } else {
       card.container.setDepth(10 + card.slotIndex);
-      scene.tweens.add({
-        targets: card.container,
-        scaleX: 1, scaleY: 1,
-        y: card.slot.y,
-        duration: CARD_MOTION.highlightOutDuration,
-        ease: 'Sine.easeOut',
-      });
-
-      this._tweenNeighborSpread(null, k, CARD_MOTION.highlightOutDuration, 'Sine.easeOut');
     }
   }
 
-  showShipEffectOverlay(handIdx, msg, color) {
+  clearShipSpread(duration = 180, ease = 'Sine.easeOut') {
+    this._tweenNeighborSpread(-1, this.scene.L, duration, ease);
+  }
+
+  prepareForShipEffect() {
+    const tweens = this.scene && this.scene.tweens;
+    this._killSpreadTweens();
+    for (const card of this.cards) {
+      if (tweens) tweens.killTweensOf(card.container);
+      card.hovered = false;
+      card.dragging = false;
+      card.container.setPosition(card.slot.x, card.slot.y);
+      card.container.setRotation(card.slot.rotation);
+      card.container.setScale(1);
+      card.container.setAlpha(card.isBlocked ? 0.7 : 1);
+      card.container.setDepth(10 + card.slotIndex);
+    }
+  }
+
+  showShipEffectOverlay(handIdx, color) {
     const card = this.cards.find(c => c.handIdx === handIdx);
     if (!card) return;
     const scene = this.scene;
     const L = scene.L;
-    const k = L.k;
-    const cw = Math.round(CARD.W * k);
-    const ch = Math.round(CARD.H * k);
-    const r = Math.round(CARD.RADIUS * k);
+    const ch = Math.round(CARD.H * L.k);
+    const effectY = ch / 2 - cardShipBandMetrics(ch, L.k).height / 2;
 
-    if (card._shipEffectOverlay) {
-      card._shipEffectOverlay.destroy(true);
-      card._shipEffectOverlay = null;
-    }
-
-    const areaH = Math.round(ch * 0.24);
-    const top = ch / 2 - areaH;
-    const textY = top + areaH / 2;
-    const accentColor = uiColorInt(color || UI_THEME.colors.cocoa);
-
-    const fontSize = Math.max(14, Math.round(17 * k));
-    const txt = scene.make.text({
-      x: 0, y: textY,
-      text: msg,
-      style: {
-        fontFamily: UI_THEME.fonts.body,
-        fontSize: fontSize + 'px',
-        color: color || UI_THEME.colors.ink,
-      },
-      add: false,
-    }).setOrigin(0.5);
-
-    const panel = scene.make.graphics({ add: false });
-    panel.fillStyle(CARD.BG, 1);
-    panel.fillRoundedRect(
-      -cw / 2 + 1, top,
-      cw - 2, areaH - 1,
-      { tl: 0, tr: 0, bl: r, br: r }
-    );
-
-    const accent = scene.add.rectangle(
-      0,
-      top + Math.round(7 * k),
-      Math.max(12 * k, cw - Math.round(30 * k)),
-      Math.max(2, Math.round(2 * k)),
-      accentColor,
-      1
-    ).setOrigin(0.5, 0);
-
-    const overlay = scene.make.container({ add: false });
-    overlay.add([panel, accent, txt]);
-    card.container.add(overlay);
-    card._shipEffectOverlay = overlay;
-    card._shipEffectParts = [panel, accent, txt];
-
-    overlay.setAlpha(0);
-    overlay.y = Math.round(10 * k);
-    accent.setScale(0.2, 1);
-    accent.setAlpha(0);
-    txt.y += Math.round(8 * k);
-    txt.setAlpha(0);
-    scene.tweens.add({
-      targets: overlay,
-      y: 0,
-      alpha: 1,
-      duration: 180,
-      ease: 'Cubic.easeOut',
+    this._clearShipEffectOverlay(card);
+    card._shipEffectOverlay = createCardBandOverlay(scene, {
+      type: card.pirate.type,
+      band: 'ship',
+      x: 0,
+      y: effectY,
+      scale: 1,
+      color,
+      parentContainer: card.container,
+      L,
     });
-    scene.tweens.add({
-      targets: accent,
-      scaleX: 1,
-      alpha: 1,
-      duration: 220,
-      ease: 'Cubic.easeOut',
-    });
-    scene.tweens.add({
-      targets: txt,
-      y: textY,
-      alpha: 1,
-      duration: 220,
-      delay: 35,
-      ease: 'Quad.easeOut',
-    });
+    showCardBandOverlay(scene, card._shipEffectOverlay);
   }
 
   hideShipEffectOverlay(handIdx) {
     const card = this.cards.find(c => c.handIdx === handIdx);
     if (!card || !card._shipEffectOverlay) return;
     const overlay = card._shipEffectOverlay;
-    const parts = card._shipEffectParts || [];
     card._shipEffectOverlay = null;
-    card._shipEffectParts = null;
-    this.scene.tweens.killTweensOf(overlay);
-    parts.forEach(part => this.scene.tweens.killTweensOf(part));
-    this.scene.tweens.add({
-      targets: overlay,
-      y: overlay.y + Math.round(8 * this.scene.L.k),
-      alpha: 0,
-      duration: 160,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        if (overlay && overlay.scene) {
-          overlay.setVisible(false);
-          overlay.setActive(false);
-        }
-      },
-    });
+    hideCardBandOverlay(this.scene, overlay);
+  }
+
+  _clearShipEffectOverlay(card) {
+    if (!card || !card._shipEffectOverlay) return;
+    const overlay = card._shipEffectOverlay;
+    card._shipEffectOverlay = null;
+    destroyCardBandOverlay(this.scene, overlay);
   }
 
   _setupDrag(cardData, onSendToIsland, L) {
@@ -637,6 +697,9 @@ class CardHand {
 
     cardImg.on('pointerdown', (pointer) => {
       dragStartY = pointer.y;
+      if (isTouchPointer(pointer) && !cardData.dragging) {
+        this._setHoveredCard(this._hoverIdx === cardData.slotIndex ? -1 : cardData.slotIndex, L);
+      }
     });
 
     cardImg.on('dragstart', (pointer) => {
@@ -690,7 +753,7 @@ class CardHand {
       if (wasActivated && wasMoved && pointer.y < L.Y_HAND_CENTER) {
         if (onSendToIsland) onSendToIsland(dragCard.handIdx, { x: pointer.x, y: pointer.y });
       } else {
-        this._animateHover(dragCard, false, L);
+        if (!dragCard.hovered) this._animateHover(dragCard, false, L);
       }
     });
   }
@@ -700,14 +763,11 @@ class CardHand {
     const k = L.k;
 
     if (hovering) {
-      cardData.targetY = cardData.slot.y - CARD.HOVER_LIFT * k;
-      cardData.targetScale = CARD.HOVER_SCALE;
-      cardData.targetRot = 0;
       cardData.container.setDepth(40);
 
       scene.tweens.add({
         targets: cardData.container,
-        y: cardData.targetY,
+        y: cardData.slot.y - CARD.HOVER_LIFT * k,
         scaleX: CARD.HOVER_SCALE,
         scaleY: CARD.HOVER_SCALE,
         rotation: 0,
@@ -715,9 +775,6 @@ class CardHand {
         ease: 'Back.easeOut',
       });
     } else {
-      cardData.targetY = cardData.slot.y;
-      cardData.targetScale = 1;
-      cardData.targetRot = cardData.slot.rotation;
       cardData.container.setDepth(10 + cardData.slotIndex);
 
       scene.tweens.add({
@@ -733,97 +790,31 @@ class CardHand {
   }
 
   _killSpreadTweens() {
-    if (this._spreadTweens) {
-      for (const tw of this._spreadTweens) tw.stop();
-      this._spreadTweens = null;
-    }
+    if (!this._spreadTweens) return;
+    for (const tw of this._spreadTweens) tw.stop();
+    this._spreadTweens = null;
   }
 
-  _tweenNeighborSpread(elevCard, k, duration, ease) {
+  _tweenNeighborSpread(activeSlotIndex, L, duration, ease) {
     const scene = this.scene;
-    const spread = CARD.NEIGHBOR_SPREAD * k;
+    const spread = CARD.NEIGHBOR_SPREAD * L.k;
+    this._killSpreadTweens();
     this._spreadTweens = [];
-    let pending = 0;
 
-    const elevIdx = elevCard
-      ? this.cards.indexOf(elevCard)
-      : -1;
-
-    const onDone = () => {
-      if (--pending <= 0) this._spreadTweens = null;
-    };
-
-    for (let i = 0; i < this.cards.length; i++) {
-      const c = this.cards[i];
-      if (i === elevIdx || c.dragging) continue;
+    for (const c of this.cards) {
       let targetX = c.slot.x;
-      if (elevIdx >= 0) {
-        const diff = i - elevIdx;
+      if (activeSlotIndex >= 0 && c.slotIndex !== activeSlotIndex) {
+        const diff = c.slotIndex - activeSlotIndex;
         const dir = Math.sign(diff);
         const dist = Math.abs(diff);
         targetX = c.slot.x + dir * spread / dist;
       }
-      pending++;
       this._spreadTweens.push(scene.tweens.add({
         targets: c.container,
         x: targetX,
-        duration, ease,
-        onComplete: onDone,
+        duration,
+        ease,
       }));
     }
-
-    if (pending === 0) this._spreadTweens = null;
   }
-
-  _updateIdle(L) {
-    this._time += 0.03;
-    const k = L.k;
-    const spread = CARD.NEIGHBOR_SPREAD * k;
-    const lerpSpeed = 0.18;
-
-    let elevIdx = -1;
-    for (let i = 0; i < this.cards.length; i++) {
-      const c = this.cards[i];
-      if (c.hovered || c.dragging || c.handIdx === this._shipHighlightedIdx) {
-        elevIdx = i;
-        break;
-      }
-    }
-
-    const spreadTweening = this._spreadTweens != null;
-
-    this.cards.forEach((c, i) => {
-      if (!spreadTweening) {
-        let targetX = c.slot.x;
-        if (elevIdx >= 0 && i !== elevIdx && !c.dragging) {
-          const diff = i - elevIdx;
-          const dir = Math.sign(diff);
-        const dist = Math.abs(diff);
-        targetX = c.slot.x + dir * spread / dist;
-      }
-      c.container.x += (targetX - c.container.x) * lerpSpeed;
-    }
-
-      if (c.hovered || c.dragging) return;
-      if (c.handIdx === this._shipHighlightedIdx) return;
-      const phase = i * 1.3;
-      const yOff = Math.sin(this._time + phase) * CARD.IDLE_AMP * k;
-      const rOff = Math.cos(this._time * 0.7 + phase) * CARD.IDLE_ROT_AMP;
-      c.container.y = c.targetY + yOff;
-      c.container.rotation = c.targetRot + rOff;
-    });
-  }
-}
-
-function roundRectGraphics(g, x, y, w, h, r) {
-  g.beginPath();
-  g.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
-  g.lineTo(x + w - r, y);
-  g.arc(x + w - r, y + r, r, -Math.PI * 0.5, 0);
-  g.lineTo(x + w, y + h - r);
-  g.arc(x + w - r, y + h - r, r, 0, Math.PI * 0.5);
-  g.lineTo(x + r, y + h);
-  g.arc(x + r, y + h - r, r, Math.PI * 0.5, Math.PI);
-  g.closePath();
-  g.strokePath();
 }

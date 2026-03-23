@@ -32,8 +32,6 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland = new Set();
     this._pendingEndSending = false;
     this._sacrificedIds = new Set();
-    this._shipResolvedSet = new Set();
-    this._shipQueueTotal = 0;
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
     this._pendingHandAppearById = null;
@@ -741,8 +739,6 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
-    this._shipResolvedSet = new Set();
-    this._shipQueueTotal = 0;
     this.closeTutorialHint();
 
     if (Array.isArray(turn.shop)) {
@@ -831,8 +827,6 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
-    this._shipResolvedSet = new Set();
-    this._shipQueueTotal = 0;
     if (node.type === 'ship') {
       G.boardingCount++;
       G.phase = 'boarding';
@@ -1002,6 +996,18 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  sentCardIslandEffectPosition(si) {
+    const L = this.L;
+    const placement = this.sentCardPlacement(si);
+    const cardH = Math.round(CARD.H * L.k) * placement.scale;
+    const islandBand = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k);
+    return {
+      x: placement.x,
+      y: placement.y - cardH / 2 + (islandBand.height * placement.scale) / 2,
+      scale: placement.scale,
+    };
+  }
+
   sendToIsland(idx, fromPos) {
     if (this.isTutorialPopupOpen()) return;
     if (G.phase !== 'sending') return;
@@ -1056,14 +1062,16 @@ class GameScene extends Phaser.Scene {
         ghost.destroy();
         this._sendingToIsland.delete(idx);
         const result = this.resolveIsland(p);
-        const spendDuration = this.showIslandResult(result, toX);
+        const sentSlot = Math.max(0, G.sent.indexOf(idx));
+        const effectPos = this.sentCardIslandEffectPosition(sentSlot);
 
         const isSacrifice = G.island && G.island.sacrifice;
         if (isSacrifice) {
-          this.sacrificePirate(p, toX);
+          this.sacrificePirate(p, effectPos.x, effectPos.y);
         }
 
         this.renderAll();
+        const spendDuration = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
 
         const baseWait = isSacrifice ? 1400 : (spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (spendDuration || 0);
@@ -1193,48 +1201,89 @@ class GameScene extends Phaser.Scene {
     return { ok: false, res: alt, n: altAmt, bonusEnthusiasm: islBonusE };
   }
 
-  sacrificePirate(pirate, x) {
+  sacrificePirate(pirate, x, y) {
     G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
     G.deck = G.deck.filter(p => p.id !== pirate.id);
     G.discard = G.discard.filter(p => p.id !== pirate.id);
     this._sacrificedIds.add(pirate.id);
-    const L = this.L;
     this.time.delayedCall(400, () => {
-      this.float(x, L.Y_ISL_CY - 50 * L.k, '💀 Lost!', '#c060ff');
+      this.float(x, y, '💀 Lost!', '#c060ff');
     });
   }
 
-  showIslandResult(r, x) {
+  showIslandEffectOverlay(type, sentSlot, color) {
+    if (sentSlot < 0) return;
     const L = this.L;
-    const fy = L.Y_ISL_CY - 80 * L.k;
+    const effectPos = this.sentCardIslandEffectPosition(sentSlot);
+    const overlay = createCardBandOverlay(this, {
+      type,
+      band: 'island',
+      x: effectPos.x,
+      y: effectPos.y,
+      scale: effectPos.scale,
+      color,
+      parentContainer: this.ct.fx,
+      depth: 66,
+      L,
+    });
+    showCardBandOverlay(this, overlay);
+    this.time.delayedCall(420, () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      hideCardBandOverlay(this, overlay);
+    });
+  }
+
+  showIslandResult(pirate, sentSlot, r, x, y) {
+    const L = this.L;
+    const sentPlacement = this.sentCardPlacement(sentSlot);
+    const bandH = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k).height * sentPlacement.scale;
+    const fy = y - bandH / 2 - 18 * L.k;
 
     if (r.recall !== undefined) {
-      if (r.ok) this.effectText(x, fy, '↩ Recalled!', '#80cbc4');
-      else this.effectText(x, fy, 'No one to recall', '#ffa726', 400);
+      if (r.ok) {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#80cbc4');
+        this.effectText(x, fy, '↩ Recalled!', '#80cbc4');
+      } else {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
+        this.effectText(x, fy, 'No one to recall', '#ffa726', 400);
+      }
       return false;
     }
     if (r.exileSent) {
-      if (r.ok) this.effectText(x, fy, '💀 Exiled ' + r.name + '!', '#ff8a80');
-      else this.effectText(x, fy, 'No one to exile', '#ffa726', 400);
+      if (r.ok) {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ff8a80');
+        this.effectText(x, fy, '💀 Exiled ' + r.name + '!', '#ff8a80');
+      } else {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
+        this.effectText(x, fy, 'No one to exile', '#ffa726', 400);
+      }
       return false;
     }
     if (r.drawn !== undefined) {
-      if (r.ok) this.effectText(x, fy, '+1 pirate to hand!', '#80cbc4');
-      else this.effectText(x, fy, 'Deck empty', '#ffa726', 400);
+      if (r.ok) {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#80cbc4');
+        this.effectText(x, fy, '+1 pirate to hand!', '#80cbc4');
+      } else {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
+        this.effectText(x, fy, 'Deck empty', '#ffa726', 400);
+      }
       return false;
     }
 
     let gainItems = [];
     let spendDuration = 0;
     if (r.convert) {
+      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
       this.effectText(x, fy,
         r.cN + RES_EMOJI[r.cRes] + ' → ' + r.n + RES_EMOJI[r.res], '#66bb6a');
-      spendDuration = this.animateResourceSpend(x, L.Y_ISL_CY, [{ emoji: RES_EMOJI[r.cRes], count: r.cN }]);
+      spendDuration = this.animateResourceSpend(x, y, [{ emoji: RES_EMOJI[r.cRes], count: r.cN }]);
       gainItems = [{ emoji: RES_EMOJI[r.res], count: r.n }];
     } else if (r.weapons) {
+      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
       this.effectText(x, fy, '+' + r.weapons + '🗡️', '#66bb6a');
       gainItems = [{ emoji: '🗡️', count: r.weapons }];
     } else if (r.items) {
+      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
       const msg = r.items.map(i => '+' + i.n + RES_EMOJI[i.res]).join(' ');
       this.effectText(x, fy, msg, '#66bb6a');
       gainItems = r.items.map(i => ({ emoji: RES_EMOJI[i.res], count: i.n }));
@@ -1243,18 +1292,25 @@ class GameScene extends Phaser.Scene {
       const eBonus = r.bonusEnthusiasm ? ' +' + r.bonusEnthusiasm + '☠️' : '';
       gainItems = [{ emoji: em, count: r.n }];
       if (r.bonusEnthusiasm) gainItems.push({ emoji: '☠️', count: r.bonusEnthusiasm });
-      if (r.ok) this.effectText(x, fy, '+' + r.n + em + eBonus, '#66bb6a');
-      else if (r.res === 'map') this.effectText(x, fy, '+🗺️!' + eBonus, '#ffd54f', 400);
-      else this.effectText(x, fy, 'Miss +' + r.n + em + eBonus, '#ffa726', 400);
+      if (r.ok) {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
+        this.effectText(x, fy, '+' + r.n + em + eBonus, '#66bb6a');
+      } else if (r.res === 'map') {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffd54f');
+        this.effectText(x, fy, '+🗺️!' + eBonus, '#ffd54f', 400);
+      } else {
+        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
+        this.effectText(x, fy, 'Miss +' + r.n + em + eBonus, '#ffa726', 400);
+      }
     }
 
     if (gainItems.length) {
       if (spendDuration > 0) {
         this.time.delayedCall(spendDuration, () => {
-          this.animateResourceGain(x, L.Y_ISL_CY, gainItems);
+          this.animateResourceGain(x, y, gainItems);
         });
       } else {
-        this.animateResourceGain(x, L.Y_ISL_CY, gainItems);
+        this.animateResourceGain(x, y, gainItems);
       }
     }
     return spendDuration;
@@ -1279,13 +1335,11 @@ class GameScene extends Phaser.Scene {
     }
     G.phase = 'ship';
     G.busy = true;
-    this._shipResolvedSet = new Set();
 
     this._shipQueue = [];
     for (let i = 0; i < G.hand.length; i++) {
       if (!G.sent.includes(i)) this._shipQueue.push(i);
     }
-    this._shipQueueTotal = this._shipQueue.length;
     this._shipQueuePos = 0;
     this.renderAll();
     this.processNextShip();
@@ -1322,6 +1376,7 @@ class GameScene extends Phaser.Scene {
     const shipEffectSuccessColor = '#177C05';
     const shipEffectFailColor = '#CE2E25';
 
+    this._cardHand.prepareForShipEffect();
     this._cardHand.highlightShipCard(hi, true);
 
     const pos = this._cardHand.getCardPosition(hi);
@@ -1330,11 +1385,19 @@ class GameScene extends Phaser.Scene {
 
     const resolveAndContinue = (effectDuration) => {
       this.time.delayedCall(effectDuration, () => {
+        const nextHi = this._shipQueuePos < this._shipQueue.length
+          ? this._shipQueue[this._shipQueuePos]
+          : -1;
         this._cardHand.hideShipEffectOverlay(hi);
         this._cardHand.highlightShipCard(hi, false);
+        this._cardHand.clearShipSpread();
+        if (nextHi >= 0) {
+          this._cardHand.highlightShipCard(nextHi, true, { spread: false });
+        }
         this.time.delayedCall(250, () => {
-          this._shipResolvedSet.add(hi);
-          this.renderAll();
+          this.renderTop();
+          this.renderBtn();
+          this.renderNav();
           this.time.delayedCall(150, () => this.processNextShip());
         });
       });
@@ -1344,21 +1407,21 @@ class GameScene extends Phaser.Scene {
       G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
       G.deck = G.deck.filter(p => p.id !== pirate.id);
       G.discard = G.discard.filter(p => p.id !== pirate.id);
-      this._cardHand.showShipEffectOverlay(hi, '💀 Lost!', shipEffectSuccessColor);
+      this._cardHand.showShipEffectOverlay(hi, shipEffectSuccessColor);
       resolveAndContinue(600);
       return;
     }
 
     if (def.ship && def.ship.removeFromDeck) {
       if (def.ship.cRes && (G.res[def.ship.cRes] || 0) < def.ship.cN) {
-        this._cardHand.showShipEffectOverlay(hi, '—', shipEffectFailColor);
+        this._cardHand.showShipEffectOverlay(hi, shipEffectFailColor);
         resolveAndContinue(500);
         return;
       }
       const handIds = new Set(G.hand.map(p => p.id));
       const targets = G.allCrew.filter(p => !handIds.has(p.id));
       if (targets.length === 0) {
-        this._cardHand.showShipEffectOverlay(hi, 'No one to exile', shipEffectFailColor);
+        this._cardHand.showShipEffectOverlay(hi, shipEffectFailColor);
         resolveAndContinue(500);
         return;
       }
@@ -1366,10 +1429,9 @@ class GameScene extends Phaser.Scene {
         G.res[def.ship.cRes] -= def.ship.cN;
         this.animateResourceSpend(x, y, [{ emoji: RES_EMOJI[def.ship.cRes], count: def.ship.cN }]);
       }
-      this._cardHand.showShipEffectOverlay(hi, 'Exile a pirate!', shipEffectSuccessColor);
+      this._cardHand.showShipEffectOverlay(hi, shipEffectSuccessColor);
       this.time.delayedCall(500, () => {
         this._cardHand.highlightShipCard(hi, false);
-        this._shipResolvedSet.add(hi);
         G.phase = 'removing';
         G.busy = false;
         this.renderAll();
@@ -1378,42 +1440,14 @@ class GameScene extends Phaser.Scene {
     }
 
     if (!def.ship) {
-      this._cardHand.showShipEffectOverlay(hi, '—', shipEffectFailColor);
+      this._cardHand.showShipEffectOverlay(hi, shipEffectFailColor);
       resolveAndContinue(500);
       return;
     }
 
     const r = this.resolveShip(pirate);
-    const s = TYPES[pirate.type].ship;
-    let costPart = '';
-    if (s.costs) {
-      costPart = s.costs.map(c => c.n + (c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res])).join(' ');
-    } else if (s.costWeapons) {
-      costPart = (s.costWeapons > 1 ? s.costWeapons : '') + '🗡️';
-    } else if (s.costCannons) {
-      costPart = (s.costCannons > 1 ? s.costCannons : '') + '💣';
-    } else if (s.cRes && s.cN > 0) {
-      costPart = s.cN + RES_EMOJI[s.cRes];
-    }
-    const gainParts = [];
-    if (s.prodWeapons) gainParts.push(s.prodWeapons + '🗡️');
-    if (s.prodCannons) gainParts.push(s.prodCannons + '💣');
-    if (s.pN > 0) {
-      const em = s.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[s.pRes];
-      gainParts.push(s.pN + em);
-    }
-    if (s.extraEnthusiasm) gainParts.push(s.extraEnthusiasm + '☠️');
-    let msg;
-    if (gainParts.length === 0 && !costPart) {
-      msg = '—';
-    } else if (costPart && gainParts.length) {
-      msg = costPart + ' → ' + gainParts.join(' ');
-    } else if (gainParts.length) {
-      msg = gainParts.map(g => '+' + g).join(' ');
-    } else {
-      msg = '—';
-    }
-    this._cardHand.showShipEffectOverlay(hi, msg, r.ok ? shipEffectSuccessColor : shipEffectFailColor);
+    const s = def.ship;
+    this._cardHand.showShipEffectOverlay(hi, r.ok ? shipEffectSuccessColor : shipEffectFailColor);
     let spendDuration = 0;
     if (r.ok) {
       const spendItems = [];
@@ -1445,8 +1479,7 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
-    const baseShipWait = (r.ok && (r.pN > 0 || r.weaponN || r.cannonN || r.extraEnthusiasm)) ? 1000 : 1000;
-    const shipWait = baseShipWait + spendDuration;
+    const shipWait = 1000 + spendDuration;
     resolveAndContinue(shipWait);
   }
 
@@ -1607,8 +1640,6 @@ class GameScene extends Phaser.Scene {
       G.sent = [];
       this._sendingToIsland.clear();
       this._pendingEndSending = false;
-      this._shipResolvedSet = new Set();
-      this._shipQueueTotal = 0;
       this.renderAll();
       this.time.delayedCall(nextTurnDelay, () => {
         if (!this.sys || !this.sys.isActive()) return;
@@ -1626,8 +1657,6 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm = 0;
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
-    this._shipResolvedSet = new Set();
-    this._shipQueueTotal = 0;
     this.renderAll();
     this.time.delayedCall(nextTurnDelay, () => {
       if (!this.sys || !this.sys.isActive()) return;
@@ -2019,7 +2048,7 @@ class GameScene extends Phaser.Scene {
     if (G.phase === 'sending') {
       if (G.sent.length >= this.maxSend()) {
         if (this._sendingToIsland.size > 0) return null;
-        return { label: 'Continue', onClick: () => this.endSending(), variant: 'continue' };
+        return { label: 'Work on Ship', onClick: () => this.endSending(), variant: 'continue' };
       }
       return { label: 'End', onClick: () => this.endSending(), variant: 'end' };
     }
@@ -2573,13 +2602,14 @@ class GameScene extends Phaser.Scene {
       : -1;
 
     const isSending = G.phase === 'sending';
+    const allowInteraction = isSending;
 
     this._cardHand.render({
       hand: G.hand,
       sent: G.sent,
       sendingSet: this._sendingToIsland,
-      shipResolvedSet: this._shipResolvedSet,
       isSending,
+      allowInteraction,
       prevPositions,
       appearFrom,
       tutorialBlocked: (p) => this.isTutorial() && G.phase === 'sending' &&

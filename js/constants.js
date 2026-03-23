@@ -43,8 +43,6 @@ const CARD_MOTION = {
   betweenTurnsDelay: 120,
   hoverInDuration: 240,
   hoverOutDuration: 300,
-  highlightInDuration: 380,
-  highlightOutDuration: 260,
 };
 
 function uiColorInt(hex) {

@@ -43,8 +43,8 @@ If the selected node is an island:
 - Siren Island: pirates sent are **permanently lost** after their island action resolves.
 - Each pirate's island ability resolves on arrival (resource gathering, conversion, recall, etc.).
 - Send animation/effect resolution is non-blocking: while one pirate is traveling/resolving, player may send another immediately.
-- Ship phase starts only after all already-triggered island actions finish resolving and the player clicks `Continue`.
-- Player may stop sending early with `End`, or use all allowed sends and then click `Continue` to begin ship actions.
+- Ship phase starts only after all already-triggered island actions finish resolving and the player clicks `Work on Ship`.
+- Player may stop sending early with `End`, or use all allowed sends and then click `Work on Ship` to begin ship actions.
 
 **Ship phase**:
 - Each pirate remaining on the ship (not sent to island) executes their ship action sequentially, in hand order.
