@@ -101,8 +101,8 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 | Ship # | Layer | Strength |
 |--------|-------|----------|
 | 1 | 4 | 6 |
-| 2 | 9 | 11 |
-| 3 | 14 | 16 |
+| 2 | 9 | 8 |
+| 3 | 14 | 11 |
 
 ### Mid/Late Game (layers 15–49)
 
@@ -111,17 +111,17 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 - Siren Island can appear starting at layer 15 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
 
-**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 4 + 2)`
+**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 2 + 4)`
 
 | Ship # | Layer | Strength |
 |--------|-------|----------|
-| 4 | 19 | 23 |
-| 5 | 24 | 29 |
-| 6 | 29 | 36 |
-| 7 | 34 | 43 |
-| 8 | 39 | 50 |
-| 9 | 44 | 57 |
-| 10 | 49 | 65 |
+| 4 | 19 | 14 |
+| 5 | 24 | 17 |
+| 6 | 29 | 21 |
+| 7 | 34 | 24 |
+| 8 | 39 | 28 |
+| 9 | 44 | 31 |
+| 10 | 49 | 35 |
 
 ### Victory Condition
 

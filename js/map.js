@@ -13,6 +13,10 @@ function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
 }
 
+function shipStrength(shipNumber) {
+  return Math.trunc(Math.pow(shipNumber, 1.2) * 2 + 4);
+}
+
 function generateMap() {
   const layers = [];
   let nextId = 0;
@@ -35,7 +39,7 @@ function generateMap() {
     const shipNumber = seg + 1;
     layers.push([{
       id: nextId++, type: 'ship',
-      strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
+      strength: shipStrength(shipNumber),
       conns: [],
     }]);
   }
@@ -47,7 +51,7 @@ function generateMap() {
       const shipNumber = (li + 1) / 5;
       layers.push([{
         id: nextId++, type: 'ship',
-        strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
+        strength: shipStrength(shipNumber),
         conns: [],
       }]);
     } else {
