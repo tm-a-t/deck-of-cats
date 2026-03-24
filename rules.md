@@ -68,21 +68,27 @@ If the selected node is an island:
 If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
 - Boarding starts with a **setup step**:
-  - Player may assign up to 1🗡️ to each pirate by tapping the corner slot on that pirate's card.
+  - All player pirates are shown immediately as compact mini cards.
+  - Player may inspect a pirate by hovering/tapping that mini card.
+  - The popup for that pirate has a weapon slot; clicking it cycles through the available weapon types and assigns up to 1 weapon to that pirate.
   - Pirate order is fixed in this prototype; reordering is currently disabled.
-  - Each assigned 🗡️ is consumed when the player presses `Fight!`.
+  - Each assigned weapon is consumed when the player presses `Fight!`.
 - Pirate combat stats in this prototype:
   - Damage = the pirate's printed ⚔️.
   - HP = 9 for every pirate.
   - Attack speed = one shared base speed for all pirates.
-  - A sword gives that pirate **+1 damage** and **+50% attack speed** for this battle.
+  - Generic `⚔️` gains from pirates become random boarding weapons from this pool:
+    - `🗡️ Sword`: **+1 damage** and **+50% attack speed**.
+    - `🪓 Axe`: **+2 damage** and **20% slower swings**.
+    - `🔪 Dagger`: **+100% attack speed**.
+    - `🔨 Hammer`: **+1 damage** and **+4 HP**.
 - Enemy boarding parties are generated independently of the map node's legacy `strength` value:
   - Encounters use 3–5 generic enemies.
   - Difficulty scales by **boarding count**.
   - Tutorial turn 5 uses a fixed training encounter.
 - Combat resolution:
   - Both rows attack automatically once `Fight!` is pressed.
-  - When combat starts, both sides switch from the setup cards to compact mini cards so all fighters stay visible at once.
+  - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
   - Every fighter gets a tiny random initial delay, then keeps attacking until dead.
   - Across the whole boarding, only one attack may start every **0.3s**.
   - A fighter's own attack cooldown is still based on that fighter's attack speed from its previous attack.
@@ -90,12 +96,12 @@ If the selected node is an enemy ship:
   - Each attack targets a random living enemy in that fighter's positional band.
   - Positional band rule: if a fighter is position `X` out of `N` living allies and the opposing row has `M` living enemies, the target band is the enemy indices from `floor((X-1)*M/N)` through `ceil(X*M/N)-1`, clamped to the living enemy row.
 - **Victory**:
-  - All remaining 🗡️ reset to 0; 💣 cannons persist.
+  - All remaining `⚔️` reset to 0; 💣 cannons persist.
   - No combat casualties persist.
   - Hand discarded, draw up to 5 new pirates, proceed to map phase.
   - If this was the final map node → **Victory screen**.
 - **Defeat**:
-  - All remaining 🗡️ reset to 0.
+  - All remaining `⚔️` reset to 0.
   - **Game Over** screen.
 
 ---
@@ -179,7 +185,11 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Type | Emoji | Effect | Persistence |
 |------|-------|--------|-------------|
-| Weapons | 🗡️ | During boarding setup, assign 1 to a pirate for +1 damage and +50% attack speed in that fight; some ship actions can spend them | Reset to 0 after boarding (win or lose) |
+| Weapons | ⚔️ | Generic category used by pirate abilities. Each gained `⚔️` becomes a random stored weapon from the rows below; ship actions that spend `⚔️` consume any mix of stored weapons | Reset to 0 after boarding (win or lose) |
+| Sword | 🗡️ | +1 damage and +50% attack speed for the pirate carrying it in that fight | Consumed when assigned to a pirate and `Fight!` is pressed |
+| Axe | 🪓 | +2 damage, but the pirate swings 20% slower in that fight | Consumed when assigned to a pirate and `Fight!` is pressed |
+| Dagger | 🔪 | Double attack speed for the pirate carrying it in that fight | Consumed when assigned to a pirate and `Fight!` is pressed |
+| Hammer | 🔨 | +1 damage and +4 HP for the pirate carrying it in that fight | Consumed when assigned to a pirate and `Fight!` is pressed |
 | Cannons | 💣 | Persistent resource used by some ship actions; no direct boarding effect in this prototype | Not reset after boarding |
 
 ---
@@ -202,7 +212,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 |------|-----|--------|------|
 | Rigger | 1 | 1🪵 (90%) | 4🪵 → 2☠️ |
 | Ballaster | 1 | 1🪨 (90%) | 4🪨 → 2☠️ |
-| Armsman | 1 | → 1🗡️ | — |
+| Armsman | 1 | → 1⚔️ | — |
 
 ### Tutorial-Only
 
@@ -216,18 +226,18 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Brute | 2 | 2 | → 1🗡️ | 1🪨 → 3☠️ |
-| Whittler | 2 | 1 | → 2☠️ | 1🪵 → 3🗡️ |
-| Corsair | 2 | 1 | → 2🗡️ | → 2☠️ |
+| Brute | 2 | 2 | → 1⚔️ | 1🪨 → 3☠️ |
+| Whittler | 2 | 1 | → 2☠️ | 1🪵 → 3⚔️ |
+| Corsair | 2 | 1 | → 2⚔️ | → 2☠️ |
 | Herald | 2 | 2 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 1 | 1🪨 (90%) | → 1🗡️+1☠️ |
-| Carpenter | 3 | 1 | 1🪵 (95%) | 2🪵 → 3🗡️+2☠️ |
+| Deckhand | 2 | 1 | 1🪨 (90%) | → 1⚔️+1☠️ |
+| Carpenter | 3 | 1 | 1🪵 (95%) | 2🪵 → 3⚔️+2☠️ |
 | Stonemason | 3 | 1 | 1🪨 (95%) | 2🪨 → 1💣+2☠️ |
-| Privateer | 3 | 2 | 1🪙 (45%) | 2🪙 → 6🗡️+4☠️ |
+| Privateer | 3 | 2 | 1🪙 (45%) | 2🪙 → 6⚔️+4☠️ |
 | Survivalist | 3 | 2 | 1🪵 (90%) +2☠️ | → 2☠️ |
-| Raider | 4 | 2 | → 3🗡️ | 💀 get lost |
-| Scrapper | 4 | 2 | → 2🗡️ | 1💣 → 4🪨+3☠️ |
-| Blacksmith | 4 | 2 | 1🪵 (90%) | 2🗡️ → 1💣+3☠️ |
+| Raider | 4 | 2 | → 3⚔️ | 💀 get lost |
+| Scrapper | 4 | 2 | → 2⚔️ | 1💣 → 4🪨+3☠️ |
+| Blacksmith | 4 | 2 | 1🪵 (90%) | 2⚔️ → 1💣+3☠️ |
 | Bosun | 5 | 1 | Can't land | → 3☠️ |
 | Cutthroat | 5 | 3 | → 1☠️ | 2🪙 → exile pirate |
 | Profiteer | 5 | 1 | 1🪙 → 2🪙 | 💀 get lost |
@@ -236,10 +246,10 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Marooner | 6 | 0 | Exile previous pirate on island | → 3🗡️ |
+| Marooner | 6 | 0 | Exile previous pirate on island | → 3⚔️ |
 | Drifter | 6 | 0 | 2🪵 (90%) | 💀 get lost |
 | Trader | 7 | 1 | 3🪵 → 3🪨 | 1🪨 → 4☠️ |
-| Woodsman | 7 | 2 | 1🪵 (90%) | 2🪵 → 6🗡️+4☠️ |
+| Woodsman | 7 | 2 | 1🪵 (90%) | 2🪵 → 6⚔️+4☠️ |
 | Prospector | 7 | 2 | 1🪨 (90%) | 2🪨 → 2💣+4☠️ |
 | Smuggler | 8 | 2 | 1🪙 (45%) | 1🪙 → 5☠️ |
 | Explorer | 9 | 1 | 1🪙 (65%) | 1🪙 → 6☠️ |
@@ -249,7 +259,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Master Rigger | 13 | 3 | 2🪵 (90%) | 2🪵 → 9🗡️+4☠️ |
+| Master Rigger | 13 | 3 | 2🪵 (90%) | 2🪵 → 9⚔️+4☠️ |
 | Master Ballaster | 13 | 3 | 2🪨 (90%) | 2🪨 → 3💣+4☠️ |
 
 ### Special Abilities Detail
@@ -288,7 +298,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 | 🪙 | Gold | Ship actions input; high-tier conversions |
 | 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-| 🗡️ | Weapons | Boarding swords; can be assigned one-per-pirate during boarding setup and can also be spent by some ship actions |
+| ⚔️ | Weapons | Mixed boarding gear. Each gained `⚔️` becomes a random stored `🗡️`/`🪓`/`🔪`/`🔨`; can be assigned one-per-pirate during boarding setup and can also be spent by some ship actions |
 | 💣 | Cannons | Persistent ship resource; no direct boarding bonus in this prototype, but some ship actions can spend them |
 
 ---
@@ -306,8 +316,10 @@ Activated from the menu:
 - Turn 3 shop: only Admiral Blackpowder is offered, and the tutorial does not continue until it is bought.
 - Turn 4 includes a scripted mismatch: one Rigger brings back 1🪙 instead of 1🪵, and Admiral Blackpowder is blocked from landing so it stays on ship.
 - Turn 5 is a scripted boarding tutorial:
-  - Arm pirates from the corner sword slots.
-  - Optionally assign any available 🗡️.
+  - Start with `1🗡️`, `1🪓`, `1🔪`, and `1🔨`.
+  - Tap a mini card to inspect that pirate.
+  - Use the popup weapon slot to choose equipment.
+  - Optionally assign any available `⚔️`.
   - Tap `Fight!` and watch the autoplay fight.
 - Winning the final tutorial boarding shows the tutorial outro; losing shows the normal game-over screen.
 - After outro, player can start a real game.

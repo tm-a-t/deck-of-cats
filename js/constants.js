@@ -48,8 +48,6 @@ const CARD_MOTION = {
 const COMBAT = {
   pirateHp: 9,
   pirateAttackMs: 1350,
-  swordDamageBonus: 1,
-  swordSpeedMultiplier: 1.5,
   initialDelayMin: 80,
   initialDelayMax: 260,
   attackStartGapMs: 300,
@@ -86,6 +84,171 @@ const COMBAT = {
     },
   ],
 };
+
+const WEAPON_CATEGORY_EMOJI = '⚔️';
+
+const WEAPON_TYPES = {
+  sword: {
+    name: 'Sword',
+    emoji: '🗡️',
+    damageBonus: 1,
+    attackMsMultiplier: 2 / 3,
+    summary: '+1 dmg, faster',
+  },
+  axe: {
+    name: 'Axe',
+    emoji: '🪓',
+    damageBonus: 2,
+    attackMsMultiplier: 1.2,
+    summary: '+2 dmg, slower',
+  },
+  dagger: {
+    name: 'Dagger',
+    emoji: '🔪',
+    attackMsMultiplier: 0.5,
+    summary: 'Fastest swings',
+  },
+  hammer: {
+    name: 'Hammer',
+    emoji: '🔨',
+    damageBonus: 1,
+    hpBonus: 4,
+    summary: '+1 dmg, +4 HP',
+  },
+};
+
+const WEAPON_ORDER = Object.keys(WEAPON_TYPES);
+
+function createWeaponInventory() {
+  const inventory = {};
+  WEAPON_ORDER.forEach((key) => {
+    inventory[key] = 0;
+  });
+  return inventory;
+}
+
+function normalizeWeaponInventory(raw) {
+  const inventory = createWeaponInventory();
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    inventory.sword = Math.max(0, Math.floor(raw));
+    return inventory;
+  }
+  if (!raw || typeof raw !== 'object') return inventory;
+  WEAPON_ORDER.forEach((key) => {
+    inventory[key] = Math.max(0, Math.floor(raw[key] || 0));
+  });
+  return inventory;
+}
+
+function cloneWeaponInventory(raw) {
+  return normalizeWeaponInventory(raw);
+}
+
+function weaponTypeKeys() {
+  return [...WEAPON_ORDER];
+}
+
+function weaponTypeKeyByEmoji(emoji) {
+  return WEAPON_ORDER.find((key) => WEAPON_TYPES[key].emoji === emoji) || null;
+}
+
+function weaponInventoryTotal(raw) {
+  const inventory = normalizeWeaponInventory(raw);
+  return WEAPON_ORDER.reduce((sum, key) => sum + inventory[key], 0);
+}
+
+function weaponCountText(weaponKey, count = 1) {
+  const weapon = WEAPON_TYPES[weaponKey];
+  const emoji = weapon ? weapon.emoji : WEAPON_CATEGORY_EMOJI;
+  const n = Number(count) || 0;
+  if (!emoji || n <= 0) return '';
+  if (n <= 3) return emoji.repeat(n);
+  return `${n}${emoji}`;
+}
+
+function weaponInventoryItems(raw, opts = {}) {
+  const inventory = normalizeWeaponInventory(raw);
+  return WEAPON_ORDER
+    .map((key) => ({
+      key,
+      name: WEAPON_TYPES[key].name,
+      emoji: WEAPON_TYPES[key].emoji,
+      count: inventory[key] || 0,
+    }))
+    .filter((item) => opts.includeZeros || item.count > 0);
+}
+
+function weaponInventoryText(raw, joiner = ' ') {
+  return weaponInventoryItems(raw).map((item) => weaponCountText(item.key, item.count)).join(joiner);
+}
+
+function addWeaponInventory(target, source) {
+  if (!target || typeof target !== 'object') return cloneWeaponInventory(source);
+  const gain = normalizeWeaponInventory(source);
+  WEAPON_ORDER.forEach((key) => {
+    target[key] = Math.max(0, (target[key] || 0) + gain[key]);
+  });
+  return target;
+}
+
+function removeWeaponInventory(target, source) {
+  if (!target || typeof target !== 'object') return false;
+  const cost = normalizeWeaponInventory(source);
+  for (const key of WEAPON_ORDER) {
+    if ((target[key] || 0) < cost[key]) return false;
+  }
+  WEAPON_ORDER.forEach((key) => {
+    target[key] = Math.max(0, (target[key] || 0) - cost[key]);
+  });
+  return true;
+}
+
+function spendAnyWeapons(target, count, order = WEAPON_ORDER) {
+  const need = Math.max(0, Math.floor(Number(count) || 0));
+  if (need === 0) return createWeaponInventory();
+  if (!target || typeof target !== 'object') return null;
+  if (weaponInventoryTotal(target) < need) return null;
+
+  const spent = createWeaponInventory();
+  let remaining = need;
+  order.forEach((key) => {
+    if (remaining <= 0) return;
+    const take = Math.min(Math.max(0, target[key] || 0), remaining);
+    if (take <= 0) return;
+    target[key] -= take;
+    spent[key] += take;
+    remaining -= take;
+  });
+  return remaining === 0 ? spent : null;
+}
+
+function randomWeaponKey() {
+  return Phaser.Utils.Array.GetRandom(WEAPON_ORDER);
+}
+
+function rollWeaponDrops(count, opts = {}) {
+  const total = Math.max(0, Math.floor(Number(count) || 0));
+  const drops = createWeaponInventory();
+  if (total === 0) return drops;
+
+  let remaining = total;
+  if (opts.ensureDistinct) {
+    const distinctKeys = Phaser.Utils.Array.Shuffle([...WEAPON_ORDER]);
+    const distinctCount = Math.min(remaining, distinctKeys.length);
+    for (let i = 0; i < distinctCount; i++) {
+      drops[distinctKeys[i]] += 1;
+      remaining -= 1;
+    }
+  }
+
+  while (remaining > 0) {
+    const key = randomWeaponKey();
+    if (!key) break;
+    drops[key] += 1;
+    remaining -= 1;
+  }
+  return drops;
+}
 
 function uiColorInt(hex) {
   return Phaser.Display.Color.HexStringToColor(hex).color;
@@ -180,7 +343,7 @@ function pirateDescWithSuffix(text, suffix) {
 }
 
 function pirateDescEmoji(kind) {
-  if (kind === 'weapons') return '🗡️';
+  if (kind === 'weapons') return WEAPON_CATEGORY_EMOJI;
   if (kind === 'cannons') return '💣';
   if (kind === 'enthusiasm') return '☠️';
   return RES_EMOJI[kind] || '';

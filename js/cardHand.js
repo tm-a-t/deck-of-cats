@@ -89,11 +89,12 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
   const mode = opts.mode || 'default';
   const slotState = opts.slotState || 'none';
+  const slotWeaponKey = opts.slotWeaponKey || null;
 
   const def = TYPES[typeKey];
   const islandDesc = pirateIslandDesc(def);
   const shipDesc = pirateShipDesc(def);
-  const textHash = cardTextHash(`${mode}|${slotState}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
+  const textHash = cardTextHash(`${mode}|${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
   const islandBand = cardIslandBandMetrics(ch, k);
   const islandBandTexKey = texKey + '_islandband';
@@ -180,11 +181,14 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
       ctx.lineWidth = 1;
       ctx.stroke();
       if (slotState === 'armed' || slotState === 'empty') {
+        const slotEmoji = slotState === 'armed'
+          ? ((slotWeaponKey && WEAPON_TYPES[slotWeaponKey] && WEAPON_TYPES[slotWeaponKey].emoji) || WEAPON_CATEGORY_EMOJI)
+          : '+';
         ctx.fillStyle = UI_THEME.colors.ink;
         ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round((slotState === 'armed' ? 16 : 18) * k))}px ${UI_THEME.fonts.heading}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(slotState === 'armed' ? '🗡️' : '+', slotW / 2, slotH / 2 + Math.round(1 * k));
+        ctx.fillText(slotEmoji, slotW / 2, slotH / 2 + Math.round(1 * k));
         ctx.textBaseline = 'top';
       }
     }
@@ -242,6 +246,7 @@ function createPirateCard(scene, opts) {
   const built = buildCardTexture(scene, opts.type, L, {
     mode: opts.cardMode || 'default',
     slotState: opts.slotState || 'none',
+    slotWeaponKey: opts.slotWeaponKey || null,
   });
   const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
   if (built.textureResolution > 1) {
@@ -498,6 +503,7 @@ class CardHand {
     const onCardPointerDown = opts.onCardPointerDown;
     const cardModeForCard = opts.cardModeForCard || (() => 'default');
     const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
+    const cardSlotWeaponKeyForCard = opts.cardSlotWeaponKeyForCard || (() => null);
     const container = opts.container;
 
     const visible = [];
@@ -526,6 +532,7 @@ class CardHand {
         depth: 10 + slotI,
         cardMode: cardModeForCard(pirate, handIdx),
         slotState: cardSlotStateForCard(pirate, handIdx),
+        slotWeaponKey: cardSlotWeaponKeyForCard(pirate, handIdx),
         L,
         container,
       });
@@ -544,6 +551,7 @@ class CardHand {
         handIdx,
         pirate,
         cardMode: cardModeForCard(pirate, handIdx),
+        slotWeaponKey: cardSlotWeaponKeyForCard(pirate, handIdx),
         slotIndex: slotI,
         isBlocked,
         hovered: false,

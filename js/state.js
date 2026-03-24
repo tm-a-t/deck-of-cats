@@ -111,7 +111,7 @@ function initState() {
     discard: [],
     hand: [],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
-    weapons: 0,
+    weapons: createWeaponInventory(),
     cannons: 0,
     enthusiasm: 0,
     round: 0,
@@ -136,7 +136,8 @@ function initBattleTestState() {
   const fighterCount = Phaser.Math.Between(3, 5);
   const crew = buildBattleTestCrew(fighterCount);
   const encounterNo = Phaser.Math.Between(1, 6);
-  const weapons = Phaser.Math.Between(1, crew.length);
+  const weaponCount = Phaser.Math.Between(1, crew.length);
+  const weapons = rollWeaponDrops(weaponCount, { ensureDistinct: true });
 
   G = {
     mode: 'battleTest',
@@ -263,6 +264,7 @@ function initTutorialState() {
       round: 5,
       phase: 'boarding',
       handRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
+      startWeapons: { sword: 1, axe: 1, dagger: 1, hammer: 1 },
       shop: [],
       enemyShip: { preset: 'tutorial-final' },
       hints: {
@@ -305,7 +307,7 @@ function initTutorialState() {
     discard: [],
     hand: firstHand,
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
-    weapons: 0,
+    weapons: createWeaponInventory(),
     cannons: 0,
     enthusiasm: 0,
     round: 1,

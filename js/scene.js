@@ -23,10 +23,11 @@ class GameScene extends Phaser.Scene {
     if (needsFreshState) initState();
 
     this.ct = {};
-    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'fx', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
+    ['top', 'island', 'phase', 'hand', 'btn', 'nav', 'fx', 'overlay', 'tutorialHint', 'tutorial', 'gameover'].forEach(k => {
       this.ct[k] = this.add.container(0, 0);
     });
     this.ct.fx.setDepth(50);
+    this.ct.overlay.setDepth(60);
     this.ct.tutorialHint.setDepth(170).setVisible(false);
     this.ct.tutorial.setDepth(180).setVisible(false);
     this.ct.gameover.setDepth(200);
@@ -37,6 +38,9 @@ class GameScene extends Phaser.Scene {
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
+    this._renderAllQueued = false;
+    this._combatSetupPopupPinned = false;
+    this._combatSetupPopupDismissTimer = null;
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
     this._pendingHandAppearById = null;
@@ -204,8 +208,9 @@ class GameScene extends Phaser.Scene {
         title: 'Final Boarding',
         body: [
           'All 5 drawn pirates fight in a row.',
-          'Tap card-corner slots to arm pirates with swords.',
-          'Swords give +1 attack and faster swings.',
+          'Tap a mini card to inspect that pirate.',
+          'Use the popup weapon slot to choose a weapon.',
+          '🗡️ is balanced, 🪓 hits hard, 🔪 swings fastest, 🔨 adds HP.',
           'Tap Fight to watch the battle play out.',
         ],
       },
@@ -262,8 +267,8 @@ class GameScene extends Phaser.Scene {
       turn5_boarding_hint: {
         title: 'Final Boarding',
         body: [
-          'Arm pirates from the card corners.',
-          'Combat switches to a compact mini-card view.',
+          'Tap a mini card to inspect that pirate.',
+          'Use the popup weapon slot to equip a weapon.',
           'Boarding now resolves as an autoplay fight.',
         ],
         autoHideMs: 8000,
@@ -560,6 +565,7 @@ class GameScene extends Phaser.Scene {
         round: 5,
         phase: 'boarding',
         handRefs: [featuredRef, 'L1', 'L2', 'L3', 'S1'],
+        startWeapons: { sword: 1, axe: 1, dagger: 1, hammer: 1 },
         shop: [],
         enemyShip: { preset: 'tutorial-final' },
         hints: {
@@ -768,6 +774,9 @@ class GameScene extends Phaser.Scene {
         }
       });
     }
+    G.weapons = turn.startWeapons && typeof turn.startWeapons === 'object'
+      ? cloneWeaponInventory(turn.startWeapons)
+      : createWeaponInventory();
     G.shopAnimating = false;
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
@@ -1153,8 +1162,9 @@ class GameScene extends Phaser.Scene {
     if (def.island.guaranteed) {
       const g = def.island.guaranteed;
       if (g.weapons) {
-        G.weapons += g.weapons;
-        return { ok: true, weapons: g.weapons };
+        const weaponGain = rollWeaponDrops(g.weapons);
+        addWeaponInventory(G.weapons, weaponGain);
+        return { ok: true, weapons: weaponGain };
       }
       if (g.res === 'enthusiasm') G.enthusiasm += g.amt;
       else G.res[g.res] = (G.res[g.res] || 0) + g.amt;
@@ -1283,10 +1293,14 @@ class GameScene extends Phaser.Scene {
         r.cN + RES_EMOJI[r.cRes] + ' → ' + r.n + RES_EMOJI[r.res], '#66bb6a');
       spendDuration = this.animateResourceSpend(x, y, [{ emoji: RES_EMOJI[r.cRes], count: r.cN }]);
       gainItems = [{ emoji: RES_EMOJI[r.res], count: r.n }];
-    } else if (r.weapons) {
+    } else if (r.weapons && weaponInventoryTotal(r.weapons) > 0) {
       this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
-      this.effectText(x, fy, '+' + r.weapons + '🗡️', '#66bb6a');
-      gainItems = [{ emoji: '🗡️', count: r.weapons }];
+      this.effectText(x, fy, '+' + weaponInventoryText(r.weapons), '#66bb6a');
+      gainItems = weaponInventoryItems(r.weapons).map((item) => ({
+        key: item.key,
+        emoji: item.emoji,
+        count: item.count,
+      }));
     } else if (r.items) {
       this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
       const msg = r.items.map(i => '+' + i.n + RES_EMOJI[i.res]).join(' ');
@@ -1459,7 +1473,11 @@ class GameScene extends Phaser.Scene {
       if (s.costs) {
         for (const c of s.costs) spendItems.push({ emoji: c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res], count: c.n });
       } else if (s.costWeapons) {
-        spendItems.push({ emoji: '🗡️', count: s.costWeapons });
+        spendItems.push(...weaponInventoryItems(r.weaponCost).map((item) => ({
+          key: item.key,
+          emoji: item.emoji,
+          count: item.count,
+        })));
       } else if (s.costCannons) {
         spendItems.push({ emoji: '💣', count: s.costCannons });
       } else if (s.cRes && s.cN > 0) {
@@ -1472,7 +1490,13 @@ class GameScene extends Phaser.Scene {
         gainItems.push({ emoji: r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes], count: r.pN });
       }
       if (r.extraEnthusiasm) gainItems.push({ emoji: '☠️', count: r.extraEnthusiasm });
-      if (r.weaponN) gainItems.push({ emoji: '🗡️', count: r.weaponN });
+      if (r.weaponGain && weaponInventoryTotal(r.weaponGain) > 0) {
+        gainItems.push(...weaponInventoryItems(r.weaponGain).map((item) => ({
+          key: item.key,
+          emoji: item.emoji,
+          count: item.count,
+        })));
+      }
       if (r.cannonN) gainItems.push({ emoji: '💣', count: r.cannonN });
       if (gainItems.length) {
         if (spendDuration > 0) {
@@ -1509,23 +1533,23 @@ class GameScene extends Phaser.Scene {
         if ((G.res[c.res] || 0) < c.n) return { ok: false };
       }
       for (const c of s.costs) G.res[c.res] -= c.n;
-      const weaponN = s.prodWeapons || 0;
+      const weaponGain = rollWeaponDrops(s.prodWeapons || 0);
       const cannonN = s.prodCannons || 0;
-      G.weapons += weaponN;
+      addWeaponInventory(G.weapons, weaponGain);
       G.cannons += cannonN;
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
-      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponN, cannonN };
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, weaponGain, cannonN };
     }
     if (s.costWeapons) {
-      if (G.weapons < s.costWeapons) return { ok: false };
-      G.weapons -= s.costWeapons;
+      const weaponCost = spendAnyWeapons(G.weapons, s.costWeapons);
+      if (!weaponCost) return { ok: false };
       const cannonN = s.prodCannons || 0;
       G.cannons += cannonN;
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
       if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
-      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponN: 0, cannonN };
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponCost, weaponGain: createWeaponInventory(), cannonN };
     }
     if (s.costCannons) {
       if (G.cannons < s.costCannons) return { ok: false };
@@ -1533,26 +1557,26 @@ class GameScene extends Phaser.Scene {
       if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
       else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
       if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
-      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponN: 0, cannonN: 0 };
+      return { ok: true, pRes: s.pRes || null, pN: s.pN || 0, extraEnthusiasm: s.extraEnthusiasm || 0, weaponGain: createWeaponInventory(), cannonN: 0 };
     }
     if (!s.cRes) {
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else if (s.pRes) G.res[s.pRes] += s.pN;
-      const weaponN = s.prodWeapons || 0;
+      const weaponGain = rollWeaponDrops(s.prodWeapons || 0);
       const cannonN = s.prodCannons || 0;
-      G.weapons += weaponN;
+      addWeaponInventory(G.weapons, weaponGain);
       G.cannons += cannonN;
-      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN, cannonN };
+      return { ok: true, pRes: s.pRes, pN: s.pN, weaponGain, cannonN };
     }
     if ((G.res[s.cRes] || 0) >= s.cN) {
       G.res[s.cRes] -= s.cN;
       if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
       else G.res[s.pRes] += s.pN;
-      const weaponN = s.prodWeapons || 0;
+      const weaponGain = rollWeaponDrops(s.prodWeapons || 0);
       const cannonN = s.prodCannons || 0;
-      G.weapons += weaponN;
+      addWeaponInventory(G.weapons, weaponGain);
       G.cannons += cannonN;
-      return { ok: true, pRes: s.pRes, pN: s.pN, weaponN, cannonN };
+      return { ok: true, pRes: s.pRes, pN: s.pN, weaponGain, cannonN };
     }
     return { ok: false };
   }
@@ -1682,6 +1706,8 @@ class GameScene extends Phaser.Scene {
 
   clearCombatState() {
     this.clearCombatTimers();
+    this.clearCombatSetupPopupDismiss();
+    this._combatSetupPopupPinned = false;
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
@@ -1735,13 +1761,20 @@ class GameScene extends Phaser.Scene {
 
   ensureBoardingCombat() {
     if (G.phase !== 'boarding') return null;
-    if (G.combat && Array.isArray(G.combat.enemyParty)) return G.combat;
+    if (G.combat && Array.isArray(G.combat.enemyParty)) {
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedPirateId')) G.combat.inspectedPirateId = null;
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedEnemyId')) G.combat.inspectedEnemyId = null;
+      return G.combat;
+    }
 
     const encounter = this.generateCombatEncounter();
+    this.clearCombatSetupPopupDismiss();
+    this._combatSetupPopupPinned = false;
     G.combat = {
       mode: 'setup',
-      selectedPirateId: null,
-      swordPirateIds: [],
+      inspectedPirateId: null,
+      inspectedEnemyId: null,
+      weaponByPirateId: {},
       enemyName: encounter.name,
       enemyParty: encounter.enemies,
       playerFighters: null,
@@ -1751,70 +1784,138 @@ class GameScene extends Phaser.Scene {
     return G.combat;
   }
 
-  combatAssignedSwordCount(combat = G.combat) {
-    return combat && Array.isArray(combat.swordPirateIds) ? combat.swordPirateIds.length : 0;
+  combatWeaponAssignments(combat = G.combat) {
+    if (!combat) return {};
+    if (!combat.weaponByPirateId || typeof combat.weaponByPirateId !== 'object') {
+      combat.weaponByPirateId = {};
+    }
+    return combat.weaponByPirateId;
   }
 
-  combatPirateHasSword(pirate, combat = G.combat) {
-    if (!pirate || !combat || !Array.isArray(combat.swordPirateIds)) return false;
-    return combat.swordPirateIds.includes(pirate.id);
+  combatAssignedWeaponCount(combat = G.combat, weaponKey = null) {
+    const assigned = Object.values(this.combatWeaponAssignments(combat))
+      .filter((key) => WEAPON_TYPES[key]);
+    if (weaponKey) return assigned.filter((key) => key === weaponKey).length;
+    return assigned.length;
   }
 
-  toggleCombatSword(handIdx) {
+  combatAssignedWeaponInventory(combat = G.combat) {
+    const inventory = createWeaponInventory();
+    Object.values(this.combatWeaponAssignments(combat)).forEach((weaponKey) => {
+      if (WEAPON_TYPES[weaponKey]) inventory[weaponKey] += 1;
+    });
+    return inventory;
+  }
+
+  combatAvailableWeaponInventory(combat = G.combat) {
+    const inventory = cloneWeaponInventory(G.weapons);
+    removeWeaponInventory(inventory, this.combatAssignedWeaponInventory(combat));
+    return inventory;
+  }
+
+  combatPirateWeaponKey(pirate, combat = G.combat) {
+    if (!pirate) return null;
+    const weaponKey = this.combatWeaponAssignments(combat)[pirate.id];
+    return WEAPON_TYPES[weaponKey] ? weaponKey : null;
+  }
+
+  combatPirateHasWeapon(pirate, combat = G.combat) {
+    return !!this.combatPirateWeaponKey(pirate, combat);
+  }
+
+  combatUnassignedWeaponCount(weaponKey, combat = G.combat) {
+    const inventory = this.combatAvailableWeaponInventory(combat);
+    return inventory[weaponKey] || 0;
+  }
+
+  cycleCombatWeapon(handIdx) {
     const combat = this.ensureBoardingCombat();
     if (!combat || combat.mode !== 'setup' || G.busy) return;
     const pirate = G.hand[handIdx];
     if (!pirate) return;
-
-    if (this.combatPirateHasSword(pirate, combat)) {
-      combat.swordPirateIds = combat.swordPirateIds.filter((id) => id !== pirate.id);
-      this.renderAll();
+    const assignments = this.combatWeaponAssignments(combat);
+    const current = this.combatPirateWeaponKey(pirate, combat);
+    const ownedWeapons = normalizeWeaponInventory(G.weapons);
+    const cycle = [null, ...weaponTypeKeys().filter((weaponKey) => (ownedWeapons[weaponKey] || 0) > 0)];
+    if (cycle.length <= 1) {
+      this.float(this.L.cx, this.islandCenterY() + 90 * this.L.k, 'No weapons left', '#ffa726');
       return;
     }
 
-    if (this.combatAssignedSwordCount(combat) >= (G.weapons || 0)) {
-      this.float(this.L.cx, this.islandCenterY() + 90 * this.L.k, 'No swords left', '#ffa726');
-      return;
+    const currentIdx = Math.max(0, cycle.indexOf(current));
+    for (let step = 1; step <= cycle.length; step++) {
+      const next = cycle[(currentIdx + step) % cycle.length];
+      if (!next) {
+        if (!current) break;
+        delete assignments[pirate.id];
+        this.queueRenderAll();
+        return;
+      }
+      if (this.combatUnassignedWeaponCount(next, combat) > 0) {
+        assignments[pirate.id] = next;
+        this.queueRenderAll();
+        return;
+      }
     }
 
-    combat.swordPirateIds.push(pirate.id);
-    this.renderAll();
+    this.float(this.L.cx, this.islandCenterY() + 90 * this.L.k, 'No weapons left', '#ffa726');
   }
 
-  selectCombatPirate(handIdx) {
-    const combat = this.ensureBoardingCombat();
-    if (!combat || combat.mode !== 'setup' || G.busy) return;
-    const pirate = G.hand[handIdx];
-    if (!pirate) return;
+  combatHandIndexByPirateId(pirateId) {
+    return G.hand.findIndex((pirate) => pirate && pirate.id === pirateId);
+  }
 
-    if (combat.selectedPirateId === pirate.id) {
-      combat.selectedPirateId = null;
-      this.renderAll();
-      return;
-    }
+  setCombatSetupInspectedPirate(pirateId, combat = G.combat, opts = {}) {
+    if (!combat || combat.mode !== 'setup') return;
+    const nextId = pirateId == null ? null : pirateId;
+    const pinned = !!opts.pinned;
+    this.clearCombatSetupPopupDismiss();
+    if (combat.inspectedPirateId === nextId && this._combatSetupPopupPinned === pinned) return;
+    combat.inspectedPirateId = nextId;
+    combat.inspectedEnemyId = null;
+    this._combatSetupPopupPinned = pinned;
+    this.queueRenderAll();
+  }
 
-    if (!combat.selectedPirateId) {
-      combat.selectedPirateId = pirate.id;
-      this.renderAll();
-      return;
-    }
+  combatSetupInspectedPirate(combat = G.combat) {
+    if (!combat || combat.mode !== 'setup' || combat.inspectedPirateId == null) return null;
+    const handIdx = this.combatHandIndexByPirateId(combat.inspectedPirateId);
+    return handIdx >= 0 ? G.hand[handIdx] : null;
+  }
 
-    const selectedIdx = G.hand.findIndex((card) => card && card.id === combat.selectedPirateId);
-    if (selectedIdx < 0) {
-      combat.selectedPirateId = pirate.id;
-      this.renderAll();
-      return;
-    }
+  setCombatSetupInspectedEnemy(enemyId, combat = G.combat, opts = {}) {
+    if (!combat || combat.mode !== 'setup') return;
+    const nextId = enemyId == null ? null : enemyId;
+    const pinned = !!opts.pinned;
+    this.clearCombatSetupPopupDismiss();
+    if (combat.inspectedEnemyId === nextId && this._combatSetupPopupPinned === pinned) return;
+    combat.inspectedEnemyId = nextId;
+    combat.inspectedPirateId = null;
+    this._combatSetupPopupPinned = pinned;
+    this.queueRenderAll();
+  }
 
-    const tmp = G.hand[selectedIdx];
-    G.hand[selectedIdx] = G.hand[handIdx];
-    G.hand[handIdx] = tmp;
-    combat.selectedPirateId = null;
-    this.renderAll();
+  combatSetupInspectedEnemy(combat = G.combat) {
+    if (!combat || combat.mode !== 'setup' || combat.inspectedEnemyId == null) return null;
+    return (combat.enemyParty || []).find((enemy) => enemy && enemy.id === combat.inspectedEnemyId) || null;
+  }
+
+  combatSetupHasInspection(combat = G.combat) {
+    return !!(this.combatSetupInspectedPirate(combat) || this.combatSetupInspectedEnemy(combat));
+  }
+
+  combatEnemyCharacteristics(enemy) {
+    if (!enemy) return '';
+    const durability = enemy.maxHp >= 11 ? 'Tough' : (enemy.maxHp <= 6 ? 'Fragile' : 'Sturdy');
+    const tempo = enemy.attackMs <= 1000 ? 'strikes fast' : (enemy.attackMs >= 1550 ? 'strikes slow' : 'strikes steadily');
+    const power = enemy.damage >= 2 ? 'hits hard' : 'hits lightly';
+    return `${durability}. ${tempo.charAt(0).toUpperCase()}${tempo.slice(1)}. ${power.charAt(0).toUpperCase()}${power.slice(1)}.`;
   }
 
   buildPlayerCombatFighter(pirate, slot, combat) {
-    const sword = this.combatPirateHasSword(pirate, combat);
+    const weaponKey = this.combatPirateWeaponKey(pirate, combat);
+    const weapon = weaponKey ? WEAPON_TYPES[weaponKey] : null;
+    const maxHp = COMBAT.pirateHp + (weapon && weapon.hpBonus ? weapon.hpBonus : 0);
     return {
       id: `player_${pirate.id}`,
       side: 'player',
@@ -1822,11 +1923,11 @@ class GameScene extends Phaser.Scene {
       type: pirate.type,
       slot,
       alive: true,
-      hp: COMBAT.pirateHp,
-      maxHp: COMBAT.pirateHp,
-      damage: (TYPES[pirate.type].str || 0) + (sword ? COMBAT.swordDamageBonus : 0),
-      attackMs: Math.round(COMBAT.pirateAttackMs / (sword ? COMBAT.swordSpeedMultiplier : 1)),
-      sword,
+      hp: maxHp,
+      maxHp,
+      damage: (TYPES[pirate.type].str || 0) + (weapon && weapon.damageBonus ? weapon.damageBonus : 0),
+      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * (weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1))),
+      weaponKey,
     };
   }
 
@@ -2126,7 +2227,7 @@ class GameScene extends Phaser.Scene {
 
     this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '💀 Defeated…', '#ff5252');
     this.time.delayedCall(1200, () => {
-      G.weapons = 0;
+      G.weapons = createWeaponInventory();
       G.busy = false;
       this.renderAll();
       this.showGameOver();
@@ -2135,6 +2236,7 @@ class GameScene extends Phaser.Scene {
 
   handleBoardingVictory() {
     if (!this.sys || !this.sys.isActive()) return;
+    G.weapons = createWeaponInventory();
     if (this.isBattleTest()) {
       G.busy = false;
       this.renderAll();
@@ -2144,7 +2246,6 @@ class GameScene extends Phaser.Scene {
 
     const discardAnimEnd = this.animateCurrentHandToDiscard();
     const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
-    G.weapons = 0;
     G.discard.push(...G.hand);
     G.hand = [];
     G.sent = [];
@@ -2184,10 +2285,18 @@ class GameScene extends Phaser.Scene {
     const combat = this.ensureBoardingCombat();
     if (!combat || combat.mode !== 'setup') return;
 
+    const assignedWeapons = this.combatAssignedWeaponInventory(combat);
+    if (!removeWeaponInventory(G.weapons, assignedWeapons)) {
+      this.float(this.L.cx, this.islandCenterY() + 90 * this.L.k, 'Not enough weapons', '#ffa726');
+      return;
+    }
+
     G.busy = true;
-    G.weapons = Math.max(0, (G.weapons || 0) - this.combatAssignedSwordCount(combat));
     combat.mode = 'fighting';
-    combat.selectedPirateId = null;
+    this.clearCombatSetupPopupDismiss();
+    this._combatSetupPopupPinned = false;
+    combat.inspectedPirateId = null;
+    combat.inspectedEnemyId = null;
     combat.result = null;
     combat.playerFighters = G.hand.map((pirate, slot) => this.buildPlayerCombatFighter(pirate, slot, combat));
     combat.enemyFighters = combat.enemyParty.map((enemy, slot) => this.buildEnemyCombatFighter(enemy, slot));
@@ -2451,6 +2560,44 @@ class GameScene extends Phaser.Scene {
 
   clearCt(k) { this.ct[k].removeAll(true); }
 
+  queueRenderAll() {
+    if (this._renderAllQueued) return;
+    this._renderAllQueued = true;
+    this.time.delayedCall(0, () => {
+      this._renderAllQueued = false;
+      if (!this.sys || !this.sys.isActive()) return;
+      this.renderAll();
+    });
+  }
+
+  clearCombatSetupPopupDismiss() {
+    if (this._combatSetupPopupDismissTimer && !this._combatSetupPopupDismissTimer.hasDispatched) {
+      this._combatSetupPopupDismissTimer.remove(false);
+    }
+    this._combatSetupPopupDismissTimer = null;
+  }
+
+  scheduleCombatSetupPopupDismiss(combat = G.combat, delayMs = 110) {
+    if (!combat || combat.mode !== 'setup' || this._combatSetupPopupPinned) return;
+    if (combat.inspectedPirateId == null && combat.inspectedEnemyId == null) return;
+    this.clearCombatSetupPopupDismiss();
+    this._combatSetupPopupDismissTimer = this.time.delayedCall(delayMs, () => {
+      this._combatSetupPopupDismissTimer = null;
+      if (!combat || combat.mode !== 'setup' || this._combatSetupPopupPinned) return;
+      this.clearCombatSetupInspection(combat);
+    });
+  }
+
+  clearCombatSetupInspection(combat = G.combat) {
+    this.clearCombatSetupPopupDismiss();
+    this._combatSetupPopupPinned = false;
+    if (!combat || combat.mode !== 'setup') return;
+    if (combat.inspectedPirateId == null && combat.inspectedEnemyId == null) return;
+    combat.inspectedPirateId = null;
+    combat.inspectedEnemyId = null;
+    this.queueRenderAll();
+  }
+
   addTo(k, obj) { this.ct[k].add(obj); return obj; }
 
   txt(k, x, y, str, style) {
@@ -2498,8 +2645,8 @@ class GameScene extends Phaser.Scene {
       }
       return {
         icon: '🏴‍☠️',
-        line1: 'Arm your pirates.',
-        line2: `${combat && combat.enemyParty ? combat.enemyParty.length : 0} foes on deck`,
+        line1: 'Equip your pirates.',
+        line2: 'Tap a cat to inspect gear',
       };
     }
 
@@ -2553,13 +2700,23 @@ class GameScene extends Phaser.Scene {
 
   inventoryDisplayItems(extraKeys = []) {
     const keep = new Set(extraKeys);
+    if (keep.has('weapons')) {
+      weaponTypeKeys().forEach((weaponKey) => keep.add(weaponKey));
+      keep.delete('weapons');
+    }
+    const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
+    const weaponInventory = combat && combat.mode === 'setup'
+      ? this.combatAvailableWeaponInventory(combat)
+      : normalizeWeaponInventory(G.weapons);
+    const weaponItems = weaponInventoryItems(weaponInventory, { includeZeros: true })
+      .map((item) => ({ key: item.key, emoji: item.emoji, count: item.count }));
     return [
       { key: 'wood', emoji: RES_EMOJI.wood, count: G.res.wood || 0 },
       { key: 'stone', emoji: RES_EMOJI.stone, count: G.res.stone || 0 },
       { key: 'gold', emoji: RES_EMOJI.gold, count: G.res.gold || 0 },
       { key: 'map', emoji: RES_EMOJI.map, count: G.res.map || 0 },
       { key: 'enthusiasm', emoji: '☠️', count: G.enthusiasm || 0 },
-      { key: 'weapons', emoji: '🗡️', count: G.weapons || 0 },
+      ...weaponItems,
       { key: 'cannons', emoji: '💣', count: G.cannons || 0 },
     ].filter((item) => item.count > 0 || keep.has(item.key));
   }
@@ -2663,13 +2820,12 @@ class GameScene extends Phaser.Scene {
 
   inventoryTargetForItem(itemOrEmoji) {
     const emoji = typeof itemOrEmoji === 'string' ? itemOrEmoji : itemOrEmoji.emoji;
-    const key = (typeof itemOrEmoji === 'object' && itemOrEmoji.key) || ({
+    const key = (typeof itemOrEmoji === 'object' && itemOrEmoji.key) || weaponTypeKeyByEmoji(emoji) || ({
       [RES_EMOJI.wood]: 'wood',
       [RES_EMOJI.stone]: 'stone',
       [RES_EMOJI.gold]: 'gold',
       [RES_EMOJI.map]: 'map',
       '☠️': 'enthusiasm',
-      '🗡️': 'weapons',
       '💣': 'cannons',
     })[emoji];
     const layout = this.inventoryLayout(key ? [key] : []);
@@ -2759,7 +2915,8 @@ class GameScene extends Phaser.Scene {
           rotation: visible.container.rotation,
           scale: visible.container.scaleX || 1,
           cardMode: visible.cardMode || 'default',
-          slotState: this.combatPirateHasSword(pirate) ? 'armed' : 'empty',
+          slotState: this.combatPirateHasWeapon(pirate) ? 'armed' : 'empty',
+          slotWeaponKey: this.combatPirateWeaponKey(pirate),
         });
         return;
       }
@@ -2773,7 +2930,8 @@ class GameScene extends Phaser.Scene {
           rotation: 0,
           scale: 0.5,
           cardMode: 'battle',
-          slotState: combatFighter.sword ? 'armed' : 'empty',
+          slotState: combatFighter.weaponKey ? 'armed' : 'empty',
+          slotWeaponKey: combatFighter.weaponKey || null,
         });
         return;
       }
@@ -2813,6 +2971,7 @@ class GameScene extends Phaser.Scene {
       const built = buildCardTexture(this, card.type, L, {
         mode: card.cardMode || 'default',
         slotState: card.slotState || 'none',
+        slotWeaponKey: card.slotWeaponKey || null,
       });
       const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
       const ghost = this.add.image(card.x, card.y, built.texKey)
@@ -2972,12 +3131,13 @@ class GameScene extends Phaser.Scene {
   }
 
   combatPreviewStats(pirate, combat = G.combat) {
-    const sword = this.combatPirateHasSword(pirate, combat);
+    const weaponKey = this.combatPirateWeaponKey(pirate, combat);
+    const weapon = weaponKey ? WEAPON_TYPES[weaponKey] : null;
     return {
-      hp: COMBAT.pirateHp,
-      damage: (TYPES[pirate.type].str || 0) + (sword ? COMBAT.swordDamageBonus : 0),
-      attackMs: Math.round(COMBAT.pirateAttackMs / (sword ? COMBAT.swordSpeedMultiplier : 1)),
-      sword,
+      hp: COMBAT.pirateHp + (weapon && weapon.hpBonus ? weapon.hpBonus : 0),
+      damage: (TYPES[pirate.type].str || 0) + (weapon && weapon.damageBonus ? weapon.damageBonus : 0),
+      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * (weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1))),
+      weaponKey,
     };
   }
 
@@ -3019,27 +3179,6 @@ class GameScene extends Phaser.Scene {
     return bar;
   }
 
-  renderCombatHandDecorations(combat) {
-    if (!combat || combat.mode !== 'setup') return;
-    const L = this.L;
-
-    (this._cardHand.cards || []).forEach((card) => {
-      const cardW = CARD.W * L.k;
-      const cardH = CARD.H * L.k;
-      const slot = this.add.zone(
-        -cardW / 2 + 16 * L.k,
-        -cardH / 2 + 16 * L.k,
-        32 * L.k,
-        32 * L.k
-      ).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      slot.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        this.toggleCombatSword(card.handIdx);
-      });
-      card.container.add(slot);
-    });
-  }
-
   renderCombatMiniCard(containerKey, x, y, opts = {}) {
     const L = this.L;
     const w = 60 * L.k;
@@ -3050,7 +3189,7 @@ class GameScene extends Phaser.Scene {
     const hpRatio = hp / maxHp;
     const ct = this.add.container(x, y);
     const bg = this.add.graphics();
-    bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
+    bg.fillStyle(uiColorInt(opts.side === 'enemy' ? '#E0AEA8' : UI_THEME.colors.sand), 1);
     bg.fillRoundedRect(-w / 2, -h / 2, w, h, r);
     bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
     bg.strokeRoundedRect(-w / 2, -h / 2, w, h, r);
@@ -3066,11 +3205,11 @@ class GameScene extends Phaser.Scene {
       ct.add(emoji);
     }
 
-    if (opts.sword) {
-      const sword = this.add.text(-w / 2 + 5 * L.k, -h / 2 + 4 * L.k, '🗡️', uiBodyStyle(L, UI_THEME.colors.ink, {
+    if (opts.weaponKey && WEAPON_TYPES[opts.weaponKey]) {
+      const weapon = this.add.text(-w / 2 + 5 * L.k, -h / 2 + 4 * L.k, WEAPON_TYPES[opts.weaponKey].emoji, uiBodyStyle(L, UI_THEME.colors.ink, {
         fontSize: L.fs(14),
       })).setOrigin(0, 0);
-      ct.add(sword);
+      ct.add(weapon);
     }
 
     const hpLabel = this.add.text(0, h / 2 - 22 * L.k, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
@@ -3090,8 +3229,133 @@ class GameScene extends Phaser.Scene {
     if (opts.side === 'player') this._combatPlayerViews[opts.id] = { x, y };
     else this._combatEnemyViews[opts.id] = { x, y };
     this._combatNodes[opts.id] = ct;
+    ct.setSize(w, h);
+    if (opts.interactive) {
+      const hit = this.add.zone(0, 0, w, h)
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+      if (opts.onHover) hit.on('pointerover', () => opts.onHover());
+      if (opts.onOut) hit.on('pointerout', () => opts.onOut());
+      if (opts.onTap) {
+        hit.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          opts.onTap();
+        });
+      }
+      ct.add(hit);
+    }
     if (opts.alive === false) ct.setAlpha(0.4);
     this.addTo(containerKey, ct);
+  }
+
+  renderCombatSetupPopup(opts = {}, combat = G.combat) {
+    if (!combat || combat.mode !== 'setup') return;
+    const L = this.L;
+    const side = opts.side === 'enemy' ? 'enemy' : 'player';
+    const viewMap = side === 'enemy' ? this._combatEnemyViews : this._combatPlayerViews;
+    const view = viewMap ? viewMap[opts.id] : null;
+    if (!view) return;
+    const popupW = 164 * L.k;
+    const padX = 11 * L.k;
+    const padY = 8 * L.k;
+    const contentW = popupW - padX * 2;
+    const gapY = 4 * L.k;
+    const cardW = 60 * L.k;
+    const cardH = 99 * L.k;
+    const popupGap = 8 * L.k;
+    const slotW = 40 * L.k;
+    const slotH = 24 * L.k;
+    const showsWeaponSlot = side === 'player';
+    const nameText = opts.name || '';
+    const strengthValue = Math.max(0, Number(opts.strength) || 0);
+    const detailText = opts.detail || '';
+
+    const name = this.add.text(0, 0, nameText, uiHeadingStyle(L, 15, UI_THEME.colors.ink, {
+      align: 'left',
+      wordWrap: { width: contentW },
+    })).setOrigin(0, 0);
+    const strength = this.add.text(0, 0, `⚔️ ${strengthValue}`, uiHeadingStyle(L, 14, UI_THEME.colors.ink, {
+      align: 'left',
+    })).setOrigin(0, 0);
+    const weaponLabel = showsWeaponSlot
+      ? this.add.text(0, 0, 'Weapon', uiBodyStyle(L, UI_THEME.colors.ink)).setOrigin(0, 0)
+      : null;
+    const detail = this.add.text(0, 0, detailText, uiBodyStyle(L, UI_THEME.colors.ink, {
+      align: 'left',
+      wordWrap: { width: contentW },
+    })).setOrigin(0, 0);
+
+    const nameY = 0;
+    const strengthY = nameY + name.height + gapY;
+    const weaponRowY = showsWeaponSlot ? (strengthY + strength.height + gapY) : null;
+    const slotX = showsWeaponSlot ? Math.min(contentW - slotW, weaponLabel.width + 8 * L.k) : 0;
+    const labelY = showsWeaponSlot ? (weaponRowY + Math.max(0, (slotH - weaponLabel.height) / 2)) : null;
+    const detailY = showsWeaponSlot
+      ? (weaponRowY + slotH + gapY)
+      : (strengthY + strength.height + gapY);
+    const popupH = detailY + detail.height + padY * 2;
+    const x = Phaser.Math.Clamp(view.x, 18 * L.k + popupW / 2, L.W - 18 * L.k - popupW / 2);
+    const y = side === 'enemy'
+      ? view.y - cardH / 2 - popupGap - popupH / 2
+      : view.y + cardH / 2 + popupGap + popupH / 2;
+    const left = -popupW / 2 + padX;
+    const top = -popupH / 2 + padY;
+
+    name.setPosition(left, top + nameY);
+    strength.setPosition(left, top + strengthY);
+    if (weaponLabel) weaponLabel.setPosition(left, top + labelY);
+    detail.setPosition(left, top + detailY);
+
+    const ct = this.add.container(x, y);
+
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0x000000, 0.28);
+    shadow.fillRoundedRect(-popupW / 2 + 4 * L.k, -popupH / 2 + 5 * L.k, popupW, popupH, 9 * L.k);
+    ct.add(shadow);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
+    bg.fillRoundedRect(-popupW / 2, -popupH / 2, popupW, popupH, 9 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
+    bg.strokeRoundedRect(-popupW / 2, -popupH / 2, popupW, popupH, 9 * L.k);
+    ct.add(bg);
+
+    const popupHit = this.add.zone(0, 0, popupW, popupH)
+      .setOrigin(0.5)
+      .setInteractive();
+    popupHit.on('pointerover', () => this.clearCombatSetupPopupDismiss());
+    popupHit.on('pointerout', () => this.scheduleCombatSetupPopupDismiss(combat));
+    popupHit.on('pointerdown', (ptr) => {
+      if (ptr && ptr.event) ptr.event.stopPropagation();
+      this.clearCombatSetupPopupDismiss();
+    });
+
+    const content = [popupHit, name, strength, detail];
+    if (weaponLabel) content.push(weaponLabel);
+    if (showsWeaponSlot) {
+      const slotBg = this.add.graphics();
+      slotBg.fillStyle(uiColorInt(UI_THEME.colors.sandEdge), 1);
+      slotBg.fillRoundedRect(left + slotX, top + weaponRowY, slotW, slotH, 5 * L.k);
+      slotBg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
+      slotBg.strokeRoundedRect(left + slotX, top + weaponRowY, slotW, slotH, 5 * L.k);
+      const slotText = this.add.text(left + slotX + slotW / 2, top + weaponRowY + slotH / 2, opts.weaponEmoji || '+', uiHeadingStyle(L, 15, UI_THEME.colors.ink))
+        .setOrigin(0.5);
+      const slotHit = this.add.zone(left + slotX + slotW / 2, top + weaponRowY + slotH / 2, slotW, slotH)
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+      slotHit.on('pointerover', () => this.clearCombatSetupPopupDismiss());
+      slotHit.on('pointerout', () => this.scheduleCombatSetupPopupDismiss(combat));
+      slotHit.on('pointerdown', (ptr) => {
+        if (ptr && ptr.event) ptr.event.stopPropagation();
+        this.clearCombatSetupPopupDismiss();
+        this._combatSetupPopupPinned = true;
+        if (opts.onWeaponTap) opts.onWeaponTap();
+      });
+      content.push(slotBg, slotText, slotHit);
+    }
+
+    ct.add(content);
+    this.addTo('overlay', ct);
   }
 
   renderBoardingEncounter() {
@@ -3102,47 +3366,90 @@ class GameScene extends Phaser.Scene {
     this._combatNodes = {};
 
     if (!combat || combat.mode === 'setup') {
-      const fighters = (combat && combat.enemyParty) || [];
-      const slots = cardRowLayout(fighters.length || 1, this.L, {
-        y: this.islandCenterY() - 8 * L.k,
-        maxStep: 124 * L.k,
-        edgePad: 34 * L.k,
-        scale: 1,
+      const enemies = (combat && combat.enemyParty) || [];
+      const enemySlots = this.combatMiniEnemySlots(enemies.length || 1);
+      const playerSlots = this.combatMiniPlayerSlots(G.hand.length || 1);
+      const inspectedPirate = this.combatSetupInspectedPirate(combat);
+      const inspectedEnemy = this.combatSetupInspectedEnemy(combat);
+
+      if (this.combatSetupHasInspection(combat)) {
+        const outsideHit = this.add.zone(L.W / 2, L.H / 2, L.W, L.H)
+          .setOrigin(0.5)
+          .setInteractive();
+        outsideHit.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          this.clearCombatSetupInspection(combat);
+        });
+        this.addTo('island', outsideHit);
+      }
+
+      enemies.forEach((enemy, idx) => {
+        const pos = enemySlots[idx] || enemySlots[0];
+        this.renderCombatMiniCard('island', pos.x, pos.y, {
+          id: enemy.id,
+          side: 'enemy',
+          emoji: enemy.emoji,
+          hp: enemy.hp,
+          maxHp: enemy.maxHp,
+          alive: true,
+          interactive: true,
+          onHover: () => this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: false }),
+          onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
+          onTap: () => this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: true }),
+        });
       });
-      const titleY = this.islandCenterY() + 126 * L.k;
-      const title = this.add.text(L.cx, titleY, 'Boarding', uiHeadingStyle(L, 40, UI_THEME.colors.paper, {
-        align: 'center',
-      })).setOrigin(0.5, 0.5);
-      const subtitle = this.add.text(L.cx, titleY + 38 * L.k, 'Arm your pirates', uiBodyStyle(L, UI_THEME.colors.paper, {
-        align: 'center',
-      })).setOrigin(0.5, 0);
-      this.addTo('island', title);
-      this.addTo('island', subtitle);
 
-      fighters.forEach((enemy, idx) => {
-        const pos = slots[idx] || slots[0];
-        this._combatEnemyViews[enemy.id] = { x: pos.x, y: pos.y };
-        const w = 120 * L.k;
-        const h = 198 * L.k;
-        const ct = this.add.container(pos.x, pos.y);
-        const bg = this.add.graphics();
-        bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
-        bg.fillRoundedRect(-w / 2, -h / 2, w, h, 8 * L.k);
-        bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
-        bg.strokeRoundedRect(-w / 2, -h / 2, w, h, 8 * L.k);
-        ct.add(bg);
+      G.hand.forEach((pirate, idx) => {
+        const pos = playerSlots[idx] || playerSlots[0];
+        const preview = this.combatPreviewStats(pirate, combat);
+        this.renderCombatMiniCard('island', pos.x, pos.y, {
+          id: pirate.id,
+          side: 'player',
+          pirateType: pirate.type,
+          hp: preview.hp,
+          maxHp: preview.hp,
+          weaponKey: preview.weaponKey,
+          alive: true,
+          interactive: true,
+          onHover: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false }),
+          onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
+          onTap: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true }),
+        });
+      });
 
-        const emoji = this.add.text(0, -26 * L.k, enemy.emoji || '☠️', uiHeadingStyle(L, 54, UI_THEME.colors.paper))
-          .setOrigin(0.5);
-        const name = this.add.text(0, 25 * L.k, enemy.name || 'Foe', uiHeadingStyle(L, 16, UI_THEME.colors.ink, {
+      if (!this.combatSetupHasInspection(combat)) {
+        const playerRowY = playerSlots.length ? Math.max(...playerSlots.map((slot) => slot.y)) : this.combatMiniPlayerSlots(1)[0].y;
+        const tipY = Math.min(L.Y_PHASE - 18 * L.k, playerRowY + 62 * L.k);
+        const tip = this.add.text(L.cx, tipY, 'Tap cards to arm pirates', uiBodyStyle(L, UI_THEME.colors.paper, {
           align: 'center',
-          wordWrap: { width: w - 18 * L.k },
+          wordWrap: { width: L.W - 40 * L.k },
         })).setOrigin(0.5, 0);
-        const stat = this.add.text(0, 48 * L.k, `⚔${enemy.damage}`, uiHeadingStyle(L, 16, UI_THEME.colors.ink))
-          .setOrigin(0.5, 0);
-        ct.add([emoji, name, stat]);
-        this.addTo('island', ct);
-      });
+        this.addTo('island', tip);
+      }
+
+      if (inspectedEnemy) {
+        this.renderCombatSetupPopup({
+          id: inspectedEnemy.id,
+          side: 'enemy',
+          name: inspectedEnemy.name || 'Enemy',
+          strength: inspectedEnemy.damage || 0,
+          detail: this.combatEnemyCharacteristics(inspectedEnemy),
+        }, combat);
+      }
+      if (inspectedPirate) {
+        const preview = this.combatPreviewStats(inspectedPirate, combat);
+        const weapon = preview.weaponKey ? WEAPON_TYPES[preview.weaponKey] : null;
+        const handIdx = this.combatHandIndexByPirateId(inspectedPirate.id);
+        this.renderCombatSetupPopup({
+          id: inspectedPirate.id,
+          side: 'player',
+          name: TYPES[inspectedPirate.type].name || inspectedPirate.type,
+          strength: TYPES[inspectedPirate.type].str || 0,
+          detail: weapon ? (weapon.summary || weapon.name) : 'No weapon equipped',
+          weaponEmoji: weapon ? weapon.emoji : '+',
+          onWeaponTap: () => this.cycleCombatWeapon(handIdx),
+        }, combat);
+      }
       return;
     }
 
@@ -3171,7 +3478,7 @@ class GameScene extends Phaser.Scene {
         pirateType: fighter.type,
         hp: fighter.hp,
         maxHp: fighter.maxHp,
-        sword: fighter.sword,
+        weaponKey: fighter.weaponKey,
         alive: fighter.alive,
       });
     });
@@ -3180,6 +3487,7 @@ class GameScene extends Phaser.Scene {
   // ──────────── RENDERING ────────────
 
   renderAll() {
+    this.clearCt('overlay');
     if (G.phase === 'boarding') this.ensureBoardingCombat();
     this.renderTop();
     this.renderIsland();
@@ -3204,7 +3512,7 @@ class GameScene extends Phaser.Scene {
     const boardingFight = combat && combat.mode !== 'setup';
     const leftLabel = boardingSetup ? 'Armed' : (boardingFight ? 'Boarding' : 'Strength');
     const leftValue = boardingSetup
-      ? `🗡️${this.combatAssignedSwordCount(combat)}/${G.weapons || 0}`
+      ? `${WEAPON_CATEGORY_EMOJI}${this.combatAssignedWeaponCount(combat)}/${weaponInventoryTotal(G.weapons)}`
       : (boardingFight
         ? `${this.combatLiving('player').length}v${this.combatLiving('enemy').length}`
         : `⚔️${strength.total}`);
@@ -3359,23 +3667,7 @@ class GameScene extends Phaser.Scene {
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
     const allowInteraction = isSending || (isBoarding && combat && combat.mode === 'setup');
 
-    if (isBoarding && combat) {
-      if (combat.mode !== 'setup') return;
-      this._cardHand.render({
-        hand: G.hand,
-        sent: [],
-        sendingSet: new Set(),
-        isSending: false,
-        allowInteraction: true,
-        cardModeForCard: () => 'battle',
-        cardSlotStateForCard: (pirate) => this.combatPirateHasSword(pirate, combat) ? 'armed' : 'empty',
-        prevPositions,
-        appearFrom,
-        container: this.ct.hand,
-      });
-      this.renderCombatHandDecorations(combat);
-      return;
-    }
+    if (isBoarding && combat) return;
 
     this._cardHand.render({
       hand: G.hand,

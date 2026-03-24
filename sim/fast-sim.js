@@ -286,6 +286,24 @@ function makeMask(actionCap, validIndices) {
   return mask;
 }
 
+function totalWeapons(weapons) {
+  if (weapons && typeof weapons === 'object') {
+    return Object.values(weapons).reduce((sum, count) => sum + (count || 0), 0);
+  }
+  return weapons || 0;
+}
+
+function clearWeapons(weapons) {
+  if (weapons && typeof weapons === 'object') {
+    const next = {};
+    Object.keys(weapons).forEach((key) => {
+      next[key] = 0;
+    });
+    return next;
+  }
+  return 0;
+}
+
 function baseDecisionTokens(api, G, kindId) {
   const t = [];
   t.push(50 + kindId);
@@ -296,7 +314,7 @@ function baseDecisionTokens(api, G, kindId) {
   t.push(240 + bucket(G.res.stone || 0, [0, 1, 2, 3, 5, 8, 12, 18, 26]));
   t.push(260 + bucket(G.res.gold || 0, [0, 1, 2, 3, 4, 6, 9, 13, 20]));
   t.push(280 + bucket(G.res.map || 0, [0, 1, 2, 3, 5]));
-  t.push(300 + bucket(G.weapons || 0, [0, 1, 2, 3, 5, 8, 12, 20, 32]));
+  t.push(300 + bucket(totalWeapons(G.weapons), [0, 1, 2, 3, 5, 8, 12, 20, 32]));
   t.push(320 + bucket(G.cannons || 0, [0, 1, 2, 3, 5, 8, 12, 20, 32]));
   t.push(340 + bucket(G.allCrew.length, [10, 12, 14, 16, 18, 21, 24, 28, 32, 40, 56, 80]));
   t.push(360 + bucket(G.deck.length, [0, 2, 4, 6, 8, 10, 14, 20, 30, 45, 70]));
@@ -874,7 +892,7 @@ function runBoardingPhase(api, scene) {
   const shipStr = G.enemyShip.strength;
 
   if (totalStr >= shipStr) {
-    G.weapons = 0;
+    G.weapons = clearWeapons(G.weapons);
     G.discard.push(...G.hand);
     G.hand = [];
 
@@ -885,7 +903,7 @@ function runBoardingPhase(api, scene) {
     return { state: 'continue', totalStr, shipStr };
   }
 
-  G.weapons = 0;
+  G.weapons = clearWeapons(G.weapons);
   return { state: 'loss', totalStr, shipStr };
 }
 
