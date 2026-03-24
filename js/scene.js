@@ -894,6 +894,17 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  openPauseMenu() {
+    if (this.isTutorialPopupOpen() || this.scene.isActive('pauseModal')) return;
+    this.closePanels();
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
+    this.scene.launch('pauseModal', { version: GAME_VERSION });
+    this.scene.bringToTop('pauseModal');
+    this.scene.pause();
+  }
+
   panelFlagKey(sceneKey) {
     const map = {
       map: '_mapPanelOpen',
@@ -2433,6 +2444,7 @@ class GameScene extends Phaser.Scene {
     const valueY = 40 * L.k;
     const sectionGap = 16 * L.k;
     const iconTextGap = 8 * L.k;
+    const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
     const strength = this.currentStrengthState();
 
@@ -2447,7 +2459,7 @@ class GameScene extends Phaser.Scene {
     const goalIcon = this.add.text(goalX, valueY - 2 * L.k, goal.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
       .setOrigin(0, 0);
     const goalTextX = goalX + goalIcon.width + iconTextGap;
-    const goalWidth = Math.max(96 * L.k, L.W - pad - goalTextX);
+    const goalWidth = Math.max(96 * L.k, L.W - rightReserve - goalTextX);
     const goalText = this.add.text(goalTextX, valueY + 1 * L.k, `${goal.line1}\n${goal.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
       lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
       wordWrap: { width: goalWidth },
@@ -2663,6 +2675,7 @@ class GameScene extends Phaser.Scene {
     const mapEnabled = panelEnabled && !this.isTutorial();
     const shopEnabled = panelEnabled && !G.busy && (!this.isTutorial() || G.phase === 'shopping');
     const pileEnabled = panelEnabled && !G.busy;
+    const pauseEnabled = panelEnabled;
     const topGap = 10 * L.k;
     const topY = 60 * L.k;
     const iconOpts = {
@@ -2690,12 +2703,24 @@ class GameScene extends Phaser.Scene {
       disabledColor: UI_THEME.colors.ink,
     });
 
-    this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
+    const mapBtn = this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
       this.toggleMapPanel();
     }, {
       ...iconOpts,
       enabled: mapEnabled,
       bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
+    });
+
+    this.mkBtn('nav', mapBtn.x - mapBtn.width / 2 - topGap, topY, '⏸', () => {
+      this.openPauseMenu();
+    }, {
+      ...iconOpts,
+      enabled: pauseEnabled,
+      bg: UI_THEME.colors.cocoa,
       hoverBg: UI_THEME.colors.cocoaDark,
       disabledBg: UI_THEME.colors.disabled,
       color: UI_THEME.colors.paper,
