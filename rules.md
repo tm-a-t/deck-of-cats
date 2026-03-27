@@ -85,8 +85,12 @@ If the selected node is an enemy ship:
     - `🔫 Musket`: ranged, targets the living enemy with the **highest current HP** in any row, deals **+2 damage**, and attacks **60% slower**.
     - `🪝 Hookshot`: ranged, attacks **45% slower**, targets a random living enemy in the **backmost enemy row**, and adds that target to the front row if it survives, without cycling the rest of the formation.
 - Enemy boarding parties are generated independently of the map node's legacy `strength` value:
-  - Encounters use 3–5 generic enemies.
-  - Difficulty scales by **boarding count**.
+  - Encounters use 3–5 enemies drawn from this roster:
+    - `😾 Raider Cat`: melee, 9 HP, 3 damage.
+    - `🐢 Slow Brute`: melee, 20 HP, 5 damage, attacks slowly.
+    - `⚡ Glass Striker`: melee, 3 HP, 5 damage.
+    - `💣 Powder Bomber`: melee, 15 HP, 3 damage, explodes on death and deals 3 damage to the pirate front row.
+  - Difficulty scales by **boarding count** through party size and unlocked enemy types; enemy stats stay at their printed values.
   - Tutorial turn 5 uses a fixed training encounter.
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
@@ -105,6 +109,7 @@ If the selected node is an enemy ship:
   - `🪓 Axe` attacks hit every living enemy in the opposing front row at once.
   - `🏹 Bow` and `🔫 Musket` ignore rows and target across the whole enemy formation using lowest/highest current HP.
   - `🪝 Hookshot` adds a surviving target from the backmost enemy row to the front row before later attacks resolve, without cycling the rest of the formation.
+  - Enemy death effects resolve immediately after the attack that killed them. A `💣 Powder Bomber` explosion hits every pirate in the current front row for 3 damage.
 - **Victory**:
   - All remaining `⚔️` reset to 0; 💣 cannons persist.
   - No combat casualties persist.
@@ -138,7 +143,7 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 laye
 **Boarding difficulty note:**
 - Ship nodes still appear at the same layers.
 - The old map `strength` values are currently ignored by boarding resolution.
-- Prototype boarding difficulty scales with **boarding count** instead.
+- Prototype boarding difficulty scales with **boarding count** through party size and unlocked enemy types.
 
 ### Mid/Late Game (layers 15–49)
 

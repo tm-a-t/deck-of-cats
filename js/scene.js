@@ -1721,15 +1721,42 @@ class GameScene extends Phaser.Scene {
     return Math.max(1, (G.enemyShip && G.enemyShip.encounterNo) || G.boardingCount || 1);
   }
 
+  buildCombatEnemyMember(archetype, id, overrides = {}) {
+    if (!archetype) return null;
+    const enemy = {
+      id,
+      name: archetype.name,
+      emoji: archetype.emoji,
+      hp: archetype.hp,
+      maxHp: archetype.hp,
+      damage: archetype.damage,
+      attackMs: archetype.attackMs,
+      color: archetype.color,
+      attackRange: archetype.attackRange || 'melee',
+      targetMode: archetype.targetMode || 'frontBand',
+      deathEffect: archetype.deathEffect || null,
+      deathEffectDamage: archetype.deathEffectDamage != null ? archetype.deathEffectDamage : archetype.damage,
+      summary: archetype.summary || null,
+    };
+    const merged = Object.assign({}, enemy, overrides || {});
+    if (merged.maxHp == null || ((overrides || {}).hp != null && (overrides || {}).maxHp == null)) {
+      merged.maxHp = merged.hp;
+    }
+    return merged;
+  }
+
   generateCombatEncounter() {
     const preset = G.enemyShip && G.enemyShip.preset;
     if (preset === 'tutorial-final') {
+      const raiderCat = COMBAT.enemyArchetypes.find((enemy) => enemy.key === 'raiderCat');
+      const glassStriker = COMBAT.enemyArchetypes.find((enemy) => enemy.key === 'glassStriker');
+      const powderBomber = COMBAT.enemyArchetypes.find((enemy) => enemy.key === 'powderBomber');
       return {
         name: 'Training Boarders',
         enemies: [
-          { id: 'tutorial_rat', name: 'Training Rat', emoji: '🐀', hp: 5, maxHp: 5, damage: 1, attackMs: 1150, color: '#d4a26b' },
-          { id: 'tutorial_hook_1', name: 'Hookhand', emoji: '🪝', hp: 6, maxHp: 6, damage: 1, attackMs: 1350, color: '#d67d4d' },
-          { id: 'tutorial_hook_2', name: 'Hookhand', emoji: '🪝', hp: 6, maxHp: 6, damage: 1, attackMs: 1350, color: '#d67d4d' },
+          this.buildCombatEnemyMember(raiderCat, 'tutorial_raider'),
+          this.buildCombatEnemyMember(glassStriker, 'tutorial_glass'),
+          this.buildCombatEnemyMember(powderBomber, 'tutorial_bomber'),
         ],
       };
     }
@@ -1742,18 +1769,7 @@ class GameScene extends Phaser.Scene {
 
     for (let i = 0; i < count; i++) {
       const archetype = COMBAT.enemyArchetypes[(i + tier) % rosterCap];
-      const hpBonus = Math.floor((tier - 1) / 2) + (archetype.key === 'brute' ? Math.floor((tier - 1) / 3) : 0);
-      const damageBonus = Math.floor((tier - 1) / 4);
-      enemies.push({
-        id: `${archetype.key}_${boardingNo}_${i}`,
-        name: archetype.name,
-        emoji: archetype.emoji,
-        hp: archetype.hp + hpBonus,
-        maxHp: archetype.hp + hpBonus,
-        damage: archetype.damage + damageBonus,
-        attackMs: Math.max(650, archetype.attackMs - (tier - 1) * 35),
-        color: archetype.color,
-      });
+      enemies.push(this.buildCombatEnemyMember(archetype, `${archetype.key}_${boardingNo}_${i}`));
     }
 
     return {
@@ -1909,6 +1925,7 @@ class GameScene extends Phaser.Scene {
 
   combatEnemyCharacteristics(enemy) {
     if (!enemy) return '';
+    if (enemy.summary) return enemy.summary;
     const durability = enemy.maxHp >= 11 ? 'Tough' : (enemy.maxHp <= 6 ? 'Fragile' : 'Sturdy');
     const tempo = enemy.attackMs <= 1000 ? 'strikes fast' : (enemy.attackMs >= 1550 ? 'strikes slow' : 'strikes steadily');
     const power = enemy.damage >= 2 ? 'hits hard' : 'hits lightly';
@@ -1967,8 +1984,11 @@ class GameScene extends Phaser.Scene {
       damage: enemy.damage,
       attackMs: enemy.attackMs,
       color: enemy.color,
-      attackRange: 'melee',
-      targetMode: 'frontBand',
+      attackRange: enemy.attackRange || 'melee',
+      targetMode: enemy.targetMode || 'frontBand',
+      deathEffect: enemy.deathEffect || null,
+      deathEffectDamage: enemy.deathEffectDamage != null ? enemy.deathEffectDamage : enemy.damage,
+      summary: enemy.summary || null,
       pulledToFront: false,
     };
   }
@@ -2208,6 +2228,43 @@ class GameScene extends Phaser.Scene {
     return true;
   }
 
+  defeatCombatFighter(fighter, deathPositions) {
+    if (!fighter || !fighter.alive) return false;
+    fighter.alive = false;
+    fighter.incomingUntil = 0;
+    if (Array.isArray(deathPositions)) deathPositions.push(this.combatWorldPoint(fighter));
+    return true;
+  }
+
+  resolveCombatDeathEffects(deadFighters, now, deathPositions) {
+    const queued = Array.isArray(deadFighters) ? deadFighters.filter(Boolean) : [];
+    const blastEvents = [];
+    queued.forEach((fighter) => {
+      if (!fighter.alive && fighter.deathEffect === 'frontRowBlast') {
+        const damage = Math.max(0, fighter.deathEffectDamage != null ? fighter.deathEffectDamage : fighter.damage || 0);
+        if (damage <= 0) return;
+        const targets = this.combatFrontRow(this.combatOpposingSide(fighter.side)).slice();
+        if (!targets.length) return;
+        const targetPositions = [];
+        targets.forEach((target) => {
+          if (!target || !target.alive) return;
+          targetPositions.push(this.combatWorldPoint(target));
+          target.incomingUntil = Math.max(target.incomingUntil || 0, now + COMBAT.attackFxMs);
+          target.hp = Math.max(0, target.hp - damage);
+          if (target.hp <= 0) {
+            this.defeatCombatFighter(target, deathPositions);
+          }
+        });
+        blastEvents.push({
+          origin: this.combatWorldPoint(fighter),
+          damage,
+          targetPositions,
+        });
+      }
+    });
+    return blastEvents;
+  }
+
   showCombatAttackFx(attacker, targets, damage, opts = {}, onComplete) {
     const hitTargets = Array.isArray(targets) ? targets.filter(Boolean) : [targets].filter(Boolean);
     const start = this.combatWorldPoint(attacker);
@@ -2399,16 +2456,16 @@ class GameScene extends Phaser.Scene {
 
     const damage = Math.max(0, attacker.damage || 0);
     const deathPositions = [];
+    const defeatedTargets = [];
     plan.targets.forEach((target) => {
       if (!target || !target.alive) return;
       target.incomingUntil = now + COMBAT.attackFxMs;
       target.hp = Math.max(0, target.hp - damage);
-      if (target.hp <= 0 && target.alive) {
-        target.alive = false;
-        target.incomingUntil = 0;
-        deathPositions.push(this.combatWorldPoint(target));
+      if (target.hp <= 0 && this.defeatCombatFighter(target, deathPositions)) {
+        defeatedTargets.push(target);
       }
     });
+    const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, now, deathPositions);
 
     let pulledTargetId = null;
     if (plan.pullTarget && plan.pullTarget.alive && this.combatMoveFighterToFrontRow(plan.pullTarget)) {
@@ -2425,6 +2482,14 @@ class GameScene extends Phaser.Scene {
       style: plan.style,
       pullTargetId: pulledTargetId,
     }, () => {
+      blastEvents.forEach((blast) => {
+        if (blast.origin) {
+          this.effectText(blast.origin.x, blast.origin.y - 30 * this.L.k, 'Boom!', '#ffb74d', false);
+        }
+        (blast.targetPositions || []).forEach((point) => {
+          this.effectText(point.x, point.y - 20 * this.L.k, `-${blast.damage}`, '#ffb74d', false);
+        });
+      });
       deathPositions.forEach((deathPos) => {
         this.effectText(deathPos.x, deathPos.y - 6 * this.L.k, 'Down!', '#ff8a80', 220);
       });
