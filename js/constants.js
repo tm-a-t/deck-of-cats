@@ -45,8 +45,12 @@ const CARD_MOTION = {
   hoverOutDuration: 300,
 };
 
+const BASE_PIRATE_HP = 9;
+const BASE_PIRATE_ATTACK = 3;
+
 const COMBAT = {
-  pirateHp: 9,
+  pirateHp: BASE_PIRATE_HP,
+  pirateDamage: BASE_PIRATE_ATTACK,
   pirateAttackMs: 1350,
   initialDelayMin: 80,
   initialDelayMax: 260,
@@ -88,32 +92,44 @@ const COMBAT = {
 const WEAPON_CATEGORY_EMOJI = '⚔️';
 
 const WEAPON_TYPES = {
-  sword: {
-    name: 'Sword',
-    emoji: '🗡️',
-    damageBonus: 1,
-    attackMsMultiplier: 2 / 3,
-    summary: '+1 dmg, faster',
+  hammer: {
+    name: 'Hammer',
+    emoji: '🔨',
+    range: 'melee',
+    targetMode: 'frontBand',
+    hpBonus: 4,
+    summary: 'Melee. +4 HP.',
   },
   axe: {
     name: 'Axe',
     emoji: '🪓',
+    range: 'melee',
+    targetMode: 'frontRowAll',
+    summary: 'Melee. Hits the whole front row.',
+  },
+  bow: {
+    name: 'Bow',
+    emoji: '🏹',
+    range: 'ranged',
+    targetMode: 'lowestHpAny',
+    summary: 'Ranged. Targets the lowest-HP foe.',
+  },
+  musket: {
+    name: 'Musket',
+    emoji: '🔫',
+    range: 'ranged',
+    targetMode: 'highestHpAny',
     damageBonus: 2,
-    attackMsMultiplier: 1.2,
-    summary: '+2 dmg, slower',
+    attackMsMultiplier: 1.6,
+    summary: 'Ranged. Slower, +2 dmg, targets the toughest foe.',
   },
-  dagger: {
-    name: 'Dagger',
-    emoji: '🔪',
-    attackMsMultiplier: 0.5,
-    summary: 'Fastest swings',
-  },
-  hammer: {
-    name: 'Hammer',
-    emoji: '🔨',
-    damageBonus: 1,
-    hpBonus: 4,
-    summary: '+1 dmg, +4 HP',
+  hookshot: {
+    name: 'Hookshot',
+    emoji: '🪝',
+    range: 'ranged',
+    targetMode: 'lastRowPull',
+    attackMsMultiplier: 1.45,
+    summary: 'Ranged. Slower, adds a back-row foe to the front row.',
   },
 };
 
@@ -130,7 +146,8 @@ function createWeaponInventory() {
 function normalizeWeaponInventory(raw) {
   const inventory = createWeaponInventory();
   if (typeof raw === 'number' && Number.isFinite(raw)) {
-    inventory.sword = Math.max(0, Math.floor(raw));
+    const firstKey = WEAPON_ORDER[0];
+    if (firstKey) inventory[firstKey] = Math.max(0, Math.floor(raw));
     return inventory;
   }
   if (!raw || typeof raw !== 'object') return inventory;
@@ -468,193 +485,193 @@ const ISLANDS = [
 const TYPES = {
   // ---- starter ----
   lumberjack: {
-    name: 'Rigger', cat: [2,33,44,16,0,5], str: 1, canIsland: true,
+    name: 'Rigger', cat: [2,33,44,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'wood', cN: 4, pRes: 'enthusiasm', pN: 2 },
     cost: null,
   },
   miner: {
-    name: 'Ballaster', cat: [7,25,43,16,0,2], str: 1, canIsland: true,
+    name: 'Ballaster', cat: [7,25,43,16,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'stone', cN: 4, pRes: 'enthusiasm', pN: 2 },
     cost: null,
   },
   armsman: {
-    name: 'Armsman', cat: [1,14,39,27,16,8], str: 1, canIsland: true,
+    name: 'Armsman', cat: [1,14,39,27,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { weapons: 1 } },
     ship:   null,
     cost: null,
   },
   // ---- tutorial-only pirates ----
   tutorialForager: {
-    name: 'Trail Forager', cat: [6,36,42,16,0,5], str: 1, canIsland: true,
+    name: 'Trail Forager', cat: [6,36,42,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { res: 'wood', amt: 1 } },
     ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 1 },
     cost: null,
   },
   tutorialSwabbie: {
-    name: 'Deck Swabbie', cat: [10,27,45,17,0,1], str: 1, canIsland: false,
+    name: 'Deck Swabbie', cat: [10,27,45,17,0,1], str: BASE_PIRATE_ATTACK, canIsland: false,
     island: null,
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1 },
     cost: null,
   },
   tutorialAdmiralBlackpowder: {
-    name: 'Admiral Blackpowder', cat: [9,33,46,16,0,7], str: 3, canIsland: false,
+    name: 'Admiral Blackpowder', cat: [9,33,46,16,0,7], str: BASE_PIRATE_ATTACK, canIsland: false,
     island: null,
     ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 0, prodCannons: 3 },
     cost: 5,
   },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
-    name: 'Carpenter', cat: [3,30,45,16,0,0], str: 1, canIsland: true,
+    name: 'Carpenter', cat: [3,30,45,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95, descSuffix: 'safe' },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapons: 3 },
     cost: 3,
   },
   stonemason: {
-    name: 'Stonemason', cat: [5,23,39,16,0,2], str: 1, canIsland: true,
+    name: 'Stonemason', cat: [5,23,39,16,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95, descSuffix: 'safe' },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodCannons: 1 },
     cost: 3,
   },
   brute: {
-    name: 'Brute', cat: [3,26,39,19,0,3], str: 2, canIsland: true,
+    name: 'Brute', cat: [3,26,39,19,0,3], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { weapons: 1 } },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
   },
   whittler: {
-    name: 'Whittler', cat: [1,6,42,34,16,0], str: 1, canIsland: true,
+    name: 'Whittler', cat: [1,6,42,34,16,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
     ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
     cost: 2,
   },
   corsair: {
-    name: 'Corsair', cat: [1,8,42,27,16,8], str: 1, canIsland: true,
+    name: 'Corsair', cat: [1,8,42,27,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { weapons: 2 } },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
   privateer: {
-    name: 'Privateer', cat: [1,12,45,27,16,4], str: 2, canIsland: true,
+    name: 'Privateer', cat: [1,12,45,27,16,4], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
     ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 6 },
     cost: 3,
   },
   herald: {
-    name: 'Herald', cat: [1,7,39,32,16,2], str: 2, canIsland: true,
+    name: 'Herald', cat: [1,7,39,32,16,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { res: 'enthusiasm', amt: 3 } },
     ship:   null,
     cost: 2,
   },
   scrapper: {
-    name: 'Scrapper', cat: [15,27,46,16,0,6], str: 2, canIsland: true,
+    name: 'Scrapper', cat: [15,27,46,16,0,6], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { weapons: 2 } },
     ship:   { costCannons: 1, pRes: 'stone', pN: 4, extraEnthusiasm: 3 },
     cost: 4,
   },
   deckhand: {
-    name: 'Deckhand', cat: [4,34,40,16,0,6], str: 1, canIsland: true,
+    name: 'Deckhand', cat: [4,34,40,16,0,6], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'risky' },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapons: 1 },
     cost: 2,
   },
   blacksmith: {
-    name: 'Blacksmith', cat: [15,37,38,16,0,9], str: 2, canIsland: true,
+    name: 'Blacksmith', cat: [15,37,38,16,0,9], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'risky' },
     ship:   { costWeapons: 2, prodCannons: 1, extraEnthusiasm: 3 },
     cost: 4,
   },
   bosun: {
-    name: 'Bosun', cat: [3,27,46,16,20,6], str: 1, canIsland: false,
+    name: 'Bosun', cat: [3,27,46,16,20,6], str: BASE_PIRATE_ATTACK, canIsland: false,
     island: null,
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 3 },
     cost: 5,
   },
   cutthroat: {
-    name: 'Cutthroat', cat: [4,25,38,17,0,2], customSkin: 0, str: 3, canIsland: true,
+    name: 'Cutthroat', cat: [4,25,38,17,0,2], customSkin: 0, str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { res: 'enthusiasm', amt: 1 } },
     ship:   { cRes: 'gold', cN: 2, removeFromDeck: true },
     cost: 5,
   },
   quartermaster: {
-    name: 'Quartermaster', cat: [12,35,39,16,0,0], str: 4, canIsland: true,
+    name: 'Quartermaster', cat: [12,35,39,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { recall: 1 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 10,
   },
   // ---- tier 2: solid mid-game (12-16☠️) ----
   trader: {
-    name: 'Trader', cat: [8,34,46,16,0,5], str: 1, canIsland: true,
+    name: 'Trader', cat: [8,34,46,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 }, descSuffix: 'safe' },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 4 },
     cost: 7,
   },
   woodsman: {
-    name: 'Woodsman', cat: [11,25,43,16,0,0], str: 2, canIsland: true,
+    name: 'Woodsman', cat: [11,25,43,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 6 },
     cost: 7,
   },
   prospector: {
-    name: 'Prospector', cat: [7,30,45,16,0,2], str: 2, canIsland: true,
+    name: 'Prospector', cat: [7,30,45,16,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodCannons: 2 },
     cost: 7,
   },
   smuggler: {
-    name: 'Smuggler', cat: [7,25,46,16,0,5], str: 2, canIsland: true,
+    name: 'Smuggler', cat: [7,25,46,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
     ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5 },
     cost: 8,
   },
   explorer: {
-    name: 'Explorer', cat: [13,23,38,17,0,2], str: 1, canIsland: true,
+    name: 'Explorer', cat: [13,23,38,17,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.65, descSuffix: 'decent odds' },
     ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 6 },
     cost: 9,
   },
   // ---- tier 3: late-game powerhouses (24-32☠️) ----
   masterLumberjack: {
-    name: 'Master Rigger', cat: [10,28,40,16,0,8], str: 3, canIsland: true,
+    name: 'Master Rigger', cat: [10,28,40,16,0,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 9 },
     cost: 13,
   },
   masterMiner: {
-    name: 'Master Ballaster', cat: [15,34,43,17,0,9], str: 3, canIsland: true,
+    name: 'Master Ballaster', cat: [15,34,43,17,0,9], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 2, chance: 0.9, descSuffix: 'reliable' },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodCannons: 3 },
     cost: 13,
   },
   // ---- special: get-lost pirates (removeSelf on ship) ----
   raider: {
-    name: 'Raider', cat: [1,15,44,26,19,3], str: 2, canIsland: true,
+    name: 'Raider', cat: [1,15,44,26,19,3], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { weapons: 3 } },
     ship:   { removeSelf: true },
     cost: 4,
   },
   profiteer: {
-    name: 'Profiteer', cat: [9,33,46,16,0,7], str: 1, canIsland: true,
+    name: 'Profiteer', cat: [9,33,46,16,0,7], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { convert: { cRes: 'gold', cN: 1, pRes: 'gold', pN: 2 } },
     ship:   { removeSelf: true },
     cost: 5,
   },
   drifter: {
-    name: 'Drifter', cat: [14,37,42,16,0,0], str: 0, canIsland: true,
+    name: 'Drifter', cat: [14,37,42,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
     ship:   { removeSelf: true },
     cost: 6,
   },
   // ---- special: utility ----
   marooner: {
-    name: 'Marooner', cat: [6,28,43,17,20,4], str: 0, canIsland: true,
+    name: 'Marooner', cat: [6,28,43,17,20,4], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { exileSent: true },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
     cost: 6,
   },
   survivalist: {
-    name: 'Survivalist', cat: [1,15,45,28,16,8], str: 2, canIsland: true,
+    name: 'Survivalist', cat: [1,15,45,28,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 3,

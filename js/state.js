@@ -133,7 +133,7 @@ function initState() {
 }
 
 function initBattleTestState() {
-  const fighterCount = Phaser.Math.Between(3, 5);
+  const fighterCount = 5;
   const crew = buildBattleTestCrew(fighterCount);
   const encounterNo = Phaser.Math.Between(1, 6);
   const weaponCount = Phaser.Math.Between(1, crew.length);
@@ -264,7 +264,7 @@ function initTutorialState() {
       round: 5,
       phase: 'boarding',
       handRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
-      startWeapons: { sword: 1, axe: 1, dagger: 1, hammer: 1 },
+      startWeapons: { hammer: 1, axe: 1, bow: 1, musket: 1, hookshot: 1 },
       shop: [],
       enemyShip: { preset: 'tutorial-final' },
       hints: {
