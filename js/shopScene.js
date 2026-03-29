@@ -5,11 +5,18 @@
 class ShopScene extends Phaser.Scene {
   constructor() { super('shopModal'); }
 
+  init(data) {
+    this._launchOriginRect = data && data.originRect ? { ...data.originRect } : null;
+    this._skipOpenAnim = !!(data && data.skipOpenAnim);
+  }
+
   create() {
     ensureCatTextures(this);
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.panel = this.computePanel();
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+    this._panelTween = null;
+    this._panelClosing = false;
     this.panelLayer = this.add.container(0, 0).setDepth(40);
     this._cardTips = new CardTooltipController(this, { depth: 80 });
     this._featuredTicker = null;
@@ -20,32 +27,78 @@ class ShopScene extends Phaser.Scene {
     this.input.on('pointerdown', (ptr) => {
       if (ptr.y > this.panel.h) {
         ptr.event.stopPropagation();
-        this.scene.stop();
+        this.requestClose();
       }
     });
 
     this.renderPanel();
-    this.animateOpen();
+    if (!this._skipOpenAnim) this.animateOpen();
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
-      this.scene.restart();
+      this.scene.restart({ skipOpenAnim: true, originRect: this._launchOriginRect });
     };
     this.scale.on('resize', this._onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this._panelTween) this._panelTween.stop();
+      this._panelTween = null;
+      this._panelClosing = false;
       if (this._cardTips) this._cardTips.destroy();
     });
   }
 
+  transitionTargets() {
+    return [this.panelLayer];
+  }
+
+  currentOriginRect() {
+    const game = this.scene.get('game');
+    if (game && typeof game.panelButtonRect === 'function') {
+      return game.panelButtonRect(this.scene.key) || this._launchOriginRect;
+    }
+    return this._launchOriginRect;
+  }
+
   animateOpen() {
-    const offset = 30 * this.L.k;
-    this.panelLayer.setAlpha(0).setY(-offset);
-    this.tweens.add({
-      targets: this.panelLayer,
-      alpha: 1, y: 0,
-      duration: 140,
-      ease: 'Cubic.easeOut',
+    const finalStates = snapshotPanelTargets(this.transitionTargets());
+    const fromStates = finalStates.map((state) => (
+      collapsedPanelState(state, this.panel, this._launchOriginRect, { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, finalStates, {
+      duration: PANEL_MOTION.openDuration,
+      ease: PANEL_MOTION.openEase,
+      onComplete: () => {
+        this._panelTween = null;
+      },
+    });
+  }
+
+  requestClose() {
+    if (this._panelClosing) return;
+    this._panelClosing = true;
+    const game = this.scene.get('game');
+    if (game && typeof game.panelFlagKey === 'function') {
+      const flagKey = game.panelFlagKey(this.scene.key);
+      if (flagKey && game[flagKey]) game.setPanelOpen(this.scene.key, false);
+    }
+    this.input.enabled = false;
+    if (this._cardTips) this._cardTips.hide();
+    if (this._panelTween) {
+      this._panelTween.stop();
+      this._panelTween = null;
+    }
+    const fromStates = snapshotPanelTargets(this.transitionTargets());
+    const toStates = fromStates.map((state) => (
+      collapsedPanelState(state, this.panel, this.currentOriginRect(), { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, toStates, {
+      duration: PANEL_MOTION.closeDuration,
+      ease: PANEL_MOTION.closeEase,
+      onComplete: () => {
+        this._panelTween = null;
+        this.scene.stop();
+      },
     });
   }
 
@@ -171,7 +224,7 @@ class ShopScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
-      this.scene.stop();
+      this.requestClose();
     });
     this.panelLayer.add(close);
 

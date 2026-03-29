@@ -65,6 +65,7 @@ class GameScene extends Phaser.Scene {
     this._shopPanelOpen = false;
     this._drawPilePanelOpen = false;
     this._discardPilePanelOpen = false;
+    this._panelButtons = {};
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
@@ -353,6 +354,7 @@ class GameScene extends Phaser.Scene {
 
   closePanels(exceptKey = null) {
     if (this._cardTips) this._cardTips.hide();
+    let changed = false;
     this.panelSceneKeys().forEach((key) => {
       if (exceptKey && key === exceptKey) return;
       if (!this.scene.isActive(key)) return;
@@ -360,8 +362,15 @@ class GameScene extends Phaser.Scene {
       if (key === 'shopModal') this._shopPanelOpen = false;
       if (key === 'drawPileModal') this._drawPilePanelOpen = false;
       if (key === 'discardPileModal') this._discardPilePanelOpen = false;
-      this.scene.stop(key);
+      const panelScene = this.scene.get(key);
+      if (panelScene && typeof panelScene.requestClose === 'function') {
+        panelScene.requestClose();
+      } else {
+        this.scene.stop(key);
+      }
+      changed = true;
     });
+    if (changed) this.refreshPanelUi();
   }
 
   panelFlagKey(sceneKey) {
@@ -389,9 +398,10 @@ class GameScene extends Phaser.Scene {
 
   openPanel(sceneKey) {
     if (this._cardTips) this._cardTips.hide();
+    const originRect = this.panelButtonRect(sceneKey);
     this.closePanels(sceneKey);
     if (this.scene.isActive(sceneKey)) return;
-    this.scene.launch(sceneKey);
+    this.scene.launch(sceneKey, { originRect });
     this.scene.bringToTop(sceneKey);
     this.setPanelOpen(sceneKey, true);
   }
@@ -432,7 +442,12 @@ class GameScene extends Phaser.Scene {
     if (this._cardTips) this._cardTips.hide();
     if (this.scene.isActive(sceneKey)) {
       this.setPanelOpen(sceneKey, false);
-      this.scene.stop(sceneKey);
+      const panelScene = this.scene.get(sceneKey);
+      if (panelScene && typeof panelScene.requestClose === 'function') {
+        panelScene.requestClose();
+      } else {
+        this.scene.stop(sceneKey);
+      }
       return;
     }
     this.openPanel(sceneKey);
@@ -2993,14 +3008,25 @@ class GameScene extends Phaser.Scene {
     return Math.min(screenRight, playAreaRight + 28 * L.k);
   }
 
-  measurePillWidth(label, opts = {}) {
-    if (!label) return 0;
+  measurePillSize(label, opts = {}) {
+    if (!label) {
+      return {
+        width: Math.max(opts.minW || 0, 0),
+        height: Math.max(opts.minH || 0, 0),
+      };
+    }
     const L = this.L;
     const probe = this.add.text(0, -9999, label, uiHeadingStyle(L, opts.textPx || 16, opts.textColor || UI_THEME.colors.paper));
     const padX = opts.padX != null ? opts.padX : 20 * L.k;
+    const padY = opts.padY != null ? opts.padY : 12 * L.k;
     const width = Math.max(opts.minW || 0, probe.width + padX * 2);
+    const height = Math.max(opts.minH || 0, probe.height + padY * 2);
     probe.destroy();
-    return width;
+    return { width, height };
+  }
+
+  measurePillWidth(label, opts = {}) {
+    return this.measurePillSize(label, opts).width;
   }
 
   footerPileBtnOpts() {
@@ -3066,6 +3092,52 @@ class GameScene extends Phaser.Scene {
     }
     const width = this.measurePillWidth('Discard', pileBtnOpts);
     return { x: L.W - 22 * L.k - width / 2, y: L.Y_NAV };
+  }
+
+  panelButtonRect(sceneKey) {
+    const liveBtn = this._panelButtons && this._panelButtons[sceneKey];
+    if (liveBtn && liveBtn.scene && liveBtn.active) {
+      return {
+        x: liveBtn.x - liveBtn.width / 2,
+        y: liveBtn.y - liveBtn.height / 2,
+        w: liveBtn.width,
+        h: liveBtn.height,
+      };
+    }
+
+    const L = this.L;
+    const topGap = 10 * L.k;
+    const topY = 60 * L.k;
+    const topInset = 22 * L.k;
+    const iconOpts = {
+      originX: 1,
+      textPx: 20,
+      minW: 50 * L.k,
+      minH: 50 * L.k,
+      padX: 12 * L.k,
+      padY: 10 * L.k,
+    };
+    const pileBtnOpts = this.footerPileBtnOpts();
+
+    if (sceneKey === 'shopModal') {
+      const size = this.measurePillSize('🛒', iconOpts);
+      return { x: L.W - topInset - size.width, y: topY - size.height / 2, w: size.width, h: size.height };
+    }
+    if (sceneKey === 'map') {
+      const shopSize = this.measurePillSize('🛒', iconOpts);
+      const size = this.measurePillSize('🗺️', iconOpts);
+      const shopLeft = L.W - topInset - shopSize.width;
+      return { x: shopLeft - topGap - size.width, y: topY - size.height / 2, w: size.width, h: size.height };
+    }
+    if (sceneKey === 'drawPileModal') {
+      const size = this.measurePillSize('Draw Pile', pileBtnOpts);
+      return { x: 22 * L.k, y: L.Y_NAV - size.height / 2, w: size.width, h: size.height };
+    }
+    if (sceneKey === 'discardPileModal') {
+      const size = this.measurePillSize('Discard', pileBtnOpts);
+      return { x: L.W - 22 * L.k - size.width, y: L.Y_NAV - size.height / 2, w: size.width, h: size.height };
+    }
+    return null;
   }
 
   queueHandAppear(cards, opts = {}) {
@@ -4076,6 +4148,7 @@ class GameScene extends Phaser.Scene {
 
   renderNav() {
     this.clearCt('nav');
+    this._panelButtons = {};
     const L = this.L;
     this.renderInventory();
 
@@ -4109,8 +4182,9 @@ class GameScene extends Phaser.Scene {
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
     });
+    this._panelButtons.shopModal = shopBtn;
 
-    this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
+    const mapBtn = this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
       this.toggleMapPanel();
     }, {
       ...iconOpts,
@@ -4121,9 +4195,10 @@ class GameScene extends Phaser.Scene {
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
     });
+    this._panelButtons.map = mapBtn;
 
     const drawPileOpen = this._drawPilePanelOpen;
-    this.mkBtn('nav', 22 * L.k, footerY, 'Draw Pile', () => {
+    const drawBtn = this.mkBtn('nav', 22 * L.k, footerY, 'Draw Pile', () => {
       this.toggleDrawPilePanel();
     }, {
       ...pileBtnOpts,
@@ -4135,9 +4210,10 @@ class GameScene extends Phaser.Scene {
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
     });
+    this._panelButtons.drawPileModal = drawBtn;
 
     const discardOpen = this._discardPilePanelOpen;
-    this.mkBtn('nav', L.W - 22 * L.k, footerY, 'Discard', () => {
+    const discardBtn = this.mkBtn('nav', L.W - 22 * L.k, footerY, 'Discard', () => {
       this.toggleDiscardPilePanel();
     }, {
       ...pileBtnOpts,
@@ -4149,6 +4225,7 @@ class GameScene extends Phaser.Scene {
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
     });
+    this._panelButtons.discardPileModal = discardBtn;
   }
 
   mkBtn(k, x, y, label, cb, opts = {}) {

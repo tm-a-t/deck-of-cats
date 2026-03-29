@@ -361,6 +361,105 @@ function makeUiPill(scene, cfg = {}) {
   return ct;
 }
 
+const PANEL_MOTION = {
+  openDuration: 220,
+  closeDuration: 180,
+  openEase: 'Cubic.easeOut',
+  closeEase: 'Cubic.easeIn',
+  minScale: 0.06,
+  collapsedAlpha: 0.16,
+};
+
+function normalizePanelMotionRect(rect, panelRect, L) {
+  if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.y)
+    && Number.isFinite(rect.w) && Number.isFinite(rect.h)
+    && rect.w > 0 && rect.h > 0) {
+    return { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+  }
+  const k = (L && L.k) || 1;
+  const size = 54 * k;
+  return {
+    x: panelRect.x + panelRect.w / 2 - size / 2,
+    y: panelRect.y + 28 * k,
+    w: size,
+    h: size,
+  };
+}
+
+function snapshotPanelTargets(targets) {
+  return (targets || [])
+    .filter(Boolean)
+    .map((target) => ({
+      target,
+      x: target.x || 0,
+      y: target.y || 0,
+      scaleX: target.scaleX == null ? 1 : target.scaleX,
+      scaleY: target.scaleY == null ? 1 : target.scaleY,
+      alpha: target.alpha == null ? 1 : target.alpha,
+    }));
+}
+
+function collapsedPanelState(baseState, panelRect, collapseRect, opts = {}) {
+  const rect = normalizePanelMotionRect(collapseRect, panelRect, opts.L);
+  const scaleX = Phaser.Math.Clamp(rect.w / Math.max(1, panelRect.w), PANEL_MOTION.minScale, 1);
+  const scaleY = Phaser.Math.Clamp(rect.h / Math.max(1, panelRect.h), PANEL_MOTION.minScale, 1);
+  const left = rect.x + (rect.w - panelRect.w * scaleX) / 2;
+  const top = rect.y + (rect.h - panelRect.h * scaleY) / 2;
+  const alphaFactor = opts.alphaFactor != null ? opts.alphaFactor : PANEL_MOTION.collapsedAlpha;
+  return {
+    target: baseState.target,
+    x: left + baseState.x * scaleX,
+    y: top + baseState.y * scaleY,
+    scaleX: baseState.scaleX * scaleX,
+    scaleY: baseState.scaleY * scaleY,
+    alpha: Phaser.Math.Clamp(baseState.alpha * alphaFactor, 0, 1),
+  };
+}
+
+function applyPanelTweenState(state) {
+  if (!state || !state.target || !state.target.scene) return;
+  state.target.setPosition(state.x, state.y);
+  state.target.setScale(state.scaleX, state.scaleY);
+  state.target.setAlpha(state.alpha);
+}
+
+function tweenPanelStates(scene, fromStates, toStates, opts = {}) {
+  if (!scene || !scene.tweens || !Array.isArray(fromStates) || !Array.isArray(toStates) || fromStates.length === 0) {
+    if (opts.onComplete) opts.onComplete();
+    return null;
+  }
+
+  fromStates.forEach(applyPanelTweenState);
+
+  return scene.tweens.addCounter({
+    from: 0,
+    to: 1,
+    duration: opts.duration || 200,
+    ease: opts.ease || 'Cubic.easeOut',
+    onUpdate: (tw) => {
+      const p = tw.getValue();
+      for (let i = 0; i < fromStates.length; i++) {
+        const from = fromStates[i];
+        const to = toStates[i];
+        if (!from || !to || !from.target || !from.target.scene) continue;
+        from.target.setPosition(
+          Phaser.Math.Linear(from.x, to.x, p),
+          Phaser.Math.Linear(from.y, to.y, p)
+        );
+        from.target.setScale(
+          Phaser.Math.Linear(from.scaleX, to.scaleX, p),
+          Phaser.Math.Linear(from.scaleY, to.scaleY, p)
+        );
+        from.target.setAlpha(Phaser.Math.Linear(from.alpha, to.alpha, p));
+      }
+    },
+    onComplete: () => {
+      toStates.forEach(applyPanelTweenState);
+      if (opts.onComplete) opts.onComplete();
+    },
+  });
+}
+
 const RES_EMOJI = { wood: '🪵', stone: '🪨', gold: '🪙', map: '🗺️', enthusiasm: '☠️' };
 
 function normalizePirateDescText(text) {
