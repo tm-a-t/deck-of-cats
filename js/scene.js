@@ -4015,6 +4015,7 @@ class GameScene extends Phaser.Scene {
       prevPositions,
       appearFrom,
       layout: isWeaponAssignment ? 'row' : undefined,
+      hoverSpread: !isWeaponAssignment,
       rowLayout: isWeaponAssignment ? {
         y: L.Y_HAND_CENTER - 8 * L.k,
         maxStep: 150 * L.k,

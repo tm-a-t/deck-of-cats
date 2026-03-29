@@ -636,6 +636,7 @@ class CardHand {
     this._spreadTweens = null;
     this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
+    this._hoverSpreadEnabled = true;
   }
 
   destroy() {
@@ -660,6 +661,7 @@ class CardHand {
     this._dragIdx = -1;
     this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
+    this._hoverSpreadEnabled = true;
   }
 
   getCardPositions() {
@@ -693,6 +695,7 @@ class CardHand {
     const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
     this._onCardHoverChange = opts.onCardHoverChange || null;
+    this._hoverSpreadEnabled = opts.hoverSpread !== false;
 
     const visible = [];
     hand.forEach((p, i) => {
@@ -829,9 +832,11 @@ class CardHand {
       if (this._onCardHoverChange) this._onCardHoverChange(c, shouldHover);
     });
     this._hoverIdx = slotIndex;
-    const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
-    const duration = slotIndex >= 0 ? CARD_MOTION.hoverInDuration : CARD_MOTION.hoverOutDuration;
-    this._tweenNeighborSpread(slotIndex, L, duration, easing);
+    if (this._hoverSpreadEnabled) {
+      const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
+      const duration = slotIndex >= 0 ? CARD_MOTION.hoverInDuration : CARD_MOTION.hoverOutDuration;
+      this._tweenNeighborSpread(slotIndex, L, duration, easing);
+    }
   }
 
   getCardPosition(handIdx) {
