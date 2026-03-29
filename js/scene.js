@@ -2767,15 +2767,6 @@ class GameScene extends Phaser.Scene {
     return this.addTo(k, t);
   }
 
-  currentStrengthState() {
-    const crew = (G.hand || []).filter(Boolean).length * (Number(COMBAT.pirateDamage) || 0);
-    return {
-      crew,
-      bonus: 0,
-      total: crew,
-    };
-  }
-
   mapBoardingNumberForLayer(layerIdx) {
     if (!G.map || !Array.isArray(G.map.layers)) return 1;
     let count = 0;
@@ -2784,6 +2775,37 @@ class GameScene extends Phaser.Scene {
       if (layer && layer.length === 1 && layer[0].type === 'ship') count++;
     }
     return Math.max(1, count);
+  }
+
+  isLandingRoundPhase() {
+    return !!G.island && G.phase !== 'map' && G.phase !== 'boarding';
+  }
+
+  nextEnemyState() {
+    if (!G.map || !Array.isArray(G.map.layers)) return null;
+
+    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
+      const layer = G.map.layers[li];
+      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+      const turnsAway = li - currentLayer;
+      const boardingNo = this.mapBoardingNumberForLayer(li);
+      const enemyCount = Phaser.Math.Clamp(
+        2 + Math.floor((boardingNo + 1) / 2),
+        COMBAT.enemyCountMin,
+        COMBAT.enemyCountMax
+      );
+      const roster = this.combatEligibleEnemyArchetypes(boardingNo)
+        .map((archetype) => archetype.emoji)
+        .join(' ');
+      return {
+        icon: '🏴‍☠️',
+        line1: `Boarding #${boardingNo} in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
+        line2: `${enemyCount} foe${enemyCount === 1 ? '' : 's'}${roster ? `  ·  ${roster}` : ''}`,
+      };
+    }
+
+    return { icon: '⭐', line1: 'No more enemy ships.', line2: 'Sail to the end' };
   }
 
   currentGoalState() {
@@ -2820,24 +2842,43 @@ class GameScene extends Phaser.Scene {
       };
     }
 
+    if (G.phase === 'removing') {
+      return {
+        icon: '☠️',
+        line1: 'Choose a pirate to exile.',
+        line2: 'Pick one cat that is not in hand',
+      };
+    }
+
+    if (G.phase === 'shopping') {
+      return {
+        icon: '🛒',
+        line1: 'Visit the shop.',
+        line2: 'Buy crew or continue sailing',
+      };
+    }
+
+    if (G.phase === 'ship') {
+      return {
+        icon: '⚒️',
+        line1: 'Crew is working on the ship.',
+        line2: 'Ship actions resolve automatically',
+      };
+    }
+
+    if (G.phase === 'sending' && G.island) {
+      return {
+        icon: '👆',
+        line1: 'Swipe a pirate to send on island.',
+        line2: 'Other pirates will work on ship',
+      };
+    }
+
     if (!G.map || !Array.isArray(G.map.layers)) {
       return { icon: '🗺️', line1: 'Choose a route.', line2: 'Open the map' };
     }
 
-    const currentLayer = G.map.currentLayer;
-    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
-      const layer = G.map.layers[li];
-      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
-      const turnsAway = li - currentLayer;
-      const shipNo = this.mapBoardingNumberForLayer(li);
-      return {
-        icon: '😈',
-        line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: `Boarding #${shipNo}`,
-      };
-    }
-
-    return { icon: '⭐', line1: 'No more battles.', line2: 'Sail to the end' };
+    return { icon: '🗺️', line1: 'Choose a route.', line2: 'Open the map' };
   }
 
   islandDescription() {
@@ -3729,39 +3770,35 @@ class GameScene extends Phaser.Scene {
     const pad = 18 * L.k;
     const labelY = 18 * L.k;
     const valueY = 40 * L.k;
-    const sectionGap = 16 * L.k;
+    const sectionGap = 22 * L.k;
     const iconTextGap = 8 * L.k;
     const goal = this.currentGoalState();
-    const strength = this.currentStrengthState();
-    const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
-    const boardingSetup = combat && combat.mode === 'setup';
-    const boardingFight = combat && combat.mode !== 'setup';
-    const leftLabel = boardingSetup ? 'Armed' : (boardingFight ? 'Boarding' : 'Strength');
-    const leftValue = boardingSetup
-      ? `${WEAPON_CATEGORY_EMOJI}${this.combatAssignedWeaponCount(combat)}/${G.hand.length || 0}`
-      : (boardingFight
-        ? `${this.combatLiving('player').length}v${this.combatLiving('enemy').length}`
-        : `⚔️${strength.total}`);
+    const blocks = [{ title: 'Current goal', state: goal }];
+    if (this.isLandingRoundPhase()) {
+      const nextEnemy = this.nextEnemyState();
+      if (nextEnemy) blocks.push({ title: 'Next enemy', state: nextEnemy });
+    }
 
-    const strengthLabel = this.add.text(pad, labelY, leftLabel, uiHeadingStyle(L, 16, UI_THEME.colors.paper))
-      .setOrigin(0, 0);
-    const strengthValue = this.add.text(pad, valueY, leftValue, uiHeadingStyle(L, 32, UI_THEME.colors.paper))
-      .setOrigin(0, 0);
-    const strengthBlockWidth = Math.max(strengthLabel.width, strengthValue.width);
-    const goalX = pad + strengthBlockWidth + sectionGap;
-    const goalLabel = this.add.text(goalX, labelY, 'Current goal', uiHeadingStyle(L, 16, UI_THEME.colors.paper))
-      .setOrigin(0, 0);
-    const goalIcon = this.add.text(goalX, valueY - 2 * L.k, goal.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
-      .setOrigin(0, 0);
-    const goalTextX = goalX + goalIcon.width + iconTextGap;
-    const goalWidth = Math.max(96 * L.k, L.W - pad - goalTextX);
-    const goalText = this.add.text(goalTextX, valueY + 1 * L.k, `${goal.line1}\n${goal.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
-      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
-      wordWrap: { width: goalWidth },
-    })).setOrigin(0, 0);
+    const availableWidth = L.W - pad * 2;
+    const blockWidth = Math.max(120 * L.k, (availableWidth - sectionGap * (blocks.length - 1)) / blocks.length);
+    let blockX = pad;
 
-    [strengthLabel, strengthValue, goalLabel, goalIcon, goalText].forEach((node) => {
-      this.addTo('top', node);
+    blocks.forEach(({ title, state }) => {
+      const label = this.add.text(blockX, labelY, title, uiHeadingStyle(L, 16, UI_THEME.colors.paper))
+        .setOrigin(0, 0);
+      const icon = this.add.text(blockX, valueY - 2 * L.k, state.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
+        .setOrigin(0, 0);
+      const textX = blockX + icon.width + iconTextGap;
+      const textWidth = Math.max(96 * L.k, blockWidth - (textX - blockX));
+      const text = this.add.text(textX, valueY + 1 * L.k, `${state.line1}\n${state.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
+        lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
+        wordWrap: { width: textWidth },
+      })).setOrigin(0, 0);
+
+      [label, icon, text].forEach((node) => {
+        this.addTo('top', node);
+      });
+      blockX += blockWidth + sectionGap;
     });
   }
 
