@@ -1108,9 +1108,54 @@ class GameScene extends Phaser.Scene {
 
   startBoardingSetupIntroIfNeeded() {
     const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
-    if (!combat || combat.mode !== 'intro' || combat.introStarted) return;
     const handCards = Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.slice() : [];
-    if (!handCards.length) return;
+    // #region agent log
+    console.log(JSON.stringify({
+      hypothesisId: 'A',
+      location: 'js/scene.js:1110',
+      message: 'boarding intro start check',
+      data: {
+        phase: G.phase,
+        combatMode: combat && combat.mode,
+        introStarted: !!(combat && combat.introStarted),
+        handCards: handCards.length,
+        handCount: Array.isArray(G.hand) ? G.hand.length : 0,
+      },
+      timestamp: Date.now(),
+    }));
+    // #endregion
+    if (!combat || combat.mode !== 'intro' || combat.introStarted) return;
+    if (!handCards.length) {
+      if (Array.isArray(G.hand) && G.hand.length) {
+        // #region agent log
+        console.log(JSON.stringify({
+          hypothesisId: 'D',
+          location: 'js/scene.js:1114',
+          message: 'boarding intro queued rerender for hand cards',
+          data: {
+            handCount: G.hand.length,
+            existingHandCards: handCards.length,
+          },
+          timestamp: Date.now(),
+        }));
+        // #endregion
+        this.queueRenderAll();
+      }
+      // #region agent log
+      console.log(JSON.stringify({
+        hypothesisId: 'A',
+        location: 'js/scene.js:1113',
+        message: 'boarding intro waiting for hand cards',
+        data: {
+          combatMode: combat.mode,
+          handCards: handCards.length,
+          handCount: Array.isArray(G.hand) ? G.hand.length : 0,
+        },
+        timestamp: Date.now(),
+      }));
+      // #endregion
+      return;
+    }
 
     const playerRows = this.combatSetupRows('player', combat);
     const playerSlots = this.combatSetupSlotMap('player', playerRows, this.combatFormationVisuals('player'));
@@ -1140,7 +1185,34 @@ class GameScene extends Phaser.Scene {
       }));
     });
 
+    // #region agent log
+    console.log(JSON.stringify({
+      hypothesisId: 'B',
+      location: 'js/scene.js:1143',
+      message: 'boarding intro timer scheduled',
+      data: {
+        delay: endAt + 60,
+        endAt,
+        handCards: handCards.length,
+        combatMode: combat.mode,
+      },
+      timestamp: Date.now(),
+    }));
+    // #endregion
     this._boardingIntroTimer = this.time.delayedCall(endAt + 60, () => {
+      // #region agent log
+      console.log(JSON.stringify({
+        hypothesisId: 'B',
+        location: 'js/scene.js:1144',
+        message: 'boarding intro timer fired',
+        data: {
+          sameCombat: G.combat === combat,
+          combatMode: combat && combat.mode,
+          currentCombatMode: G.combat && G.combat.mode,
+        },
+        timestamp: Date.now(),
+      }));
+      // #endregion
       this._boardingIntroTimer = null;
       if (!this.sys || !this.sys.isActive()) return;
       if (G.combat !== combat || combat.mode !== 'intro') return;
@@ -3805,6 +3877,21 @@ class GameScene extends Phaser.Scene {
   renderAll() {
     this.clearCt('overlay');
     if (G.phase === 'boarding') this.ensureBoardingCombat();
+    if (G.phase === 'boarding') {
+      // #region agent log
+      console.log(JSON.stringify({
+        hypothesisId: 'D',
+        location: 'js/scene.js:3805',
+        message: 'renderAll boarding pass',
+        data: {
+          combatMode: G.combat && G.combat.mode,
+          existingHandCards: Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.length : 0,
+          handCount: Array.isArray(G.hand) ? G.hand.length : 0,
+        },
+        timestamp: Date.now(),
+      }));
+      // #endregion
+    }
     this.renderTop();
     this.renderIsland();
     this.renderPhase();
@@ -4051,6 +4138,21 @@ class GameScene extends Phaser.Scene {
       onCardHoverChange,
       container: this.ct.hand,
     });
+    if (isBoarding && combat && combat.mode === 'intro') {
+      // #region agent log
+      console.log(JSON.stringify({
+        hypothesisId: 'A',
+        location: 'js/scene.js:4054',
+        message: 'renderHand finished during boarding intro',
+        data: {
+          renderedHandCards: Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.length : 0,
+          handCount: Array.isArray(G.hand) ? G.hand.length : 0,
+          combatMode: combat.mode,
+        },
+        timestamp: Date.now(),
+      }));
+      // #endregion
+    }
   }
 
   renderBtn() {
