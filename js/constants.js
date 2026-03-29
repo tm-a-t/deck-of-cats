@@ -636,25 +636,6 @@ const TYPES = {
     ship:   null,
     cost: null,
   },
-  // ---- tutorial-only pirates ----
-  tutorialForager: {
-    name: 'Trail Forager', cat: [6,36,42,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { res: 'wood', amt: 1 } },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 1 },
-    cost: null,
-  },
-  tutorialSwabbie: {
-    name: 'Deck Swabbie', cat: [10,27,45,17,0,1], str: BASE_PIRATE_ATTACK, canIsland: false,
-    island: null,
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1 },
-    cost: null,
-  },
-  tutorialAdmiralBlackpowder: {
-    name: 'Admiral Blackpowder', cat: [9,33,46,16,0,7], str: BASE_PIRATE_ATTACK, canIsland: false,
-    island: null,
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'musket', prodWeaponN: 2 },
-    cost: 5,
-  },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,

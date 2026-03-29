@@ -707,8 +707,8 @@ class CardHand {
     const sendingSet = opts.sendingSet;
     const isSending = opts.isSending;
     const allowInteraction = opts.allowInteraction !== false;
-    const tutorialBlocked = opts.tutorialBlocked || (() => false);
-    const tutorialTargetIdx = opts.tutorialTargetIdx;
+    const blockedCard = opts.blockedCard || (() => false);
+    const highlightTargetIdx = opts.highlightTargetIdx;
     const onSendToIsland = opts.onSendToIsland;
     const onCardPointerDown = opts.onCardPointerDown;
     const cardModeForCard = opts.cardModeForCard || (() => 'default');
@@ -733,8 +733,8 @@ class CardHand {
     visible.forEach((entry, slotI) => {
       const { pirate, handIdx } = entry;
       const slot = slots[slotI];
-      const isBlocked = tutorialBlocked(pirate, handIdx);
-      const isTarget = handIdx === tutorialTargetIdx;
+      const isBlocked = blockedCard(pirate, handIdx);
+      const isTarget = handIdx === highlightTargetIdx;
 
       const cardView = createPirateCard(scene, {
         type: pirate.type,

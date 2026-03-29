@@ -42,7 +42,7 @@ This is not a full enterprise architecture. It is a pragmatic adaptation of a we
 
 | Layer | Files | Responsibility |
 |------|------|------|
-| Design rules | `rules.md`, `docs/design.md`, `docs/tutorial-plan.md` | Define what the game is supposed to do |
+| Design rules | `rules.md`, `docs/design.md` | Define what the game is supposed to do |
 | Content/config | `js/constants.js` | Store islands, pirate definitions, prices, display strings, and shop pool |
 | Runtime state | `js/state.js`, `js/map.js` | Create and evolve `G`, draw cards, generate the map |
 | Layout system | `js/layout.js` | Convert viewport size into reusable UI coordinates and scales |
@@ -71,7 +71,6 @@ However, `G` must be treated as the **single gameplay state container**, not as 
 - phase information;
 - map progress;
 - shop state;
-- tutorial state;
 - transient gameplay locks such as `busy` or `shopAnimating`.
 
 `G` should not contain:
@@ -92,7 +91,6 @@ It owns:
 - island and ship effect resolution;
 - buying pirates;
 - boarding resolution;
-- tutorial flow;
 - top-level rendering coordination through `renderAll()`.
 
 Other scenes should stay narrower:
@@ -124,7 +122,7 @@ flowchart LR
     B --> C{"Valid action?"}
     C -->|No| D["UI feedback only\nfloat / tooltip / hint"]
     C -->|Yes| E["Mutate runtime state\nG + deck/shop/map data"]
-    E --> F["Resolve side effects\nanimations, Poki signals,\ntutorial flags, panel open/close"]
+    E --> F["Resolve side effects\nanimations, Poki signals,\npanel open/close"]
     F --> G["renderAll() / panel rerender"]
     G --> H["Phaser display tree"]
     H --> A
@@ -162,7 +160,6 @@ const G = {
   island: null,
   enemyShip: null,
   map: null,
-  tutorial: null,
   busy: false,
   shopAnimating: false,
 };
@@ -220,7 +217,7 @@ Use these rules for code review. Treat them as strict checks, not vague suggesti
 
 - Reject code that stores gameplay truth inside Phaser display objects, containers, tweens, or tooltip state.
 - Reject code that duplicates the same gameplay fact both in `G` and in some scene-local shadow object without a strong reason.
-- Reject code that mutates deck, discard, hand, resources, map progress, or tutorial progress from random helper modules with no clear owner.
+- Reject code that mutates deck, discard, hand, resources, or map progress from random helper modules with no clear owner.
 
 ### Flow integrity
 
@@ -238,11 +235,11 @@ Use these rules for code review. Treat them as strict checks, not vague suggesti
 
 - Reject any gameplay change that is not reflected in `rules.md` in the same change.
 - Reject architecture changes that make this document false without updating this document.
-- Reject new design assumptions that conflict with `docs/design.md` or `docs/tutorial-plan.md` without explicit revision.
+- Reject new design assumptions that conflict with `docs/design.md` without explicit revision.
 
 ### Prototype-specific standards
 
 - Prefer simple, explicit methods over abstract indirection that adds no clarity at this project size.
 - Prefer full rerender from state over fragile partial UI mutation.
-- Prefer deterministic tutorial logic over hidden randomness.
+- Prefer readable, testable flow logic over hidden randomness.
 - Prefer adding a small helper function over copy-pasting the same state transition logic across scenes.

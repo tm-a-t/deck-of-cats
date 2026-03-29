@@ -48,9 +48,7 @@ class AllPiratesScene extends Phaser.Scene {
 
     this._mkBtn(L.cx, 76 * L.k, '← Menu', () => this.scene.start('menu'));
 
-    const allKeys = Object.keys(TYPES).filter(k =>
-      !k.startsWith('tutorial')
-    );
+    const allKeys = Object.keys(TYPES);
 
     const cardW = Math.min(L.W - 40 * L.k, 700 * L.k);
     const cardLeft = (L.W - cardW) / 2;

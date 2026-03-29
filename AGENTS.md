@@ -14,7 +14,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 
 - No build step; plain JS files loaded via `<script>` tags in `index.html`.
 - Phaser runs in `Phaser.Scale.NONE`; `js/main.js` manually syncs canvas size/zoom for HiDPI viewports.
-- Global mutable state in object `G`, initialized by `initState()` or `initTutorialState()`.
+- Global mutable state in object `G`, initialized by `initState()` or `initBattleTestState()`.
 - `GameScene` redraws its main UI via `renderAll()` after state changes; overlay panels live in separate scenes.
 - The active hand is rendered by `CardHand`, which owns the fan layout, hover, drag-to-island, and ship-effect overlays.
 
@@ -29,7 +29,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 
 | Scene | Key | Role |
 |-------|-----|------|
-| `MenuScene` | `menu` | Start menu: Play, Tutorial, Costumes, All Pirates |
+| `MenuScene` | `menu` | Start menu: Play, Battle Test, Costumes, All Pirates |
 | `GameScene` | `game` | Main gameplay loop and HUD |
 | `MapScene` | `map` | Top parchment panel for route selection or preview |
 | `ShopScene` | `shopModal` | Top parchment panel for pirate buying and round advance |
@@ -43,7 +43,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | File | Contents |
 |------|----------|
 | `js/constants.js` | `UI_THEME`, UI text/pill helpers, `RES_EMOJI`, `ISLANDS`, `TYPES`, `SHOP_POOL` |
-| `js/state.js` | `G`, `mkP`, `initState`, `initTutorialState`, `randomShopType`, `initialShop`, `drawCards` |
+| `js/state.js` | `G`, `mkP`, `initState`, `initBattleTestState`, `randomShopType`, `initialShop`, `drawCards` |
 | `js/map.js` | Map generation: `generateMap`, `getAvailableNodes`, `mapNodeById`, connection logic |
 | `js/layout.js` | Viewport helpers and `computeLayout` — dynamic layout calculations |
 | `js/menuScene.js` | `MenuScene` — start menu with streak display and gallery links |
@@ -53,7 +53,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | `js/cardHand.js` | Pirate card texture builder, `createPirateCard`, `CardHand` |
 | `js/costumesScene.js` | Cat sprite compositor (`ensureCatTextures`, `addCatSprite`, `FUR_PALETTE`) + `CostumesScene` |
 | `js/allPiratesScene.js` | `AllPiratesScene` — scrollable pirate gallery |
-| `js/scene.js` | `GameScene` — phases, tutorial flow, island/ship resolution, rendering, panel toggles |
+| `js/scene.js` | `GameScene` — phases, island/ship resolution, rendering, panel toggles |
 | `js/main.js` | Font wait, HiDPI text/canvas sync, `Phaser.Game` initialization |
 | `js/pokiBridge.js` | Poki SDK bridge used by the web build |
 
@@ -70,7 +70,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | `cannons` | `int` | 💣 permanent attack bonus |
 | `enthusiasm` | `int` | ☠️ currency for buying pirates |
 | `round` | `int` | Current round number |
-| `phase` | `string` | `map`, `sending`, `ship`, `shopping`, `boarding`, `removing`, `tutorialOutro` |
+| `phase` | `string` | `map`, `sending`, `ship`, `shopping`, `boarding`, `removing` |
 | `sent` | `Array<int>` | Indices of hand pirates sent to island |
 | `island` | `object\|null` | Current island definition |
 | `enemyShip` | `{strength}\|null` | Enemy ship if boarding round |
@@ -79,12 +79,11 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | `shop` | `Array<string>` | 4 type-keys in the shop window |
 | `shopAnimating` | `bool` | Lock during buy animation |
 | `busy` | `bool` | Lock during phase transitions |
-| `map` | `object\|null` | `{layers, visited, currentNodeId, currentLayer}` in regular runs, `null` in tutorial |
-| `tutorial` | `object\|null` | Tutorial state when active |
+| `map` | `object\|null` | `{layers, visited, currentNodeId, currentLayer}` in regular runs, `null` in battle test |
 
 ### GameScene Containers
 
-`top`, `island`, `phase`, `hand`, `btn`, `nav`, `fx` (depth 50), `tutorialHint` (depth 170), `tutorial` (depth 180), `gameover` (depth 200).
+`top`, `island`, `phase`, `hand`, `btn`, `nav`, `fx` (depth 50), `overlay` (depth 60), `gameover` (depth 200).
 
 ### Main Screen Layout
 

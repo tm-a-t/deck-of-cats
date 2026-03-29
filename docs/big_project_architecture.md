@@ -28,7 +28,7 @@ The large-project version should use these layers:
 | Application | Use cases, orchestration, save/load flow, progression systems, analytics dispatch |
 | Presentation | Phaser scenes, widgets, UI composition, animation, input adapters |
 | Infrastructure | Storage, telemetry, platform SDKs, remote config, asset loading, localization |
-| Content | Data files for pirates, islands, encounters, tutorial scripts, balance tables |
+| Content | Data files for pirates, islands, encounters, balance tables |
 
 Domain logic should become largely engine-agnostic.
 
@@ -40,7 +40,6 @@ Instead of one giant object, split runtime state into explicit modules such as:
 - `CombatState`
 - `MapState`
 - `ShopState`
-- `TutorialState`
 - `MetaProgressionState`
 - `SessionUiState`
 
@@ -53,7 +52,7 @@ Each store should have:
 
 ### 3. Move content into external data
 
-Pirates, islands, encounters, shop pools, tutorial scripts, and reward tables should move out of one JS constants file into validated data assets such as JSON, YAML, or generated content files.
+Pirates, islands, encounters, shop pools, and reward tables should move out of one JS constants file into validated data assets such as JSON, YAML, or generated content files.
 
 That content pipeline should include:
 
@@ -92,7 +91,6 @@ This allows:
 - `domain/combat/`
 - `domain/map/`
 - `domain/shop/`
-- `domain/tutorial/`
 - `domain/content/`
 
 Each domain module should expose pure operations such as:
@@ -102,7 +100,6 @@ Each domain module should expose pure operations such as:
 - `resolveBoarding`
 - `advanceShop`
 - `generateMapSegment`
-- `applyTutorialStep`
 
 ### Application modules
 
@@ -159,7 +156,7 @@ You will need:
 
 - unit tests for domain formulas and transitions;
 - content validation tests;
-- golden-path tutorial tests;
+- golden-path opening-flow tests;
 - deterministic simulation tests for balance;
 - integration tests for use cases;
 - browser smoke tests for critical UI flows.
@@ -181,7 +178,7 @@ The large project should track:
 
 - loading and onboarding metrics;
 - turn completion and abandonment points;
-- tutorial step completion;
+- first-session step completion;
 - economy sinks and sources;
 - crash and invalid-state diagnostics.
 
@@ -192,7 +189,7 @@ For a large project, designers should not edit code to make routine content chan
 The project should support:
 
 - data tables for pirates and islands;
-- scriptable tutorial steps;
+- scriptable opening beats;
 - automated diff-friendly balancing outputs;
 - generated reference docs from content data.
 

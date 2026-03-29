@@ -103,7 +103,6 @@ If the selected node is an enemy ship:
   - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.
   - Difficulty scales by **boarding count** through party size and unlocked enemy types; enemy stats stay at their printed values.
   - Early boardings use `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber`; `🪤 Netter` unlocks starting at boarding **4**, and `🔥 Flint Duelist` unlocks starting at boarding **6**.
-  - Tutorial turn 5 still uses the fixed legacy training encounter: `😾 Raider Cat`, `⚡ Glass Striker`, and `💣 Powder Bomber`.
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
   - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
@@ -244,11 +243,11 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 ## Shop
 
-- **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
-- **Regular-run pool**: all non-starter, non-tutorial pirate types (23 types).
+- Shop uses a 4-slot window.
+- Pool: all non-starter pirates (23 types).
 - **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
-- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
-- **Next round rotation**: in regular runs, the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
+- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). The bought slot is refilled with a new random pirate from the pool.
+- **Next round rotation**: the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
 
 ---
 
@@ -261,14 +260,6 @@ Win the boarding at the final layer (layer 49, ship #10).
 | Rigger | 3 | 1🪵 (90%) | 4🪵 → 2☠️ |
 | Ballaster | 3 | 1🪨 (90%) | 4🪨 → 2☠️ |
 | Armsman | 3 | → 🔨 | — |
-
-### Tutorial-Only
-
-| Name | ⚔️ | Island | Ship |
-|------|-----|--------|------|
-| Trail Forager | 3 | → 1🪵 (guaranteed) | 1🪵 → 1☠️ |
-| Deck Swabbie | 3 | Can't land | → 1☠️ |
-| Admiral Blackpowder | 3 | Can't land | 1🪙 → 🔫🔫 |
 
 ### Tier 1: Early Upgrades (cost 2–5)
 
@@ -344,33 +335,6 @@ Win the boarding at the final layer (layer 49, ship #10).
 | 🪙 | Gold | Ship actions input; high-tier conversions |
 | 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-
----
-
-## Tutorial
-
-Activated from the menu:
-- No map; turns are fully scripted.
-- Starting tutorial crew: 3 Riggers, 3 Ballasters, 3 Deck Swabbies.
-- The tutorial lasts 5 turns.
-- Turns 1–4 are island rounds and require sending exactly 2 pirates.
-- Turn 1 island: Forest Island.
-- Turn 2 island: Rocky Island.
-- Turns 3–4 island: Calm Atoll (no island bonus).
-- Turn 3 shop: only Admiral Blackpowder is offered, and the tutorial does not continue until it is bought.
-- Turn 4 includes a scripted mismatch: one Rigger brings back 1🪙 instead of 1🪵, and Admiral Blackpowder is blocked from landing so it stays on ship.
-- Turn 5 is a scripted boarding tutorial:
-  - Start with 5 pirates already equipped: `1🔨`, `1🪓`, `1🏹`, `1🔫`, and `1🪝`.
-  - Drag the 5 pirates into any front/middle/back arrangement before pressing `Fight!`.
-  - Tap a mini card to inspect that pirate.
-  - Weapons are fixed before boarding; combat does not reassign them.
-  - Tap `Fight!` and watch the autoplay fight.
-- Winning the final tutorial boarding shows the tutorial outro; losing shows the normal game-over screen.
-- After outro, player can start a real game.
-
-No map in tutorial mode.
-
----
 
 ## Streak
 

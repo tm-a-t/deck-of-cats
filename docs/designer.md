@@ -67,7 +67,7 @@ Resource gain, spending, boarding strength, and recruitment should stay legible.
 The first turns should teach the loop cleanly.
 Later turns can become more combinatorial and demanding.
 
-The tutorial and early runs should prioritize:
+Opening runs should prioritize:
 
 - clear island vs ship split;
 - visible resource feedback;
@@ -163,7 +163,7 @@ If the idea is good, can it support more pirates, islands, or encounters later w
 
 - a new pirate that creates a new but readable resource conversion line;
 - an island modifier that changes decision pressure without changing the whole ruleset;
-- a tutorial improvement that reduces confusion in the first three turns;
+- an opening-run improvement that reduces confusion in the first three turns;
 - a boarding-related mechanic that deepens preparation across several rounds.
 
 ## Examples of weak design directions
@@ -208,11 +208,11 @@ Use this section as the checklist for design review.
 - Flag additions that erase the tension between short-term weapons and long-term cannons.
 - Flag shop, map, or pirate changes that make future deckbuilding decisions less meaningful instead of more meaningful.
 
-### Tutorial and onboarding
+### Opening Runs and Onboarding
 
 - Flag any new mechanic that the player would need early but that is not teachable in the current onboarding structure.
 - Flag anything that makes the first five turns noisier or more confusing.
-- Flag tutorial text changes that explain UI instead of explaining decisions and outcomes.
+- Flag onboarding text changes that explain UI instead of explaining decisions and outcomes.
 
 ### Prototype discipline
 

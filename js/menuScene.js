@@ -47,7 +47,6 @@ class MenuScene extends Phaser.Scene {
     });
 
     const links = [
-      { label: 'Tutorial', cb: () => this.startTutorial() },
       { label: 'Costumes', cb: () => this.scene.start('costumes') },
       { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
     ];
@@ -82,28 +81,6 @@ class MenuScene extends Phaser.Scene {
   startGame() {
     this.resetGameScenes();
     initState();
-    this.scene.start('game');
-  }
-
-  startTutorial() {
-    this.resetGameScenes();
-    let tutorialReady = false;
-    try {
-      if (typeof initTutorialState === 'function') {
-        initTutorialState();
-        tutorialReady = true;
-      } else if (typeof window !== 'undefined' && typeof window.initTutorialState === 'function') {
-        window.initTutorialState();
-        tutorialReady = true;
-      }
-    } catch (err) {
-      console.error('Tutorial init failed:', err);
-    }
-
-    if (!tutorialReady) {
-      initState();
-    }
-
     this.scene.start('game');
   }
 
