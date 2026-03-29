@@ -226,7 +226,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Type | Emoji | Effect | Persistence |
 |------|-------|--------|-------------|
-| Weapon gain | `🔨` / `🪓` / `🏹` / `🔫` / `🪝` / `⛓️` / `🗡️` / `🔱` / `⚓` / `🧨` / `🥏` | When a pirate action produces a weapon, it creates that exact weapon. During the same round, the player may assign it to any unarmed pirate from the current hand, including pirates already sent to the island. If skipped, the weapon is lost | Never enters inventory |
+| Weapon gain | `🔨` / `🪓` / `🏹` / `🔫` / `🪝` / `⛓️` / `🗡️` / `🔱` / `⚓` / `🧨` / `🥏` | When a pirate action produces a weapon, it creates that exact weapon. During the same round, the player must assign it to one pirate from the current hand, including pirates already sent to the island. If that pirate already has a weapon, the old weapon is discarded | Never enters inventory |
 | Hammer | 🔨 | Melee weapon; keeps the pirate's attack unchanged and gives **+4 HP** in every boarding while equipped | Stays on that pirate until that pirate leaves the crew |
 | Axe | 🪓 | Melee weapon; each swing hits the whole opposing front row | Stays on that pirate until that pirate leaves the crew |
 | Bow | 🏹 | Ranged weapon; targets the living enemy with the **lowest current HP** in any row | Stays on that pirate until that pirate leaves the crew |

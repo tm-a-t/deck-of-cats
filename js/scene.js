@@ -142,7 +142,6 @@ class GameScene extends Phaser.Scene {
     if (!pirate) return false;
     if (this._sendingToIsland.has(handIdx)) return false;
     if (this._sacrificedIds.has(pirate.id)) return false;
-    if (this.pirateHasWeapon(pirate)) return false;
     return true;
   }
 
@@ -223,15 +222,6 @@ class GameScene extends Phaser.Scene {
     return this.startWeaponAssignmentFlow(queue, opts);
   }
 
-  skipWeaponAssignment() {
-    if (!this.weaponAssignmentActive()) return;
-    const weapon = WEAPON_TYPES[this._weaponAssignFlow.weaponKey];
-    if (weapon) {
-      this.float(this.L.cx, this.endActionY() - 54 * this.L.k, `${weapon.emoji} left behind`, '#ffd54f');
-    }
-    this.advanceWeaponAssignmentFlow();
-  }
-
   assignWeaponToHandPirate(handIdx) {
     const flow = this.currentWeaponAssignment();
     if (!flow) return;
@@ -243,22 +233,20 @@ class GameScene extends Phaser.Scene {
         return;
       }
       if (this._sendingToIsland.has(handIdx)) return;
-      if (this.pirateHasWeapon(pirate)) {
-        this.float(this.L.cx, this.endActionY() - 54 * this.L.k, 'That pirate is already armed', '#ffa726');
-      }
-      return;
-    }
-    if (this.pirateHasWeapon(pirate)) {
-      this.float(this.L.cx, this.endActionY() - 54 * this.L.k, 'That pirate is already armed', '#ffa726');
       return;
     }
 
     const weaponKey = flow.weaponKey;
+    const oldWeaponKey = this.pirateWeaponKey(pirate);
+    const oldWeapon = oldWeaponKey ? WEAPON_TYPES[oldWeaponKey] : null;
     pirate.weaponKey = weaponKey;
     const weapon = WEAPON_TYPES[weaponKey];
     const label = (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate';
     if (weapon) {
-      this.float(this.L.cx, this.endActionY() - 54 * this.L.k, `${label} took ${weapon.emoji}`, '#66bb6a');
+      const text = oldWeapon
+        ? `${label} swapped ${oldWeapon.emoji} for ${weapon.emoji}`
+        : `${label} took ${weapon.emoji}`;
+      this.float(this.L.cx, this.endActionY() - 54 * this.L.k, text, '#66bb6a');
     }
     this.advanceWeaponAssignmentFlow();
   }
@@ -2806,7 +2794,7 @@ class GameScene extends Phaser.Scene {
       return {
         icon: weapon ? weapon.emoji : WEAPON_CATEGORY_EMOJI,
         line1: weapon ? `Assign ${weapon.name}.` : 'Arm a pirate.',
-        line2: 'Pick any unarmed pirate this round',
+        line2: 'Pick any pirate from this round',
       };
     }
 
@@ -3069,7 +3057,6 @@ class GameScene extends Phaser.Scene {
           y: visible.container.y,
           rotation: visible.container.rotation,
           scale: visible.container.scaleX || 1,
-          cardMode: visible.cardMode || 'default',
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
         });
@@ -3084,8 +3071,7 @@ class GameScene extends Phaser.Scene {
           y: view.y,
           rotation: 0,
           scale: 0.5,
-          cardMode: 'battle',
-          slotState: combatFighter.weaponKey ? 'armed' : 'empty',
+          slotState: combatFighter.weaponKey ? 'armed' : 'none',
           slotWeaponKey: combatFighter.weaponKey || null,
         });
         return;
@@ -3098,7 +3084,6 @@ class GameScene extends Phaser.Scene {
         y: placement.y,
         rotation: placement.rotation || 0,
         scale: placement.scale != null ? placement.scale : 1,
-        cardMode: 'default',
         slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
         slotWeaponKey: this.pirateWeaponKey(pirate),
       });
@@ -3125,7 +3110,6 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => {
       if (!this.sys || !this.sys.isActive()) return;
       const built = buildCardTexture(this, card.type, L, {
-        mode: card.cardMode || 'default',
         slotState: card.slotState || 'none',
         slotWeaponKey: card.slotWeaponKey || null,
       });
@@ -3833,7 +3817,6 @@ class GameScene extends Phaser.Scene {
       if (this._sendingToIsland.has(hi)) return;
       const p = G.hand[hi];
       const placement = this.sentCardPlacement(si);
-      const tipKey = `island-${p.id}`;
       const cardView = createPirateCard(this, {
         type: p.type,
         x: placement.x,
@@ -3842,27 +3825,37 @@ class GameScene extends Phaser.Scene {
         scale: placement.scale,
         depth: 12 + si,
         interactive: true,
-        slotState: this.pirateHasWeapon(p) ? 'armed' : 'none',
+        slotState: this.weaponAssignmentActive() && !this.pirateHasWeapon(p)
+          ? 'assign'
+          : (this.pirateHasWeapon(p) ? 'armed' : 'none'),
         slotWeaponKey: this.pirateWeaponKey(p),
         L,
         container: this.ct.island,
       });
-      const showTips = () => this._cardTips && this._cardTips.showForCard(cardView.container, pirateCardEffectTips(p), { key: tipKey });
-      cardView.cardImg.on('pointerover', () => {
-        showTips();
-      });
-      cardView.cardImg.on('pointerout', () => {
-        if (this._cardTips) this._cardTips.hideForKey(tipKey);
-      });
-      cardView.cardImg.on('pointerdown', (ptr) => {
-        if (ptr && ptr.event) ptr.event.stopPropagation();
-        if (!isTouchLikePointer(ptr)) return;
-        if (this._cardTips && this._cardTips.isActiveFor(tipKey)) {
-          this._cardTips.hide();
-          return;
-        }
-        showTips();
-      });
+      if (this.weaponAssignmentActive()) {
+        cardView.cardImg.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          this.assignWeaponToHandPirate(hi);
+        });
+      } else {
+        const tipKey = `island-${p.id}`;
+        const showTips = () => this._cardTips && this._cardTips.showForCard(cardView.container, pirateCardEffectTips(p), { key: tipKey });
+        cardView.cardImg.on('pointerover', () => {
+          showTips();
+        });
+        cardView.cardImg.on('pointerout', () => {
+          if (this._cardTips) this._cardTips.hideForKey(tipKey);
+        });
+        cardView.cardImg.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          if (!isTouchLikePointer(ptr)) return;
+          if (this._cardTips && this._cardTips.isActiveFor(tipKey)) {
+            this._cardTips.hide();
+            return;
+          }
+          showTips();
+        });
+      }
       if (this._sacrificedIds.has(p.id)) {
         cardView.container.setAlpha(0.35);
       }
@@ -3871,22 +3864,10 @@ class GameScene extends Phaser.Scene {
 
   renderPhase() {
     this.clearCt('phase');
-    const L = this.L;
     if (this.weaponAssignmentActive()) {
-      const flow = this.currentWeaponAssignment();
-      const weapon = flow ? WEAPON_TYPES[flow.weaponKey] : null;
-      const title = weapon ? `Choose who gets ${weapon.emoji}` : 'Choose who gets the weapon';
-      const detail = weapon
-        ? `${weapon.name} becomes permanent on one pirate from this round.`
-        : 'Assigned weapons stay on that pirate.';
-      this.addTo('phase', this.add.text(L.cx, L.Y_ISL_LBL + 146 * L.k, title, uiHeadingStyle(L, 28, UI_THEME.colors.paper, {
-        align: 'center',
-      })).setOrigin(0.5, 0.5));
-      this.addTo('phase', this.add.text(L.cx, L.Y_ISL_LBL + 178 * L.k, detail, uiBodyStyle(L, UI_THEME.colors.paper, {
-        align: 'center',
-      })).setOrigin(0.5, 0.5));
       return;
     }
+    const L = this.L;
 
     if (G.phase !== 'removing') return;
     const crew = [...G.allCrew].sort((a, b) => {
@@ -3927,6 +3908,7 @@ class GameScene extends Phaser.Scene {
     this._cardHand.destroy();
     this._handSprites = {};
     const L = this.L;
+    const isWeaponAssignment = this.weaponAssignmentActive();
     const onCardHoverChange = (cardData, hovering) => {
       if (!this._cardTips || !cardData || !cardData.pirate) return;
       const key = `hand-${cardData.handIdx}-${cardData.pirate.id}`;
@@ -3940,34 +3922,10 @@ class GameScene extends Phaser.Scene {
       });
     };
 
-    if (this.weaponAssignmentActive()) {
-      this._cardHand.render({
-        hand: G.hand,
-        sent: [],
-        sendingSet: new Set(),
-        allowInteraction: true,
-        prevPositions,
-        appearFrom,
-        layout: 'row',
-        rowLayout: {
-          y: L.Y_HAND_CENTER - 8 * L.k,
-          maxStep: 150 * L.k,
-        },
-        blockedCard: (pirate, handIdx) => this.pirateHasWeapon(pirate) || !this.canAssignWeaponToHandIndex(handIdx),
-        cardModeForCard: () => 'battle',
-        cardSlotStateForCard: (pirate) => this.pirateHasWeapon(pirate) ? 'armed' : 'empty',
-        cardSlotWeaponKeyForCard: (pirate) => this.pirateWeaponKey(pirate),
-        onCardPointerDown: (handIdx) => this.assignWeaponToHandPirate(handIdx),
-        onCardHoverChange,
-        container: this.ct.hand,
-      });
-      return;
-    }
-
-    const isSending = G.phase === 'sending';
+    const isSending = G.phase === 'sending' && !isWeaponAssignment;
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
-    const allowInteraction = isSending || (isBoarding && combat && combat.mode === 'setup');
+    const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
 
     if (isBoarding && combat) return;
 
@@ -3979,9 +3937,20 @@ class GameScene extends Phaser.Scene {
       allowInteraction,
       prevPositions,
       appearFrom,
-      cardSlotStateForCard: (pirate) => this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+      layout: isWeaponAssignment ? 'row' : undefined,
+      rowLayout: isWeaponAssignment ? {
+        y: L.Y_HAND_CENTER - 8 * L.k,
+        maxStep: 150 * L.k,
+      } : undefined,
+      cardSlotStateForCard: (pirate) => (
+        isWeaponAssignment && !this.pirateHasWeapon(pirate)
+          ? 'assign'
+          : (this.pirateHasWeapon(pirate) ? 'armed' : 'none')
+      ),
       cardSlotWeaponKeyForCard: (pirate) => this.pirateWeaponKey(pirate),
-      onSendToIsland: (idx, fromPos) => this.sendToIsland(idx, fromPos),
+      touchTapPreviewsAction: !isWeaponAssignment,
+      onCardPointerDown: isWeaponAssignment ? (handIdx) => this.assignWeaponToHandPirate(handIdx) : null,
+      onSendToIsland: isSending ? (idx, fromPos) => this.sendToIsland(idx, fromPos) : null,
       onCardHoverChange,
       container: this.ct.hand,
     });
@@ -3989,16 +3958,6 @@ class GameScene extends Phaser.Scene {
 
   renderBtn() {
     this.clearCt('btn');
-    if (this.weaponAssignmentActive()) {
-      const L = this.L;
-      this.mkBtn('btn', this.actionPanelRightX(), this.endActionY(), 'Leave Behind', () => this.skipWeaponAssignment(), {
-        originX: 1,
-        minH: 48 * L.k,
-        minW: 180 * L.k,
-        textPx: 16,
-      });
-      return;
-    }
     const action = this.currentIslandAction();
     if (!action) return;
     const L = this.L;

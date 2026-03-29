@@ -533,7 +533,7 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'weapon-grant',
       `${WEAPON_CATEGORY_EMOJI} Weapon Gain`,
-      'Assign created weapons to any unarmed pirate from this round, even one already sent ashore. Skip them and they vanish.'
+      'Assign each created weapon to one pirate from this round, even one already sent ashore. If that pirate already had a weapon, the old one is thrown away.'
     );
     addWeaponTip(weaponKey);
   };
