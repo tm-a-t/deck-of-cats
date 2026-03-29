@@ -58,6 +58,10 @@ function cardIslandBandMetrics(ch, k) {
   };
 }
 
+function cardBandCenterOffsetY(ch, band, scale = 1) {
+  return (-ch / 2 + band.height / 2) * scale;
+}
+
 function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolution, band) {
   if (scene.textures.exists(bandTexKey)) return;
   const bandCanvas = document.createElement('canvas');
@@ -289,6 +293,7 @@ function createCardBandOverlay(scene, opts) {
   if (opts.depth != null) bandImg.setDepth(opts.depth);
   bandImg.setScale(imageScale * 0.985).setAlpha(0);
   bandImg.y += settleOffset;
+  if (opts.bandTint != null) bandImg.setTint(uiColorInt(opts.bandTint));
 
   if (opts.parentContainer) {
     opts.parentContainer.add([bandImg, accent]);
@@ -633,9 +638,11 @@ class CardHand {
     this._hoverIdx = -1;
     this._dragIdx = -1;
     this._dragGhost = null;
+    this._dragIslandOverlay = null;
     this._spreadTweens = null;
     this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
+    this._canReleaseDragCard = null;
     this._hoverSpreadEnabled = true;
   }
 
@@ -655,12 +662,14 @@ class CardHand {
       if (c.container) c.container.destroy(true);
     });
     this._killSpreadTweens();
+    this._clearDragIslandOverlay();
     this.cards = [];
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
     this._hoverIdx = -1;
     this._dragIdx = -1;
     this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
+    this._canReleaseDragCard = null;
     this._hoverSpreadEnabled = true;
   }
 
@@ -695,6 +704,7 @@ class CardHand {
     const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
     this._onCardHoverChange = opts.onCardHoverChange || null;
+    this._canReleaseDragCard = typeof opts.canReleaseDragCard === 'function' ? opts.canReleaseDragCard : null;
     this._hoverSpreadEnabled = opts.hoverSpread !== false;
 
     const visible = [];
@@ -929,6 +939,67 @@ class CardHand {
     destroyCardBandOverlay(this.scene, overlay);
   }
 
+  _dragIslandOverlayPosition(pointer, L) {
+    const cardH = Math.round(CARD.H * L.k);
+    const band = cardIslandBandMetrics(cardH, L.k);
+    return {
+      x: pointer.x,
+      y: pointer.y + cardBandCenterOffsetY(cardH, band, CARD.DRAG_SCALE),
+    };
+  }
+
+  _canReleaseDraggedCard(dragCard, pointer, L) {
+    if (!dragCard || !pointer || pointer.y >= L.Y_HAND_CENTER) return false;
+    if (dragCard.isBlocked) return false;
+    if (!this._canReleaseDragCard) return true;
+    return !!this._canReleaseDragCard(dragCard.handIdx, dragCard.pirate, pointer);
+  }
+
+  _updateDragIslandOverlay(dragCard, pointer, L) {
+    const shouldShow = this._canReleaseDraggedCard(dragCard, pointer, L);
+    if (!shouldShow) {
+      this._clearDragIslandOverlay();
+      return;
+    }
+
+    const pos = this._dragIslandOverlayPosition(pointer, L);
+    if (!this._dragIslandOverlay) {
+      this._dragIslandOverlay = createCardBandOverlay(this.scene, {
+        type: dragCard.pirate.type,
+        band: 'island',
+        x: pos.x,
+        y: pos.y,
+        scale: CARD.DRAG_SCALE,
+        color: '#66bb6a',
+        bandTint: '#d9f0d1',
+        depth: 81,
+        L,
+      });
+      this._dragIslandOverlay.accent.setAlpha(1);
+      this._dragIslandOverlay.accent.setScale(
+        this._dragIslandOverlay.visualScale * 1.02,
+        this._dragIslandOverlay.visualScale * 1.02
+      );
+      this._dragIslandOverlay.bandImg.setAlpha(1);
+      this._dragIslandOverlay.bandImg.setScale(
+        this._dragIslandOverlay.imageScale * 1.02,
+        this._dragIslandOverlay.imageScale * 1.02
+      );
+      return;
+    }
+
+    this._dragIslandOverlay.x = pos.x;
+    this._dragIslandOverlay.y = pos.y;
+    this._dragIslandOverlay.accent.setPosition(pos.x, pos.y);
+    this._dragIslandOverlay.bandImg.setPosition(pos.x, pos.y);
+  }
+
+  _clearDragIslandOverlay() {
+    if (!this._dragIslandOverlay) return;
+    destroyCardBandOverlay(this.scene, this._dragIslandOverlay);
+    this._dragIslandOverlay = null;
+  }
+
   _setupDrag(cardData, onSendToIsland, L) {
     const scene = this.scene;
     const cardImg = cardData.cardImg;
@@ -956,7 +1027,10 @@ class CardHand {
       const ghost = scene.add.image(pointer.x, pointer.y, dragCard.cardImg.texture.key);
       ghost.setOrigin(0.5, 0.5);
       ghost.setDepth(80);
-      ghost.setScale(CARD.DRAG_SCALE);
+      ghost.setDisplaySize(
+        dragCard.cardImg.displayWidth * CARD.DRAG_SCALE,
+        dragCard.cardImg.displayHeight * CARD.DRAG_SCALE
+      );
       ghost.setRotation(0);
       this._dragGhost = ghost;
     };
@@ -970,6 +1044,7 @@ class CardHand {
         this._dragGhost.destroy();
         this._dragGhost = null;
       }
+      this._clearDragIslandOverlay();
       dragCard.container.setAlpha(dragCard.isBlocked ? 0.7 : 1);
       dragCard.container.setDepth(10 + dragCard.slotIndex);
     };
@@ -1018,6 +1093,7 @@ class CardHand {
         const dx = pointer.x - (pointer.prevPosition ? pointer.prevPosition.x : pointer.x);
         this._dragGhost.setRotation(Phaser.Math.Clamp(dx * 0.01, -0.15, 0.15));
       }
+      this._updateDragIslandOverlay(dragCard, pointer, L);
       const dist = Phaser.Math.Distance.Between(
         dragCard.slot.x, dragCard.slot.y, pointer.x, pointer.y
       );

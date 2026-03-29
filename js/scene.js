@@ -506,6 +506,25 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  canPreviewIslandDrop(handIdx) {
+    if (G.phase !== 'sending') return false;
+    if (handIdx == null) return false;
+    if (G.sent.includes(handIdx) || this._sendingToIsland.has(handIdx)) return false;
+    if (G.sent.length >= this.maxSend()) return false;
+
+    const pirate = G.hand && G.hand[handIdx];
+    if (!pirate) return false;
+    const def = TYPES[pirate.type];
+    if (!def || !def.canIsland || !def.island) return false;
+
+    if (def.island.convert) {
+      const c = def.island.convert;
+      if ((G.res[c.cRes] || 0) < c.cN) return false;
+    }
+
+    return true;
+  }
+
   sendToIsland(idx, fromPos) {
     if (G.phase !== 'sending') return;
     if (G.sent.includes(idx) || G.sent.length >= this.maxSend()) return;
@@ -4101,6 +4120,7 @@ class GameScene extends Phaser.Scene {
       touchTapPreviewsAction: !isWeaponAssignment,
       onCardPointerDown: isWeaponAssignment ? (handIdx) => this.assignWeaponToHandPirate(handIdx) : null,
       onSendToIsland: isSending ? (idx, fromPos) => this.sendToIsland(idx, fromPos) : null,
+      canReleaseDragCard: isSending ? (handIdx) => this.canPreviewIslandDrop(handIdx) : null,
       onCardHoverChange,
       container: this.ct.hand,
     });
