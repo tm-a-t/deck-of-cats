@@ -549,17 +549,17 @@ class GameScene extends Phaser.Scene {
         }
 
         this.renderAll();
-        const spendDuration = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
-        this.queueWeaponGrant(result.weaponGrant);
-        const gainStartDelay = spendDuration > 0 ? spendDuration : 0;
-
-        const baseWait = isSacrifice ? 1400 : (spendDuration !== false ? 1000 : 800);
-        const waitMs = baseWait + (spendDuration || 0);
-        const followupDelay = this._pendingWeaponQueue.length > 0 ? gainStartDelay : waitMs;
-        this.time.delayedCall(followupDelay, () => {
-          if (G.phase !== 'sending') return;
-          const sendingDone = this._sendingToIsland.size === 0;
-          if (sendingDone && this._pendingWeaponQueue.length > 0) {
+        const effect = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
+        const baseWait = isSacrifice ? 1400 : (effect.spendDuration !== false ? 1000 : 800);
+        const waitMs = baseWait + (effect.spendDuration || 0);
+        this.scheduleEffectFollowup({
+          gainStartDelay: effect.gainStartDelay,
+          fallbackDelay: waitMs,
+          hasPendingWeapons: this._pendingWeaponQueue.length > 0,
+          shouldRun: () => G.phase === 'sending',
+          tryStartAssignment: () => {
+            const sendingDone = this._sendingToIsland.size === 0;
+            if (!sendingDone || this._pendingWeaponQueue.length === 0) return false;
             const resume = () => {
               if (G.phase !== 'sending') return;
               if (this._pendingEndSending) this.endSending();
@@ -568,13 +568,16 @@ class GameScene extends Phaser.Scene {
             if (!this.maybeStartPendingWeaponAssignment({ onComplete: resume })) {
               resume();
             }
-            return;
-          }
-          if (sendingDone && this._pendingEndSending) {
-            this.endSending();
-            return;
-          }
-          this.renderAll();
+            return true;
+          },
+          fallback: () => {
+            const sendingDone = this._sendingToIsland.size === 0;
+            if (sendingDone && this._pendingEndSending) {
+              this.endSending();
+              return;
+            }
+            this.renderAll();
+          },
         });
       },
     });
@@ -698,6 +701,80 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  playResolvedEffect(opts = {}) {
+    const showOverlay = typeof opts.showOverlay === 'function' ? opts.showOverlay : null;
+    const effectText = opts.effectText || null;
+    const spendItems = Array.isArray(opts.spendItems) ? opts.spendItems : [];
+    const gainItems = Array.isArray(opts.gainItems) ? opts.gainItems : [];
+    const weaponGrant = opts.weaponGrant || null;
+    const weaponTextPos = opts.weaponTextPos || null;
+    const fromX = opts.fromX != null ? opts.fromX : this.L.cx;
+    const fromY = opts.fromY != null ? opts.fromY : this.L.Y_HAND;
+
+    if (showOverlay && opts.overlayColor) showOverlay(opts.overlayColor);
+    if (effectText && effectText.text) {
+      this.effectText(effectText.x, effectText.y, effectText.text, effectText.color, effectText.hold);
+    }
+
+    let spendDuration = 0;
+    if (spendItems.length) {
+      spendDuration = this.animateResourceSpend(fromX, fromY, spendItems);
+    }
+    const gainStartDelay = spendDuration > 0 ? spendDuration : 0;
+
+    const startGain = () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      this.animateResourceGain(fromX, fromY, gainItems);
+    };
+    if (gainItems.length) {
+      if (gainStartDelay > 0) {
+        this.time.delayedCall(gainStartDelay, startGain);
+      } else {
+        startGain();
+      }
+    }
+
+    const showWeaponGrantText = () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      this.effectText(
+        weaponTextPos.x,
+        weaponTextPos.y,
+        '+' + weaponGrantText(weaponGrant),
+        weaponTextPos.color || '#66bb6a',
+        weaponTextPos.hold
+      );
+    };
+    if (weaponGrant && weaponTextPos) {
+      if (gainStartDelay > 0) {
+        this.time.delayedCall(gainStartDelay, showWeaponGrantText);
+      } else {
+        showWeaponGrantText();
+      }
+    }
+
+    return {
+      spendDuration,
+      gainStartDelay,
+      queuedWeapons: this.queueWeaponGrant(weaponGrant),
+    };
+  }
+
+  scheduleEffectFollowup(opts = {}) {
+    const gainStartDelay = Math.max(0, opts.gainStartDelay || 0);
+    const fallbackDelay = Math.max(0, opts.fallbackDelay || 0);
+    const hasPendingWeapons = !!opts.hasPendingWeapons;
+    const delay = hasPendingWeapons ? gainStartDelay : fallbackDelay;
+
+    this.time.delayedCall(delay, () => {
+      if (!this.sys || !this.sys.isActive()) return;
+      if (typeof opts.shouldRun === 'function' && !opts.shouldRun()) return;
+      if (hasPendingWeapons && typeof opts.tryStartAssignment === 'function' && opts.tryStartAssignment() === true) {
+        return;
+      }
+      if (typeof opts.fallback === 'function') opts.fallback();
+    });
+  }
+
   showIslandResult(pirate, sentSlot, r, x, y) {
     const L = this.L;
     const sentPlacement = this.sentCardPlacement(sentSlot);
@@ -712,7 +789,7 @@ class GameScene extends Phaser.Scene {
         this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
         this.effectText(x, fy, 'No one to recall', '#ffa726', 400);
       }
-      return false;
+      return { spendDuration: false, gainStartDelay: 0, queuedWeapons: 0 };
     }
     if (r.exileSent) {
       if (r.ok) {
@@ -722,24 +799,28 @@ class GameScene extends Phaser.Scene {
         this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
         this.effectText(x, fy, 'No one to exile', '#ffa726', 400);
       }
-      return false;
+      return { spendDuration: false, gainStartDelay: 0, queuedWeapons: 0 };
     }
 
+    let overlayColor = '#66bb6a';
+    let effectText = null;
+    let spendItems = [];
     let gainItems = [];
-    let spendDuration = 0;
+    let weaponTextPos = null;
     if (r.convert) {
-      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
-      this.effectText(x, fy,
-        r.cN + RES_EMOJI[r.cRes] + ' → ' + r.n + RES_EMOJI[r.res], '#66bb6a');
-      spendDuration = this.animateResourceSpend(x, y, [{ emoji: RES_EMOJI[r.cRes], count: r.cN }]);
+      effectText = {
+        x,
+        y: fy,
+        text: r.cN + RES_EMOJI[r.cRes] + ' → ' + r.n + RES_EMOJI[r.res],
+        color: '#66bb6a',
+      };
+      spendItems = [{ emoji: RES_EMOJI[r.cRes], count: r.cN }];
       gainItems = [{ emoji: RES_EMOJI[r.res], count: r.n }];
     } else if (r.weaponGrant) {
-      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
-      this.effectText(x, fy, '+' + weaponGrantText(r.weaponGrant), '#66bb6a');
+      weaponTextPos = { x, y: fy, color: '#66bb6a' };
     } else if (r.items) {
-      this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
       const msg = r.items.map(i => '+' + i.n + RES_EMOJI[i.res]).join(' ');
-      this.effectText(x, fy, msg, '#66bb6a');
+      effectText = { x, y: fy, text: msg, color: '#66bb6a' };
       gainItems = r.items.map(i => ({ emoji: RES_EMOJI[i.res], count: i.n }));
     } else {
       const em = RES_EMOJI[r.res] || '🗺️';
@@ -747,27 +828,28 @@ class GameScene extends Phaser.Scene {
       gainItems = [{ emoji: em, count: r.n }];
       if (r.bonusEnthusiasm) gainItems.push({ emoji: '☠️', count: r.bonusEnthusiasm });
       if (r.ok) {
-        this.showIslandEffectOverlay(pirate.type, sentSlot, '#66bb6a');
-        this.effectText(x, fy, '+' + r.n + em + eBonus, '#66bb6a');
+        overlayColor = '#66bb6a';
+        effectText = { x, y: fy, text: '+' + r.n + em + eBonus, color: '#66bb6a' };
       } else if (r.res === 'map') {
-        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffd54f');
-        this.effectText(x, fy, '+🗺️!' + eBonus, '#ffd54f', 400);
+        overlayColor = '#ffd54f';
+        effectText = { x, y: fy, text: '+🗺️!' + eBonus, color: '#ffd54f', hold: 400 };
       } else {
-        this.showIslandEffectOverlay(pirate.type, sentSlot, '#ffa726');
-        this.effectText(x, fy, 'Miss +' + r.n + em + eBonus, '#ffa726', 400);
+        overlayColor = '#ffa726';
+        effectText = { x, y: fy, text: 'Miss +' + r.n + em + eBonus, color: '#ffa726', hold: 400 };
       }
     }
 
-    if (gainItems.length) {
-      if (spendDuration > 0) {
-        this.time.delayedCall(spendDuration, () => {
-          this.animateResourceGain(x, y, gainItems);
-        });
-      } else {
-        this.animateResourceGain(x, y, gainItems);
-      }
-    }
-    return spendDuration;
+    return this.playResolvedEffect({
+      fromX: x,
+      fromY: y,
+      showOverlay: (color) => this.showIslandEffectOverlay(pirate.type, sentSlot, color),
+      overlayColor,
+      effectText,
+      spendItems,
+      gainItems,
+      weaponGrant: r.weaponGrant || null,
+      weaponTextPos,
+    });
   }
 
   endSending() {
@@ -881,53 +963,45 @@ class GameScene extends Phaser.Scene {
 
     const r = this.resolveShip(pirate);
     const s = def.ship;
-    this._cardHand.showShipEffectOverlay(hi, r.ok ? shipEffectSuccessColor : shipEffectFailColor);
-    let spendDuration = 0;
+    const spendItems = [];
+    const gainItems = [];
     if (r.ok) {
-      const spendItems = [];
       if (s.costs) {
         for (const c of s.costs) spendItems.push({ emoji: c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res], count: c.n });
       } else if (s.cRes && s.cN > 0) {
         spendItems.push({ emoji: RES_EMOJI[s.cRes], count: s.cN });
       }
-      if (spendItems.length) spendDuration = this.animateResourceSpend(x, y, spendItems);
-
-      const gainItems = [];
       if (r.pN > 0) {
         gainItems.push({ emoji: r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes], count: r.pN });
       }
       if (r.extraEnthusiasm) gainItems.push({ emoji: '☠️', count: r.extraEnthusiasm });
-      if (gainItems.length) {
-        if (spendDuration > 0) {
-          this.time.delayedCall(spendDuration, () => {
-            this.animateResourceGain(x, y, gainItems);
-          });
-        } else {
-          this.animateResourceGain(x, y, gainItems);
-        }
-      }
-      if (r.weaponGrant) {
-        const detail = '+' + weaponGrantText(r.weaponGrant);
-        const delay = spendDuration > 0 ? spendDuration : 0;
-        this.time.delayedCall(delay, () => {
-          if (!this.sys || !this.sys.isActive()) return;
-          this.effectText(x, y - 116 * L.k, detail, '#66bb6a');
-        });
-      }
     }
-    this.queueWeaponGrant(r.weaponGrant);
-    const gainStartDelay = spendDuration > 0 ? spendDuration : 0;
-    const shipWait = 1000 + spendDuration;
-    if (this._pendingWeaponQueue.length > 0) {
-      this.time.delayedCall(gainStartDelay, () => {
-        if (!this.sys || !this.sys.isActive()) return;
+    const effect = this.playResolvedEffect({
+      fromX: x,
+      fromY: y,
+      showOverlay: (color) => this._cardHand.showShipEffectOverlay(hi, color),
+      overlayColor: r.ok ? shipEffectSuccessColor : shipEffectFailColor,
+      spendItems,
+      gainItems,
+      weaponGrant: r.ok ? r.weaponGrant : null,
+      weaponTextPos: (r.ok && r.weaponGrant)
+        ? { x, y: y - 116 * L.k, color: '#66bb6a' }
+        : null,
+    });
+    const shipWait = 1000 + effect.spendDuration;
+    this.scheduleEffectFollowup({
+      gainStartDelay: effect.gainStartDelay,
+      fallbackDelay: shipWait,
+      hasPendingWeapons: this._pendingWeaponQueue.length > 0,
+      tryStartAssignment: () => {
+        if (this._pendingWeaponQueue.length === 0) return false;
         if (!this.maybeStartPendingWeaponAssignment({ onComplete: () => resolveAndContinue(0) })) {
           resolveAndContinue(0);
         }
-      });
-      return;
-    }
-    resolveAndContinue(shipWait);
+        return true;
+      },
+      fallback: () => resolveAndContinue(0),
+    });
   }
 
   completeRemoval(pirateId) {
