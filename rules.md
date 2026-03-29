@@ -68,7 +68,8 @@ If the selected node is an island:
 If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
 - Boarding starts with a **setup step**:
-  - All player pirates are shown immediately as compact mini cards.
+  - The normal hand is drawn first.
+  - After that, each player card animates from the hand into its compact battle position.
   - Initial setup places melee pirates in the front row and ranged pirates in the middle row.
   - Player may drag those mini cards to rearrange pirates arbitrarily across the front, middle, and back rows, including left-to-right order within a row.
   - Player may inspect a pirate by hovering/tapping that mini card.
@@ -106,6 +107,7 @@ If the selected node is an enemy ship:
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
   - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
+  - When a player pirate dies in boarding, that pirate does **not** stay on the table; its full card animates back into the hand area.
   - Boarding formations use up to 3 centered rows per side: front, middle, and back.
   - Any number of fighters may start in a given row.
   - The current front row is always the frontmost living row.
@@ -136,10 +138,12 @@ If the selected node is an enemy ship:
 - **Victory**:
   - Equipped weapons persist.
   - No combat casualties persist.
-  - Hand discarded, draw up to 5 new pirates, proceed to map phase.
+  - After combat ends, the game shows a short result state with `Won Combat` and a `Continue` button.
+  - On `Continue`, every card from the player's hand is discarded together, then the player draws up to 5 new pirates and proceeds to map phase.
   - If this was the final map node → **Victory screen**.
 - **Defeat**:
-  - **Game Over** screen.
+  - After combat ends, the game shows `Lost Combat` with a `Game Over` button.
+  - Pressing that button opens the **Game Over** screen.
 - **Battle Test**:
   - Always starts with 5 pirates so the row-rearranging setup is fully available.
   - Some pirates begin pre-equipped so the weapon behaviors are visible immediately.

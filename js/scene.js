@@ -54,6 +54,7 @@ class GameScene extends Phaser.Scene {
     this._combatSetupPopupDismissTimer = null;
     this._weaponAssignFlow = null;
     this._pendingWeaponQueue = [];
+    this._boardingIntroTimer = null;
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
     this._cardTips = new CardTooltipController(this, { depth: 165 });
@@ -1063,6 +1064,10 @@ class GameScene extends Phaser.Scene {
   clearCombatState() {
     this.clearCombatTimers();
     this.clearCombatSetupPopupDismiss();
+    if (this._boardingIntroTimer && !this._boardingIntroTimer.hasDispatched) {
+      this._boardingIntroTimer.remove(false);
+    }
+    this._boardingIntroTimer = null;
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
     this._combatEnemyViews = {};
@@ -1073,6 +1078,76 @@ class GameScene extends Phaser.Scene {
 
   currentBoardingNumber() {
     return Math.max(1, (G.enemyShip && G.enemyShip.encounterNo) || G.boardingCount || 1);
+  }
+
+  combatReturnedPirateIds(combat = G.combat) {
+    return Array.isArray(combat && combat.returnedPirateIds) ? combat.returnedPirateIds : [];
+  }
+
+  combatReturnedPirateSet(combat = G.combat) {
+    return new Set(this.combatReturnedPirateIds(combat));
+  }
+
+  queueCombatPirateReturn(fighter, fromPoint = null, combat = G.combat) {
+    if (!combat || !fighter || fighter.side !== 'player' || fighter.pirateId == null) return false;
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId);
+    if (!pirate) return false;
+    if (!Array.isArray(combat.returnedPirateIds)) combat.returnedPirateIds = [];
+    if (combat.returnedPirateIds.includes(pirate.id)) return false;
+    combat.returnedPirateIds.push(pirate.id);
+    const start = fromPoint || this.combatWorldPoint(fighter);
+    this.queueHandAppear([pirate], {
+      from: start,
+      delay: 0,
+      stagger: 0,
+      duration: 420,
+      startScale: 0.5,
+    });
+    return true;
+  }
+
+  startBoardingSetupIntroIfNeeded() {
+    const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
+    if (!combat || combat.mode !== 'intro' || combat.introStarted) return;
+    const handCards = Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.slice() : [];
+    if (!handCards.length) return;
+
+    const playerRows = this.combatSetupRows('player', combat);
+    const playerSlots = this.combatSetupSlotMap('player', playerRows, this.combatFormationVisuals('player'));
+    let endAt = 0;
+    combat.introStarted = true;
+
+    handCards.forEach((cardData, idx) => {
+      const pirate = cardData && cardData.pirate;
+      const target = pirate ? playerSlots[pirate.id] : null;
+      if (!pirate || !target) return;
+      endAt = Math.max(endAt, this.animateCardGhost({
+        type: pirate.type,
+        x: cardData.container.x,
+        y: cardData.container.y,
+        rotation: cardData.container.rotation,
+        scale: cardData.container.scaleX || 1,
+        slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+        slotWeaponKey: this.pirateWeaponKey(pirate),
+      }, target, {
+        delay: 140 + idx * 70,
+        duration: 520,
+        endScale: 0.5,
+        endAlpha: 0.24,
+        endRotation: 0,
+        arcHeight: 110 * this.L.k,
+        arcSpreadX: 64 * this.L.k,
+      }));
+    });
+
+    this._boardingIntroTimer = this.time.delayedCall(endAt + 60, () => {
+      this._boardingIntroTimer = null;
+      if (!this.sys || !this.sys.isActive()) return;
+      if (G.combat !== combat || combat.mode !== 'intro') return;
+      combat.mode = 'setup';
+      combat.introStarted = false;
+      this.renderAll();
+    });
   }
 
   combatSetupRowTotal() {
@@ -1420,6 +1495,8 @@ class GameScene extends Phaser.Scene {
     if (G.combat && Array.isArray(G.combat.enemyParty)) {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedPirateId')) G.combat.inspectedPirateId = null;
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedEnemyId')) G.combat.inspectedEnemyId = null;
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'returnedPirateIds')) G.combat.returnedPirateIds = [];
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'introStarted')) G.combat.introStarted = false;
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
       }
@@ -1436,7 +1513,7 @@ class GameScene extends Phaser.Scene {
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
     G.combat = {
-      mode: 'setup',
+      mode: 'intro',
       inspectedPirateId: null,
       inspectedEnemyId: null,
       enemyName: encounter.name,
@@ -1450,6 +1527,8 @@ class GameScene extends Phaser.Scene {
       playerFighters: null,
       enemyFighters: null,
       result: null,
+      returnedPirateIds: [],
+      introStarted: false,
     };
     return G.combat;
   }
@@ -2070,9 +2149,11 @@ class GameScene extends Phaser.Scene {
 
   defeatCombatFighter(fighter, deathPositions) {
     if (!fighter || !fighter.alive) return false;
+    const deathPoint = this.combatWorldPoint(fighter);
     fighter.alive = false;
     fighter.incomingUntil = 0;
-    if (Array.isArray(deathPositions)) deathPositions.push(this.combatWorldPoint(fighter));
+    if (fighter.side === 'player') this.queueCombatPirateReturn(fighter, deathPoint);
+    if (Array.isArray(deathPositions)) deathPositions.push(deathPoint);
     return true;
   }
 
@@ -2393,27 +2474,19 @@ class GameScene extends Phaser.Scene {
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
-    G.busy = true;
+    G.busy = false;
     this.renderAll();
-
-    if (result === 'win') {
-      this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '⚔️ Victory!', '#66bb6a');
-      this.time.delayedCall(900, () => this.handleBoardingVictory());
-      return;
-    }
-
-    this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '💀 Defeated…', '#ff5252');
-    this.time.delayedCall(1200, () => {
-      G.busy = false;
-      this.renderAll();
-      this.showGameOver();
-    });
   }
 
-  handleBoardingVictory() {
+  continueFromResolvedBoarding() {
     if (!this.sys || !this.sys.isActive()) return;
+    const combat = G.combat;
+    if (!combat || combat.mode !== 'resolved') return;
+    if (combat.result !== 'win') {
+      this.showGameOver();
+      return;
+    }
     if (this.isBattleTest()) {
-      G.busy = false;
       this.renderAll();
       this.showBattleTestOverlay('win');
       return;
@@ -2799,6 +2872,13 @@ class GameScene extends Phaser.Scene {
 
     if (G.phase === 'boarding' && G.enemyShip) {
       const combat = this.ensureBoardingCombat();
+      if (combat && combat.mode === 'intro') {
+        return {
+          icon: '🏴‍☠️',
+          line1: 'Boarding party spotted.',
+          line2: 'Crew moving into formation',
+        };
+      }
       if (combat && combat.mode === 'fighting') {
         return {
           icon: '⚔️',
@@ -2868,7 +2948,14 @@ class GameScene extends Phaser.Scene {
     if (this.weaponAssignmentActive()) return null;
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
-      if (!combat || combat.mode !== 'setup') return null;
+      if (!combat || combat.mode === 'intro' || combat.mode === 'fighting') return null;
+      if (combat.mode === 'resolved') {
+        return {
+          label: combat.result === 'win' ? 'Continue' : 'Game Over',
+          onClick: () => this.continueFromResolvedBoarding(),
+          variant: 'continue',
+        };
+      }
       return { label: 'Fight!', onClick: () => this.resolveBoarding(), variant: 'continue' };
     }
     if (G.phase === 'sending') {
@@ -3560,7 +3647,7 @@ class GameScene extends Phaser.Scene {
     this._combatPlayerViews = {};
     this._combatNodes = {};
 
-    if (!combat || combat.mode === 'setup') {
+    if (!combat || combat.mode === 'intro' || combat.mode === 'setup') {
       const enemies = (combat && combat.enemyParty) || [];
       const enemyVisuals = this.combatFormationVisuals('enemy');
       const playerVisuals = this.combatFormationVisuals('player');
@@ -3669,6 +3756,9 @@ class GameScene extends Phaser.Scene {
           detail: weapon ? `Permanent ${weapon.summary || weapon.name}` : 'No permanent weapon. Front-row melee.',
           weaponEmoji: weapon ? weapon.emoji : '—',
         }, combat);
+      }
+      if (combat && combat.mode === 'intro') {
+        this.startBoardingSetupIntroIfNeeded();
       }
       return;
     }
@@ -3925,8 +4015,9 @@ class GameScene extends Phaser.Scene {
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
     const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
+    const returnedPirateIds = isBoarding ? this.combatReturnedPirateSet(combat) : new Set();
 
-    if (isBoarding && combat) return;
+    if (isBoarding && combat && combat.mode !== 'intro' && combat.mode !== 'resolved') return;
 
     this._cardHand.render({
       hand: G.hand,
@@ -3936,6 +4027,13 @@ class GameScene extends Phaser.Scene {
       allowInteraction,
       prevPositions,
       appearFrom,
+      hiddenCard: (_pirate, handIdx) => {
+        if (!isBoarding || !combat) return false;
+        const pirate = G.hand && G.hand[handIdx];
+        if (!pirate) return false;
+        if (combat.mode === 'resolved') return false;
+        return returnedPirateIds.size > 0 && !returnedPirateIds.has(pirate.id);
+      },
       layout: isWeaponAssignment ? 'row' : undefined,
       rowLayout: isWeaponAssignment ? {
         y: L.Y_HAND_CENTER - 8 * L.k,
