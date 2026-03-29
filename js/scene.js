@@ -315,7 +315,11 @@ class GameScene extends Phaser.Scene {
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
-      G.enemyShip = { strength: node.strength, encounterNo: G.boardingCount };
+      G.enemyShip = {
+        strength: node.strength,
+        encounterNo: G.boardingCount,
+        encounter: node.encounter || null,
+      };
     } else {
       G.phase = 'sending';
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
@@ -1480,39 +1484,80 @@ class GameScene extends Phaser.Scene {
     return merged;
   }
 
-  combatEligibleEnemyArchetypes(boardingNo) {
-    return COMBAT.enemyArchetypes
-      .filter((archetype) => boardingNo >= Math.max(1, Math.floor(Number(archetype.unlockAt) || 1)));
+  combatArchetypeByKey(key) {
+    return COMBAT.enemyArchetypes.find((a) => a.key === key) || null;
   }
 
-  combatEncounterArchetypes(boardingNo, count) {
+  combatEligibleEnemyArchetypes(boardingNo) {
+    return COMBAT.enemyArchetypes
+      .filter((archetype) => {
+        if (archetype.tier === 'weak') return true;
+        return boardingNo >= Math.max(1, Math.floor(Number(archetype.unlockAt) || 1));
+      });
+  }
+
+  combatEncounterArchetypesFromBlueprint(blueprint, boardingNo) {
+    if (!blueprint) return this.combatEncounterArchetypesFallback(boardingNo);
+    const archetypeMap = new Map(COMBAT.enemyArchetypes.map((a) => [a.key, a]));
+    const main = archetypeMap.get(blueprint.mainKey);
+    if (!main) return this.combatEncounterArchetypesFallback(boardingNo);
+
+    const archetypes = [main];
+    (blueprint.supportKeys || []).forEach((key) => {
+      const arch = archetypeMap.get(key);
+      if (arch) archetypes.push(arch);
+    });
+    while (archetypes.length < (blueprint.totalCount || 3)) archetypes.push(main);
+    return Phaser.Utils.Array.Shuffle(archetypes);
+  }
+
+  combatEncounterArchetypesFallback(boardingNo) {
     const eligible = this.combatEligibleEnemyArchetypes(boardingNo);
+    const strong = eligible.filter((a) => a.tier === 'strong');
+    const weak = eligible.filter((a) => a.tier === 'weak');
+    const count = Phaser.Math.Clamp(2 + Math.floor((boardingNo + 1) / 2), COMBAT.enemyCountMin, COMBAT.enemyCountMax);
     if (!eligible.length || count <= 0) return [];
 
-    const primary = Phaser.Utils.Array.GetRandom(eligible);
-    const supportPool = eligible.filter((archetype) => archetype.key !== primary.key);
-    let supportCount = 0;
-    if (supportPool.length > 0) {
-      if (count >= 5 && boardingNo >= 6 && Phaser.Math.Between(0, 99) < 38) {
-        supportCount = 2;
-      } else if (count >= 3 && Phaser.Math.Between(0, 99) < 68) {
-        supportCount = 1;
-      }
+    const primary = strong.length ? Phaser.Utils.Array.GetRandom(strong) : Phaser.Utils.Array.GetRandom(eligible);
+    let strongCount, weakCount;
+    if (boardingNo <= 2) {
+      strongCount = Math.min(boardingNo, 2);
+      weakCount = count - strongCount;
+    } else if (boardingNo <= 4) {
+      strongCount = Math.min(count - 1, 1 + Math.floor(boardingNo / 2));
+      weakCount = count - strongCount;
+    } else {
+      strongCount = count;
+      weakCount = 0;
     }
-    supportCount = Math.min(supportCount, count - 1);
-    const primaryCount = Math.max(1, count - supportCount);
-    const archetypes = Array.from({ length: primaryCount }, () => primary);
-    if (supportCount > 0 && supportPool.length) {
-      const secondary = Phaser.Utils.Array.GetRandom(supportPool);
-      for (let i = 0; i < supportCount; i++) archetypes.push(secondary);
+    const archetypes = [primary];
+    for (let i = 1; i < strongCount; i++) {
+      const pool = strong.filter((a) => a.key !== primary.key);
+      archetypes.push(pool.length ? Phaser.Utils.Array.GetRandom(pool) : primary);
+    }
+    for (let i = 0; i < weakCount; i++) {
+      archetypes.push(weak.length ? Phaser.Utils.Array.GetRandom(weak) : Phaser.Utils.Array.GetRandom(eligible));
     }
     return Phaser.Utils.Array.Shuffle(archetypes);
   }
 
+  currentEncounterBlueprint() {
+    if (!G.map || !G.map.currentNodeId) return null;
+    const node = mapNodeById(G.map, G.map.currentNodeId);
+    return (node && node.encounter) || null;
+  }
+
+  encounterBlueprintForLayer(layerIdx) {
+    if (!G.map || !Array.isArray(G.map.layers)) return null;
+    const layer = G.map.layers[layerIdx];
+    if (!layer || layer.length !== 1 || layer[0].type !== 'ship') return null;
+    return layer[0].encounter || null;
+  }
+
   generateCombatEncounter() {
     const boardingNo = this.currentBoardingNumber();
-    const count = Phaser.Math.Clamp(2 + Math.floor((boardingNo + 1) / 2), COMBAT.enemyCountMin, COMBAT.enemyCountMax);
-    const archetypes = this.combatEncounterArchetypes(boardingNo, count);
+    const blueprint = this.currentEncounterBlueprint();
+    const archetypes = this.combatEncounterArchetypesFromBlueprint(blueprint, boardingNo);
     const enemies = [];
 
     archetypes.forEach((archetype, i) => {
@@ -1520,8 +1565,12 @@ class GameScene extends Phaser.Scene {
       enemies.push(this.buildCombatEnemyMember(archetype, `${archetype.key}_${boardingNo}_${i}`));
     });
 
+    const mainArch = blueprint ? this.combatArchetypeByKey(blueprint.mainKey) : null;
+    const encounterDesc = blueprint ? blueprint.encounterDesc : (mainArch ? mainArch.encounterDesc : null);
+
     return {
       name: `Boarding Party ${boardingNo}`,
+      encounterDesc: encounterDesc || null,
       enemies,
       rows: this.combatRandomEnemySetupRows(enemies),
     };
@@ -1552,6 +1601,7 @@ class GameScene extends Phaser.Scene {
       inspectedPirateId: null,
       inspectedEnemyId: null,
       enemyName: encounter.name,
+      encounterDesc: encounter.encounterDesc || null,
       enemyParty: encounter.enemies,
       playerSetupRows: this.combatDefaultPlayerSetupRows(),
       enemySetupRows: this.combatNormalizeSetupRows(
@@ -2608,6 +2658,7 @@ class GameScene extends Phaser.Scene {
       boardingCount: G.boardingCount,
       enemyShip: G.enemyShip ? { ...G.enemyShip } : null,
       enemyName: combat.enemyName || null,
+      encounterDesc: combat.encounterDesc || null,
       enemyParty: combat.enemyParty.filter(Boolean).map((enemy) => ({ ...enemy })),
       playerSetupRows: this.cloneBattleTestSetupRows(this.combatSetupRows('player', combat)),
       enemySetupRows: this.cloneBattleTestSetupRows(this.combatSetupRows('enemy', combat)),
@@ -2747,7 +2798,7 @@ class GameScene extends Phaser.Scene {
     this.addTo('gameover', this.add.text(L.cx, L.H * 0.28, 'Victory!',
       uiHeadingStyle(L, 44, UI_THEME.colors.paper)).setOrigin(0.5, 0));
     this.txt('gameover', L.cx, L.H * 0.36,
-      'You conquered all 10 enemy ships!',
+      `You conquered all ${TOTAL_BATTLES} enemy ships!`,
       { color: UI_THEME.colors.mutedPaper });
     this.txt('gameover', L.cx, L.H * 0.42,
       `${G.round} rounds  ·  Crew of ${G.allCrew.length}`,
@@ -2902,18 +2953,17 @@ class GameScene extends Phaser.Scene {
       if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
       const turnsAway = li - currentLayer;
       const boardingNo = this.mapBoardingNumberForLayer(li);
-      const enemyCount = Phaser.Math.Clamp(
+      const bp = this.encounterBlueprintForLayer(li);
+      const desc = bp && bp.encounterDesc ? bp.encounterDesc : null;
+      const totalCount = bp ? bp.totalCount : Phaser.Math.Clamp(
         2 + Math.floor((boardingNo + 1) / 2),
         COMBAT.enemyCountMin,
         COMBAT.enemyCountMax
       );
-      const roster = this.combatEligibleEnemyArchetypes(boardingNo)
-        .map((archetype) => archetype.emoji)
-        .join(' ');
       return {
         icon: '🏴‍☠️',
-        line1: `Boarding #${boardingNo} in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: `${enemyCount} foe${enemyCount === 1 ? '' : 's'}${roster ? `  ·  ${roster}` : ''}`,
+        line1: `In ${turnsAway} turn${turnsAway === 1 ? '' : 's'}  ·  ${totalCount} foe${totalCount === 1 ? '' : 's'}`,
+        line2: desc || `Battle #${boardingNo}`,
       };
     }
 

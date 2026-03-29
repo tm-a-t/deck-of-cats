@@ -90,19 +90,27 @@ If the selected node is an enemy ship:
     - `⚓ Anchor`: melee, deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row.
     - `🧨 Bomb Lance`: melee, deals **8 damage** but only strikes **once** per boarding.
     - `🥏 Chakram`: ranged, deals **2 damage** on its first shot and gains **+1 damage** after each shot in that boarding.
-- Enemy boarding parties are generated independently of the map node's legacy `strength` value:
-  - Encounters use 3–5 enemies drawn from this roster:
-    - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
-    - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
-    - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
-    - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
-    - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
-  - A random boarding usually centers on **one main enemy type**, with at most a small side group from one other type.
+- Enemy boarding parties are generated from encounter blueprints stored on each map ship node:
+  - **Enemy roster** has two tiers:
+    - **Weak (swarm/support):**
+      - `🐀 Bilge Rat`: melee, 6 HP, 2 damage, fast but fragile.
+      - `🔔 Cabin Boy`: ranged, 5 HP, 2 damage, targets the backmost pirate.
+    - **Strong:**
+      - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
+      - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
+      - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
+      - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
+      - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
+  - **Difficulty scaling by boarding number:**
+    - Boardings 1–2 (early): 3 enemies total; only 1–2 strong enemies, the rest are weak swarm fillers. Only `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber` are eligible as strong picks.
+    - Boardings 3–4 (mid): 3–4 enemies; more strong enemies with a few weak supports. `🪤 Netter` unlocks at boarding **3**.
+    - Boardings 5–6 (late): 4–5 enemies; almost entirely strong enemies. `🔥 Flint Duelist` unlocks at boarding **5**.
+  - Each encounter centers on **one main strong enemy type** with optional support from a second type and/or weak fillers.
   - Each enemy party is distributed across up to 3 rows with a variable split.
   - Enemy rows are always filled from the **front backward**; random setup never leaves an empty front or middle row with enemies behind it.
   - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.
-  - Difficulty scales by **boarding count** through party size and unlocked enemy types; enemy stats stay at their printed values.
-  - Early boardings use `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber`; `🪤 Netter` unlocks starting at boarding **4**, and `🔥 Flint Duelist` unlocks starting at boarding **6**.
+  - Enemy stats stay at their printed values; difficulty rises through party size, composition, and unlocked types.
+  - A short description of the main enemy type (e.g. "Heavy shields ahead") appears in the goal display under "Enemy in X turns" so the player can prepare.
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
   - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
@@ -149,36 +157,35 @@ If the selected node is an enemy ship:
 
 ## Map Generation
 
-Total: **50 layers**, yielding **10 enemy ships** total.
+Total: **30 layers**, yielding **6 enemy ships** total.
 
-### Early Game (layers 0–14): 3 segments
+### Early Game (layers 0–9): 2 segments
 
-Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 layers.
+Each segment = 4 island layers + 1 battle layer = 5 layers. 2 segments = 10 layers.
 
 - Segment 1 (layers 0–3) is a single mandatory path with no route choice before the first battle.
-- Segments 2 and 3 use 3 parallel non-intersecting paths.
+- Segment 2 uses 3 parallel non-intersecting paths.
 - All available paths converge at the battle node at the end of each segment.
 - After a battle, paths fan back out to 3 for the next segment.
 
 **Island restrictions in early game:**
 - Layers 0–8: no Treasure Island, no Skull Island, no Siren Island.
-- Layers 9–14: no Siren Island (Treasure and Skull are allowed).
+- Layers 9: no Siren Island (Treasure and Skull are allowed).
 
-**Boarding difficulty note:**
-- Ship nodes still appear at the same layers.
-- The old map `strength` values are currently ignored by boarding resolution.
-- Prototype boarding difficulty scales with **boarding count** through party size and unlocked enemy types.
+**Encounter blueprints:**
+- Each ship node stores a pre-generated encounter blueprint determining the main enemy type, support composition, and total count.
+- The blueprint also provides a short description shown in the goal display before the battle.
 
-### Mid/Late Game (layers 15–49)
+### Mid/Late Game (layers 10–29)
 
 - Non-ship layers have 2–3 island nodes (random).
-- Ship nodes at layers 19, 24, 29, 34, 39, 44, 49 (every 5th layer).
-- Siren Island can appear starting at layer 15 (50% chance per layer of being included in the island pool).
+- Ship nodes every 5th layer (layers 14, 19, 24, 29).
+- Siren Island can appear starting at layer 10 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
 
 ### Victory Condition
 
-Win the boarding at the final layer (layer 49, ship #10).
+Win the boarding at the final layer (layer 29, ship #6).
 
 ---
 
