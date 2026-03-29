@@ -533,7 +533,7 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'weapon-grant',
       'Weapon Gain',
-      'Gain weapon to assign this round.'
+      'Gain a weapon and assign it to one pirate this round.'
     );
     addWeaponTip(weaponKey);
   };
