@@ -3963,6 +3963,20 @@ class GameScene extends Phaser.Scene {
     }
     const L = this.L;
 
+    if (G.phase === 'boarding') {
+      const combat = this.ensureBoardingCombat();
+      if (combat && combat.mode === 'resolved') {
+        const won = combat.result === 'win';
+        const resultText = this.add.text(
+          L.cx,
+          this.islandContinueY() - 44 * L.k,
+          won ? 'Won Combat' : 'Lost Combat',
+          uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
+        ).setOrigin(0.5, 0.5);
+        this.addTo('phase', resultText);
+      }
+    }
+
     if (G.phase !== 'removing') return;
     const crew = [...G.allCrew].sort((a, b) => {
       const ca = TYPES[a.type].cost ?? -1;
