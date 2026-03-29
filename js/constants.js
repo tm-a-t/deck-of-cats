@@ -533,15 +533,9 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'weapon-grant',
       'Weapon Gain',
-      'Gain weapon(s) to assign this round.'
+      'Gain weapon to assign this round.'
     );
     addWeaponTip(weaponKey);
-  };
-
-  const addChanceTip = () => {
-    if (!island || island.chance == null || !island.res || !island.amt) return;
-    const label = pirateTooltipTitle(pirateIslandDescSuffix(island), 'Chance');
-    addTip(`chance-${typeKey}`, label, 'Chance-based island effect.');
   };
 
   if (island) {
@@ -565,7 +559,6 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
       if (gain.weapon) addWeaponGrantTips(gain.weapon);
     }
     if (island.bonusEnthusiasm) addEnthusiasmTip();
-    addChanceTip();
   }
 
   if (ship) {
