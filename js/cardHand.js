@@ -634,6 +634,7 @@ class CardHand {
     this._dragIdx = -1;
     this._dragGhost = null;
     this._spreadTweens = null;
+    this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
   }
 
@@ -657,6 +658,7 @@ class CardHand {
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
     this._hoverIdx = -1;
     this._dragIdx = -1;
+    this._shipEffectPrepared = false;
     this._onCardHoverChange = null;
   }
 
@@ -862,14 +864,23 @@ class CardHand {
   }
 
   prepareForShipEffect() {
+    if (this._shipEffectPrepared) return;
+    this._shipEffectPrepared = true;
     const tweens = this.scene && this.scene.tweens;
     this._killSpreadTweens();
+    this._hoverIdx = -1;
+    const shipEffectY = this.scene.L.Y_HAND_CENTER + Math.round(CARD.H * this.scene.L.k * 0.05);
     for (const card of this.cards) {
+      const rowSlot = {
+        x: card.slot.x,
+        y: shipEffectY,
+      };
+      card.shipEffectSlot = rowSlot;
       if (tweens) tweens.killTweensOf(card.container);
       card.hovered = false;
       card.dragging = false;
-      card.container.setPosition(card.slot.x, card.slot.y);
-      card.container.setRotation(card.slot.rotation);
+      card.container.setPosition(rowSlot.x, rowSlot.y);
+      card.container.setRotation(0);
       card.container.setScale(1);
       card.container.setAlpha(card.isBlocked ? 0.7 : 1);
       card.container.setDepth(10 + card.slotIndex);
@@ -1065,16 +1076,18 @@ class CardHand {
     this._spreadTweens = [];
 
     for (const c of this.cards) {
-      let targetX = c.slot.x;
+      const baseSlot = this._shipEffectPrepared && c.shipEffectSlot ? c.shipEffectSlot : c.slot;
+      let targetX = baseSlot.x;
       if (activeSlotIndex >= 0 && c.slotIndex !== activeSlotIndex) {
         const diff = c.slotIndex - activeSlotIndex;
         const dir = Math.sign(diff);
         const dist = Math.abs(diff);
-        targetX = c.slot.x + dir * spread / dist;
+        targetX = baseSlot.x + dir * spread / dist;
       }
       this._spreadTweens.push(scene.tweens.add({
         targets: c.container,
         x: targetX,
+        y: baseSlot.y,
         duration,
         ease,
       }));

@@ -551,10 +551,12 @@ class GameScene extends Phaser.Scene {
         this.renderAll();
         const spendDuration = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
         this.queueWeaponGrant(result.weaponGrant);
+        const gainStartDelay = spendDuration > 0 ? spendDuration : 0;
 
         const baseWait = isSacrifice ? 1400 : (spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (spendDuration || 0);
-        this.time.delayedCall(waitMs, () => {
+        const followupDelay = this._pendingWeaponQueue.length > 0 ? gainStartDelay : waitMs;
+        this.time.delayedCall(followupDelay, () => {
           if (G.phase !== 'sending') return;
           const sendingDone = this._sendingToIsland.size === 0;
           if (sendingDone && this._pendingWeaponQueue.length > 0) {
@@ -821,9 +823,10 @@ class GameScene extends Phaser.Scene {
           : -1;
         this._cardHand.hideShipEffectOverlay(hi);
         this._cardHand.highlightShipCard(hi, false);
-        this._cardHand.clearShipSpread();
         if (nextHi >= 0) {
-          this._cardHand.highlightShipCard(nextHi, true, { spread: false });
+          this._cardHand.highlightShipCard(nextHi, true);
+        } else {
+          this._cardHand.clearShipSpread();
         }
         this.time.delayedCall(250, () => {
           this.renderTop();
@@ -913,9 +916,10 @@ class GameScene extends Phaser.Scene {
       }
     }
     this.queueWeaponGrant(r.weaponGrant);
+    const gainStartDelay = spendDuration > 0 ? spendDuration : 0;
     const shipWait = 1000 + spendDuration;
     if (this._pendingWeaponQueue.length > 0) {
-      this.time.delayedCall(shipWait, () => {
+      this.time.delayedCall(gainStartDelay, () => {
         if (!this.sys || !this.sys.isActive()) return;
         if (!this.maybeStartPendingWeaponAssignment({ onComplete: () => resolveAndContinue(0) })) {
           resolveAndContinue(0);
