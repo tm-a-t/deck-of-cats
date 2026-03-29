@@ -514,7 +514,7 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'enthusiasm',
       '☠️ Enthusiasm',
-      'Used to buy new pirates in the shop. It resets at the end of the round.'
+      'Shop currency for this round.'
     );
   };
 
@@ -524,7 +524,7 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       `weapon-${weaponKey}`,
       `${weapon.emoji} ${weapon.name}`,
-      `${weapon.summary} Stays on that pirate until it leaves your crew.`
+      weapon.summary
     );
   };
 
@@ -532,22 +532,16 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     if (!WEAPON_TYPES[weaponKey]) return;
     addTip(
       'weapon-grant',
-      `${WEAPON_CATEGORY_EMOJI} Weapon Gain`,
-      'Assign each created weapon to one pirate from this round, even one already sent ashore. If that pirate already had a weapon, the old one is thrown away.'
+      'Weapon Gain',
+      'Gain weapon(s) to assign this round.'
     );
     addWeaponTip(weaponKey);
   };
 
   const addChanceTip = () => {
     if (!island || island.chance == null || !island.res || !island.amt) return;
-    const chancePct = Math.round((Number(island.chance) || 0) * 100);
-    const resultText = pirateDescCount(island.res, island.amt);
-    const label = pirateTooltipTitle(pirateIslandDescSuffix(island), 'Chance Roll');
-    let body = `${chancePct}% to gain ${resultText}. On a miss, you usually get 1 random other resource instead.`;
-    if (island.res === 'gold') {
-      body += ' A 🗺️ auto-spends for +30% gold chance, up to 95%.';
-    }
-    addTip(`chance-${typeKey}`, label, body);
+    const label = pirateTooltipTitle(pirateIslandDescSuffix(island), 'Chance');
+    addTip(`chance-${typeKey}`, label, 'Chance-based island effect.');
   };
 
   if (island) {
@@ -555,14 +549,14 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
       addTip(
         'recall',
         'Recall',
-        `Returns the last ${island.recall} other pirate${island.recall === 1 ? '' : 's'} sent to this island back to your hand.`
+        `Return the last ${island.recall} sent pirate${island.recall === 1 ? '' : 's'} to your hand.`
       );
     }
     if (island.exileSent) {
       addTip(
         'exile-sent',
         'Exile Previous',
-        'Permanently removes the pirate sent just before this one from your crew. Does nothing if no pirate was sent first.'
+        'Exile the pirate sent right before this one.'
       );
     }
     if (island.guaranteed) {
@@ -581,14 +575,14 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
       addTip(
         'remove-self',
         'Get Lost',
-        'After this ship action, this pirate is permanently removed from your crew.'
+        'After this ship action, exile this pirate.'
       );
     }
     if (ship.removeFromDeck) {
       addTip(
         'remove-from-deck',
         'Exile Pirate',
-        'After paying the cost, permanently exile one pirate from your crew that is not in the current hand.'
+        'Pay the cost, then exile one crew pirate not in your hand.'
       );
     }
     if (ship.prodWeapon) addWeaponGrantTips(ship.prodWeapon);
