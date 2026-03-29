@@ -1544,8 +1544,7 @@ class GameScene extends Phaser.Scene {
   combatPirateStats(pirate, combat = G.combat) {
     const weaponKey = this.combatPirateWeaponKey(pirate, combat);
     const weapon = this.combatWeaponByKey(weaponKey);
-    const def = (pirate && TYPES[pirate.type]) || {};
-    const baseDamage = Number(def.str != null ? def.str : COMBAT.pirateDamage) || 0;
+    const baseDamage = Number(COMBAT.pirateDamage) || 0;
     return {
       hp: COMBAT.pirateHp + (weapon && weapon.hpBonus ? weapon.hpBonus : 0),
       baseDamage,
@@ -2769,7 +2768,7 @@ class GameScene extends Phaser.Scene {
   }
 
   currentStrengthState() {
-    const crew = G.hand.reduce((sum, pirate) => sum + (TYPES[pirate.type].str || 0), 0);
+    const crew = (G.hand || []).filter(Boolean).length * (Number(COMBAT.pirateDamage) || 0);
     return {
       crew,
       bonus: 0,

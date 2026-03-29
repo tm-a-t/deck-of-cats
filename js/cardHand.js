@@ -93,7 +93,7 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
   const def = TYPES[typeKey];
   const islandDesc = pirateIslandDesc(def);
   const shipDesc = pirateShipDesc(def);
-  const textHash = cardTextHash(`${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
+  const textHash = cardTextHash(`${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
   const islandBand = cardIslandBandMetrics(ch, k);
   const islandBandTexKey = texKey + '_islandband';
@@ -133,20 +133,10 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
       '',
       UI_THEME.fonts.headingMinPx
     );
-    const statFs = fitCanvasFontSize(
-      ctx,
-      `⚔️${def.str || 0}`,
-      maxTxtW,
-      Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
-      UI_THEME.fonts.heading,
-      '',
-      UI_THEME.fonts.headingMinPx
-    );
     const islandFs = fitCanvasFontSize(ctx, islandDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
     const shipFs = fitCanvasFontSize(ctx, shipDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
     const topTextY = Math.round(7 * k);
     const nameY = Math.round(123 * k);
-    const statY = Math.round(143 * k);
     const bottomTextY = shipBand.top + Math.round(8 * k);
 
     ctx.textAlign = 'center';
@@ -200,9 +190,6 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
 
     ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
     ctx.fillText(def.name, cw / 2, nameY);
-
-    ctx.font = `${statFs}px ${UI_THEME.fonts.heading}`;
-    ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
 
     ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
     ctx.fillText(shipDesc, cw / 2, bottomTextY);

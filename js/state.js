@@ -56,14 +56,6 @@ function buildBattleTestCrew(count) {
   const crew = [];
   const fighterCount = Math.max(3, Number(count) || 0);
   for (let i = 0; i < fighterCount; i++) crew.push(mkP(randomBattleTestType()));
-
-  if (!crew.some(pirate => (TYPES[pirate.type] && TYPES[pirate.type].str) > 0)) {
-    const damagingPool = battleTestTypePool().filter(type => (TYPES[type] && TYPES[type].str) > 0);
-    if (damagingPool.length) {
-      crew[0] = mkP(Phaser.Utils.Array.GetRandom(damagingPool));
-    }
-  }
-
   return crew;
 }
 

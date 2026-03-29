@@ -39,29 +39,14 @@ class MenuScene extends Phaser.Scene {
       minH: 66 * L.k,
     });
 
-    const battleTestY = playY + 76 * L.k;
-    this.mkBtn(L.cx, battleTestY, 'Battle Test', () => this.startBattleTest(), {
-      minW: 200 * L.k,
-      minH: 58 * L.k,
-      textPx: 20,
-    });
-
     const links = [
+      { label: 'Battle Test', cb: () => this.startBattleTest() },
       { label: 'Costumes', cb: () => this.scene.start('costumes') },
       { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
     ];
-    const linksY = battleTestY + 62 * L.k;
+    const linksY = playY + 78 * L.k;
     links.forEach((item, idx) => {
-      const link = this.add.text(L.cx, linksY + idx * 28 * L.k, item.label, uiBodyStyle(L, UI_THEME.colors.cocoa, {
-        fontStyle: idx === 0 ? 'bold' : 'normal',
-      })).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      link.on('pointerover', () => link.setColor(UI_THEME.colors.ink));
-      link.on('pointerout', () => link.setColor(UI_THEME.colors.cocoa));
-      link.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        item.cb();
-      });
-      this.root.add(link);
+      this.mkTextBtn(L.cx, linksY + idx * 28 * L.k, item.label, item.cb);
     });
 
     const streak = getStreak();
@@ -117,5 +102,27 @@ class MenuScene extends Phaser.Scene {
     });
     this.root.add(btn);
     return btn;
+  }
+
+  mkTextBtn(x, y, label, cb, opts = {}) {
+    const style = Object.assign(
+      {},
+      uiBodyStyle(this.L, opts.color || UI_THEME.colors.cocoa, {
+        fontStyle: opts.fontStyle || 'normal',
+      }),
+      opts.textStyle || {}
+    );
+    const text = this.add.text(x, y, label, style)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    const hoverColor = opts.hoverColor || UI_THEME.colors.ink;
+    text.on('pointerover', () => text.setColor(hoverColor));
+    text.on('pointerout', () => text.setColor(opts.color || UI_THEME.colors.cocoa));
+    text.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      cb();
+    });
+    this.root.add(text);
+    return text;
   }
 }

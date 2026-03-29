@@ -110,7 +110,6 @@ class ShopScene extends Phaser.Scene {
       `Featured: ${def.name}`,
       `Island: ${islandDesc}`,
       `Ship: ${shipDesc}`,
-      `Power: ${(def.str || 0)}⚔️`,
       `Cost: ☠️${def.cost}`,
     ];
 

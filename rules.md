@@ -74,8 +74,8 @@ If the selected node is an enemy ship:
   - Player may inspect a pirate by hovering/tapping that mini card.
   - Weapons are **not** assigned here; each pirate uses their permanently equipped weapon, if any.
 - Pirate combat stats in this prototype:
-  - Damage = the pirate's printed ⚔️.
-  - For the current prototype pass, **every pirate has 3⚔️**.
+  - Pirate cards do not print a strength stat.
+  - Every pirate uses **3 base damage** before weapon modifiers.
   - HP = 9 for every pirate.
   - Attack speed = one shared base speed for all pirates.
   - Pirate actions can equip these permanent weapons before boarding:
@@ -255,49 +255,49 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 ### Starters
 
-| Name | ⚔️ | Island | Ship |
-|------|-----|--------|------|
-| Rigger | 3 | 1🪵 (90%) | 4🪵 → 2☠️ |
-| Ballaster | 3 | 1🪨 (90%) | 4🪨 → 2☠️ |
-| Armsman | 3 | → 🔨 | — |
+| Name | Island | Ship |
+|------|--------|------|
+| Rigger | 1🪵 (90%) | 4🪵 → 2☠️ |
+| Ballaster | 1🪨 (90%) | 4🪨 → 2☠️ |
+| Armsman | → 🔨 | — |
 
 ### Tier 1: Early Upgrades (cost 2–5)
 
-| Name | ☠️ | ⚔️ | Island | Ship |
-|------|-----|-----|--------|------|
-| Brute | 2 | 3 | → 🔨 | 1🪨 → 3☠️ |
-| Whittler | 2 | 3 | → 2☠️ | 1🪵 → 🥏 |
-| Corsair | 2 | 3 | → 🪓🪓 | → 2☠️ |
-| Herald | 2 | 3 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 3 | 1🪨 (90%) | → 🔨+1☠️ |
-| Carpenter | 3 | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
-| Stonemason | 3 | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
-| Privateer | 3 | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
-| Raider | 4 | 3 | → 🪓🪓 | 💀 get lost |
-| Bosun | 5 | 3 | Can't land | → 3☠️ |
-| Cutthroat | 5 | 3 | → 1☠️ | 2🪙 → exile pirate |
-| Profiteer | 5 | 3 | 1🪙 → 2🪙 | 💀 get lost |
+| Name | ☠️ | Island | Ship |
+|------|-----|--------|------|
+| Brute | 2 | → 🔨 | 1🪨 → 3☠️ |
+| Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
+| Corsair | 2 | → 🪓🪓 | → 2☠️ |
+| Herald | 2 | → 3☠️ | — (no ship action) |
+| Deckhand | 2 | 1🪨 (90%) | → 🔨+1☠️ |
+| Carpenter | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
+| Stonemason | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
+| Privateer | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
+| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
+| Raider | 4 | → 🪓🪓 | 💀 get lost |
+| Bosun | 5 | Can't land | → 3☠️ |
+| Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
+| Profiteer | 5 | 1🪙 → 2🪙 | 💀 get lost |
 
 ### Tier 2: Mid-Game (cost 6–10)
 
-| Name | ☠️ | ⚔️ | Island | Ship |
-|------|-----|-----|--------|------|
-| Marooner | 6 | 3 | Exile previous pirate on island | → 🗡️ |
-| Drifter | 6 | 3 | 2🪵 (90%) | 💀 get lost |
-| Trader | 7 | 3 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
-| Woodsman | 7 | 3 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
-| Prospector | 7 | 3 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 3 | 1🪙 (45%) | 1🪙 → 5☠️ |
-| Explorer | 9 | 3 | 1🪙 (65%) | 1🪙 → 6☠️ |
-| Quartermaster | 10 | 3 | Recall 1 pirate from island | → 2☠️ |
+| Name | ☠️ | Island | Ship |
+|------|-----|--------|------|
+| Marooner | 6 | Exile previous pirate on island | → 🗡️ |
+| Drifter | 6 | 2🪵 (90%) | 💀 get lost |
+| Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
+| Woodsman | 7 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
+| Prospector | 7 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
+| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 5☠️ |
+| Explorer | 9 | 1🪙 (65%) | 1🪙 → 6☠️ |
+| Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
 
 ### Tier 3: Late-Game (cost 13)
 
-| Name | ☠️ | ⚔️ | Island | Ship |
-|------|-----|-----|--------|------|
-| Master Rigger | 13 | 3 | 2🪵 (90%) | 2🪵 → 🪝🪝+4☠️ |
-| Master Ballaster | 13 | 3 | 2🪨 (90%) | 2🪨 → 🔫🔫+4☠️ |
+| Name | ☠️ | Island | Ship |
+|------|-----|--------|------|
+| Master Rigger | 13 | 2🪵 (90%) | 2🪵 → 🪝🪝+4☠️ |
+| Master Ballaster | 13 | 2🪨 (90%) | 2🪨 → 🔫🔫+4☠️ |
 
 ### Special Abilities Detail
 

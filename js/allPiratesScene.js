@@ -19,12 +19,15 @@ class AllPiratesScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(BG_COLOR);
     this.L = computeLayout(this.scale.width, this.scale.height);
 
-    this.root = this.add.container(0, 0);
+    this.uiLayer = this.add.container(0, 0).setDepth(10);
+    this.contentLayer = this.add.container(0, 0).setDepth(11);
+    this._cardTips = new CardTooltipController(this, { depth: 80 });
+    this._contentMaskSource = null;
     this._scrollY = 0;
     this._contentH = 0;
 
-    this._buildList();
-    this._setupScroll();
+    this.renderGallery();
+    this.setupScroll();
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
@@ -33,123 +36,243 @@ class AllPiratesScene extends Phaser.Scene {
     this.scale.on('resize', this._onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this.contentLayer) this.contentLayer.clearMask(true);
+      if (this._contentMaskSource) {
+        this._contentMaskSource.destroy();
+        this._contentMaskSource = null;
+      }
+      if (this._cardTips) this._cardTips.destroy();
     });
   }
 
-  _buildList() {
+  renderGallery() {
     const L = this.L;
-    const fs = L.fsPx(22);
+    const scrollArea = this.computeScrollArea();
+    const allKeys = Object.keys(TYPES).filter((key) => TYPES[key]);
 
-    const title = this.add.text(L.cx, 36 * L.k, 'All Pirates', {
-      fontFamily: 'monospace', fontSize: fs,
-      color: '#d7c08f',
-    }).setOrigin(0.5);
-    this.root.add(title);
+    this.uiLayer.removeAll(true);
+    this.contentLayer.removeAll(true);
+    if (this.contentLayer) this.contentLayer.clearMask(true);
+    if (this._contentMaskSource) {
+      this._contentMaskSource.destroy();
+      this._contentMaskSource = null;
+    }
 
-    this._mkBtn(L.cx, 76 * L.k, '← Menu', () => this.scene.start('menu'));
-
-    const allKeys = Object.keys(TYPES);
-
-    const cardW = Math.min(L.W - 40 * L.k, 700 * L.k);
-    const cardLeft = (L.W - cardW) / 2;
-    const sprSc = Math.max(3, Math.round(8 * L.k));
-    const sprSize = CATS_PX * sprSc;
-    const cardPadX = 16 * L.k;
-    const cardPadY = 14 * L.k;
-    const cardGap = 10 * L.k;
-
-    let y = 116 * L.k;
-
-    for (const key of allKeys) {
-      const def = TYPES[key];
-      if (!def) continue;
-
-      const textX = cardLeft + cardPadX + sprSize + 16 * L.k;
-      const textW = cardW - cardPadX * 2 - sprSize - 16 * L.k;
-
-      const lines = this._pirateLines(def);
-      const tmpTxt = this.add.text(0, -9999, def.name + '\n' + lines.join('\n'), {
-        fontFamily: 'monospace', fontSize: fs,
-        lineSpacing: 4 * L.k, wordWrap: { width: textW },
+    this._scrollArea = scrollArea;
+    if (this._cardTips) {
+      this._cardTips.setBoundsRect({
+        left: 12 * L.k,
+        top: 18 * L.k,
+        right: L.W - 12 * L.k,
+        bottom: L.H - 12 * L.k,
       });
-      const textH = tmpTxt.height;
-      tmpTxt.destroy();
-
-      const cardH = Math.max(sprSize + cardPadY * 2, textH + cardPadY * 2);
-
-
-      const sprX = cardLeft + cardPadX + sprSize / 2;
-      const sprY = y + cardPadY + sprSize / 2;
-      const spr = addCatSprite(this, sprX, sprY, key);
-      spr.setScale(sprSc);
-      this.root.add(spr);
-
-      const nameTxt = this.add.text(textX, y + cardPadY, def.name, {
-        fontFamily: 'monospace', fontSize: fs, color: '#d7c08f',
-      }).setOrigin(0, 0);
-      this.root.add(nameTxt);
-
-      const infoTxt = this.add.text(textX, y + cardPadY + nameTxt.height + 4 * L.k, lines.join('\n'), {
-        fontFamily: 'monospace', fontSize: fs, color: '#b0b8c8',
-        lineSpacing: 4 * L.k, wordWrap: { width: textW },
-      }).setOrigin(0, 0);
-      this.root.add(infoTxt);
-
-      y += cardH + cardGap;
+      this._cardTips.hide();
     }
 
-    this._contentH = y + 40 * L.k;
-  }
+    const title = this.add.text(L.cx, 34 * L.k, 'All Pirates', uiHeadingStyle(L, 44, UI_THEME.colors.mutedPaper))
+      .setOrigin(0.5, 0);
+    this.uiLayer.add(title);
 
-  _pirateLines(def) {
-    const lines = [];
-    if (def.canIsland) {
-      lines.push('🏝️ ' + pirateIslandDesc(def));
-    } else {
-      lines.push('🏝️ ' + pirateIslandDesc(def, { cantLandText: 'Can\'t land' }));
+    const back = this.mkTextBtn(28 * L.k, 36 * L.k, '← Menu', () => this.scene.start('menu'), {
+      color: UI_THEME.colors.mutedPaper,
+      hoverColor: UI_THEME.colors.paper,
+      originX: 0,
+      originY: 0,
+    });
+    this.uiLayer.add(back);
+
+    const divider = this.add.graphics();
+    divider.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.outline), 0.65);
+    divider.lineBetween(20 * L.k, scrollArea.y - 16 * L.k, L.W - 20 * L.k, scrollArea.y - 16 * L.k);
+    this.uiLayer.add(divider);
+
+    const maskShape = this.make.graphics({ add: false });
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(scrollArea.x, scrollArea.y, scrollArea.w, scrollArea.h);
+    this._contentMaskSource = maskShape;
+    this.contentLayer.setMask(maskShape.createGeometryMask());
+
+    if (allKeys.length === 0) {
+      const empty = this.add.text(
+        L.cx,
+        scrollArea.h / 2,
+        'No pirates found',
+        uiBodyStyle(L, UI_THEME.colors.paper, { align: 'center' })
+      ).setOrigin(0.5);
+      this.contentLayer.add(empty);
+      this._contentH = scrollArea.h;
+      this.applyScroll(0);
+      return;
     }
-    lines.push('⛵ ' + pirateShipDesc(def));
-    lines.push('⚔️ ' + (def.str || 0));
-    if (def.cost !== null) lines.push('☠️ ' + def.cost);
-    return lines;
-  }
 
-  _setupScroll() {
-    const L = this.L;
-    const maxScroll = Math.max(0, this._contentH - L.H);
+    const layout = this.computeGridLayout(allKeys.length);
+    allKeys.forEach((key, idx) => {
+      const pos = this.gridCardPos(idx, layout);
+      const tips = pirateCardEffectTips(key);
+      const tipKey = `all-pirates-${key}-${idx}`;
+      const card = createPirateCard(this, {
+        type: key,
+        x: pos.x,
+        y: pos.y,
+        L,
+        container: this.contentLayer,
+        depth: 10 + idx,
+        scale: layout.cardScale,
+        interactive: true,
+      });
+      const showTips = () => this._cardTips && this._cardTips.showForCard(card.container, tips, { key: tipKey });
 
-    this.input.on('wheel', (_ptr, _go, _dx, dy) => {
-      this._scrollY = Phaser.Math.Clamp(this._scrollY + dy, 0, maxScroll);
-      this.root.y = -this._scrollY;
+      card.cardImg.on('pointerover', () => {
+        this.tweens.add({
+          targets: card.container,
+          scaleX: layout.cardScale * 1.03,
+          scaleY: layout.cardScale * 1.03,
+          duration: 120,
+          ease: 'Sine.easeOut',
+        });
+        showTips();
+      });
+      card.cardImg.on('pointerout', () => {
+        this.tweens.add({
+          targets: card.container,
+          scaleX: layout.cardScale,
+          scaleY: layout.cardScale,
+          duration: 120,
+          ease: 'Sine.easeOut',
+        });
+        if (this._cardTips) this._cardTips.hideForKey(tipKey);
+      });
+      card.cardImg.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        if (!isTouchLikePointer(ptr)) return;
+        if (this._cardTips && this._cardTips.isActiveFor(tipKey)) {
+          this._cardTips.hide();
+          return;
+        }
+        showTips();
+      });
     });
 
+    this._contentH = layout.contentH;
+    this.applyScroll(0);
+  }
+
+  computeScrollArea() {
+    const L = this.L;
+    const top = 114 * L.k;
+    const bottomPad = 20 * L.k;
+    return {
+      x: 0,
+      y: top,
+      w: L.W,
+      h: Math.max(120 * L.k, L.H - top - bottomPad),
+    };
+  }
+
+  computeGridLayout(count) {
+    const L = this.L;
+    const area = this._scrollArea;
+    const sidePad = 20 * L.k;
+    const gapX = 16 * L.k;
+    const gapY = 24 * L.k;
+    const topPad = 6 * L.k;
+    const bottomPad = 28 * L.k;
+    const minScale = 0.72;
+    const usableW = area.w - sidePad * 2;
+    const maxFitCols = Math.max(
+      1,
+      Math.floor((usableW + gapX) / (CARD.W * L.k * minScale + gapX))
+    );
+    const cols = Math.max(1, Math.min(count, maxFitCols, 8));
+    const cardScale = Phaser.Math.Clamp(
+      (usableW - gapX * Math.max(0, cols - 1)) / Math.max(1, cols * CARD.W * L.k),
+      minScale,
+      1
+    );
+    const cardW = CARD.W * L.k * cardScale;
+    const cardH = CARD.H * L.k * cardScale;
+    const rows = Math.max(1, Math.ceil(count / cols));
+    const gridW = cols * cardW + Math.max(0, cols - 1) * gapX;
+    return {
+      cols,
+      gapX,
+      gapY,
+      cardScale,
+      cardW,
+      cardH,
+      startX: sidePad + (usableW - gridW) / 2 + cardW / 2,
+      startY: topPad + cardH / 2,
+      contentH: topPad + rows * cardH + Math.max(0, rows - 1) * gapY + bottomPad,
+    };
+  }
+
+  gridCardPos(idx, layout) {
+    const row = Math.floor(idx / layout.cols);
+    const col = idx % layout.cols;
+    return {
+      x: layout.startX + col * (layout.cardW + layout.gapX),
+      y: layout.startY + row * (layout.cardH + layout.gapY),
+    };
+  }
+
+  setupScroll() {
+    let dragging = false;
     let dragStartY = 0;
     let dragScrollStart = 0;
+
     this.input.on('pointerdown', (ptr) => {
+      if (!this.isPointInScrollArea(ptr.x, ptr.y)) return;
+      dragging = true;
       dragStartY = ptr.y;
       dragScrollStart = this._scrollY;
     });
+
     this.input.on('pointermove', (ptr) => {
-      if (!ptr.isDown) return;
+      if (!dragging || !ptr.isDown) return;
       const dy = dragStartY - ptr.y;
-      this._scrollY = Phaser.Math.Clamp(dragScrollStart + dy, 0, maxScroll);
-      this.root.y = -this._scrollY;
+      this.applyScroll(dragScrollStart + dy);
+    });
+
+    this.input.on('pointerup', () => {
+      dragging = false;
+    });
+
+    this.input.on('wheel', (ptr, _gos, _dx, dy) => {
+      if (!this.isPointInScrollArea(ptr.x, ptr.y)) return;
+      this.applyScroll(this._scrollY + dy * 0.5);
     });
   }
 
-  _mkBtn(x, y, label, cb, opts = {}) {
-    const L = this.L;
-    const bg = opts.bg || '#2b3f52';
-    const hoverBg = opts.hoverBg || '#35536f';
-    const btn = this.add.text(x, y, label, {
-      fontFamily: 'monospace', fontSize: L.fsPx(22),
-      color: opts.color || '#d1e4f8',
-      backgroundColor: bg, padding: { x: 24 * L.k, y: 12 * L.k },
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
-    btn.on('pointerout', () => btn.setStyle({ backgroundColor: bg }));
-    btn.on('pointerdown', (ptr) => { ptr.event.stopPropagation(); cb(); });
-    this.root.add(btn);
-    return btn;
+  isPointInScrollArea(x, y) {
+    const area = this._scrollArea;
+    return !!area
+      && x >= area.x
+      && x <= area.x + area.w
+      && y >= area.y
+      && y <= area.y + area.h;
+  }
+
+  applyScroll(nextY) {
+    if (this._cardTips) this._cardTips.hide();
+    const maxScroll = Math.max(0, this._contentH - this._scrollArea.h);
+    this._scrollY = Phaser.Math.Clamp(nextY, 0, maxScroll);
+    this.contentLayer.y = this._scrollArea.y - this._scrollY;
+  }
+
+  mkTextBtn(x, y, label, cb, opts = {}) {
+    const text = this.add.text(x, y, label, uiBodyStyle(this.L, opts.color || UI_THEME.colors.paper, {
+      fontStyle: opts.fontStyle || 'normal',
+    }))
+      .setOrigin(opts.originX != null ? opts.originX : 0.5, opts.originY != null ? opts.originY : 0.5)
+      .setInteractive({ useHandCursor: true });
+    const baseColor = opts.color || UI_THEME.colors.paper;
+    const hoverColor = opts.hoverColor || UI_THEME.colors.mutedPaper;
+    text.on('pointerover', () => text.setColor(hoverColor));
+    text.on('pointerout', () => text.setColor(baseColor));
+    text.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      cb();
+    });
+    return text;
   }
 }
