@@ -105,3 +105,25 @@ Each pirate type has a `cat` array: `[body, clothes, weapon, eyes, accessory, fu
 - `FUR_PALETTE` (10 colors): primary/secondary fur pixels recolored at runtime.
 - Accessories: frame 0 = none; frames 20–22 are rare (~5% in random generation).
 - Textures composited per type at runtime via `ensureCatTextures()`, cached as canvas textures.
+
+## Cursor Cloud specific instructions
+
+### Running the game
+
+Serve the repo root with a static HTTP server:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000`. No build step, no `npm install`, no dependencies to install. The game is entirely client-side; all third-party libraries (Phaser 3.60.0, Poki SDK v2) are vendored in `third_party/`.
+
+### Linting / testing
+
+There is no configured linter or automated test suite for the browser game. The headless Node.js simulator at `sim/fast-sim.js` can be run with `node sim/fast-sim.js --runs N` for balance testing, but it is separate from the game itself and may have its own pre-existing issues.
+
+### Gotchas
+
+- The game must be served over HTTP, not `file://`, because Phaser loads sprite assets (`assets/cats.png`, etc.) via XHR/fetch which fails under `file://` due to CORS.
+- Google Fonts (Amarante, Lora) are loaded from CDN at runtime; if the network is unavailable the game falls back to system fonts.
+- Game state persists in `localStorage`; to start fresh, clear localStorage or open an incognito window.
