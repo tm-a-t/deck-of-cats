@@ -574,7 +574,10 @@ class GameScene extends Phaser.Scene {
     const depth = this.combatPlayAreaBand(side, rowIndex, rowCount);
     const rowScale = this.projectPlayAreaScale(depth, visuals);
     const point = this.projectPlayAreaPoint(0, depth);
-    const maxStep = (opts.maxStep != null ? opts.maxStep : visuals.maxStep) * rowScale.scaleX;
+    const spacingBoost = side === 'enemy'
+      ? Phaser.Math.Linear(1.05, 1.12, this.playAreaDepthRatio(depth))
+      : Phaser.Math.Linear(1.02, 1.1, this.playAreaDepthRatio(depth));
+    const maxStep = (opts.maxStep != null ? opts.maxStep : visuals.maxStep) * rowScale.scaleX * spacingBoost;
     const edgePad = opts.edgePad != null ? opts.edgePad : (visuals.edgePad * rowScale.scaleX);
     const slots = cardRowLayout(count, this.L, {
       y: point.y,
@@ -810,7 +813,8 @@ class GameScene extends Phaser.Scene {
   showIslandResult(pirate, sentSlot, r, x, y) {
     const L = this.L;
     const sentPlacement = this.sentCardPlacement(sentSlot);
-    const bandH = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k).height * sentPlacement.scale;
+    const bandH = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k).height
+      * (sentPlacement.scaleY != null ? sentPlacement.scaleY : sentPlacement.scale);
     const fy = y - bandH / 2 - 18 * L.k;
 
     if (r.recall !== undefined) {
@@ -3433,15 +3437,15 @@ class GameScene extends Phaser.Scene {
       strokeAlpha: 0.55,
     };
     const visuals = this.combatFormationVisuals('player');
-    const sampleSlots = this.combatSetupSlotLayout('player', 0, 5, visuals);
-    const firstScaleX = sampleSlots[0] && sampleSlots[0].scaleX != null ? sampleSlots[0].scaleX : visuals.scale;
-    const firstScaleY = sampleSlots[0] && sampleSlots[0].scaleY != null ? sampleSlots[0].scaleY : visuals.scale;
-    const cardW = 60 * L.k * firstScaleX;
-    const guideW = sampleSlots.length >= 2
-      ? (sampleSlots[sampleSlots.length - 1].x - sampleSlots[0].x) + cardW + 14 * L.k
-      : (cardW + 14 * L.k);
-    const guideH = 34 * L.k * firstScaleY;
     for (let rowIndex = 0; rowIndex < this.combatSetupRowTotal(); rowIndex++) {
+      const sampleSlots = this.combatSetupSlotLayout('player', rowIndex, 5, visuals);
+      const firstScaleX = sampleSlots[0] && sampleSlots[0].scaleX != null ? sampleSlots[0].scaleX : visuals.scale;
+      const firstScaleY = sampleSlots[0] && sampleSlots[0].scaleY != null ? sampleSlots[0].scaleY : visuals.scale;
+      const cardW = 60 * L.k * firstScaleX;
+      const guideW = sampleSlots.length >= 2
+        ? (sampleSlots[sampleSlots.length - 1].x - sampleSlots[0].x) + cardW + 14 * L.k
+        : (cardW + 14 * L.k);
+      const guideH = 34 * L.k * firstScaleY;
       const projected = this.combatProjectedRow('player', rowIndex, this.combatSetupRowTotal(), 1, visuals);
       const rowY = projected.y;
       const guide = this.add.graphics();
