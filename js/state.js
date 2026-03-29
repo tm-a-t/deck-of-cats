@@ -3,7 +3,13 @@
    ============================================================ */
 
 let uid = 0;
-function mkP(type) { return { id: uid++, type }; }
+function mkP(type, opts = {}) {
+  return {
+    id: uid++,
+    type,
+    weaponKey: WEAPON_TYPES[opts.weaponKey] ? opts.weaponKey : null,
+  };
+}
 
 function getStreak() {
   const key = 'pirates_streak';
@@ -61,6 +67,70 @@ function buildBattleTestCrew(count) {
   return crew;
 }
 
+function cloneBattleTestPirate(pirate) {
+  if (!pirate || !TYPES[pirate.type]) return null;
+  const cloned = mkP(pirate.type);
+  if (pirate.id != null) cloned.id = pirate.id;
+  cloned.weaponKey = WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null;
+  return cloned;
+}
+
+function cloneBattleTestCrew(crew) {
+  if (!Array.isArray(crew)) return [];
+  return crew.map(cloneBattleTestPirate).filter(Boolean);
+}
+
+function cloneBattleTestEnemy(enemy) {
+  if (!enemy || typeof enemy !== 'object' || enemy.id == null) return null;
+  return { ...enemy };
+}
+
+function cloneBattleTestRows(rows) {
+  return [0, 1, 2].map((rowIndex) => {
+    const row = Array.isArray(rows && rows[rowIndex]) ? rows[rowIndex] : [];
+    return row.filter((id) => id != null);
+  });
+}
+
+function buildBattleTestCombatState(repeatState) {
+  const enemyParty = Array.isArray(repeatState && repeatState.enemyParty)
+    ? repeatState.enemyParty.map(cloneBattleTestEnemy).filter(Boolean)
+    : [];
+  if (!enemyParty.length) return null;
+
+  return {
+    mode: 'setup',
+    inspectedPirateId: null,
+    inspectedEnemyId: null,
+    enemyName: typeof repeatState.enemyName === 'string' && repeatState.enemyName
+      ? repeatState.enemyName
+      : 'Boarding Party',
+    enemyParty,
+    playerSetupRows: cloneBattleTestRows(repeatState.playerSetupRows),
+    enemySetupRows: cloneBattleTestRows(repeatState.enemySetupRows),
+    playerFighters: null,
+    enemyFighters: null,
+    result: null,
+  };
+}
+
+function equipPiratesFromWeaponQueue(pirates, weaponKeys, opts = {}) {
+  const crew = Array.isArray(pirates) ? pirates.filter(Boolean) : [];
+  const queue = Array.isArray(weaponKeys)
+    ? weaponKeys.filter((weaponKey) => WEAPON_TYPES[weaponKey])
+    : [];
+  const targets = crew.filter((pirate) => !WEAPON_TYPES[pirate.weaponKey]);
+  if (opts.shuffleTargets) Phaser.Utils.Array.Shuffle(targets);
+
+  let idx = 0;
+  queue.forEach((weaponKey) => {
+    const pirate = targets[idx];
+    if (!pirate || !WEAPON_TYPES[weaponKey]) return;
+    pirate.weaponKey = weaponKey;
+    idx += 1;
+  });
+}
+
 let G = {};
 
 function drawCardsWithMeta(n) {
@@ -111,8 +181,6 @@ function initState() {
     discard: [],
     hand: [],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
-    weapons: createWeaponInventory(),
-    cannons: 0,
     enthusiasm: 0,
     round: 0,
     phase: 'map',
@@ -132,12 +200,31 @@ function initState() {
   G.hand = drawCards(5);
 }
 
-function initBattleTestState() {
+function initBattleTestState(repeatState = null) {
   const fighterCount = 5;
-  const crew = buildBattleTestCrew(fighterCount);
-  const encounterNo = Phaser.Math.Between(1, 6);
-  const weaponCount = Phaser.Math.Between(1, crew.length);
-  const weapons = rollWeaponDrops(weaponCount, { ensureDistinct: true });
+  const repeatCrew = cloneBattleTestCrew(repeatState && repeatState.crew);
+  const repeatCombat = buildBattleTestCombatState(repeatState);
+  const useRepeatState = repeatCrew.length > 0 && !!repeatCombat;
+
+  const crew = useRepeatState ? repeatCrew : buildBattleTestCrew(fighterCount);
+  const encounterNo = useRepeatState
+    ? Math.max(1, Number(
+      (repeatState.enemyShip && repeatState.enemyShip.encounterNo)
+        || repeatState.boardingCount
+        || repeatState.round
+    ) || 1)
+    : Phaser.Math.Between(1, 6);
+  if (!useRepeatState) {
+    const weaponCount = Phaser.Math.Between(1, crew.length);
+    equipPiratesFromWeaponQueue(crew, rollWeaponKeys(weaponCount, { ensureDistinct: true }), { shuffleTargets: true });
+  }
+  const enemyShip = useRepeatState
+    ? {
+      ...(repeatState.enemyShip || {}),
+      encounterNo,
+      strength: Number((repeatState.enemyShip && repeatState.enemyShip.strength) || encounterNo) || encounterNo,
+    }
+    : { encounterNo, strength: encounterNo };
 
   G = {
     mode: 'battleTest',
@@ -146,15 +233,13 @@ function initBattleTestState() {
     discard: [],
     hand: [...crew],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
-    weapons,
-    cannons: 0,
     enthusiasm: 0,
     round: encounterNo,
     phase: 'boarding',
     sent: [],
     island: null,
-    enemyShip: { encounterNo, strength: encounterNo },
-    combat: null,
+    enemyShip,
+    combat: useRepeatState ? repeatCombat : null,
     boardingCount: encounterNo,
     gameOver: false,
     shop: [],
@@ -264,11 +349,17 @@ function initTutorialState() {
       round: 5,
       phase: 'boarding',
       handRefs: ['FEATURED', 'L1', 'L2', 'M1', 'M2'],
-      startWeapons: { hammer: 1, axe: 1, bow: 1, musket: 1, hookshot: 1 },
+      startEquippedWeapons: {
+        FEATURED: 'hammer',
+        L1: 'axe',
+        L2: 'bow',
+        M1: 'musket',
+        M2: 'hookshot',
+      },
       shop: [],
       enemyShip: { preset: 'tutorial-final' },
       hints: {
-        boarding: 'Arm pirates, then Fight',
+        boarding: 'Inspect the crew, then Fight',
       },
     },
   ];
@@ -307,8 +398,6 @@ function initTutorialState() {
     discard: [],
     hand: firstHand,
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
-    weapons: createWeaponInventory(),
-    cannons: 0,
     enthusiasm: 0,
     round: 1,
     phase: 'sending',

@@ -11,6 +11,7 @@ class ShopScene extends Phaser.Scene {
     this.panel = this.computePanel();
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this.panelLayer = this.add.container(0, 0).setDepth(40);
+    this._cardTips = new CardTooltipController(this, { depth: 80 });
     this._featuredTicker = null;
     this._featuredTickerLabel = null;
     this._featuredTickerLines = [];
@@ -33,6 +34,7 @@ class ShopScene extends Phaser.Scene {
     this.scale.on('resize', this._onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this._cardTips) this._cardTips.destroy();
     });
   }
 
@@ -56,6 +58,16 @@ class ShopScene extends Phaser.Scene {
       y: 0,
       w: L.W,
       h: Math.max(320 * L.k, maxH),
+    };
+  }
+
+  tooltipBounds(panel) {
+    const pad = 18 * this.L.k;
+    return {
+      left: panel.x + pad,
+      top: panel.y + pad,
+      right: panel.x + panel.w - pad,
+      bottom: panel.y + panel.h - pad,
     };
   }
 
@@ -134,6 +146,10 @@ class ShopScene extends Phaser.Scene {
     const L = this.L;
     const m = this.computePanel();
     this.panel = m;
+    if (this._cardTips) {
+      this._cardTips.setBoundsRect(this.tooltipBounds(m));
+      this._cardTips.hide();
+    }
 
     const shadow = this.add.graphics();
     shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.18);
@@ -188,6 +204,8 @@ class ShopScene extends Phaser.Scene {
       const def = TYPES[type];
       const pos = this.shopPos(i, G.shop.length, m, shopLayout);
       const canBuy = canBuyNow && G.enthusiasm >= def.cost;
+      const tipKey = `shop-${i}-${type}`;
+      const tips = pirateCardEffectTips(type);
       const card = createPirateCard(this, {
         type,
         x: pos.x,
@@ -201,6 +219,7 @@ class ShopScene extends Phaser.Scene {
 
       const cardImg = card.cardImg;
       const cardCt = card.container;
+      const showTips = () => this._cardTips && this._cardTips.showForCard(cardCt, tips, { key: tipKey });
       if (!canBuy) cardCt.setAlpha(0.72);
 
       cardImg.on('pointerover', () => {
@@ -211,6 +230,7 @@ class ShopScene extends Phaser.Scene {
           duration: 120,
           ease: 'Sine.easeOut',
         });
+        showTips();
       });
       cardImg.on('pointerout', () => {
         this.tweens.add({
@@ -220,10 +240,15 @@ class ShopScene extends Phaser.Scene {
           duration: 120,
           ease: 'Sine.easeOut',
         });
+        if (this._cardTips) this._cardTips.hideForKey(tipKey);
       });
       cardImg.on('pointerdown', (ptr) => {
         ptr.event.stopPropagation();
+        if (isTouchLikePointer(ptr) && !this._cardTips.isActiveFor(tipKey)) {
+          if (showTips()) return;
+        }
         if (!canBuy) return;
+        if (this._cardTips) this._cardTips.hide();
         this.animateBuyTransition(i, m, cardScale);
       });
 
@@ -258,6 +283,7 @@ class ShopScene extends Phaser.Scene {
         }));
         action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
+          if (this._cardTips) this._cardTips.hide();
           this.animateBuyTransition(i, m, cardScale);
         });
       }
@@ -337,6 +363,7 @@ class ShopScene extends Phaser.Scene {
     if (G.shopAnimating || G.phase !== 'shopping' || G.busy) return;
     const L = this.L;
     const game = this.scene.get('game');
+    if (this._cardTips) this._cardTips.hide();
     const oldShop = [...G.shop];
     const oldN = oldShop.length;
     if (shopIdx < 0 || shopIdx >= oldN) return;

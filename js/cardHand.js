@@ -170,27 +170,32 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
       ctx.moveTo(Math.round(8 * k), shipBand.top);
       ctx.lineTo(cw - Math.round(8 * k), shipBand.top);
       ctx.stroke();
-    } else {
+    }
+
+    const showsWeaponSlot = mode === 'default'
+      ? slotState === 'armed'
+      : (slotState === 'armed' || slotState === 'empty');
+    if (showsWeaponSlot) {
       const slotW = Math.round(32 * k);
       const slotH = Math.round(32 * k);
       const slotR = Math.round(4 * k);
-      roundRect(ctx, 0, 0, slotW, slotH, slotR);
+      const slotX = 0;
+      const slotY = mode === 'default' ? Math.round(36 * k) : 0;
+      roundRect(ctx, slotX, slotY, slotW, slotH, slotR);
       ctx.fillStyle = UI_THEME.colors.sandEdge;
       ctx.fill();
       ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 1);
       ctx.lineWidth = 1;
       ctx.stroke();
-      if (slotState === 'armed' || slotState === 'empty') {
-        const slotEmoji = slotState === 'armed'
-          ? ((slotWeaponKey && WEAPON_TYPES[slotWeaponKey] && WEAPON_TYPES[slotWeaponKey].emoji) || WEAPON_CATEGORY_EMOJI)
-          : '+';
-        ctx.fillStyle = UI_THEME.colors.ink;
-        ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round((slotState === 'armed' ? 16 : 18) * k))}px ${UI_THEME.fonts.heading}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(slotEmoji, slotW / 2, slotH / 2 + Math.round(1 * k));
-        ctx.textBaseline = 'top';
-      }
+      const slotEmoji = slotState === 'armed'
+        ? ((slotWeaponKey && WEAPON_TYPES[slotWeaponKey] && WEAPON_TYPES[slotWeaponKey].emoji) || WEAPON_CATEGORY_EMOJI)
+        : '+';
+      ctx.fillStyle = UI_THEME.colors.ink;
+      ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round((slotState === 'armed' ? 16 : 18) * k))}px ${UI_THEME.fonts.heading}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(slotEmoji, slotX + slotW / 2, slotY + slotH / 2 + Math.round(1 * k));
+      ctx.textBaseline = 'top';
     }
 
     ctx.fillStyle = UI_THEME.colors.ink;
@@ -445,6 +450,204 @@ function cardRowLayout(n, L, opts = {}) {
   return slots;
 }
 
+function isTouchLikePointer(pointer) {
+  return !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
+}
+
+const CARD_TIP = {
+  maxW: 212,
+  padX: 12,
+  padY: 10,
+  titleGap: 5,
+  stackGap: 8,
+  anchorGap: 12,
+  edgePad: 12,
+  radius: 10,
+};
+
+class CardTooltipController {
+  constructor(scene, opts = {}) {
+    this.scene = scene;
+    this.boundsRect = opts.boundsRect || null;
+    this.layer = scene.add.container(0, 0).setDepth(opts.depth != null ? opts.depth : 160);
+    this.layer.setVisible(false);
+    this._activeKey = null;
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
+  }
+
+  destroy() {
+    this.hide();
+    if (this.layer) this.layer.destroy(true);
+    this.layer = null;
+    this.scene = null;
+    this.boundsRect = null;
+  }
+
+  setBoundsRect(rect) {
+    this.boundsRect = rect || null;
+  }
+
+  isActiveFor(key) {
+    return !!key && this._activeKey === key;
+  }
+
+  hideForKey(key) {
+    if (!this.isActiveFor(key)) return false;
+    this.hide();
+    return true;
+  }
+
+  hide() {
+    if (!this.layer) return;
+    this.layer.removeAll(true);
+    this.layer.setVisible(false);
+    this._activeKey = null;
+  }
+
+  showForCard(target, entries, opts = {}) {
+    const tips = Array.isArray(entries) ? entries.filter((entry) => entry && entry.title && entry.body) : [];
+    if (!tips.length) {
+      this.hide();
+      return false;
+    }
+    const bounds = this.resolveCardBounds(target);
+    if (!bounds) {
+      this.hide();
+      return false;
+    }
+
+    const scene = this.scene;
+    const L = scene.L;
+    const area = this.resolveArea();
+    const areaW = Math.max(1, area.right - area.left);
+    const minBoxW = Math.min(Math.round(120 * L.k), areaW);
+    const boxW = Phaser.Math.Clamp(Math.round(CARD_TIP.maxW * L.k), minBoxW, areaW);
+    const stackGap = Math.round(CARD_TIP.stackGap * L.k);
+    const boxes = tips.map((entry) => this.buildTipBox(entry, boxW));
+    const totalH = boxes.reduce((sum, box, idx) => sum + box.height + (idx > 0 ? stackGap : 0), 0);
+    const anchorGap = Math.round(CARD_TIP.anchorGap * L.k);
+    const maxTop = Math.max(area.top, area.bottom - totalH);
+    const placement = opts.placement || 'side';
+    let left = area.left;
+    let top = area.top;
+
+    if (placement === 'above' || placement === 'below') {
+      left = Phaser.Math.Clamp(bounds.centerX - boxW / 2, area.left, Math.max(area.left, area.right - boxW));
+      const preferredTop = placement === 'above'
+        ? bounds.top - anchorGap - totalH
+        : bounds.bottom + anchorGap;
+      const fallbackTop = placement === 'above'
+        ? bounds.bottom + anchorGap
+        : bounds.top - anchorGap - totalH;
+      top = preferredTop;
+      if (top < area.top || top > maxTop) top = fallbackTop;
+    } else {
+      const centerX = (area.left + area.right) / 2;
+      const preferRight = bounds.centerX <= centerX;
+      left = preferRight
+        ? bounds.right + anchorGap
+        : bounds.left - anchorGap - boxW;
+      if (preferRight && left + boxW > area.right) {
+        left = bounds.left - anchorGap - boxW;
+      } else if (!preferRight && left < area.left) {
+        left = bounds.right + anchorGap;
+      }
+      left = Phaser.Math.Clamp(left, area.left, Math.max(area.left, area.right - boxW));
+      top = bounds.centerY - totalH / 2;
+    }
+    top = Phaser.Math.Clamp(top, area.top, maxTop);
+
+    this.hide();
+    this._activeKey = opts.key || null;
+
+    let cursorY = top;
+    boxes.forEach((box, idx) => {
+      box.container.setPosition(left, cursorY);
+      this.layer.add(box.container);
+      cursorY += box.height + (idx < boxes.length - 1 ? stackGap : 0);
+    });
+
+    this.layer.setVisible(true);
+    return true;
+  }
+
+  resolveArea() {
+    const scene = this.scene;
+    const L = scene.L;
+    const pad = Math.round(CARD_TIP.edgePad * L.k);
+    const rect = this.boundsRect;
+    if (rect) {
+      return {
+        left: rect.left != null ? rect.left : pad,
+        top: rect.top != null ? rect.top : pad,
+        right: rect.right != null ? rect.right : scene.scale.width - pad,
+        bottom: rect.bottom != null ? rect.bottom : scene.scale.height - pad,
+      };
+    }
+    return {
+      left: pad,
+      top: pad,
+      right: scene.scale.width - pad,
+      bottom: scene.scale.height - pad,
+    };
+  }
+
+  resolveCardBounds(target) {
+    const node = target && (target.container || target);
+    if (!node || typeof node.getBounds !== 'function') return null;
+    const raw = node.getBounds();
+    if (!raw) return null;
+    const left = raw.x;
+    const top = raw.y;
+    const width = raw.width || 0;
+    const height = raw.height || 0;
+    return {
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      centerX: left + width / 2,
+      centerY: top + height / 2,
+    };
+  }
+
+  buildTipBox(entry, width) {
+    const scene = this.scene;
+    const L = scene.L;
+    const padX = Math.round(CARD_TIP.padX * L.k);
+    const padY = Math.round(CARD_TIP.padY * L.k);
+    const titleGap = Math.round(CARD_TIP.titleGap * L.k);
+    const innerW = Math.max(1, width - padX * 2);
+
+    const title = scene.add.text(padX, padY, entry.title, uiHeadingStyle(L, 15, UI_THEME.colors.ink, {
+      wordWrap: { width: innerW },
+    })).setOrigin(0, 0);
+    const body = scene.add.text(padX, padY + title.height + titleGap, entry.body, uiBodyStyle(L, UI_THEME.colors.ink, {
+      wordWrap: { width: innerW },
+      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
+    })).setOrigin(0, 0);
+    const height = Math.round(padY + title.height + titleGap + body.height + padY);
+    const radius = Math.round(CARD_TIP.radius * L.k);
+
+    const shadow = scene.add.graphics();
+    shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.2);
+    shadow.fillRoundedRect(3 * L.k, 4 * L.k, width, height, radius);
+
+    const bg = scene.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.paper), 0.98);
+    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandEdge), 1);
+    bg.fillRoundedRect(0, 0, width, height, radius);
+    bg.strokeRoundedRect(0, 0, width, height, radius);
+
+    const accent = scene.add.graphics();
+    accent.fillStyle(uiColorInt(UI_THEME.colors.outline), 0.18);
+    accent.fillRoundedRect(padX, padY + title.height + Math.max(1, Math.round(2 * L.k)), Math.max(12 * L.k, innerW * 0.48), Math.max(2, Math.round(2 * L.k)), Math.max(1, Math.round(1 * L.k)));
+
+    const container = scene.add.container(0, 0, [shadow, bg, accent, title, body]);
+    return { container, height };
+  }
+}
+
 
 // ─────────── CardHand class ───────────
 
@@ -456,10 +659,16 @@ class CardHand {
     this._dragIdx = -1;
     this._dragGhost = null;
     this._spreadTweens = null;
+    this._onCardHoverChange = null;
   }
 
   destroy() {
     const tweens = this.scene && this.scene.tweens;
+    if (this._onCardHoverChange) {
+      this.cards.forEach((card) => {
+        if (card.hovered) this._onCardHoverChange(card, false);
+      });
+    }
     this.cards.forEach(c => {
       if (tweens) {
         tweens.killTweensOf(c.container);
@@ -473,6 +682,7 @@ class CardHand {
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
     this._hoverIdx = -1;
     this._dragIdx = -1;
+    this._onCardHoverChange = null;
   }
 
   getCardPositions() {
@@ -504,7 +714,9 @@ class CardHand {
     const cardModeForCard = opts.cardModeForCard || (() => 'default');
     const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
     const cardSlotWeaponKeyForCard = opts.cardSlotWeaponKeyForCard || (() => null);
+    const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
+    this._onCardHoverChange = opts.onCardHoverChange || null;
 
     const visible = [];
     hand.forEach((p, i) => {
@@ -521,7 +733,7 @@ class CardHand {
     visible.forEach((entry, slotI) => {
       const { pirate, handIdx } = entry;
       const slot = slots[slotI];
-      const isBlocked = tutorialBlocked(pirate);
+      const isBlocked = tutorialBlocked(pirate, handIdx);
       const isTarget = handIdx === tutorialTargetIdx;
 
       const cardView = createPirateCard(scene, {
@@ -566,6 +778,11 @@ class CardHand {
         } else if (onCardPointerDown) {
           cardImg.on('pointerdown', (pointer) => {
             if (pointer && pointer.event) pointer.event.stopPropagation();
+            if (touchTapPreviewsAction && isTouchLikePointer(pointer)) {
+              const alreadyHovered = this._hoverIdx === slotI;
+              this._setHoveredCard(alreadyHovered ? -1 : slotI, L);
+              if (!alreadyHovered) return;
+            }
             onCardPointerDown(handIdx, pirate, cardData, pointer);
           });
         }
@@ -635,6 +852,7 @@ class CardHand {
       if (c.hovered === shouldHover) return;
       c.hovered = shouldHover;
       this._animateHover(c, shouldHover, L);
+      if (this._onCardHoverChange) this._onCardHoverChange(c, shouldHover);
     });
     this._hoverIdx = slotIndex;
     const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
@@ -735,14 +953,13 @@ class CardHand {
     let dragStartY = cardData.slot.y;
     const mobilePullThreshold = CARD.MOBILE_DRAG_PULL * k;
 
-    const isTouchPointer = (pointer) =>
-      !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
     const isMobileViewport = () =>
       !!(scene.L && scene.L.IS_MOBILE);
 
     const beginDragVisual = (pointer) => {
       if (dragActivated) return;
       dragActivated = true;
+      this._setHoveredCard(-1, L);
       dragCard.dragging = true;
       this._dragIdx = dragCard.slotIndex;
       dragCard.container.setAlpha(0.3);
@@ -771,7 +988,7 @@ class CardHand {
 
     cardImg.on('pointerdown', (pointer) => {
       dragStartY = pointer.y;
-      if (isTouchPointer(pointer) && !cardData.dragging) {
+      if (isTouchLikePointer(pointer) && !cardData.dragging) {
         this._setHoveredCard(this._hoverIdx === cardData.slotIndex ? -1 : cardData.slotIndex, L);
       }
     });
@@ -780,7 +997,7 @@ class CardHand {
       dragMoved = false;
       dragActivated = false;
       dragCard = cardData;
-      touchDrag = isMobileViewport() && isTouchPointer(pointer);
+      touchDrag = isMobileViewport() && isTouchLikePointer(pointer);
 
       if (!touchDrag) {
         beginDragVisual(pointer);

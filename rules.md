@@ -51,7 +51,7 @@ If the selected node is an island:
 - "Get lost" pirates are permanently removed when their turn comes.
 - "Exile" pirates trigger selection: player picks a crew member (not from current hand) to permanently remove.
 - Some pirates have no ship action.
-- All others attempt to spend input resources and produce output resources/enthusiasm/weapons/cannons.
+- All others attempt to spend input resources and produce output resources, enthusiasm, and/or specific weapons.
 
 **Shopping phase**:
 - After ship effects finish, the round enters shopping.
@@ -69,34 +69,47 @@ If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
 - Boarding starts with a **setup step**:
   - All player pirates are shown immediately as compact mini cards.
+  - Initial setup places melee pirates in the front row and ranged pirates in the middle row.
+  - Player may drag those mini cards to rearrange pirates arbitrarily across the front, middle, and back rows, including left-to-right order within a row.
   - Player may inspect a pirate by hovering/tapping that mini card.
-  - The popup for that pirate has a weapon slot; clicking it cycles through the available weapon types and assigns up to 1 weapon to that pirate.
-  - Pirate order is fixed in this prototype; reordering is currently disabled.
-  - Each assigned weapon is consumed when the player presses `Fight!`.
+  - Weapons are **not** assigned here; each pirate uses their permanently equipped weapon, if any.
 - Pirate combat stats in this prototype:
   - Damage = the pirate's printed ⚔️.
   - For the current prototype pass, **every pirate has 3⚔️**.
   - HP = 9 for every pirate.
   - Attack speed = one shared base speed for all pirates.
-  - Generic `⚔️` gains from pirates become random boarding weapons from this pool:
+  - Pirate actions can equip these permanent weapons before boarding:
     - `🔨 Hammer`: melee, **+4 HP**.
     - `🪓 Axe`: melee, hits the whole opposing front row at once.
     - `🏹 Bow`: ranged, targets the living enemy with the **lowest current HP** in any row.
     - `🔫 Musket`: ranged, targets the living enemy with the **highest current HP** in any row, deals **+2 damage**, and attacks **60% slower**.
-    - `🪝 Hookshot`: ranged, attacks **45% slower**, targets a random living enemy in the **backmost enemy row**, and adds that target to the front row if it survives, without cycling the rest of the formation.
+    - `🪝 Hookshot`: ranged, attacks **45% slower**, targets a random living enemy in the **backmost enemy row**, deals **0 damage**, and pulls that target to the front row without cycling the rest of the formation.
+    - `⛓️ Chain`: melee, deals **0 damage** and delays the target's next attack by **1.0s**.
+    - `🗡️ Dirk`: melee, deals normal damage and applies bleed for **1 damage three times**, once every **0.7s**.
+    - `🔱 Trident`: melee, deals normal damage and then heals every living ally in the next row behind the attacker for **1 HP**.
+    - `⚓ Anchor`: melee, deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row.
+    - `🧨 Bomb Lance`: melee, deals **8 damage** but only strikes **once** per boarding.
+    - `🥏 Chakram`: ranged, deals **2 damage** on its first shot and gains **+1 damage** after each shot in that boarding.
 - Enemy boarding parties are generated independently of the map node's legacy `strength` value:
   - Encounters use 3–5 enemies drawn from this roster:
-    - `😾 Raider Cat`: melee, 9 HP, 3 damage.
-    - `🐢 Slow Brute`: melee, 20 HP, 5 damage, attacks slowly.
-    - `⚡ Glass Striker`: melee, 3 HP, 5 damage.
-    - `💣 Powder Bomber`: melee, 15 HP, 3 damage, explodes on death and deals 3 damage to the pirate front row.
+    - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
+    - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
+    - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
+    - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
+    - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
+  - A random boarding usually centers on **one main enemy type**, with at most a small side group from one other type.
+  - Each enemy party is distributed across up to 3 rows with a variable split.
+  - Enemy rows are always filled from the **front backward**; random setup never leaves an empty front or middle row with enemies behind it.
+  - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.
   - Difficulty scales by **boarding count** through party size and unlocked enemy types; enemy stats stay at their printed values.
-  - Tutorial turn 5 uses a fixed training encounter.
+  - Early boardings use `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber`; `🪤 Netter` unlocks starting at boarding **4**, and `🔥 Flint Duelist` unlocks starting at boarding **6**.
+  - Tutorial turn 5 still uses the fixed legacy training encounter: `😾 Raider Cat`, `⚡ Glass Striker`, and `💣 Powder Bomber`.
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
   - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
-  - Boarding formations use up to 3 centered rows per side with front-to-back capacities **2 / 1 / 2**.
-  - With 5 pirates, the rows are always **2 front, 1 middle, 2 back**.
+  - Boarding formations use up to 3 centered rows per side: front, middle, and back.
+  - Any number of fighters may start in a given row.
+  - The current front row is always the frontmost living row.
   - If a whole row is defeated, any rows behind it slide forward to fill the gap.
   - Melee fighters can only attack while they are in the current front row.
   - Ranged fighters can attack from any living row.
@@ -108,18 +121,30 @@ If the selected node is an enemy ship:
   - Positional band rule: if a fighter is position `X` out of `N` living front-row allies and the opposing front row has `M` living enemies, the target band is the enemy indices from `floor((X-1)*M/N)` through `ceil(X*M/N)-1`, clamped to the living opposing front row.
   - `🪓 Axe` attacks hit every living enemy in the opposing front row at once.
   - `🏹 Bow` and `🔫 Musket` ignore rows and target across the whole enemy formation using lowest/highest current HP.
-  - `🪝 Hookshot` adds a surviving target from the backmost enemy row to the front row before later attacks resolve, without cycling the rest of the formation.
-  - Enemy death effects resolve immediately after the attack that killed them. A `💣 Powder Bomber` explosion hits every pirate in the current front row for 3 damage.
+  - `🪝 Hookshot` deals no damage and pulls a target from the backmost enemy row to the front row before later attacks resolve, without cycling the rest of the formation.
+  - `⛓️ Chain` delays the surviving target's next attack by **1.0s**.
+  - `🗡️ Dirk` adds bleed, which deals **1 damage** every **0.7s** for **3 ticks**; a fresh dirk hit refreshes that bleed.
+  - `🔱 Trident` heals every living ally in the next row behind the attacker for **1 HP** after each attack.
+  - `⚓ Anchor` uses **6 base damage** and loses **1 damage** for each other living ally in the attacker's row.
+  - `🧨 Bomb Lance` uses the normal front-row band target rule, deals **8 damage**, and then cannot attack again that boarding.
+  - `🥏 Chakram` uses the normal front-row band target rule, starts at **2 damage**, and gains **+1 damage** after each shot.
+  - `🛡️ Shellback` reduces row-wide hit damage by **2** for every living enemy in its row, to a minimum of **1** damage.
+  - `🎯 Deck Sniper` targets the backmost armed pirate first.
+  - `🪤 Netter` targets the backmost pirate and delays ranged targets longer than melee targets.
+  - `🔥 Flint Duelist` reacts only to **single-target** hits of **5+ damage** that it survives; row-wide hits do not trigger it.
+  - Enemy death effects resolve immediately after the attack that killed them. A `💣 Powder Bomber` explosion hits every pirate in the current front row for 4 damage.
+  - Bleed ticks resolve during autoplay and can kill fighters between attacks.
 - **Victory**:
-  - All remaining `⚔️` reset to 0; 💣 cannons persist.
+  - Equipped weapons persist.
   - No combat casualties persist.
   - Hand discarded, draw up to 5 new pirates, proceed to map phase.
   - If this was the final map node → **Victory screen**.
 - **Defeat**:
-  - All remaining `⚔️` reset to 0.
   - **Game Over** screen.
 - **Battle Test**:
-  - Always starts with 5 pirates so the full **2 / 1 / 2** formation is shown.
+  - Always starts with 5 pirates so the row-rearranging setup is fully available.
+  - Some pirates begin pre-equipped so the weapon behaviors are visible immediately.
+  - After the result screen, `Repeat` reruns the exact same crew, enemy party, and pre-fight formation. `Another Battle` rolls a fresh random test.
 
 ---
 
@@ -193,29 +218,34 @@ Win the boarding at the final layer (layer 49, ship #10).
 1. **Get Lost**: pirate is permanently removed from the game. No other effect.
 2. **Exile from Deck** (Cutthroat): spend resources, then player picks a crew member (not from current hand) to permanently exile. No effect if resources insufficient or no valid targets.
 3. **No action** (Herald): does nothing on ship.
-4. **Free production** (Bosun, Corsair, etc.): generates enthusiasm, weapons, and/or cannons with no input cost.
-5. **Resource conversion**: spend N of a resource (or weapons/cannons), produce resources, enthusiasm, weapons, and/or cannons. Fails silently if insufficient resources.
+4. **Free production** (Bosun, Corsair, etc.): generates enthusiasm and/or specific weapons with no input cost.
+5. **Resource conversion**: spend N of a resource, produce resources, enthusiasm, and/or specific weapons. Fails silently if insufficient resources.
 
 ---
 
-## Weapons & Cannons
+## Weapons
 
 | Type | Emoji | Effect | Persistence |
 |------|-------|--------|-------------|
-| Weapons | ⚔️ | Generic category used by pirate abilities. Each gained `⚔️` becomes a random stored weapon from the rows below; ship actions that spend `⚔️` consume any mix of stored weapons | Reset to 0 after boarding (win or lose) |
-| Hammer | 🔨 | Melee weapon; keeps the pirate's attack unchanged and gives **+4 HP** in that fight | Consumed when assigned to a pirate and `Fight!` is pressed |
-| Axe | 🪓 | Melee weapon; each swing hits the whole opposing front row | Consumed when assigned to a pirate and `Fight!` is pressed |
-| Bow | 🏹 | Ranged weapon; targets the living enemy with the **lowest current HP** in any row | Consumed when assigned to a pirate and `Fight!` is pressed |
-| Musket | 🔫 | Ranged weapon; targets the living enemy with the **highest current HP**, deals **+2 damage**, and attacks **60% slower** | Consumed when assigned to a pirate and `Fight!` is pressed |
-| Hookshot | 🪝 | Ranged weapon; attacks **45% slower**, targets a random living enemy in the backmost enemy row, and adds that target to the front row if it survives, without cycling the rest of the formation | Consumed when assigned to a pirate and `Fight!` is pressed |
-| Cannons | 💣 | Persistent resource used by some ship actions; no direct boarding effect in this prototype | Not reset after boarding |
+| Weapon gain | `🔨` / `🪓` / `🏹` / `🔫` / `🪝` / `⛓️` / `🗡️` / `🔱` / `⚓` / `🧨` / `🥏` | When a pirate action produces a weapon, it creates that exact weapon. During the same round, the player may assign it to any unarmed pirate from the current hand, including pirates already sent to the island. If skipped, the weapon is lost | Never enters inventory |
+| Hammer | 🔨 | Melee weapon; keeps the pirate's attack unchanged and gives **+4 HP** in every boarding while equipped | Stays on that pirate until that pirate leaves the crew |
+| Axe | 🪓 | Melee weapon; each swing hits the whole opposing front row | Stays on that pirate until that pirate leaves the crew |
+| Bow | 🏹 | Ranged weapon; targets the living enemy with the **lowest current HP** in any row | Stays on that pirate until that pirate leaves the crew |
+| Musket | 🔫 | Ranged weapon; targets the living enemy with the **highest current HP**, deals **+2 damage**, and attacks **60% slower** | Stays on that pirate until that pirate leaves the crew |
+| Hookshot | 🪝 | Ranged weapon; attacks **45% slower**, targets a random living enemy in the backmost enemy row, deals **0 damage**, and pulls that target to the front row without cycling the rest of the formation | Stays on that pirate until that pirate leaves the crew |
+| Chain | ⛓️ | Melee weapon; deals **0 damage** and delays the target's next attack by **1.0s** | Stays on that pirate until that pirate leaves the crew |
+| Dirk | 🗡️ | Melee weapon; deals normal damage and applies bleed for **1 damage three times**, once every **0.7s**; a fresh dirk hit refreshes that bleed | Stays on that pirate until that pirate leaves the crew |
+| Trident | 🔱 | Melee weapon; deals normal damage and then heals every living ally in the next row behind the attacker for **1 HP** | Stays on that pirate until that pirate leaves the crew |
+| Anchor | ⚓ | Melee weapon; deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row | Stays on that pirate until that pirate leaves the crew |
+| Bomb Lance | 🧨 | Melee weapon; uses the normal front-row band target rule, deals **8 damage**, and only strikes **once** per boarding | Stays on that pirate until that pirate leaves the crew |
+| Chakram | 🥏 | Ranged weapon; uses the normal front-row band target rule, starts at **2 damage**, and gains **+1 damage** after each shot in that boarding | Stays on that pirate until that pirate leaves the crew |
 
 ---
 
 ## Shop
 
 - **Regular runs** use a 4-slot shop. Tutorial turns can override the shop size and contents.
-- **Regular-run pool**: all non-starter, non-tutorial pirate types (25 types).
+- **Regular-run pool**: all non-starter, non-tutorial pirate types (23 types).
 - **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
 - **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). In regular runs, the bought slot is refilled with a new random pirate from the pool.
 - **Next round rotation**: in regular runs, the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
@@ -230,7 +260,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 |------|-----|--------|------|
 | Rigger | 3 | 1🪵 (90%) | 4🪵 → 2☠️ |
 | Ballaster | 3 | 1🪨 (90%) | 4🪨 → 2☠️ |
-| Armsman | 3 | → 1⚔️ | — |
+| Armsman | 3 | → 🔨 | — |
 
 ### Tutorial-Only
 
@@ -238,24 +268,22 @@ Win the boarding at the final layer (layer 49, ship #10).
 |------|-----|--------|------|
 | Trail Forager | 3 | → 1🪵 (guaranteed) | 1🪵 → 1☠️ |
 | Deck Swabbie | 3 | Can't land | → 1☠️ |
-| Admiral Blackpowder | 3 | Can't land | 1🪙 → 3💣 |
+| Admiral Blackpowder | 3 | Can't land | 1🪙 → 🔫🔫 |
 
 ### Tier 1: Early Upgrades (cost 2–5)
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Brute | 2 | 3 | → 1⚔️ | 1🪨 → 3☠️ |
-| Whittler | 2 | 3 | → 2☠️ | 1🪵 → 3⚔️ |
-| Corsair | 2 | 3 | → 2⚔️ | → 2☠️ |
+| Brute | 2 | 3 | → 🔨 | 1🪨 → 3☠️ |
+| Whittler | 2 | 3 | → 2☠️ | 1🪵 → 🥏 |
+| Corsair | 2 | 3 | → 🪓🪓 | → 2☠️ |
 | Herald | 2 | 3 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 3 | 1🪨 (90%) | → 1⚔️+1☠️ |
-| Carpenter | 3 | 3 | 1🪵 (95%) | 2🪵 → 3⚔️+2☠️ |
-| Stonemason | 3 | 3 | 1🪨 (95%) | 2🪨 → 1💣+2☠️ |
-| Privateer | 3 | 3 | 1🪙 (45%) | 2🪙 → 6⚔️+4☠️ |
-| Survivalist | 3 | 3 | 1🪵 (90%) +2☠️ | → 2☠️ |
-| Raider | 4 | 3 | → 3⚔️ | 💀 get lost |
-| Scrapper | 4 | 3 | → 2⚔️ | 1💣 → 4🪨+3☠️ |
-| Blacksmith | 4 | 3 | 1🪵 (90%) | 2⚔️ → 1💣+3☠️ |
+| Deckhand | 2 | 3 | 1🪨 (90%) | → 🔨+1☠️ |
+| Carpenter | 3 | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
+| Stonemason | 3 | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
+| Privateer | 3 | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
+| Survivalist | 3 | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
+| Raider | 4 | 3 | → 🪓🪓 | 💀 get lost |
 | Bosun | 5 | 3 | Can't land | → 3☠️ |
 | Cutthroat | 5 | 3 | → 1☠️ | 2🪙 → exile pirate |
 | Profiteer | 5 | 3 | 1🪙 → 2🪙 | 💀 get lost |
@@ -264,11 +292,11 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Marooner | 6 | 3 | Exile previous pirate on island | → 3⚔️ |
+| Marooner | 6 | 3 | Exile previous pirate on island | → 🗡️ |
 | Drifter | 6 | 3 | 2🪵 (90%) | 💀 get lost |
-| Trader | 7 | 3 | 3🪵 → 3🪨 | 1🪨 → 4☠️ |
-| Woodsman | 7 | 3 | 1🪵 (90%) | 2🪵 → 6⚔️+4☠️ |
-| Prospector | 7 | 3 | 1🪨 (90%) | 2🪨 → 2💣+4☠️ |
+| Trader | 7 | 3 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
+| Woodsman | 7 | 3 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
+| Prospector | 7 | 3 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
 | Smuggler | 8 | 3 | 1🪙 (45%) | 1🪙 → 5☠️ |
 | Explorer | 9 | 3 | 1🪙 (65%) | 1🪙 → 6☠️ |
 | Quartermaster | 10 | 3 | Recall 1 pirate from island | → 2☠️ |
@@ -277,8 +305,8 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | ⚔️ | Island | Ship |
 |------|-----|-----|--------|------|
-| Master Rigger | 13 | 3 | 2🪵 (90%) | 2🪵 → 9⚔️+4☠️ |
-| Master Ballaster | 13 | 3 | 2🪨 (90%) | 2🪨 → 3💣+4☠️ |
+| Master Rigger | 13 | 3 | 2🪵 (90%) | 2🪵 → 🪝🪝+4☠️ |
+| Master Ballaster | 13 | 3 | 2🪨 (90%) | 2🪨 → 🔫🔫+4☠️ |
 
 ### Special Abilities Detail
 
@@ -312,12 +340,10 @@ Win the boarding at the final layer (layer 49, ship #10).
 | Emoji | Name | Use |
 |-------|------|-----|
 | 🪵 | Wood | Ship actions input; weapon production |
-| 🪨 | Stone | Ship actions input; cannon production |
+| 🪨 | Stone | Ship actions input; weapon production |
 | 🪙 | Gold | Ship actions input; high-tier conversions |
 | 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-| ⚔️ | Weapons | Mixed boarding gear. Each gained `⚔️` becomes a random stored `🔨`/`🪓`/`🏹`/`🔫`/`🪝`; can be assigned one-per-pirate during boarding setup and can also be spent by some ship actions |
-| 💣 | Cannons | Persistent ship resource; no direct boarding bonus in this prototype, but some ship actions can spend them |
 
 ---
 
@@ -334,11 +360,10 @@ Activated from the menu:
 - Turn 3 shop: only Admiral Blackpowder is offered, and the tutorial does not continue until it is bought.
 - Turn 4 includes a scripted mismatch: one Rigger brings back 1🪙 instead of 1🪵, and Admiral Blackpowder is blocked from landing so it stays on ship.
 - Turn 5 is a scripted boarding tutorial:
-  - Start with `1🔨`, `1🪓`, `1🏹`, `1🔫`, and `1🪝`.
-  - The 5 pirates start in a **2 / 1 / 2** formation.
+  - Start with 5 pirates already equipped: `1🔨`, `1🪓`, `1🏹`, `1🔫`, and `1🪝`.
+  - Drag the 5 pirates into any front/middle/back arrangement before pressing `Fight!`.
   - Tap a mini card to inspect that pirate.
-  - Use the popup weapon slot to choose equipment.
-  - Optionally assign any available `⚔️`.
+  - Weapons are fixed before boarding; combat does not reassign them.
   - Tap `Fight!` and watch the autoplay fight.
 - Winning the final tutorial boarding shows the tutorial outro; losing shows the normal game-over screen.
 - After outro, player can start a real game.

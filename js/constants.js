@@ -60,46 +60,71 @@ const COMBAT = {
   enemyCountMax: 5,
   enemyArchetypes: [
     {
-      key: 'glassStriker',
-      name: 'Glass Striker',
-      emoji: '⚡',
-      hp: 3,
-      damage: 5,
-      attackMs: 1350,
-      color: '#c14545',
-      summary: 'A reckless glass cannon.',
+      key: 'shellback',
+      name: 'Shellback',
+      emoji: '🛡️',
+      hp: 18,
+      damage: 4,
+      attackMs: 1450,
+      color: '#6a8a72',
+      unlockAt: 1,
+      passiveKey: 'braceRowVsMultiTarget',
+      passiveValue: 2,
+      summary: 'Its row braces against sweeping hits.',
     },
     {
-      key: 'raiderCat',
-      name: 'Raider Cat',
-      emoji: '😾',
+      key: 'deckSniper',
+      name: 'Deck Sniper',
+      emoji: '🎯',
       hp: 9,
+      damage: 4,
+      attackMs: 950,
+      color: '#8f5f99',
+      unlockAt: 1,
+      attackRange: 'ranged',
+      targetMode: 'backmostArmed',
+      summary: 'Shoots the backmost armed pirate first.',
+    },
+    {
+      key: 'netter',
+      name: 'Netter',
+      emoji: '🪤',
+      hp: 12,
       damage: 3,
       attackMs: 1350,
-      color: '#d67d4d',
-      summary: 'A steady front-line bruiser.',
+      color: '#4e8381',
+      unlockAt: 4,
+      attackRange: 'ranged',
+      targetMode: 'backmostAny',
+      onHitEffectKey: 'snareOnHit',
+      onHitEffectValue: { delayMs: 350, rangedDelayMs: 1200 },
+      summary: 'Throws nets into the back line and tangles ranged cats longer.',
+    },
+    {
+      key: 'flintDuelist',
+      name: 'Flint Duelist',
+      emoji: '🔥',
+      hp: 11,
+      damage: 5,
+      attackMs: 1050,
+      color: '#c85f41',
+      unlockAt: 6,
+      triggerKey: 'rushOnHeavyHit',
+      triggerValue: { threshold: 5, nextAttackMs: 220 },
+      summary: 'Huge hits fire it up and make it lunge sooner.',
     },
     {
       key: 'powderBomber',
       name: 'Powder Bomber',
       emoji: '💣',
-      hp: 15,
-      damage: 3,
-      attackMs: 1350,
+      hp: 17,
+      damage: 4,
+      attackMs: 1250,
       color: '#7d4a33',
+      unlockAt: 1,
       deathEffect: 'frontRowBlast',
-      deathEffectDamage: 3,
+      deathEffectDamage: 4,
       summary: 'Blows up when brought down.',
-    },
-    {
-      key: 'slowBrute',
-      name: 'Slow Brute',
-      emoji: '🐢',
-      hp: 20,
-      damage: 5,
-      attackMs: 2100,
-      color: '#5e6b7d',
-      summary: 'A lumbering heavy hitter.',
     },
   ],
 };
@@ -144,50 +169,64 @@ const WEAPON_TYPES = {
     range: 'ranged',
     targetMode: 'lastRowPull',
     attackMsMultiplier: 1.45,
-    summary: 'Ranged. Slower, adds a back-row foe to the front row.',
+    damageOverride: 0,
+    summary: 'Ranged. Slower, no damage, pulls a back-row foe forward.',
+  },
+  chain: {
+    name: 'Chain',
+    emoji: '⛓️',
+    range: 'melee',
+    targetMode: 'frontBand',
+    damageOverride: 0,
+    nextAttackDelayMsOnHit: 1000,
+    summary: 'Melee. No damage, delays the target by 1s.',
+  },
+  dirk: {
+    name: 'Dirk',
+    emoji: '🗡️',
+    range: 'melee',
+    targetMode: 'frontBand',
+    bleed: { damage: 1, ticks: 3, intervalMs: 700 },
+    summary: 'Melee. Normal hit, then 3 bleed ticks.',
+  },
+  trident: {
+    name: 'Trident',
+    emoji: '🔱',
+    range: 'melee',
+    targetMode: 'frontBand',
+    healRowBehindOnHit: 1,
+    summary: 'Melee. After each hit, heals the row behind for 1.',
+  },
+  anchor: {
+    name: 'Anchor',
+    emoji: '⚓',
+    range: 'melee',
+    targetMode: 'frontBand',
+    damageOverride: 6,
+    damagePerOtherAllyInRow: 1,
+    summary: 'Melee. 6 dmg, -1 per other ally in the row.',
+  },
+  blunderbuss: {
+    name: 'Bomb Lance',
+    emoji: '🧨',
+    range: 'melee',
+    targetMode: 'frontBand',
+    damageOverride: 8,
+    maxAttacks: 1,
+    summary: 'Melee. 8 dmg, but only strikes once.',
+  },
+  chakram: {
+    name: 'Chakram',
+    emoji: '🥏',
+    range: 'ranged',
+    targetMode: 'frontBand',
+    damageOverride: 2,
+    damageGrowthPerAttack: 1,
+    summary: 'Ranged. Starts at 2 dmg and gains +1 each shot.',
   },
 };
 
 const WEAPON_ORDER = Object.keys(WEAPON_TYPES);
-
-function createWeaponInventory() {
-  const inventory = {};
-  WEAPON_ORDER.forEach((key) => {
-    inventory[key] = 0;
-  });
-  return inventory;
-}
-
-function normalizeWeaponInventory(raw) {
-  const inventory = createWeaponInventory();
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    const firstKey = WEAPON_ORDER[0];
-    if (firstKey) inventory[firstKey] = Math.max(0, Math.floor(raw));
-    return inventory;
-  }
-  if (!raw || typeof raw !== 'object') return inventory;
-  WEAPON_ORDER.forEach((key) => {
-    inventory[key] = Math.max(0, Math.floor(raw[key] || 0));
-  });
-  return inventory;
-}
-
-function cloneWeaponInventory(raw) {
-  return normalizeWeaponInventory(raw);
-}
-
-function weaponTypeKeys() {
-  return [...WEAPON_ORDER];
-}
-
-function weaponTypeKeyByEmoji(emoji) {
-  return WEAPON_ORDER.find((key) => WEAPON_TYPES[key].emoji === emoji) || null;
-}
-
-function weaponInventoryTotal(raw) {
-  const inventory = normalizeWeaponInventory(raw);
-  return WEAPON_ORDER.reduce((sum, key) => sum + inventory[key], 0);
-}
 
 function weaponCountText(weaponKey, count = 1) {
   const weapon = WEAPON_TYPES[weaponKey];
@@ -198,77 +237,39 @@ function weaponCountText(weaponKey, count = 1) {
   return `${n}${emoji}`;
 }
 
-function weaponInventoryItems(raw, opts = {}) {
-  const inventory = normalizeWeaponInventory(raw);
-  return WEAPON_ORDER
-    .map((key) => ({
-      key,
-      name: WEAPON_TYPES[key].name,
-      emoji: WEAPON_TYPES[key].emoji,
-      count: inventory[key] || 0,
-    }))
-    .filter((item) => opts.includeZeros || item.count > 0);
+function createWeaponGrant(weaponKey, count = 1) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  if (!WEAPON_TYPES[weaponKey] || n <= 0) return null;
+  return { key: weaponKey, count: n };
 }
 
-function weaponInventoryText(raw, joiner = ' ') {
-  return weaponInventoryItems(raw).map((item) => weaponCountText(item.key, item.count)).join(joiner);
+function weaponGrantQueue(grant) {
+  const normalized = createWeaponGrant(grant && grant.key, grant && grant.count);
+  if (!normalized) return [];
+  return Array.from({ length: normalized.count }, () => normalized.key);
 }
 
-function addWeaponInventory(target, source) {
-  if (!target || typeof target !== 'object') return cloneWeaponInventory(source);
-  const gain = normalizeWeaponInventory(source);
-  WEAPON_ORDER.forEach((key) => {
-    target[key] = Math.max(0, (target[key] || 0) + gain[key]);
-  });
-  return target;
-}
-
-function removeWeaponInventory(target, source) {
-  if (!target || typeof target !== 'object') return false;
-  const cost = normalizeWeaponInventory(source);
-  for (const key of WEAPON_ORDER) {
-    if ((target[key] || 0) < cost[key]) return false;
-  }
-  WEAPON_ORDER.forEach((key) => {
-    target[key] = Math.max(0, (target[key] || 0) - cost[key]);
-  });
-  return true;
-}
-
-function spendAnyWeapons(target, count, order = WEAPON_ORDER) {
-  const need = Math.max(0, Math.floor(Number(count) || 0));
-  if (need === 0) return createWeaponInventory();
-  if (!target || typeof target !== 'object') return null;
-  if (weaponInventoryTotal(target) < need) return null;
-
-  const spent = createWeaponInventory();
-  let remaining = need;
-  order.forEach((key) => {
-    if (remaining <= 0) return;
-    const take = Math.min(Math.max(0, target[key] || 0), remaining);
-    if (take <= 0) return;
-    target[key] -= take;
-    spent[key] += take;
-    remaining -= take;
-  });
-  return remaining === 0 ? spent : null;
+function weaponGrantText(grant) {
+  const normalized = createWeaponGrant(grant && grant.key, grant && grant.count);
+  if (!normalized) return '';
+  return weaponCountText(normalized.key, normalized.count);
 }
 
 function randomWeaponKey() {
   return Phaser.Utils.Array.GetRandom(WEAPON_ORDER);
 }
 
-function rollWeaponDrops(count, opts = {}) {
+function rollWeaponKeys(count, opts = {}) {
   const total = Math.max(0, Math.floor(Number(count) || 0));
-  const drops = createWeaponInventory();
-  if (total === 0) return drops;
+  const out = [];
+  if (total === 0) return out;
 
   let remaining = total;
   if (opts.ensureDistinct) {
     const distinctKeys = Phaser.Utils.Array.Shuffle([...WEAPON_ORDER]);
     const distinctCount = Math.min(remaining, distinctKeys.length);
     for (let i = 0; i < distinctCount; i++) {
-      drops[distinctKeys[i]] += 1;
+      out.push(distinctKeys[i]);
       remaining -= 1;
     }
   }
@@ -276,10 +277,10 @@ function rollWeaponDrops(count, opts = {}) {
   while (remaining > 0) {
     const key = randomWeaponKey();
     if (!key) break;
-    drops[key] += 1;
+    out.push(key);
     remaining -= 1;
   }
-  return drops;
+  return out;
 }
 
 function uiColorInt(hex) {
@@ -375,8 +376,8 @@ function pirateDescWithSuffix(text, suffix) {
 }
 
 function pirateDescEmoji(kind) {
+  if (WEAPON_TYPES[kind]) return WEAPON_TYPES[kind].emoji;
   if (kind === 'weapons') return WEAPON_CATEGORY_EMOJI;
-  if (kind === 'cannons') return '💣';
   if (kind === 'enthusiasm') return '☠️';
   return RES_EMOJI[kind] || '';
 }
@@ -413,8 +414,8 @@ function pirateIslandDesc(def, opts = {}) {
 
   if (island.guaranteed) {
     const gain = island.guaranteed;
+    if (gain.weapon) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount(gain.weapon, gain.count || 1), pirateIslandDescSuffix(island)));
     if (gain.weapons) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount('weapons', gain.weapons), pirateIslandDescSuffix(island)));
-    if (gain.cannons) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount('cannons', gain.cannons), pirateIslandDescSuffix(island)));
     if (gain.res) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount(gain.res, gain.amt), pirateIslandDescSuffix(island)));
     return '—';
   }
@@ -451,8 +452,6 @@ function pirateShipCostDesc(ship) {
   if (Array.isArray(ship.costs) && ship.costs.length) {
     return pirateDescJoin(ship.costs.map(cost => pirateDescCount(cost.res, cost.n)));
   }
-  if (ship.costWeapons) return pirateDescCount('weapons', ship.costWeapons);
-  if (ship.costCannons) return pirateDescCount('cannons', ship.costCannons);
   if (ship.cRes && ship.cN > 0) return pirateDescCount(ship.cRes, ship.cN);
   return '';
 }
@@ -462,8 +461,7 @@ function pirateShipGainDesc(ship) {
   const gains = [];
   if (ship.pRes && ship.pN > 0) gains.push(pirateDescCount(ship.pRes, ship.pN));
   if (ship.extraEnthusiasm) gains.push(pirateDescCount('enthusiasm', ship.extraEnthusiasm));
-  if (ship.prodWeapons) gains.push(pirateDescCount('weapons', ship.prodWeapons));
-  if (ship.prodCannons) gains.push(pirateDescCount('cannons', ship.prodCannons));
+  if (ship.prodWeapon) gains.push(pirateDescCount(ship.prodWeapon, ship.prodWeaponN || 1));
   return pirateDescJoin(gains);
 }
 
@@ -481,6 +479,127 @@ function pirateShipDesc(def) {
   if (cost && gain) return normalizePirateDescText(`${cost} → ${gain}`);
   if (gain) return normalizePirateDescText(gain);
   return '—';
+}
+
+function pirateTooltipTitle(text, fallback = 'Effect') {
+  const src = String(text || fallback).trim();
+  if (!src) return fallback;
+  return src
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function pirateCardEffectTips(typeOrPirate, opts = {}) {
+  const pirate = typeOrPirate && typeof typeOrPirate === 'object' ? typeOrPirate : null;
+  const typeKey = typeof typeOrPirate === 'string' ? typeOrPirate : (pirate && pirate.type);
+  const def = TYPES[typeKey];
+  if (!def) return [];
+
+  const tips = [];
+  const seen = new Set();
+  const island = def.island;
+  const ship = def.ship;
+
+  const addTip = (key, title, body) => {
+    const cleanTitle = String(title || '').trim();
+    const cleanBody = String(body || '').trim();
+    if (!key || seen.has(key) || !cleanTitle || !cleanBody) return;
+    seen.add(key);
+    tips.push({ key, title: cleanTitle, body: cleanBody });
+  };
+
+  const addEnthusiasmTip = () => {
+    addTip(
+      'enthusiasm',
+      '☠️ Enthusiasm',
+      'Used to buy new pirates in the shop. It resets at the end of the round.'
+    );
+  };
+
+  const addWeaponTip = (weaponKey) => {
+    const weapon = WEAPON_TYPES[weaponKey];
+    if (!weapon) return;
+    addTip(
+      `weapon-${weaponKey}`,
+      `${weapon.emoji} ${weapon.name}`,
+      `${weapon.summary} Stays on that pirate until it leaves your crew.`
+    );
+  };
+
+  const addWeaponGrantTips = (weaponKey) => {
+    if (!WEAPON_TYPES[weaponKey]) return;
+    addTip(
+      'weapon-grant',
+      `${WEAPON_CATEGORY_EMOJI} Weapon Gain`,
+      'Assign created weapons to any unarmed pirate from this round, even one already sent ashore. Skip them and they vanish.'
+    );
+    addWeaponTip(weaponKey);
+  };
+
+  const addChanceTip = () => {
+    if (!island || island.chance == null || !island.res || !island.amt) return;
+    const chancePct = Math.round((Number(island.chance) || 0) * 100);
+    const resultText = pirateDescCount(island.res, island.amt);
+    const label = pirateTooltipTitle(pirateIslandDescSuffix(island), 'Chance Roll');
+    let body = `${chancePct}% to gain ${resultText}. On a miss, you usually get 1 random other resource instead.`;
+    if (island.res === 'gold') {
+      body += ' A 🗺️ auto-spends for +30% gold chance, up to 95%.';
+    }
+    addTip(`chance-${typeKey}`, label, body);
+  };
+
+  if (island) {
+    if (island.recall) {
+      addTip(
+        'recall',
+        'Recall',
+        `Returns the last ${island.recall} other pirate${island.recall === 1 ? '' : 's'} sent to this island back to your hand.`
+      );
+    }
+    if (island.exileSent) {
+      addTip(
+        'exile-sent',
+        'Exile Previous',
+        'Permanently removes the pirate sent just before this one from your crew. Does nothing if no pirate was sent first.'
+      );
+    }
+    if (island.guaranteed) {
+      const gain = island.guaranteed;
+      if (gain.res === 'enthusiasm' && gain.amt > 0) addEnthusiasmTip();
+      if (gain.weapon) addWeaponGrantTips(gain.weapon);
+    }
+    if (island.bonusEnthusiasm) addEnthusiasmTip();
+    addChanceTip();
+  }
+
+  if (ship) {
+    if (ship.pRes === 'enthusiasm' && ship.pN > 0) addEnthusiasmTip();
+    if (ship.extraEnthusiasm) addEnthusiasmTip();
+    if (ship.removeSelf) {
+      addTip(
+        'remove-self',
+        'Get Lost',
+        'After this ship action, this pirate is permanently removed from your crew.'
+      );
+    }
+    if (ship.removeFromDeck) {
+      addTip(
+        'remove-from-deck',
+        'Exile Pirate',
+        'After paying the cost, permanently exile one pirate from your crew that is not in the current hand.'
+      );
+    }
+    if (ship.prodWeapon) addWeaponGrantTips(ship.prodWeapon);
+  }
+
+  const equippedWeaponKey = opts.equippedWeaponKey != null
+    ? opts.equippedWeaponKey
+    : (pirate && pirate.weaponKey);
+  if (WEAPON_TYPES[equippedWeaponKey]) addWeaponTip(equippedWeaponKey);
+
+  return tips;
 }
 
 const ISLANDS = [
@@ -513,7 +632,7 @@ const TYPES = {
   },
   armsman: {
     name: 'Armsman', cat: [1,14,39,27,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { weapons: 1 } },
+    island: { guaranteed: { weapon: 'hammer', count: 1 } },
     ship:   null,
     cost: null,
   },
@@ -533,44 +652,44 @@ const TYPES = {
   tutorialAdmiralBlackpowder: {
     name: 'Admiral Blackpowder', cat: [9,33,46,16,0,7], str: BASE_PIRATE_ATTACK, canIsland: false,
     island: null,
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 0, prodCannons: 3 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'musket', prodWeaponN: 2 },
     cost: 5,
   },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95, descSuffix: 'safe' },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapons: 3 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'axe', prodWeaponN: 1 },
     cost: 3,
   },
   stonemason: {
     name: 'Stonemason', cat: [5,23,39,16,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95, descSuffix: 'safe' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodCannons: 1 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'chain', prodWeaponN: 1 },
     cost: 3,
   },
   brute: {
     name: 'Brute', cat: [3,26,39,19,0,3], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { weapons: 1 } },
+    island: { guaranteed: { weapon: 'hammer', count: 1 } },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
   },
   whittler: {
     name: 'Whittler', cat: [1,6,42,34,16,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'chakram', prodWeaponN: 1 },
     cost: 2,
   },
   corsair: {
     name: 'Corsair', cat: [1,8,42,27,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { weapons: 2 } },
+    island: { guaranteed: { weapon: 'axe', count: 2 } },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
   privateer: {
     name: 'Privateer', cat: [1,12,45,27,16,4], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
-    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 6 },
+    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
     cost: 3,
   },
   herald: {
@@ -579,23 +698,11 @@ const TYPES = {
     ship:   null,
     cost: 2,
   },
-  scrapper: {
-    name: 'Scrapper', cat: [15,27,46,16,0,6], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { weapons: 2 } },
-    ship:   { costCannons: 1, pRes: 'stone', pN: 4, extraEnthusiasm: 3 },
-    cost: 4,
-  },
   deckhand: {
     name: 'Deckhand', cat: [4,34,40,16,0,6], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapons: 1 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'hammer', prodWeaponN: 1 },
     cost: 2,
-  },
-  blacksmith: {
-    name: 'Blacksmith', cat: [15,37,38,16,0,9], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'risky' },
-    ship:   { costWeapons: 2, prodCannons: 1, extraEnthusiasm: 3 },
-    cost: 4,
   },
   bosun: {
     name: 'Bosun', cat: [3,27,46,16,20,6], str: BASE_PIRATE_ATTACK, canIsland: false,
@@ -619,19 +726,19 @@ const TYPES = {
   trader: {
     name: 'Trader', cat: [8,34,46,16,0,5], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 }, descSuffix: 'safe' },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 4 },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2, prodWeapon: 'anchor', prodWeaponN: 1 },
     cost: 7,
   },
   woodsman: {
     name: 'Woodsman', cat: [11,25,43,16,0,0], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 6 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'bow', prodWeaponN: 2 },
     cost: 7,
   },
   prospector: {
     name: 'Prospector', cat: [7,30,45,16,0,2], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodCannons: 2 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'blunderbuss', prodWeaponN: 2 },
     cost: 7,
   },
   smuggler: {
@@ -650,19 +757,19 @@ const TYPES = {
   masterLumberjack: {
     name: 'Master Rigger', cat: [10,28,40,16,0,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapons: 9 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'hookshot', prodWeaponN: 2 },
     cost: 13,
   },
   masterMiner: {
     name: 'Master Ballaster', cat: [15,34,43,17,0,9], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'stone', amt: 2, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodCannons: 3 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
     cost: 13,
   },
   // ---- special: get-lost pirates (removeSelf on ship) ----
   raider: {
     name: 'Raider', cat: [1,15,44,26,19,3], str: BASE_PIRATE_ATTACK, canIsland: true,
-    island: { guaranteed: { weapons: 3 } },
+    island: { guaranteed: { weapon: 'axe', count: 2 } },
     ship:   { removeSelf: true },
     cost: 4,
   },
@@ -682,13 +789,13 @@ const TYPES = {
   marooner: {
     name: 'Marooner', cat: [6,28,43,17,20,4], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { exileSent: true },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapons: 3 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapon: 'dirk', prodWeaponN: 1 },
     cost: 6,
   },
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], str: BASE_PIRATE_ATTACK, canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'trident', prodWeaponN: 1 },
     cost: 3,
   },
 };
@@ -697,7 +804,7 @@ const SHOP_POOL = [
   'woodsman', 'prospector', 'explorer',
   'masterLumberjack', 'masterMiner',
   'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
-  'brute', 'deckhand', 'blacksmith', 'trader', 'scrapper',
+  'brute', 'deckhand', 'trader',
   'whittler', 'corsair', 'privateer', 'herald',
   'raider', 'profiteer', 'drifter', 'marooner', 'survivalist',
 ];

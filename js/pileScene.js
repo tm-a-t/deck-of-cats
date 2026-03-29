@@ -25,6 +25,7 @@ class PilePanelScene extends Phaser.Scene {
     this.panelLayer = this.add.container(0, 0).setDepth(40);
     this.contentLayer = this.add.container(0, 0).setDepth(41);
     this.uiLayer = this.add.container(0, 0).setDepth(42);
+    this._cardTips = new CardTooltipController(this, { depth: 80 });
     this._contentH = 0;
     this._scrollMinY = 0;
     this._scrollMaxY = 0;
@@ -53,6 +54,7 @@ class PilePanelScene extends Phaser.Scene {
         this._contentMaskSource.destroy();
         this._contentMaskSource = null;
       }
+      if (this._cardTips) this._cardTips.destroy();
     });
   }
 
@@ -93,6 +95,16 @@ class PilePanelScene extends Phaser.Scene {
       innerY: y + headH,
       innerW: w - pad * 2,
       innerH: h - headH - footPad,
+    };
+  }
+
+  tooltipBounds(panel) {
+    const pad = 18 * this.L.k;
+    return {
+      left: panel.x + pad,
+      top: panel.y + pad,
+      right: panel.x + panel.w - pad,
+      bottom: panel.y + panel.h - pad,
     };
   }
 
@@ -160,6 +172,10 @@ class PilePanelScene extends Phaser.Scene {
     const L = this.L;
     const m = this.computePanel();
     this.panel = m;
+    if (this._cardTips) {
+      this._cardTips.setBoundsRect(this.tooltipBounds(m));
+      this._cardTips.hide();
+    }
 
     const shadow = this.add.graphics();
     shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.18);
@@ -206,7 +222,9 @@ class PilePanelScene extends Phaser.Scene {
     const layout = this.computeGridLayout(cards.length);
     cards.forEach((pirate, idx) => {
       const pos = this.gridCardPos(idx, layout);
-      createPirateCard(this, {
+      const tipKey = `${this.scene.key}-${pirate.id}-${idx}`;
+      const tips = pirateCardEffectTips(pirate);
+      const card = createPirateCard(this, {
         type: pirate.type,
         x: pos.x,
         y: pos.y,
@@ -214,6 +232,24 @@ class PilePanelScene extends Phaser.Scene {
         container: this.contentLayer,
         depth: 10 + idx,
         scale: layout.cardScale,
+        interactive: true,
+        slotState: WEAPON_TYPES[pirate.weaponKey] ? 'armed' : 'none',
+        slotWeaponKey: WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null,
+      });
+      const showTips = () => this._cardTips && this._cardTips.showForCard(card.container, tips, { key: tipKey });
+      card.cardImg.on('pointerover', () => {
+        showTips();
+      });
+      card.cardImg.on('pointerout', () => {
+        if (this._cardTips) this._cardTips.hideForKey(tipKey);
+      });
+      card.cardImg.on('pointerdown', (ptr) => {
+        if (!isTouchLikePointer(ptr)) return;
+        if (this._cardTips && this._cardTips.isActiveFor(tipKey)) {
+          this._cardTips.hide();
+          return;
+        }
+        showTips();
       });
     });
 
@@ -260,6 +296,7 @@ class PilePanelScene extends Phaser.Scene {
   }
 
   applyScroll(nextY) {
+    if (this._cardTips) this._cardTips.hide();
     this.contentLayer.y = Phaser.Math.Clamp(nextY, this._scrollMinY, this._scrollMaxY);
   }
 
