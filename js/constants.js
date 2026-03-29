@@ -529,11 +529,12 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
   };
 
   const addWeaponGrantTips = (weaponKey) => {
-    if (!WEAPON_TYPES[weaponKey]) return;
+    const weapon = WEAPON_TYPES[weaponKey];
+    if (!weapon) return;
     addTip(
       'weapon-grant',
       'Weapon Gain',
-      'Gain a weapon and assign it to one pirate this round.'
+      `Assign ${weapon.emoji} to one pirate.`
     );
     addWeaponTip(weaponKey);
   };
