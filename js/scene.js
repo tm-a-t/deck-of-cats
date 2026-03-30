@@ -1126,23 +1126,21 @@ class GameScene extends Phaser.Scene {
       const pirate = cardData && cardData.pirate;
       const target = pirate ? playerSlots[pirate.id] : null;
       if (!pirate || !target) return;
-      endAt = Math.max(endAt, this.animateCardGhost({
-        type: pirate.type,
-        x: cardData.container.x,
-        y: cardData.container.y,
-        rotation: cardData.container.rotation,
-        scale: cardData.container.scaleX || 1,
-        slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
-        slotWeaponKey: this.pirateWeaponKey(pirate),
-      }, target, {
-        delay: 140 + idx * 70,
-        duration: 520,
-        endScale: 0.5,
-        endAlpha: 0.24,
-        endRotation: 0,
-        arcHeight: 110 * this.L.k,
-        arcSpreadX: 64 * this.L.k,
-      }));
+      const delay = 140 + idx * 70;
+      const duration = 520;
+      cardData.container.setDepth(70 + idx);
+      this.tweens.add({
+        targets: cardData.container,
+        x: target.x,
+        y: target.y,
+        rotation: 0,
+        scaleX: 0.5,
+        scaleY: 0.5,
+        delay,
+        duration,
+        ease: 'Cubic.easeInOut',
+      });
+      endAt = Math.max(endAt, delay + duration);
     });
 
     this._boardingIntroTimer = this.time.delayedCall(endAt + 60, () => {
@@ -1153,6 +1151,22 @@ class GameScene extends Phaser.Scene {
       combat.introStarted = false;
       this.renderAll();
     });
+  }
+
+  boardingHandVisible(combat = G.combat) {
+    if (!combat) return false;
+    if (combat.mode === 'intro' || combat.mode === 'resolved') return true;
+    return combat.mode === 'fighting' && this.combatReturnedPirateIds(combat).length > 0;
+  }
+
+  boardingHandHiddenCard(combat = G.combat) {
+    const returnedPirateIds = this.combatReturnedPirateSet(combat);
+    return (_pirate, handIdx) => {
+      if (!combat || combat.mode === 'intro') return false;
+      const pirate = G.hand && G.hand[handIdx];
+      if (!pirate) return false;
+      return !returnedPirateIds.has(pirate.id);
+    };
   }
 
   combatSetupRowTotal() {
@@ -3768,8 +3782,8 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const enemyFighters = combat.enemyFighters || [];
-    const playerFighters = combat.playerFighters || [];
+    const enemyFighters = (combat.enemyFighters || []).filter((fighter) => fighter && fighter.alive);
+    const playerFighters = (combat.playerFighters || []).filter((fighter) => fighter && fighter.alive);
     const enemyVisuals = this.combatFormationVisuals('enemy');
     const playerVisuals = this.combatFormationVisuals('player');
     const enemySlots = this.combatFormationSlots('enemy', enemyFighters, { ...enemyVisuals, livingOnly: true });
@@ -4034,9 +4048,9 @@ class GameScene extends Phaser.Scene {
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
     const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
-    const returnedPirateIds = isBoarding ? this.combatReturnedPirateSet(combat) : new Set();
+    const handVisible = !(isBoarding && combat && !this.boardingHandVisible(combat));
 
-    if (isBoarding && combat && combat.mode !== 'intro' && combat.mode !== 'resolved') return;
+    if (!handVisible) return;
 
     this._cardHand.render({
       hand: G.hand,
@@ -4046,13 +4060,7 @@ class GameScene extends Phaser.Scene {
       allowInteraction,
       prevPositions,
       appearFrom,
-      hiddenCard: (_pirate, handIdx) => {
-        if (!isBoarding || !combat) return false;
-        const pirate = G.hand && G.hand[handIdx];
-        if (!pirate) return false;
-        if (combat.mode === 'resolved') return false;
-        return returnedPirateIds.size > 0 && !returnedPirateIds.has(pirate.id);
-      },
+      hiddenCard: isBoarding && combat ? this.boardingHandHiddenCard(combat) : undefined,
       layout: isWeaponAssignment ? 'row' : undefined,
       rowLayout: isWeaponAssignment ? {
         y: L.Y_HAND_CENTER - 8 * L.k,
