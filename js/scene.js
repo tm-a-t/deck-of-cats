@@ -391,7 +391,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openPauseMenu() {
-    if (this.isTutorialPopupOpen() || this.scene.isActive('pauseModal')) return;
+    if (this.scene.isActive('pauseModal')) return;
     this.closePanels();
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStop();
@@ -4601,7 +4601,7 @@ class GameScene extends Phaser.Scene {
     const mapEnabled = panelEnabled;
     const shopEnabled = panelEnabled && !G.busy;
     const pileEnabled = panelEnabled && !G.busy;
-    const pauseEnabled = panelEnabled;
+    const pauseEnabled = true;
     const topGap = 10 * L.k;
     const topY = 60 * L.k;
     const iconOpts = {
