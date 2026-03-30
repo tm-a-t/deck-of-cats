@@ -8,6 +8,11 @@ class PilePanelScene extends Phaser.Scene {
     this.panelTitle = title;
   }
 
+  init(data) {
+    this._launchOriginRect = data && data.originRect ? { ...data.originRect } : null;
+    this._skipOpenAnim = !!(data && data.skipOpenAnim);
+  }
+
   preload() {
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
@@ -22,9 +27,12 @@ class PilePanelScene extends Phaser.Scene {
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.panel = this.computePanel();
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+    this._panelTween = null;
+    this._panelClosing = false;
     this.panelLayer = this.add.container(0, 0).setDepth(40);
     this.contentLayer = this.add.container(0, 0).setDepth(41);
     this.uiLayer = this.add.container(0, 0).setDepth(42);
+    this._cardTips = new CardTooltipController(this, { depth: 80 });
     this._contentH = 0;
     this._scrollMinY = 0;
     this._scrollMaxY = 0;
@@ -33,40 +41,84 @@ class PilePanelScene extends Phaser.Scene {
     this.input.on('pointerdown', (ptr) => {
       if (ptr.y > this.panel.h) {
         ptr.event.stopPropagation();
-        this.scene.stop();
+        this.requestClose();
       }
     });
 
     this.renderPanel();
     this.setupScroll();
-    this.animateOpen();
+    if (!this._skipOpenAnim) this.animateOpen();
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
-      this.scene.restart();
+      this.scene.restart({ skipOpenAnim: true, originRect: this._launchOriginRect });
     };
     this.scale.on('resize', this._onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this._panelTween) this._panelTween.stop();
+      this._panelTween = null;
+      this._panelClosing = false;
       if (this.contentLayer) this.contentLayer.clearMask(true);
       if (this._contentMaskSource) {
         this._contentMaskSource.destroy();
         this._contentMaskSource = null;
       }
+      if (this._cardTips) this._cardTips.destroy();
     });
   }
 
   animateOpen() {
-    const offset = 30 * this.L.k;
-    [this.panelLayer, this.contentLayer, this.uiLayer].forEach((layer) => {
-      layer.setAlpha(0).setY(-offset);
-      this.tweens.add({
-        targets: layer,
-        alpha: 1,
-        y: 0,
-        duration: 140,
-        ease: 'Cubic.easeOut',
-      });
+    const finalStates = snapshotPanelTargets(this.transitionTargets());
+    const fromStates = finalStates.map((state) => (
+      collapsedPanelState(state, this.panel, this._launchOriginRect, { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, finalStates, {
+      duration: PANEL_MOTION.openDuration,
+      ease: PANEL_MOTION.openEase,
+      onComplete: () => {
+        this._panelTween = null;
+      },
+    });
+  }
+
+  transitionTargets() {
+    return [this.panelLayer, this.contentLayer, this.uiLayer, this._contentMaskSource];
+  }
+
+  currentOriginRect() {
+    const game = this.scene.get('game');
+    if (game && typeof game.panelButtonRect === 'function') {
+      return game.panelButtonRect(this.scene.key) || this._launchOriginRect;
+    }
+    return this._launchOriginRect;
+  }
+
+  requestClose() {
+    if (this._panelClosing) return;
+    this._panelClosing = true;
+    const game = this.scene.get('game');
+    if (game && typeof game.panelFlagKey === 'function') {
+      const flagKey = game.panelFlagKey(this.scene.key);
+      if (flagKey && game[flagKey]) game.setPanelOpen(this.scene.key, false);
+    }
+    this.input.enabled = false;
+    if (this._cardTips) this._cardTips.hide();
+    if (this._panelTween) {
+      this._panelTween.stop();
+      this._panelTween = null;
+    }
+    const fromStates = snapshotPanelTargets(this.transitionTargets());
+    const toStates = fromStates.map((state) => (
+      collapsedPanelState(state, this.panel, this.currentOriginRect(), { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, toStates, {
+      duration: PANEL_MOTION.closeDuration,
+      ease: PANEL_MOTION.closeEase,
+      onComplete: () => {
+        this._panelTween = null;
+        this.scene.stop();
+      },
     });
   }
 
@@ -93,6 +145,16 @@ class PilePanelScene extends Phaser.Scene {
       innerY: y + headH,
       innerW: w - pad * 2,
       innerH: h - headH - footPad,
+    };
+  }
+
+  tooltipBounds(panel) {
+    const pad = 18 * this.L.k;
+    return {
+      left: panel.x + pad,
+      top: panel.y + pad,
+      right: panel.x + panel.w - pad,
+      bottom: panel.y + panel.h - pad,
     };
   }
 
@@ -160,6 +222,10 @@ class PilePanelScene extends Phaser.Scene {
     const L = this.L;
     const m = this.computePanel();
     this.panel = m;
+    if (this._cardTips) {
+      this._cardTips.setBoundsRect(this.tooltipBounds(m));
+      this._cardTips.hide();
+    }
 
     const shadow = this.add.graphics();
     shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.18);
@@ -183,7 +249,7 @@ class PilePanelScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
-      this.scene.stop();
+      this.requestClose();
     });
     this.uiLayer.add(close);
 
@@ -206,7 +272,9 @@ class PilePanelScene extends Phaser.Scene {
     const layout = this.computeGridLayout(cards.length);
     cards.forEach((pirate, idx) => {
       const pos = this.gridCardPos(idx, layout);
-      createPirateCard(this, {
+      const tipKey = `${this.scene.key}-${pirate.id}-${idx}`;
+      const tips = pirateCardEffectTips(pirate);
+      const card = createPirateCard(this, {
         type: pirate.type,
         x: pos.x,
         y: pos.y,
@@ -214,6 +282,24 @@ class PilePanelScene extends Phaser.Scene {
         container: this.contentLayer,
         depth: 10 + idx,
         scale: layout.cardScale,
+        interactive: true,
+        slotState: WEAPON_TYPES[pirate.weaponKey] ? 'armed' : 'none',
+        slotWeaponKey: WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null,
+      });
+      const showTips = () => this._cardTips && this._cardTips.showForCard(card.container, tips, { key: tipKey });
+      card.cardImg.on('pointerover', () => {
+        showTips();
+      });
+      card.cardImg.on('pointerout', () => {
+        if (this._cardTips) this._cardTips.hideForKey(tipKey);
+      });
+      card.cardImg.on('pointerdown', (ptr) => {
+        if (!isTouchLikePointer(ptr)) return;
+        if (this._cardTips && this._cardTips.isActiveFor(tipKey)) {
+          this._cardTips.hide();
+          return;
+        }
+        showTips();
       });
     });
 
@@ -223,7 +309,7 @@ class PilePanelScene extends Phaser.Scene {
 
   setupScroll() {
     const m = this.panel;
-    const maskShape = this.make.graphics({ add: false });
+    const maskShape = this.add.graphics().setDepth(39).setAlpha(0.001);
     maskShape.fillStyle(0xffffff);
     maskShape.fillRect(m.innerX, m.innerY, m.innerW, m.innerH);
     this._contentMaskSource = maskShape;
@@ -260,6 +346,7 @@ class PilePanelScene extends Phaser.Scene {
   }
 
   applyScroll(nextY) {
+    if (this._cardTips) this._cardTips.hide();
     this.contentLayer.y = Phaser.Math.Clamp(nextY, this._scrollMinY, this._scrollMaxY);
   }
 

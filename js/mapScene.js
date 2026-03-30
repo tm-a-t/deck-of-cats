@@ -5,6 +5,11 @@
 class MapScene extends Phaser.Scene {
   constructor() { super('map'); }
 
+  init(data) {
+    this._launchOriginRect = data && data.originRect ? { ...data.originRect } : null;
+    this._skipOpenAnim = !!(data && data.skipOpenAnim);
+  }
+
   preload() {
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
@@ -19,6 +24,9 @@ class MapScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     this.L = computeLayout(this.scale.width, this.scale.height);
     this.panel = this.computePanel();
+    this._panelTween = null;
+    this._panelClosing = false;
+    this._mapMaskSource = null;
     this.panelLayer = this.add.container(0, 0).setDepth(20);
     this.mapGfx = this.add.container(0, 0).setDepth(21);
     this.uiLayer = this.add.container(0, 0).setDepth(22);
@@ -28,36 +36,82 @@ class MapScene extends Phaser.Scene {
     this.renderHeader();
     this.setupScroll();
     this.scrollToCurrentLayer(false);
-    this.animateOpen();
+    if (!this._skipOpenAnim) this.animateOpen();
 
     this.input.on('pointerdown', (ptr) => {
       if (ptr.y > this.panel.h) {
         ptr.event.stopPropagation();
-        this.scene.stop();
+        this.requestClose();
       }
     });
 
     this._onResize = () => {
       this.L = computeLayout(this.scale.width, this.scale.height);
-      this.scene.restart();
+      this.scene.restart({ skipOpenAnim: true, originRect: this._launchOriginRect });
     };
     this.scale.on('resize', this._onResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this._panelTween) this._panelTween.stop();
+      this._panelTween = null;
+      this._panelClosing = false;
+      if (this._mapMaskSource) {
+        this._mapMaskSource.destroy();
+        this._mapMaskSource = null;
+      }
     });
   }
 
+  transitionTargets() {
+    return [this.panelLayer, this.mapGfx, this.uiLayer, this._mapMaskSource];
+  }
+
+  currentOriginRect() {
+    const game = this.scene.get('game');
+    if (game && typeof game.panelButtonRect === 'function') {
+      return game.panelButtonRect(this.scene.key) || this._launchOriginRect;
+    }
+    return this._launchOriginRect;
+  }
+
   animateOpen() {
-    const offset = 30 * this.L.k;
-    [this.panelLayer, this.mapGfx, this.uiLayer].forEach(c => {
-      const origY = c.y;
-      c.setAlpha(0).setY(origY - offset);
-      this.tweens.add({
-        targets: c,
-        alpha: 1, y: origY,
-        duration: 140,
-        ease: 'Cubic.easeOut',
-      });
+    const finalStates = snapshotPanelTargets(this.transitionTargets());
+    const fromStates = finalStates.map((state) => (
+      collapsedPanelState(state, this.panel, this._launchOriginRect, { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, finalStates, {
+      duration: PANEL_MOTION.openDuration,
+      ease: PANEL_MOTION.openEase,
+      onComplete: () => {
+        this._panelTween = null;
+      },
+    });
+  }
+
+  requestClose() {
+    if (this._panelClosing) return;
+    this._panelClosing = true;
+    const game = this.scene.get('game');
+    if (game && typeof game.panelFlagKey === 'function') {
+      const flagKey = game.panelFlagKey(this.scene.key);
+      if (flagKey && game[flagKey]) game.setPanelOpen(this.scene.key, false);
+    }
+    this.input.enabled = false;
+    if (this._panelTween) {
+      this._panelTween.stop();
+      this._panelTween = null;
+    }
+    const fromStates = snapshotPanelTargets(this.transitionTargets());
+    const toStates = fromStates.map((state) => (
+      collapsedPanelState(state, this.panel, this.currentOriginRect(), { L: this.L })
+    ));
+    this._panelTween = tweenPanelStates(this, fromStates, toStates, {
+      duration: PANEL_MOTION.closeDuration,
+      ease: PANEL_MOTION.closeEase,
+      onComplete: () => {
+        this._panelTween = null;
+        this.scene.stop();
+      },
     });
   }
 
@@ -254,9 +308,9 @@ class MapScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.mapGfx.add(label);
 
-        // Ship strength label
+        // Boarding label
         if (isShip) {
-          const strTxt = this.add.text(nx, ny + r + 8, node.strength + '⚔️', {
+          const strTxt = this.add.text(nx, ny + r + 8, 'Board', {
             fontFamily: UI_THEME.fonts.body,
             fontSize: L.fs(14),
             color: UI_THEME.colors.ink,
@@ -328,7 +382,7 @@ class MapScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     close.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
-      this.scene.stop();
+      this.requestClose();
     });
     this.uiLayer.add([title, close]);
   }
@@ -343,9 +397,10 @@ class MapScene extends Phaser.Scene {
     const viewH = mapZoneBot - mapZoneTop;
 
     // Mask the map container to the map zone
-    const shape = this.make.graphics({ add: false });
+    const shape = this.add.graphics().setDepth(19).setAlpha(0.001);
     shape.fillStyle(0xffffff);
     shape.fillRect(0, mapZoneTop, L.W, viewH);
+    this._mapMaskSource = shape;
     const mask = shape.createGeometryMask();
     this.mapGfx.setMask(mask);
 
@@ -427,10 +482,11 @@ class MapScene extends Phaser.Scene {
   selectMapNode(nodeId) {
     if (G.phase !== 'map') return;
     const game = this.scene.get('game');
+    let handled = false;
     if (game && game.scene && game.scene.isActive()) {
-      game.applyMapNodeSelection(nodeId);
+      handled = game.applyMapNodeSelection(nodeId);
     }
-    this.scene.stop();
+    if (!handled) this.requestClose();
   }
 
   // ──────────── HELPERS ────────────

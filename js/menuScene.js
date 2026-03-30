@@ -40,22 +40,14 @@ class MenuScene extends Phaser.Scene {
     });
 
     const links = [
-      { label: 'Tutorial', cb: () => this.startTutorial() },
+      { label: 'Battle Test', cb: () => this.startBattleTest() },
       { label: 'Costumes', cb: () => this.scene.start('costumes') },
       { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
+      { label: 'Survey', cb: () => this.openSurvey() },
     ];
-    const linksY = playY + 82 * L.k;
+    const linksY = playY + 78 * L.k;
     links.forEach((item, idx) => {
-      const link = this.add.text(L.cx, linksY + idx * 28 * L.k, item.label, uiBodyStyle(L, UI_THEME.colors.cocoa, {
-        fontStyle: idx === 0 ? 'bold' : 'normal',
-      })).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      link.on('pointerover', () => link.setColor(UI_THEME.colors.ink));
-      link.on('pointerout', () => link.setColor(UI_THEME.colors.cocoa));
-      link.on('pointerdown', (ptr) => {
-        ptr.event.stopPropagation();
-        item.cb();
-      });
-      this.root.add(link);
+      this.mkTextBtn(L.cx, linksY + idx * 28 * L.k, item.label, item.cb);
     });
 
     const streak = getStreak();
@@ -71,34 +63,35 @@ class MenuScene extends Phaser.Scene {
     this.root.add(versionTxt);
   }
 
+  resetGameScenes() {
+    ['map', 'shopModal', 'drawPileModal', 'discardPileModal'].forEach((key) => {
+      if (this.scene.isActive(key)) this.scene.stop(key);
+    });
+  }
+
   startGame() {
-    if (this.scene.isActive('map')) this.scene.stop('map');
-    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
+    this.resetGameScenes();
     initState();
     this.scene.start('game');
   }
 
-  startTutorial() {
-    if (this.scene.isActive('map')) this.scene.stop('map');
-    if (this.scene.isActive('shopModal')) this.scene.stop('shopModal');
-    let tutorialReady = false;
-    try {
-      if (typeof initTutorialState === 'function') {
-        initTutorialState();
-        tutorialReady = true;
-      } else if (typeof window !== 'undefined' && typeof window.initTutorialState === 'function') {
-        window.initTutorialState();
-        tutorialReady = true;
-      }
-    } catch (err) {
-      console.error('Tutorial init failed:', err);
-    }
-
-    if (!tutorialReady) {
-      initState();
-    }
-
+  startBattleTest() {
+    this.resetGameScenes();
+    initBattleTestState();
     this.scene.start('game');
+  }
+
+  openSurvey() {
+    const url = this.getSurveyUrl();
+    if (typeof window === 'undefined') return;
+    const popup = typeof window.open === 'function'
+      ? window.open(url, '_blank', 'noopener,noreferrer')
+      : null;
+    if (!popup && window.location) window.location.assign(url);
+  }
+
+  getSurveyUrl() {
+    return `https://docs.google.com/forms/d/e/1FAIpQLScEAnKUl-glUgItxfcCDSrcqFNn07DhO5ipk-EzOtM2bTvo8Q/viewform?usp=pp_url&entry.67414477=${encodeURIComponent(GAME_VERSION)}`;
   }
 
   mkBtn(x, y, label, cb, opts = {}) {
@@ -128,5 +121,27 @@ class MenuScene extends Phaser.Scene {
     });
     this.root.add(btn);
     return btn;
+  }
+
+  mkTextBtn(x, y, label, cb, opts = {}) {
+    const style = Object.assign(
+      {},
+      uiBodyStyle(this.L, opts.color || UI_THEME.colors.cocoa, {
+        fontStyle: opts.fontStyle || 'normal',
+      }),
+      opts.textStyle || {}
+    );
+    const text = this.add.text(x, y, label, style)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    const hoverColor = opts.hoverColor || UI_THEME.colors.ink;
+    text.on('pointerover', () => text.setColor(hoverColor));
+    text.on('pointerout', () => text.setColor(opts.color || UI_THEME.colors.cocoa));
+    text.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      cb();
+    });
+    this.root.add(text);
+    return text;
   }
 }

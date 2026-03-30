@@ -58,6 +58,10 @@ function cardIslandBandMetrics(ch, k) {
   };
 }
 
+function cardBandCenterOffsetY(ch, band, scale = 1) {
+  return (-ch / 2 + band.height / 2) * scale;
+}
+
 function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolution, band) {
   if (scene.textures.exists(bandTexKey)) return;
   const bandCanvas = document.createElement('canvas');
@@ -80,18 +84,20 @@ function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolu
   scene.textures.get(bandTexKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
 }
 
-function buildCardTexture(scene, typeKey, L) {
+function buildCardTexture(scene, typeKey, L, opts = {}) {
   const k = L.k;
   const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
   const cw = Math.round(CARD.W * k);
   const ch = Math.round(CARD.H * k);
   const r = Math.round(CARD.RADIUS * k);
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
+  const slotState = opts.slotState || 'none';
+  const slotWeaponKey = opts.slotWeaponKey || null;
 
   const def = TYPES[typeKey];
   const islandDesc = pirateIslandDesc(def);
   const shipDesc = pirateShipDesc(def);
-  const textHash = cardTextHash(`${typeKey}|${def.name}|${islandDesc}|${shipDesc}|${def.str || 0}`);
+  const textHash = cardTextHash(`${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
   const islandBand = cardIslandBandMetrics(ch, k);
   const islandBandTexKey = texKey + '_islandband';
@@ -131,20 +137,10 @@ function buildCardTexture(scene, typeKey, L) {
       '',
       UI_THEME.fonts.headingMinPx
     );
-    const statFs = fitCanvasFontSize(
-      ctx,
-      `⚔️${def.str || 0}`,
-      maxTxtW,
-      Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k)),
-      UI_THEME.fonts.heading,
-      '',
-      UI_THEME.fonts.headingMinPx
-    );
     const islandFs = fitCanvasFontSize(ctx, islandDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
     const shipFs = fitCanvasFontSize(ctx, shipDesc, maxTxtW, Math.max(11, Math.round(14 * k)), UI_THEME.fonts.body);
     const topTextY = Math.round(7 * k);
     const nameY = Math.round(123 * k);
-    const statY = Math.round(143 * k);
     const bottomTextY = shipBand.top + Math.round(8 * k);
 
     ctx.textAlign = 'center';
@@ -167,6 +163,30 @@ function buildCardTexture(scene, typeKey, L) {
     ctx.lineTo(cw - Math.round(8 * k), shipBand.top);
     ctx.stroke();
 
+    const showsWeaponSlot = slotState === 'armed' || slotState === 'assign';
+    if (showsWeaponSlot) {
+      const slotW = Math.round(32 * k);
+      const slotH = Math.round(32 * k);
+      const slotR = Math.round(4 * k);
+      const slotX = 0;
+      const slotY = Math.round(36 * k);
+      roundRect(ctx, slotX, slotY, slotW, slotH, slotR);
+      ctx.fillStyle = UI_THEME.colors.sandEdge;
+      ctx.fill();
+      ctx.strokeStyle = hexToCSS(CARD.BORDER_COLOR, 1);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      const slotEmoji = slotState === 'assign'
+        ? '+'
+        : ((slotWeaponKey && WEAPON_TYPES[slotWeaponKey] && WEAPON_TYPES[slotWeaponKey].emoji) || WEAPON_CATEGORY_EMOJI);
+      ctx.fillStyle = UI_THEME.colors.ink;
+      ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round(16 * k))}px ${UI_THEME.fonts.heading}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(slotEmoji, slotX + slotW / 2, slotY + slotH / 2 + Math.round(1 * k));
+      ctx.textBaseline = 'top';
+    }
+
     ctx.fillStyle = UI_THEME.colors.ink;
 
     ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
@@ -174,9 +194,6 @@ function buildCardTexture(scene, typeKey, L) {
 
     ctx.font = `${nameFs}px ${UI_THEME.fonts.heading}`;
     ctx.fillText(def.name, cw / 2, nameY);
-
-    ctx.font = `${statFs}px ${UI_THEME.fonts.heading}`;
-    ctx.fillText(`⚔️${def.str || 0}`, cw / 2, statY);
 
     ctx.font = `${shipFs}px ${UI_THEME.fonts.body}`;
     ctx.fillText(shipDesc, cw / 2, bottomTextY);
@@ -211,7 +228,10 @@ function createPirateCard(scene, opts) {
   const depth = opts.depth != null ? opts.depth : 10;
   const scale = opts.scale != null ? opts.scale : 1;
 
-  const built = buildCardTexture(scene, opts.type, L);
+  const built = buildCardTexture(scene, opts.type, L, {
+    slotState: opts.slotState || 'none',
+    slotWeaponKey: opts.slotWeaponKey || null,
+  });
   const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
   if (built.textureResolution > 1) {
     cardImg.setScale(1 / built.textureResolution);
@@ -273,6 +293,7 @@ function createCardBandOverlay(scene, opts) {
   if (opts.depth != null) bandImg.setDepth(opts.depth);
   bandImg.setScale(imageScale * 0.985).setAlpha(0);
   bandImg.y += settleOffset;
+  if (opts.bandTint != null) bandImg.setTint(uiColorInt(opts.bandTint));
 
   if (opts.parentContainer) {
     opts.parentContainer.add([bandImg, accent]);
@@ -389,6 +410,226 @@ function cardHandLayout(n, L) {
   return slots;
 }
 
+function cardRowLayout(n, L, opts = {}) {
+  const k = L.k;
+  const scale = opts.scale != null ? opts.scale : 1;
+  const cardW = CARD.W * k * scale;
+  const y = opts.y != null ? opts.y : L.Y_HAND_CENTER;
+  const maxStep = opts.maxStep != null ? opts.maxStep : 170 * k;
+  const edgePad = opts.edgePad != null ? opts.edgePad : 22 * k;
+  const minX = edgePad + cardW / 2;
+  const maxX = L.W - minX;
+  const usableW = Math.max(0, maxX - minX);
+  const step = n <= 1 ? 0 : Math.min(maxStep, usableW / Math.max(n - 1, 1));
+  const rowW = step * Math.max(0, n - 1);
+  const startX = Phaser.Math.Clamp(L.cx - rowW / 2, minX, maxX - rowW);
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    slots.push({ x: startX + i * step, y, rotation: 0, index: i });
+  }
+  return slots;
+}
+
+function isTouchLikePointer(pointer) {
+  return !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
+}
+
+const CARD_TIP = {
+  maxW: 212,
+  padX: 12,
+  padY: 10,
+  titleGap: 5,
+  stackGap: 8,
+  anchorGap: 12,
+  edgePad: 12,
+  radius: 10,
+};
+
+class CardTooltipController {
+  constructor(scene, opts = {}) {
+    this.scene = scene;
+    this.boundsRect = opts.boundsRect || null;
+    this.layer = scene.add.container(0, 0).setDepth(opts.depth != null ? opts.depth : 160);
+    this.layer.setVisible(false);
+    this._activeKey = null;
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
+  }
+
+  destroy() {
+    this.hide();
+    if (this.layer) this.layer.destroy(true);
+    this.layer = null;
+    this.scene = null;
+    this.boundsRect = null;
+  }
+
+  setBoundsRect(rect) {
+    this.boundsRect = rect || null;
+  }
+
+  isActiveFor(key) {
+    return !!key && this._activeKey === key;
+  }
+
+  hideForKey(key) {
+    if (!this.isActiveFor(key)) return false;
+    this.hide();
+    return true;
+  }
+
+  hide() {
+    if (!this.layer) return;
+    this.layer.removeAll(true);
+    this.layer.setVisible(false);
+    this._activeKey = null;
+  }
+
+  showForCard(target, entries, opts = {}) {
+    const tips = Array.isArray(entries) ? entries.filter((entry) => entry && entry.title && entry.body) : [];
+    if (!tips.length) {
+      this.hide();
+      return false;
+    }
+    const bounds = this.resolveCardBounds(target, opts);
+    if (!bounds) {
+      this.hide();
+      return false;
+    }
+
+    const scene = this.scene;
+    const L = scene.L;
+    const area = this.resolveArea();
+    const areaW = Math.max(1, area.right - area.left);
+    const minBoxW = Math.min(Math.round(120 * L.k), areaW);
+    const boxW = Phaser.Math.Clamp(Math.round(CARD_TIP.maxW * L.k), minBoxW, areaW);
+    const stackGap = Math.round(CARD_TIP.stackGap * L.k);
+    const boxes = tips.map((entry) => this.buildTipBox(entry, boxW));
+    const totalH = boxes.reduce((sum, box, idx) => sum + box.height + (idx > 0 ? stackGap : 0), 0);
+    const anchorGap = Math.round(CARD_TIP.anchorGap * L.k);
+    const maxTop = Math.max(area.top, area.bottom - totalH);
+    const placement = opts.placement || 'side';
+    let left = area.left;
+    let top = area.top;
+
+    if (placement === 'above' || placement === 'below') {
+      left = Phaser.Math.Clamp(bounds.centerX - boxW / 2, area.left, Math.max(area.left, area.right - boxW));
+      const preferredTop = placement === 'above'
+        ? bounds.top - anchorGap - totalH
+        : bounds.bottom + anchorGap;
+      const fallbackTop = placement === 'above'
+        ? bounds.bottom + anchorGap
+        : bounds.top - anchorGap - totalH;
+      top = preferredTop;
+      if (top < area.top || top > maxTop) top = fallbackTop;
+    } else {
+      const centerX = (area.left + area.right) / 2;
+      const preferRight = bounds.centerX <= centerX;
+      left = preferRight
+        ? bounds.right + anchorGap
+        : bounds.left - anchorGap - boxW;
+      if (preferRight && left + boxW > area.right) {
+        left = bounds.left - anchorGap - boxW;
+      } else if (!preferRight && left < area.left) {
+        left = bounds.right + anchorGap;
+      }
+      left = Phaser.Math.Clamp(left, area.left, Math.max(area.left, area.right - boxW));
+      top = bounds.centerY - totalH / 2;
+    }
+    top = Phaser.Math.Clamp(top, area.top, maxTop);
+
+    this.hide();
+    this._activeKey = opts.key || null;
+
+    let cursorY = top;
+    boxes.forEach((box, idx) => {
+      box.container.setPosition(left, cursorY);
+      this.layer.add(box.container);
+      cursorY += box.height + (idx < boxes.length - 1 ? stackGap : 0);
+    });
+
+    this.layer.setVisible(true);
+    return true;
+  }
+
+  resolveArea() {
+    const scene = this.scene;
+    const L = scene.L;
+    const pad = Math.round(CARD_TIP.edgePad * L.k);
+    const rect = this.boundsRect;
+    if (rect) {
+      return {
+        left: rect.left != null ? rect.left : pad,
+        top: rect.top != null ? rect.top : pad,
+        right: rect.right != null ? rect.right : scene.scale.width - pad,
+        bottom: rect.bottom != null ? rect.bottom : scene.scale.height - pad,
+      };
+    }
+    return {
+      left: pad,
+      top: pad,
+      right: scene.scale.width - pad,
+      bottom: scene.scale.height - pad,
+    };
+  }
+
+  resolveCardBounds(target, opts = {}) {
+    const node = target && (target.container || target);
+    if (!node || typeof node.getBounds !== 'function') return null;
+    const raw = node.getBounds();
+    if (!raw) return null;
+    const offsetX = opts.anchorOffsetX || 0;
+    const offsetY = opts.anchorOffsetY || 0;
+    const left = raw.x + offsetX;
+    const top = raw.y + offsetY;
+    const width = raw.width || 0;
+    const height = raw.height || 0;
+    return {
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      centerX: left + width / 2,
+      centerY: top + height / 2,
+    };
+  }
+
+  buildTipBox(entry, width) {
+    const scene = this.scene;
+    const L = scene.L;
+    const padX = Math.round(CARD_TIP.padX * L.k);
+    const padY = Math.round(CARD_TIP.padY * L.k);
+    const titleGap = Math.round(CARD_TIP.titleGap * L.k);
+    const innerW = Math.max(1, width - padX * 2);
+
+    const title = scene.add.text(padX, padY, entry.title, uiHeadingStyle(L, 15, UI_THEME.colors.ink, {
+      wordWrap: { width: innerW },
+    })).setOrigin(0, 0);
+    const body = scene.add.text(padX, padY + title.height + titleGap, entry.body, uiBodyStyle(L, UI_THEME.colors.ink, {
+      wordWrap: { width: innerW },
+      lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
+    })).setOrigin(0, 0);
+    const height = Math.round(padY + title.height + titleGap + body.height + padY);
+    const radius = Math.round(CARD_TIP.radius * L.k);
+
+    const shadow = scene.add.graphics();
+    shadow.fillStyle(uiColorInt(UI_THEME.colors.shadow), 0.2);
+    shadow.fillRoundedRect(3 * L.k, 4 * L.k, width, height, radius);
+
+    const bg = scene.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.paper), 0.98);
+    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandEdge), 1);
+    bg.fillRoundedRect(0, 0, width, height, radius);
+    bg.strokeRoundedRect(0, 0, width, height, radius);
+
+    const accent = scene.add.graphics();
+    accent.fillStyle(uiColorInt(UI_THEME.colors.outline), 0.18);
+    accent.fillRoundedRect(padX, padY + title.height + Math.max(1, Math.round(2 * L.k)), Math.max(12 * L.k, innerW * 0.48), Math.max(2, Math.round(2 * L.k)), Math.max(1, Math.round(1 * L.k)));
+
+    const container = scene.add.container(0, 0, [shadow, bg, accent, title, body]);
+    return { container, height };
+  }
+}
+
 
 // ─────────── CardHand class ───────────
 
@@ -399,11 +640,21 @@ class CardHand {
     this._hoverIdx = -1;
     this._dragIdx = -1;
     this._dragGhost = null;
+    this._dragIslandOverlay = null;
     this._spreadTweens = null;
+    this._shipEffectPrepared = false;
+    this._onCardHoverChange = null;
+    this._canReleaseDragCard = null;
+    this._hoverSpreadEnabled = true;
   }
 
   destroy() {
     const tweens = this.scene && this.scene.tweens;
+    if (this._onCardHoverChange) {
+      this.cards.forEach((card) => {
+        if (card.hovered) this._onCardHoverChange(card, false);
+      });
+    }
     this.cards.forEach(c => {
       if (tweens) {
         tweens.killTweensOf(c.container);
@@ -413,10 +664,15 @@ class CardHand {
       if (c.container) c.container.destroy(true);
     });
     this._killSpreadTweens();
+    this._clearDragIslandOverlay();
     this.cards = [];
     if (this._dragGhost) { this._dragGhost.destroy(); this._dragGhost = null; }
     this._hoverIdx = -1;
     this._dragIdx = -1;
+    this._shipEffectPrepared = false;
+    this._onCardHoverChange = null;
+    this._canReleaseDragCard = null;
+    this._hoverSpreadEnabled = true;
   }
 
   getCardPositions() {
@@ -441,24 +697,37 @@ class CardHand {
     const sendingSet = opts.sendingSet;
     const isSending = opts.isSending;
     const allowInteraction = opts.allowInteraction !== false;
-    const tutorialBlocked = opts.tutorialBlocked || (() => false);
-    const tutorialTargetIdx = opts.tutorialTargetIdx;
+    const blockedCard = opts.blockedCard || (() => false);
+    const hiddenCard = opts.hiddenCard || (() => false);
+    const highlightTargetIdx = opts.highlightTargetIdx;
     const onSendToIsland = opts.onSendToIsland;
+    const onCardPointerDown = opts.onCardPointerDown;
+    const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
+    const cardSlotWeaponKeyForCard = opts.cardSlotWeaponKeyForCard || (() => null);
+    const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
+    this._onCardHoverChange = opts.onCardHoverChange || null;
+    this._canReleaseDragCard = typeof opts.canReleaseDragCard === 'function' ? opts.canReleaseDragCard : null;
+    this._hoverSpreadEnabled = opts.hoverSpread !== false;
 
     const visible = [];
     hand.forEach((p, i) => {
       if (sent.includes(i) || sendingSet.has(i)) return;
+      if (hiddenCard(p, i)) return;
       visible.push({ pirate: p, handIdx: i });
     });
 
-    const slots = cardHandLayout(visible.length, L);
+    const slots = Array.isArray(opts.slots)
+      ? opts.slots
+      : (opts.layout === 'row'
+        ? cardRowLayout(visible.length, L, opts.rowLayout || {})
+        : cardHandLayout(visible.length, L));
 
     visible.forEach((entry, slotI) => {
       const { pirate, handIdx } = entry;
       const slot = slots[slotI];
-      const isBlocked = tutorialBlocked(pirate);
-      const isTarget = handIdx === tutorialTargetIdx;
+      const isBlocked = blockedCard(pirate, handIdx);
+      const isTarget = handIdx === highlightTargetIdx;
 
       const cardView = createPirateCard(scene, {
         type: pirate.type,
@@ -466,6 +735,8 @@ class CardHand {
         y: slot.y,
         rotation: slot.rotation,
         depth: 10 + slotI,
+        slotState: cardSlotStateForCard(pirate, handIdx),
+        slotWeaponKey: cardSlotWeaponKeyForCard(pirate, handIdx),
         L,
         container,
       });
@@ -483,6 +754,7 @@ class CardHand {
         slot,
         handIdx,
         pirate,
+        slotWeaponKey: cardSlotWeaponKeyForCard(pirate, handIdx),
         slotIndex: slotI,
         isBlocked,
         hovered: false,
@@ -494,6 +766,16 @@ class CardHand {
         if (isSending) {
           scene.input.setDraggable(cardImg, true);
           this._setupDrag(cardData, onSendToIsland, L);
+        } else if (onCardPointerDown) {
+          cardImg.on('pointerdown', (pointer) => {
+            if (pointer && pointer.event) pointer.event.stopPropagation();
+            if (touchTapPreviewsAction && isTouchLikePointer(pointer)) {
+              const alreadyHovered = this._hoverIdx === slotI;
+              this._setHoveredCard(alreadyHovered ? -1 : slotI, L);
+              if (!alreadyHovered) return;
+            }
+            onCardPointerDown(handIdx, pirate, cardData, pointer);
+          });
         }
 
         cardImg.on('pointerover', () => {
@@ -561,11 +843,14 @@ class CardHand {
       if (c.hovered === shouldHover) return;
       c.hovered = shouldHover;
       this._animateHover(c, shouldHover, L);
+      if (this._onCardHoverChange) this._onCardHoverChange(c, shouldHover);
     });
     this._hoverIdx = slotIndex;
-    const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
-    const duration = slotIndex >= 0 ? CARD_MOTION.hoverInDuration : CARD_MOTION.hoverOutDuration;
-    this._tweenNeighborSpread(slotIndex, L, duration, easing);
+    if (this._hoverSpreadEnabled) {
+      const easing = slotIndex >= 0 && prevHoverIdx < 0 ? 'Back.easeOut' : 'Sine.easeOut';
+      const duration = slotIndex >= 0 ? CARD_MOTION.hoverInDuration : CARD_MOTION.hoverOutDuration;
+      this._tweenNeighborSpread(slotIndex, L, duration, easing);
+    }
   }
 
   getCardPosition(handIdx) {
@@ -598,14 +883,23 @@ class CardHand {
   }
 
   prepareForShipEffect() {
+    if (this._shipEffectPrepared) return;
+    this._shipEffectPrepared = true;
     const tweens = this.scene && this.scene.tweens;
     this._killSpreadTweens();
+    this._hoverIdx = -1;
+    const shipEffectY = this.scene.L.Y_HAND_CENTER + Math.round(CARD.H * this.scene.L.k * 0.05);
     for (const card of this.cards) {
+      const rowSlot = {
+        x: card.slot.x,
+        y: shipEffectY,
+      };
+      card.shipEffectSlot = rowSlot;
       if (tweens) tweens.killTweensOf(card.container);
       card.hovered = false;
       card.dragging = false;
-      card.container.setPosition(card.slot.x, card.slot.y);
-      card.container.setRotation(card.slot.rotation);
+      card.container.setPosition(rowSlot.x, rowSlot.y);
+      card.container.setRotation(0);
       card.container.setScale(1);
       card.container.setAlpha(card.isBlocked ? 0.7 : 1);
       card.container.setDepth(10 + card.slotIndex);
@@ -649,6 +943,67 @@ class CardHand {
     destroyCardBandOverlay(this.scene, overlay);
   }
 
+  _dragIslandOverlayPosition(pointer, L) {
+    const cardH = Math.round(CARD.H * L.k);
+    const band = cardIslandBandMetrics(cardH, L.k);
+    return {
+      x: pointer.x,
+      y: pointer.y + cardBandCenterOffsetY(cardH, band, CARD.DRAG_SCALE),
+    };
+  }
+
+  _canReleaseDraggedCard(dragCard, pointer, L) {
+    if (!dragCard || !pointer || pointer.y >= L.Y_HAND_CENTER) return false;
+    if (dragCard.isBlocked) return false;
+    if (!this._canReleaseDragCard) return true;
+    return !!this._canReleaseDragCard(dragCard.handIdx, dragCard.pirate, pointer);
+  }
+
+  _updateDragIslandOverlay(dragCard, pointer, L) {
+    const shouldShow = this._canReleaseDraggedCard(dragCard, pointer, L);
+    if (!shouldShow) {
+      this._clearDragIslandOverlay();
+      return;
+    }
+
+    const pos = this._dragIslandOverlayPosition(pointer, L);
+    if (!this._dragIslandOverlay) {
+      this._dragIslandOverlay = createCardBandOverlay(this.scene, {
+        type: dragCard.pirate.type,
+        band: 'island',
+        x: pos.x,
+        y: pos.y,
+        scale: CARD.DRAG_SCALE,
+        color: '#66bb6a',
+        bandTint: '#d9f0d1',
+        depth: 81,
+        L,
+      });
+      this._dragIslandOverlay.accent.setAlpha(1);
+      this._dragIslandOverlay.accent.setScale(
+        this._dragIslandOverlay.visualScale * 1.02,
+        this._dragIslandOverlay.visualScale * 1.02
+      );
+      this._dragIslandOverlay.bandImg.setAlpha(1);
+      this._dragIslandOverlay.bandImg.setScale(
+        this._dragIslandOverlay.imageScale * 1.02,
+        this._dragIslandOverlay.imageScale * 1.02
+      );
+      return;
+    }
+
+    this._dragIslandOverlay.x = pos.x;
+    this._dragIslandOverlay.y = pos.y;
+    this._dragIslandOverlay.accent.setPosition(pos.x, pos.y);
+    this._dragIslandOverlay.bandImg.setPosition(pos.x, pos.y);
+  }
+
+  _clearDragIslandOverlay() {
+    if (!this._dragIslandOverlay) return;
+    destroyCardBandOverlay(this.scene, this._dragIslandOverlay);
+    this._dragIslandOverlay = null;
+  }
+
   _setupDrag(cardData, onSendToIsland, L) {
     const scene = this.scene;
     const cardImg = cardData.cardImg;
@@ -661,14 +1016,13 @@ class CardHand {
     let dragStartY = cardData.slot.y;
     const mobilePullThreshold = CARD.MOBILE_DRAG_PULL * k;
 
-    const isTouchPointer = (pointer) =>
-      !!pointer && (pointer.pointerType === 'touch' || pointer.wasTouch === true);
     const isMobileViewport = () =>
       !!(scene.L && scene.L.IS_MOBILE);
 
     const beginDragVisual = (pointer) => {
       if (dragActivated) return;
       dragActivated = true;
+      this._setHoveredCard(-1, L);
       dragCard.dragging = true;
       this._dragIdx = dragCard.slotIndex;
       dragCard.container.setAlpha(0.3);
@@ -677,7 +1031,10 @@ class CardHand {
       const ghost = scene.add.image(pointer.x, pointer.y, dragCard.cardImg.texture.key);
       ghost.setOrigin(0.5, 0.5);
       ghost.setDepth(80);
-      ghost.setScale(CARD.DRAG_SCALE);
+      ghost.setDisplaySize(
+        dragCard.cardImg.displayWidth * CARD.DRAG_SCALE,
+        dragCard.cardImg.displayHeight * CARD.DRAG_SCALE
+      );
       ghost.setRotation(0);
       this._dragGhost = ghost;
     };
@@ -691,13 +1048,14 @@ class CardHand {
         this._dragGhost.destroy();
         this._dragGhost = null;
       }
+      this._clearDragIslandOverlay();
       dragCard.container.setAlpha(dragCard.isBlocked ? 0.7 : 1);
       dragCard.container.setDepth(10 + dragCard.slotIndex);
     };
 
     cardImg.on('pointerdown', (pointer) => {
       dragStartY = pointer.y;
-      if (isTouchPointer(pointer) && !cardData.dragging) {
+      if (isTouchLikePointer(pointer) && !cardData.dragging) {
         this._setHoveredCard(this._hoverIdx === cardData.slotIndex ? -1 : cardData.slotIndex, L);
       }
     });
@@ -706,7 +1064,7 @@ class CardHand {
       dragMoved = false;
       dragActivated = false;
       dragCard = cardData;
-      touchDrag = isMobileViewport() && isTouchPointer(pointer);
+      touchDrag = isMobileViewport() && isTouchLikePointer(pointer);
 
       if (!touchDrag) {
         beginDragVisual(pointer);
@@ -739,6 +1097,7 @@ class CardHand {
         const dx = pointer.x - (pointer.prevPosition ? pointer.prevPosition.x : pointer.x);
         this._dragGhost.setRotation(Phaser.Math.Clamp(dx * 0.01, -0.15, 0.15));
       }
+      this._updateDragIslandOverlay(dragCard, pointer, L);
       const dist = Phaser.Math.Distance.Between(
         dragCard.slot.x, dragCard.slot.y, pointer.x, pointer.y
       );
@@ -798,20 +1157,26 @@ class CardHand {
   _tweenNeighborSpread(activeSlotIndex, L, duration, ease) {
     const scene = this.scene;
     const spread = CARD.NEIGHBOR_SPREAD * L.k;
+    const hoverLiftY = CARD.HOVER_LIFT * L.k;
     this._killSpreadTweens();
     this._spreadTweens = [];
 
     for (const c of this.cards) {
-      let targetX = c.slot.x;
+      const baseSlot = this._shipEffectPrepared && c.shipEffectSlot ? c.shipEffectSlot : c.slot;
+      let targetX = baseSlot.x;
+      let targetY = baseSlot.y;
       if (activeSlotIndex >= 0 && c.slotIndex !== activeSlotIndex) {
         const diff = c.slotIndex - activeSlotIndex;
         const dir = Math.sign(diff);
         const dist = Math.abs(diff);
-        targetX = c.slot.x + dir * spread / dist;
+        targetX = baseSlot.x + dir * spread / dist;
+      } else if (c.hovered) {
+        targetY = baseSlot.y - hoverLiftY;
       }
       this._spreadTweens.push(scene.tweens.add({
         targets: c.container,
         x: targetX,
+        y: targetY,
         duration,
         ease,
       }));
