@@ -4313,7 +4313,9 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     const prevPositions = this._cardHand.getCardPositions();
     const appearFrom = this.consumeHandAppear();
-    if (this._cardTips) this._cardTips.hide();
+    const isBoarding = G.phase === 'boarding';
+    const combat = isBoarding ? this.ensureBoardingCombat() : null;
+    if (!(isBoarding && combat) && this._cardTips) this._cardTips.hide();
     this.clearCt('hand');
     this._cardHand.destroy();
     this._handSprites = {};
@@ -4333,8 +4335,6 @@ class GameScene extends Phaser.Scene {
     };
 
     const isSending = G.phase === 'sending' && !isWeaponAssignment;
-    const isBoarding = G.phase === 'boarding';
-    const combat = isBoarding ? this.ensureBoardingCombat() : null;
     const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
 
     if (isBoarding && combat) return;
