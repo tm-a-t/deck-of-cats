@@ -1033,7 +1033,14 @@ class GameScene extends Phaser.Scene {
       } else if (s.cRes && s.cN > 0) {
         spendItems.push({ emoji: RES_EMOJI[s.cRes], count: s.cN });
       }
-      if (r.pN > 0) {
+      if (Array.isArray(r.gainItems) && r.gainItems.length) {
+        for (const gain of r.gainItems) {
+          gainItems.push({
+            emoji: gain.res === 'enthusiasm' ? '☠️' : RES_EMOJI[gain.res],
+            count: gain.n,
+          });
+        }
+      } else if (r.pN > 0) {
         gainItems.push({ emoji: r.pRes === 'enthusiasm' ? '☠️' : RES_EMOJI[r.pRes], count: r.pN });
       }
       if (r.extraEnthusiasm) gainItems.push({ emoji: '☠️', count: r.extraEnthusiasm });

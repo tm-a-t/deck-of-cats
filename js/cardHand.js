@@ -1127,7 +1127,7 @@ class CardHand {
         y: cardData.slot.y - CARD.HOVER_LIFT * k,
         scaleX: CARD.HOVER_SCALE,
         scaleY: CARD.HOVER_SCALE,
-        rotation: 0,
+        rotation: cardData.slot.rotation,
         duration: CARD_MOTION.hoverInDuration,
         ease: 'Back.easeOut',
       });
@@ -1155,22 +1155,26 @@ class CardHand {
   _tweenNeighborSpread(activeSlotIndex, L, duration, ease) {
     const scene = this.scene;
     const spread = CARD.NEIGHBOR_SPREAD * L.k;
+    const hoverLiftY = CARD.HOVER_LIFT * L.k;
     this._killSpreadTweens();
     this._spreadTweens = [];
 
     for (const c of this.cards) {
       const baseSlot = this._shipEffectPrepared && c.shipEffectSlot ? c.shipEffectSlot : c.slot;
       let targetX = baseSlot.x;
+      let targetY = baseSlot.y;
       if (activeSlotIndex >= 0 && c.slotIndex !== activeSlotIndex) {
         const diff = c.slotIndex - activeSlotIndex;
         const dir = Math.sign(diff);
         const dist = Math.abs(diff);
         targetX = baseSlot.x + dir * spread / dist;
+      } else if (c.hovered) {
+        targetY = baseSlot.y - hoverLiftY;
       }
       this._spreadTweens.push(scene.tweens.add({
         targets: c.container,
         x: targetX,
-        y: baseSlot.y,
+        y: targetY,
         duration,
         ease,
       }));
