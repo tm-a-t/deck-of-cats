@@ -48,11 +48,15 @@ function generateEncounterBlueprint(boardingNo) {
     desc = mainArch.encounterDesc || mainArch.summary;
     const strongCount = Math.min(totalCount - 1, 1 + Math.floor(boardingNo / 2));
     const weakCount = totalCount - strongCount;
+    const otherStrong = eligibleStrong.filter(a => a.key !== mainKey);
+    const secondaryCount = Math.random() < 0.5 && otherStrong.length ? 1 : 0;
+    const secondaryArch = otherStrong.length
+      ? otherStrong[Math.floor(Math.random() * otherStrong.length)]
+      : null;
     supportKeys = [];
-    for (let i = 1; i < strongCount; i++) {
-      const pool = eligibleStrong.filter(a => a.key !== mainKey);
-      const pick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : mainArch;
-      supportKeys.push(pick.key);
+    for (let i = 1; i < strongCount - secondaryCount; i++) supportKeys.push(mainKey);
+    if (secondaryArch) {
+      for (let i = 0; i < secondaryCount; i++) supportKeys.push(secondaryArch.key);
     }
     for (let i = 0; i < weakCount; i++) {
       supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);

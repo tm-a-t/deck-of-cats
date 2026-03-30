@@ -105,7 +105,7 @@ If the selected node is an enemy ship:
     - Boardings 1–2 (early): 3 enemies total; only 1–2 strong enemies, the rest are weak swarm fillers. Only `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber` are eligible as strong picks.
     - Boardings 3–4 (mid): 3–4 enemies; more strong enemies with a few weak supports. `🪤 Netter` unlocks at boarding **3**.
     - Boardings 5–6 (late): 4–5 enemies; almost entirely strong enemies. `🔥 Flint Duelist` unlocks at boarding **5**.
-  - Each encounter centers on **one main strong enemy type** with optional support from a second type and/or weak fillers.
+  - Each encounter centers on **one main strong enemy type**: most strong slots are filled with the main type, with at most one slot for a secondary strong type (50% chance when enough strong slots exist). Remaining slots are filled with weak swarm enemies in early/mid battles.
   - Each enemy party is distributed across up to 3 rows with a variable split.
   - Enemy rows are always filled from the **front backward**; random setup never leaves an empty front or middle row with enemies behind it.
   - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.

@@ -1530,10 +1530,15 @@ class GameScene extends Phaser.Scene {
       strongCount = count;
       weakCount = 0;
     }
+
+    const otherStrong = strong.filter((a) => a.key !== primary.key);
+    const secondaryCount = (strongCount >= 3 && Math.random() < 0.5 && otherStrong.length) ? 1 : 0;
+    const secondary = otherStrong.length ? Phaser.Utils.Array.GetRandom(otherStrong) : null;
+
     const archetypes = [primary];
-    for (let i = 1; i < strongCount; i++) {
-      const pool = strong.filter((a) => a.key !== primary.key);
-      archetypes.push(pool.length ? Phaser.Utils.Array.GetRandom(pool) : primary);
+    for (let i = 1; i < strongCount - secondaryCount; i++) archetypes.push(primary);
+    if (secondary) {
+      for (let i = 0; i < secondaryCount; i++) archetypes.push(secondary);
     }
     for (let i = 0; i < weakCount; i++) {
       archetypes.push(weak.length ? Phaser.Utils.Array.GetRandom(weak) : Phaser.Utils.Array.GetRandom(eligible));
