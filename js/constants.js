@@ -26,7 +26,7 @@ const UI_THEME = {
 };
 
 const BG_COLOR = UI_THEME.colors.gameBg;
-const GAME_VERSION = '0.0.3';
+const GAME_VERSION = '0.1.0';
 
 const CARD_MOTION = {
   handAppearDelay: 80,
