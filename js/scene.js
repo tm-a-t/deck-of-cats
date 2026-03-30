@@ -379,6 +379,17 @@ class GameScene extends Phaser.Scene {
     if (changed) this.refreshPanelUi();
   }
 
+  openPauseMenu() {
+    if (this.isTutorialPopupOpen() || this.scene.isActive('pauseModal')) return;
+    this.closePanels();
+    if (window.PokiBridge) {
+      window.PokiBridge.gameplayStop();
+    }
+    this.scene.launch('pauseModal', { version: GAME_VERSION });
+    this.scene.bringToTop('pauseModal');
+    this.scene.pause();
+  }
+
   panelFlagKey(sceneKey) {
     const map = {
       map: '_mapPanelOpen',
@@ -4112,6 +4123,7 @@ class GameScene extends Phaser.Scene {
     const valueY = 40 * L.k;
     const sectionGap = 16 * L.k;
     const iconTextGap = 8 * L.k;
+    const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
     const blocks = [{ title: 'Current goal', state: goal }];
     if (this.isLandingRoundPhase()) {
@@ -4122,7 +4134,7 @@ class GameScene extends Phaser.Scene {
     let blockX = pad;
 
     blocks.forEach(({ title, state }) => {
-      const remainingWidth = Math.max(120 * L.k, L.W - pad - blockX);
+      const remainingWidth = Math.max(120 * L.k, L.W - rightReserve - blockX);
       const label = this.add.text(blockX, labelY, title, uiHeadingStyle(L, 16, UI_THEME.colors.paper))
         .setOrigin(0, 0);
       const icon = this.add.text(blockX, valueY - 2 * L.k, state.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
@@ -4404,6 +4416,7 @@ class GameScene extends Phaser.Scene {
     const mapEnabled = panelEnabled;
     const shopEnabled = panelEnabled && !G.busy;
     const pileEnabled = panelEnabled && !G.busy;
+    const pauseEnabled = panelEnabled;
     const topGap = 10 * L.k;
     const topY = 60 * L.k;
     const iconOpts = {
@@ -4444,6 +4457,18 @@ class GameScene extends Phaser.Scene {
       disabledColor: UI_THEME.colors.ink,
     });
     this._panelButtons.map = mapBtn;
+
+    this.mkBtn('nav', mapBtn.x - mapBtn.width / 2 - topGap, topY, '⏸', () => {
+      this.openPauseMenu();
+    }, {
+      ...iconOpts,
+      enabled: pauseEnabled,
+      bg: UI_THEME.colors.cocoa,
+      hoverBg: UI_THEME.colors.cocoaDark,
+      disabledBg: UI_THEME.colors.disabled,
+      color: UI_THEME.colors.paper,
+      disabledColor: UI_THEME.colors.ink,
+    });
 
     const drawPileOpen = this._drawPilePanelOpen;
     const drawBtn = this.mkBtn('nav', 22 * L.k, footerY, 'Draw Pile', () => {

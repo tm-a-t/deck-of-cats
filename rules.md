@@ -183,12 +183,28 @@ Each segment = 4 island layers + 1 battle layer = 5 layers. 2 segments = 10 laye
 - Each ship node stores a pre-generated encounter blueprint determining the main enemy type, support composition, and total count.
 - The blueprint also provides a short description shown in the goal display before the battle.
 
+**Early ship strength:**
+
+| Ship # | Layer | Strength |
+|--------|-------|----------|
+| 1 | 4 | 6 |
+| 2 | 9 | 8 |
+
 ### Mid/Late Game (layers 10–29)
 
 - Non-ship layers have 2–3 island nodes (random).
 - Ship nodes every 5th layer (layers 14, 19, 24, 29).
 - Siren Island can appear starting at layer 10 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
+
+**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 2 + 4)`
+
+| Ship # | Layer | Strength |
+|--------|-------|----------|
+| 3 | 14 | 11 |
+| 4 | 19 | 14 |
+| 5 | 24 | 17 |
+| 6 | 29 | 21 |
 
 ### Victory Condition
 

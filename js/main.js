@@ -130,7 +130,7 @@ function bootPhaserGame() {
       autoRound: true,
       zoom: 1 / dpr,
     },
-    scene: [MenuScene, GameScene, MapScene, ShopScene, DrawPileScene, DiscardPileScene, CostumesScene, AllPiratesScene],
+    scene: [MenuScene, GameScene, MapScene, ShopScene, DrawPileScene, DiscardPileScene, PauseScene, CostumesScene, AllPiratesScene],
   });
 
   window.addEventListener('resize', () => {

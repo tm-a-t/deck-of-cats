@@ -14,6 +14,10 @@ function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
 }
 
+function shipStrength(shipNumber) {
+  return Math.trunc(Math.pow(shipNumber, 1.2) * 2 + 4);
+}
+
 function generateEncounterBlueprint(boardingNo) {
   const archetypes = COMBAT.enemyArchetypes;
   const weak = archetypes.filter(a => a.tier === 'weak');
@@ -113,7 +117,7 @@ function generateMap() {
     const bp = generateEncounterBlueprint(battlesSoFar);
     layers.push([{
       id: nextId++, type: 'ship',
-      strength: Math.trunc(Math.pow(battlesSoFar, 1.2) * 4 + 2),
+      strength: shipStrength(battlesSoFar),
       encounter: bp,
       conns: [],
     }]);
@@ -127,7 +131,7 @@ function generateMap() {
       const bp = generateEncounterBlueprint(battlesSoFar);
       layers.push([{
         id: nextId++, type: 'ship',
-        strength: Math.trunc(Math.pow(battlesSoFar, 1.2) * 4 + 2),
+        strength: shipStrength(battlesSoFar),
         encounter: bp,
         conns: [],
       }]);
