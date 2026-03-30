@@ -4527,6 +4527,7 @@ class GameScene extends Phaser.Scene {
       this._cardTips.showForCard(cardData.container, pirateCardEffectTips(cardData.pirate), {
         key,
         placement: 'above',
+        anchorOffsetY: -CARD.HOVER_LIFT * L.k,
       });
     };
 

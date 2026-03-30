@@ -490,7 +490,7 @@ class CardTooltipController {
       this.hide();
       return false;
     }
-    const bounds = this.resolveCardBounds(target);
+    const bounds = this.resolveCardBounds(target, opts);
     if (!bounds) {
       this.hide();
       return false;
@@ -572,13 +572,15 @@ class CardTooltipController {
     };
   }
 
-  resolveCardBounds(target) {
+  resolveCardBounds(target, opts = {}) {
     const node = target && (target.container || target);
     if (!node || typeof node.getBounds !== 'function') return null;
     const raw = node.getBounds();
     if (!raw) return null;
-    const left = raw.x;
-    const top = raw.y;
+    const offsetX = opts.anchorOffsetX || 0;
+    const offsetY = opts.anchorOffsetY || 0;
+    const left = raw.x + offsetX;
+    const top = raw.y + offsetY;
     const width = raw.width || 0;
     const height = raw.height || 0;
     return {
@@ -1127,7 +1129,7 @@ class CardHand {
         y: cardData.slot.y - CARD.HOVER_LIFT * k,
         scaleX: CARD.HOVER_SCALE,
         scaleY: CARD.HOVER_SCALE,
-        rotation: cardData.slot.rotation,
+        rotation: 0,
         duration: CARD_MOTION.hoverInDuration,
         ease: 'Back.easeOut',
       });
