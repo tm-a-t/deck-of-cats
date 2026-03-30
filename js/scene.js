@@ -279,10 +279,6 @@ class GameScene extends Phaser.Scene {
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStart();
     }
-    // TEST: Draw cards if boarding hand is empty (reshuffle test scenario)
-    if (G.phase === 'boarding' && (!G.hand || G.hand.length === 0)) {
-      this.drawCardsIntoHand(5);
-    }
     if (!(this._animateInitialMapHand && G.phase === 'map')) {
       this.renderAll();
     }

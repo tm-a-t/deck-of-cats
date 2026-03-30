@@ -217,14 +217,12 @@ function initBattleTestState(repeatState = null) {
     }
     : { encounterNo, strength: encounterNo };
 
-  // TEST: Force reshuffle scenario with split deck/discard
-  const testReshuffleSplit = crew.length >= 5;
   G = {
     mode: 'battleTest',
     allCrew: [...crew],
-    deck: testReshuffleSplit ? [crew[0], crew[1]] : [],
-    discard: testReshuffleSplit ? crew.slice(2) : [],
-    hand: testReshuffleSplit ? [] : [...crew],
+    deck: [],
+    discard: [],
+    hand: [...crew],
     res: { wood: 0, stone: 0, gold: 0, map: 0 },
     enthusiasm: 0,
     round: encounterNo,
