@@ -54,10 +54,12 @@ class GameScene extends Phaser.Scene {
     this._combatSetupPopupDismissTimer = null;
     this._weaponAssignFlow = null;
     this._pendingWeaponQueue = [];
+    this._boardingIntroTimer = null;
     this.input.setDraggable([]);
     this._cardHand = new CardHand(this);
     this._cardTips = new CardTooltipController(this, { depth: 165 });
     this._pendingHandAppearById = null;
+    this._pendingHandAppearUntil = 0;
     this._animateInitialMapHand = needsFreshState;
     this.normalizeCrewWeapons();
 
@@ -1182,6 +1184,10 @@ class GameScene extends Phaser.Scene {
   clearCombatState() {
     this.clearCombatTimers();
     this.clearCombatSetupPopupDismiss();
+    if (this._boardingIntroTimer && !this._boardingIntroTimer.hasDispatched) {
+      this._boardingIntroTimer.remove(false);
+    }
+    this._boardingIntroTimer = null;
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
     this._combatEnemyViews = {};
@@ -1192,6 +1198,98 @@ class GameScene extends Phaser.Scene {
 
   currentBoardingNumber() {
     return Math.max(1, (G.enemyShip && G.enemyShip.encounterNo) || G.boardingCount || 1);
+  }
+
+  combatReturnedPirateIds(combat = G.combat) {
+    return Array.isArray(combat && combat.returnedPirateIds) ? combat.returnedPirateIds : [];
+  }
+
+  combatReturnedPirateSet(combat = G.combat) {
+    return new Set(this.combatReturnedPirateIds(combat));
+  }
+
+  queueCombatPirateReturn(fighter, fromPoint = null, combat = G.combat) {
+    if (!combat || !fighter || fighter.side !== 'player' || fighter.pirateId == null) return false;
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId);
+    if (!pirate) return false;
+    if (!Array.isArray(combat.returnedPirateIds)) combat.returnedPirateIds = [];
+    if (combat.returnedPirateIds.includes(pirate.id)) return false;
+    combat.returnedPirateIds.push(pirate.id);
+    const start = fromPoint || this.combatWorldPoint(fighter);
+    this.queueHandAppear([pirate], {
+      from: start,
+      delay: 0,
+      stagger: 0,
+      duration: 420,
+      startScale: 0.5,
+    });
+    return true;
+  }
+
+  startBoardingSetupIntroIfNeeded() {
+    const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
+    const handCards = Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.slice() : [];
+    if (!combat || combat.mode !== 'intro' || combat.introStarted) return;
+    if ((this._pendingHandAppearUntil || 0) > this.time.now) {
+      this.queueRenderAll();
+      return;
+    }
+    if (!handCards.length) {
+      if (Array.isArray(G.hand) && G.hand.length) {
+        this.queueRenderAll();
+      }
+      return;
+    }
+
+    const playerRows = this.combatSetupRows('player', combat);
+    const playerSlots = this.combatSetupSlotMap('player', playerRows, this.combatFormationVisuals('player'));
+    let endAt = 0;
+    combat.introStarted = true;
+
+    handCards.forEach((cardData, idx) => {
+      const pirate = cardData && cardData.pirate;
+      const target = pirate ? playerSlots[pirate.id] : null;
+      if (!pirate || !target) return;
+      const delay = 140 + idx * 70;
+      const duration = 520;
+      cardData.container.setDepth(70 + idx);
+      this.tweens.add({
+        targets: cardData.container,
+        x: target.x,
+        y: target.y,
+        rotation: 0,
+        scaleX: 0.5,
+        scaleY: 0.5,
+        delay,
+        duration,
+        ease: 'Cubic.easeInOut',
+      });
+      endAt = Math.max(endAt, delay + duration);
+    });
+
+    this._boardingIntroTimer = this.time.delayedCall(endAt + 60, () => {
+      this._boardingIntroTimer = null;
+      if (!this.sys || !this.sys.isActive()) return;
+      if (G.combat !== combat || combat.mode !== 'intro') return;
+      combat.mode = 'setup';
+      combat.introStarted = false;
+      this.renderAll();
+    });
+  }
+
+  boardingHandVisible(combat = G.combat) {
+    if (!combat) return false;
+    return combat.mode === 'intro' || combat.mode === 'resolved';
+  }
+
+  boardingHandHiddenCard(combat = G.combat) {
+    const returnedPirateIds = this.combatReturnedPirateSet(combat);
+    return (_pirate, handIdx) => {
+      if (!combat || combat.mode === 'intro') return false;
+      const pirate = G.hand && G.hand[handIdx];
+      if (!pirate) return false;
+      return !returnedPirateIds.has(pirate.id);
+    };
   }
 
   combatSetupRowTotal() {
@@ -1589,6 +1687,8 @@ class GameScene extends Phaser.Scene {
     if (G.combat && Array.isArray(G.combat.enemyParty)) {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedPirateId')) G.combat.inspectedPirateId = null;
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedEnemyId')) G.combat.inspectedEnemyId = null;
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'returnedPirateIds')) G.combat.returnedPirateIds = [];
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'introStarted')) G.combat.introStarted = false;
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
       }
@@ -1605,7 +1705,7 @@ class GameScene extends Phaser.Scene {
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
     G.combat = {
-      mode: 'setup',
+      mode: 'intro',
       inspectedPirateId: null,
       inspectedEnemyId: null,
       enemyName: encounter.name,
@@ -1620,6 +1720,8 @@ class GameScene extends Phaser.Scene {
       playerFighters: null,
       enemyFighters: null,
       result: null,
+      returnedPirateIds: [],
+      introStarted: false,
     };
     return G.combat;
   }
@@ -2240,9 +2342,11 @@ class GameScene extends Phaser.Scene {
 
   defeatCombatFighter(fighter, deathPositions) {
     if (!fighter || !fighter.alive) return false;
+    const deathPoint = this.combatWorldPoint(fighter);
     fighter.alive = false;
     fighter.incomingUntil = 0;
-    if (Array.isArray(deathPositions)) deathPositions.push(this.combatWorldPoint(fighter));
+    if (fighter.side === 'player') this.queueCombatPirateReturn(fighter, deathPoint);
+    if (Array.isArray(deathPositions)) deathPositions.push(deathPoint);
     return true;
   }
 
@@ -2563,27 +2667,19 @@ class GameScene extends Phaser.Scene {
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
-    G.busy = true;
+    G.busy = false;
     this.renderAll();
-
-    if (result === 'win') {
-      this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '⚔️ Victory!', '#66bb6a');
-      this.time.delayedCall(900, () => this.handleBoardingVictory());
-      return;
-    }
-
-    this.float(this.L.cx, this.islandCenterY() - 110 * this.L.k, '💀 Defeated…', '#ff5252');
-    this.time.delayedCall(1200, () => {
-      G.busy = false;
-      this.renderAll();
-      this.showGameOver();
-    });
   }
 
-  handleBoardingVictory() {
+  continueFromResolvedBoarding() {
     if (!this.sys || !this.sys.isActive()) return;
+    const combat = G.combat;
+    if (!combat || combat.mode !== 'resolved') return;
+    if (combat.result !== 'win') {
+      this.showGameOver();
+      return;
+    }
     if (this.isBattleTest()) {
-      G.busy = false;
       this.renderAll();
       this.showBattleTestOverlay('win');
       return;
@@ -2985,6 +3081,13 @@ class GameScene extends Phaser.Scene {
 
     if (G.phase === 'boarding' && G.enemyShip) {
       const combat = this.ensureBoardingCombat();
+      if (combat && combat.mode === 'intro') {
+        return {
+          icon: '🏴‍☠️',
+          line1: 'Boarding party spotted.',
+          line2: 'Crew moving into formation',
+        };
+      }
       if (combat && combat.mode === 'fighting') {
         return {
           icon: '⚔️',
@@ -3073,7 +3176,14 @@ class GameScene extends Phaser.Scene {
     if (this.weaponAssignmentActive()) return null;
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
-      if (!combat || combat.mode !== 'setup') return null;
+      if (!combat || combat.mode === 'intro' || combat.mode === 'fighting') return null;
+      if (combat.mode === 'resolved') {
+        return {
+          label: combat.result === 'win' ? 'Continue' : 'Game Over',
+          onClick: () => this.continueFromResolvedBoarding(),
+          variant: 'continue',
+        };
+      }
       return { label: 'Fight!', onClick: () => this.resolveBoarding(), variant: 'continue' };
     }
     if (G.phase === 'sending') {
@@ -3276,6 +3386,7 @@ class GameScene extends Phaser.Scene {
       };
       endAt = Math.max(endAt, entryDelay + duration);
     });
+    this._pendingHandAppearUntil = Math.max(this._pendingHandAppearUntil || 0, this.time.now + endAt);
     return endAt;
   }
 
@@ -3290,6 +3401,7 @@ class GameScene extends Phaser.Scene {
       found = true;
     });
     this._pendingHandAppearById = null;
+    this._pendingHandAppearUntil = 0;
     return found ? byIdx : null;
   }
 
@@ -3822,7 +3934,7 @@ class GameScene extends Phaser.Scene {
     this._combatPlayerViews = {};
     this._combatNodes = {};
 
-    if (!combat || combat.mode === 'setup') {
+    if (!combat || combat.mode === 'intro' || combat.mode === 'setup') {
       const enemies = (combat && combat.enemyParty) || [];
       const enemyVisuals = this.combatFormationVisuals('enemy');
       const playerVisuals = this.combatFormationVisuals('player');
@@ -3869,48 +3981,49 @@ class GameScene extends Phaser.Scene {
         });
       });
 
-      playerRows.forEach((rowIds) => {
-        rowIds.forEach((pirateId) => {
-          const pirate = pirateById.get(pirateId);
-          if (!pirate) return;
-          const pos = playerSlots[pirate.id] || { x: L.cx, y: this.combatFormationRowY('player', 0) };
-          const preview = this.combatPreviewStats(pirate, combat);
-          this.renderCombatMiniCard('island', pos.x, pos.y, {
-            id: pirate.id,
-            side: 'player',
-            pirateType: pirate.type,
-            hp: preview.hp,
-            maxHp: preview.hp,
-            weaponKey: preview.weaponKey,
-            alive: true,
-            scale: playerVisuals.scale,
-            interactive: true,
-            draggable: true,
-            onHover: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false }),
-            onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
-            onTap: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true }),
-            onDragStart: (_pointer, cardNode) => {
-              this._combatSetupDragState = { pirateId: pirate.id };
-              this.clearCombatSetupInspection(combat, { silent: true });
-              cardNode.setDepth(130);
-              cardNode.setScale(1.05);
-              cardNode.setAlpha(0.96);
-            },
-            onDrag: (pointer, cardNode) => {
-              if (!pointer) return;
-              cardNode.setPosition(pointer.x, pointer.y);
-              cardNode.setDepth(130);
-            },
-            onDragEnd: (pointer) => {
-              const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
-              this._combatSetupDragState = null;
-              this.moveCombatSetupPirate(pirate.id, drop.rowIndex, drop.insertIndex, combat);
-              this.renderAll();
-            },
+      if (combat && combat.mode !== 'intro') {
+        playerRows.forEach((rowIds) => {
+          rowIds.forEach((pirateId) => {
+            const pirate = pirateById.get(pirateId);
+            if (!pirate) return;
+            const pos = playerSlots[pirate.id] || { x: L.cx, y: this.combatFormationRowY('player', 0) };
+            const preview = this.combatPreviewStats(pirate, combat);
+            this.renderCombatMiniCard('island', pos.x, pos.y, {
+              id: pirate.id,
+              side: 'player',
+              pirateType: pirate.type,
+              hp: preview.hp,
+              maxHp: preview.hp,
+              weaponKey: preview.weaponKey,
+              alive: true,
+              scale: playerVisuals.scale,
+              interactive: true,
+              draggable: true,
+              onHover: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false }),
+              onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
+              onTap: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true }),
+              onDragStart: (_pointer, cardNode) => {
+                this._combatSetupDragState = { pirateId: pirate.id };
+                this.clearCombatSetupInspection(combat, { silent: true });
+                cardNode.setDepth(130);
+                cardNode.setScale(1.05);
+                cardNode.setAlpha(0.96);
+              },
+              onDrag: (pointer, cardNode) => {
+                if (!pointer) return;
+                cardNode.setPosition(pointer.x, pointer.y);
+                cardNode.setDepth(130);
+              },
+              onDragEnd: (pointer) => {
+                const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
+                this._combatSetupDragState = null;
+                this.moveCombatSetupPirate(pirate.id, drop.rowIndex, drop.insertIndex, combat);
+                this.renderAll();
+              },
+            });
           });
         });
-      });
-
+      }
       if (inspectedEnemy) {
         this.renderCombatSetupPopup({
           id: inspectedEnemy.id,
@@ -3932,11 +4045,14 @@ class GameScene extends Phaser.Scene {
           weaponEmoji: weapon ? weapon.emoji : '—',
         }, combat);
       }
+      if (combat && combat.mode === 'intro') {
+        this.startBoardingSetupIntroIfNeeded();
+      }
       return;
     }
 
-    const enemyFighters = combat.enemyFighters || [];
-    const playerFighters = combat.playerFighters || [];
+    const enemyFighters = (combat.enemyFighters || []).filter((fighter) => fighter && fighter.alive);
+    const playerFighters = (combat.playerFighters || []).filter((fighter) => fighter && fighter.alive);
     const enemyVisuals = this.combatFormationVisuals('enemy');
     const playerVisuals = this.combatFormationVisuals('player');
     const enemySlots = this.combatFormationSlots('enemy', enemyFighters, { ...enemyVisuals, livingOnly: true });
@@ -4127,6 +4243,20 @@ class GameScene extends Phaser.Scene {
     }
     const L = this.L;
 
+    if (G.phase === 'boarding') {
+      const combat = this.ensureBoardingCombat();
+      if (combat && combat.mode === 'resolved') {
+        const won = combat.result === 'win';
+        const resultText = this.add.text(
+          L.cx,
+          this.islandContinueY() - 44 * L.k,
+          won ? 'Won Combat' : 'Lost Combat',
+          uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
+        ).setOrigin(0.5, 0.5);
+        this.addTo('phase', resultText);
+      }
+    }
+
     if (G.phase !== 'removing') return;
     const crew = [...G.allCrew].sort((a, b) => {
       const ca = TYPES[a.type].cost ?? -1;
@@ -4159,6 +4289,11 @@ class GameScene extends Phaser.Scene {
   }
 
   renderHand() {
+    const isBoarding = G.phase === 'boarding';
+    const combat = isBoarding ? this.ensureBoardingCombat() : null;
+    if (isBoarding && combat && combat.mode === 'intro' && combat.introStarted) {
+      return;
+    }
     const prevPositions = this._cardHand.getCardPositions();
     const appearFrom = this.consumeHandAppear();
     if (this._cardTips) this._cardTips.hide();
@@ -4181,11 +4316,10 @@ class GameScene extends Phaser.Scene {
     };
 
     const isSending = G.phase === 'sending' && !isWeaponAssignment;
-    const isBoarding = G.phase === 'boarding';
-    const combat = isBoarding ? this.ensureBoardingCombat() : null;
     const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
+    const handVisible = !(isBoarding && combat && !this.boardingHandVisible(combat));
 
-    if (isBoarding && combat) return;
+    if (!handVisible) return;
 
     this._cardHand.render({
       hand: G.hand,
@@ -4195,6 +4329,7 @@ class GameScene extends Phaser.Scene {
       allowInteraction,
       prevPositions,
       appearFrom,
+      hiddenCard: isBoarding && combat ? this.boardingHandHiddenCard(combat) : undefined,
       layout: isWeaponAssignment ? 'row' : undefined,
       hoverSpread: !isWeaponAssignment,
       rowLayout: isWeaponAssignment ? {
