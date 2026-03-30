@@ -3780,12 +3780,13 @@ class GameScene extends Phaser.Scene {
         bodyZone.on('pointerup', (ptr) => {
           clearTooltipHold();
           stopPtr(ptr);
-          if (suppressTap) {
+          if (shouldHoldForTooltip()) {
+            if (opts.onOut) opts.onOut({ targetKind: 'body' });
             suppressTap = false;
             return;
           }
-          if (shouldHoldForTooltip()) {
-            if (opts.onOut) opts.onOut({ targetKind: 'body' });
+          if (suppressTap) {
+            suppressTap = false;
             return;
           }
           opts.onTap({ targetKind: 'body' });
