@@ -592,7 +592,14 @@ function pirateShipCostDesc(ship) {
 function pirateShipGainDesc(ship) {
   if (!ship) return '';
   const gains = [];
-  if (ship.pRes && ship.pN > 0) gains.push(pirateDescCount(ship.pRes, ship.pN));
+  if (Array.isArray(ship.gains) && ship.gains.length) {
+    for (const gain of ship.gains) {
+      if (!gain || !gain.res || gain.n <= 0) continue;
+      gains.push(pirateDescCount(gain.res, gain.n));
+    }
+  } else if (ship.pRes && ship.pN > 0) {
+    gains.push(pirateDescCount(ship.pRes, ship.pN));
+  }
   if (ship.extraEnthusiasm) gains.push(pirateDescCount('enthusiasm', ship.extraEnthusiasm));
   if (ship.prodWeapon) gains.push(pirateDescCount(ship.prodWeapon, ship.prodWeaponN || 1));
   return pirateDescJoin(gains);
@@ -696,7 +703,11 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
   }
 
   if (ship) {
-    if (ship.pRes === 'enthusiasm' && ship.pN > 0) addEnthusiasmTip();
+    const shipGains = Array.isArray(ship.gains) ? ship.gains : [];
+    if (
+      (ship.pRes === 'enthusiasm' && ship.pN > 0)
+      || shipGains.some(gain => gain && gain.res === 'enthusiasm' && gain.n > 0)
+    ) addEnthusiasmTip();
     if (ship.extraEnthusiasm) addEnthusiasmTip();
     if (ship.removeSelf) {
       addTip(
@@ -784,7 +795,7 @@ const TYPES = {
   },
   corsair: {
     name: 'Corsair', cat: [1,8,42,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'axe', count: 2 } },
+    island: { guaranteed: { weapon: 'hammer', count: 2 } },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
@@ -846,13 +857,13 @@ const TYPES = {
   smuggler: {
     name: 'Smuggler', cat: [7,25,46,16,0,5], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5 },
+    ship:   { cRes: 'gold', cN: 1, gains: [{ res: 'enthusiasm', n: 6 }, { res: 'wood', n: 1 }, { res: 'stone', n: 1 }] },
     cost: 8,
   },
   explorer: {
     name: 'Explorer', cat: [13,23,38,17,0,2], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.65, descSuffix: 'decent odds' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 6 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5, prodWeapon: 'trident', prodWeaponN: 1 },
     cost: 9,
   },
   // ---- tier 3: late-game powerhouses (24-32☠️) ----
@@ -897,7 +908,7 @@ const TYPES = {
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'trident', prodWeaponN: 1 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
   },
 };
