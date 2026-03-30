@@ -217,7 +217,7 @@ Win the boarding at the final layer (layer 49, ship #10).
 1. **Get Lost**: pirate is permanently removed from the game. No other effect.
 2. **Exile from Deck** (Cutthroat): spend resources, then player picks a crew member (not from current hand) to permanently exile. No effect if resources insufficient or no valid targets.
 3. **No action** (Herald): does nothing on ship.
-4. **Free production** (Bosun, Corsair, etc.): generates enthusiasm and/or specific weapons with no input cost.
+4. **Free production** (Bosun, Quartermaster, etc.): generates enthusiasm with no input cost.
 5. **Resource conversion**: spend N of a resource, produce resources, enthusiasm, and/or specific weapons. Fails silently if insufficient resources.
 
 ---
@@ -261,20 +261,27 @@ Win the boarding at the final layer (layer 49, ship #10).
 | Ballaster | 1🪨 (90%) | 4🪨 → 2☠️ |
 | Armsman | → 🔨 | — |
 
+### Progression Lanes
+
+- **Wood lane**: reliable wood income grows into melee-oriented ship actions and premium melee weapons.
+- **Stone lane**: reliable stone income grows into ranged/control ship actions and premium ranged weapons.
+- **Gold lane**: gold stays harder to get, but cards that combine gold with wood or stone pay off with bigger enthusiasm bursts and stronger weapons.
+- **Cheap cards** mostly force a tradeoff between economy and arms; **expensive cards** are more likely to give both.
+
 ### Tier 1: Early Upgrades (cost 2–5)
 
 | Name | ☠️ | Island | Ship |
 |------|-----|--------|------|
-| Brute | 2 | → 🔨 | 1🪨 → 3☠️ |
-| Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
-| Corsair | 2 | → 🪓🪓 | → 2☠️ |
+| Brute | 2 | → 🔨 | 1🪵 → 2☠️ |
+| Whittler | 2 | → 2☠️ | 1🪵 → 🗡️ |
+| Corsair | 2 | → 🥏 | 1🪨 → 2☠️ |
 | Herald | 2 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 1🪨 (90%) | → 🔨+1☠️ |
+| Deckhand | 2 | 1🪨 (90%) | 1🪨 → 2☠️ |
 | Carpenter | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
-| Stonemason | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
-| Privateer | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
-| Raider | 4 | → 🪓🪓 | 💀 get lost |
+| Stonemason | 3 | 1🪨 (95%) | 2🪨 → 🏹+2☠️ |
+| Privateer | 3 | 1🪙 (45%) | 1🪙 → 🔫+3☠️ |
+| Survivalist | 3 | 1🪵 (90%) +2☠️ | 1🪵 → 🗺️+1☠️ |
+| Raider | 4 | → 🪓 | 💀 get lost |
 | Bosun | 5 | Can't land | → 3☠️ |
 | Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
 | Profiteer | 5 | 1🪙 → 2🪙 | 💀 get lost |
@@ -283,21 +290,21 @@ Win the boarding at the final layer (layer 49, ship #10).
 
 | Name | ☠️ | Island | Ship |
 |------|-----|--------|------|
-| Marooner | 6 | Exile previous pirate on island | → 🗡️ |
+| Marooner | 6 | Exile previous pirate on island | 2🪵 → ⛓️+2☠️ |
 | Drifter | 6 | 2🪵 (90%) | 💀 get lost |
-| Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
-| Woodsman | 7 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
-| Prospector | 7 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 5☠️ |
-| Explorer | 9 | 1🪙 (65%) | 1🪙 → 6☠️ |
+| Trader | 7 | 3🪵 → 3🪨 | 2🪨 → 1🪙+2☠️ |
+| Woodsman | 7 | 2🪵 (90%) | 3🪵 → 🔱+4☠️ |
+| Prospector | 7 | 2🪨 (90%) | 3🪨 → 🔫+4☠️ |
+| Armorer | 8 | 1🪙 (45%) | 1🪵 + 1🪙 → ⚓+5☠️ |
+| Navigator | 9 | 1🪙 (65%) | 1🪨 + 1🪙 → 🪝+5☠️ |
 | Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
 
 ### Tier 3: Late-Game (cost 13)
 
 | Name | ☠️ | Island | Ship |
 |------|-----|--------|------|
-| Master Rigger | 13 | 2🪵 (90%) | 2🪵 → 🪝🪝+4☠️ |
-| Master Ballaster | 13 | 2🪨 (90%) | 2🪨 → 🔫🔫+4☠️ |
+| Master Rigger | 13 | 2🪵 (90%) | 3🪵 + 1🪙 → 🧨🧨+4☠️ |
+| Master Ballaster | 13 | 2🪨 (90%) | 3🪨 + 1🪙 → 🪝🪝+4☠️ |
 
 ### Special Abilities Detail
 

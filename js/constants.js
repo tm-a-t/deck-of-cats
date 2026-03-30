@@ -723,7 +723,7 @@ const TYPES = {
     ship:   null,
     cost: null,
   },
-  // ---- tier 1: cheap early upgrades (2-3☠️) ----
+  // ---- tier 1: cheap early upgrades (2-5☠️) ----
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.95, descSuffix: 'safe' },
@@ -733,31 +733,31 @@ const TYPES = {
   stonemason: {
     name: 'Stonemason', cat: [5,23,39,16,0,2], canIsland: true,
     island: { res: 'stone', amt: 1, chance: 0.95, descSuffix: 'safe' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'chain', prodWeaponN: 1 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'bow', prodWeaponN: 1 },
     cost: 3,
   },
   brute: {
     name: 'Brute', cat: [3,26,39,19,0,3], canIsland: true,
     island: { guaranteed: { weapon: 'hammer', count: 1 } },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
   whittler: {
     name: 'Whittler', cat: [1,6,42,34,16,0], canIsland: true,
     island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'chakram', prodWeaponN: 1 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'dirk', prodWeaponN: 1 },
     cost: 2,
   },
   corsair: {
     name: 'Corsair', cat: [1,8,42,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'axe', count: 2 } },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
+    island: { guaranteed: { weapon: 'chakram', count: 1 } },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
   privateer: {
     name: 'Privateer', cat: [1,12,45,27,16,4], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
-    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 3, prodWeapon: 'musket', prodWeaponN: 1 },
     cost: 3,
   },
   herald: {
@@ -768,8 +768,8 @@ const TYPES = {
   },
   deckhand: {
     name: 'Deckhand', cat: [4,34,40,16,0,6], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'hammer', prodWeaponN: 1 },
+    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
   bosun: {
@@ -790,54 +790,54 @@ const TYPES = {
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 10,
   },
-  // ---- tier 2: solid mid-game (12-16☠️) ----
+  // ---- tier 2: solid mid-game (6-10☠️) ----
   trader: {
     name: 'Trader', cat: [8,34,46,16,0,5], canIsland: true,
     island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 }, descSuffix: 'safe' },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2, prodWeapon: 'anchor', prodWeaponN: 1 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'gold', pN: 1, extraEnthusiasm: 2 },
     cost: 7,
   },
   woodsman: {
     name: 'Woodsman', cat: [11,25,43,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'bow', prodWeaponN: 2 },
+    island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
+    ship:   { cRes: 'wood', cN: 3, pRes: 'enthusiasm', pN: 4, prodWeapon: 'trident', prodWeaponN: 1 },
     cost: 7,
   },
   prospector: {
     name: 'Prospector', cat: [7,30,45,16,0,2], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'blunderbuss', prodWeaponN: 2 },
+    island: { res: 'stone', amt: 2, chance: 0.9, descSuffix: 'reliable' },
+    ship:   { cRes: 'stone', cN: 3, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 1 },
     cost: 7,
   },
   smuggler: {
-    name: 'Smuggler', cat: [7,25,46,16,0,5], canIsland: true,
+    name: 'Armorer', cat: [7,25,46,16,0,5], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5 },
+    ship:   { costs: [{ res: 'wood', n: 1 }, { res: 'gold', n: 1 }], pRes: 'enthusiasm', pN: 5, prodWeapon: 'anchor', prodWeaponN: 1 },
     cost: 8,
   },
   explorer: {
-    name: 'Explorer', cat: [13,23,38,17,0,2], canIsland: true,
+    name: 'Navigator', cat: [13,23,38,17,0,2], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.65, descSuffix: 'decent odds' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 6 },
+    ship:   { costs: [{ res: 'stone', n: 1 }, { res: 'gold', n: 1 }], pRes: 'enthusiasm', pN: 5, prodWeapon: 'hookshot', prodWeaponN: 1 },
     cost: 9,
   },
-  // ---- tier 3: late-game powerhouses (24-32☠️) ----
+  // ---- tier 3: late-game powerhouses (13☠️) ----
   masterLumberjack: {
     name: 'Master Rigger', cat: [10,28,40,16,0,8], canIsland: true,
     island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'hookshot', prodWeaponN: 2 },
+    ship:   { costs: [{ res: 'wood', n: 3 }, { res: 'gold', n: 1 }], pRes: 'enthusiasm', pN: 4, prodWeapon: 'blunderbuss', prodWeaponN: 2 },
     cost: 13,
   },
   masterMiner: {
     name: 'Master Ballaster', cat: [15,34,43,17,0,9], canIsland: true,
     island: { res: 'stone', amt: 2, chance: 0.9, descSuffix: 'reliable' },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
+    ship:   { costs: [{ res: 'stone', n: 3 }, { res: 'gold', n: 1 }], pRes: 'enthusiasm', pN: 4, prodWeapon: 'hookshot', prodWeaponN: 2 },
     cost: 13,
   },
   // ---- special: get-lost pirates (removeSelf on ship) ----
   raider: {
     name: 'Raider', cat: [1,15,44,26,19,3], canIsland: true,
-    island: { guaranteed: { weapon: 'axe', count: 2 } },
+    island: { guaranteed: { weapon: 'axe', count: 1 } },
     ship:   { removeSelf: true },
     cost: 4,
   },
@@ -857,13 +857,13 @@ const TYPES = {
   marooner: {
     name: 'Marooner', cat: [6,28,43,17,20,4], canIsland: true,
     island: { exileSent: true },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapon: 'dirk', prodWeaponN: 1 },
+    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'chain', prodWeaponN: 1 },
     cost: 6,
   },
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'trident', prodWeaponN: 1 },
+    island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'reliable' },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'map', pN: 1, extraEnthusiasm: 1 },
     cost: 3,
   },
 };
