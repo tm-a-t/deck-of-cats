@@ -70,7 +70,7 @@ const COMBAT = {
       unlockAt: 1,
       passiveKey: 'braceRowVsMultiTarget',
       passiveValue: 2,
-      summary: 'Its row braces against sweeping hits.',
+      summary: 'Front-liner. When you hit its whole row, each Shellback there takes 2 less damage.',
     },
     {
       key: 'deckSniper',
@@ -83,7 +83,7 @@ const COMBAT = {
       unlockAt: 1,
       attackRange: 'ranged',
       targetMode: 'backmostArmed',
-      summary: 'Shoots the backmost armed pirate first.',
+      summary: 'Ranged. Shoots your backmost armed pirate first.',
     },
     {
       key: 'netter',
@@ -98,7 +98,7 @@ const COMBAT = {
       targetMode: 'backmostAny',
       onHitEffectKey: 'snareOnHit',
       onHitEffectValue: { delayMs: 350, rangedDelayMs: 1200 },
-      summary: 'Throws nets into the back line and tangles ranged cats longer.',
+      summary: 'Ranged. Nets your backmost pirate and delays ranged cats much longer.',
     },
     {
       key: 'flintDuelist',
@@ -111,7 +111,7 @@ const COMBAT = {
       unlockAt: 6,
       triggerKey: 'rushOnHeavyHit',
       triggerValue: { threshold: 5, nextAttackMs: 220 },
-      summary: 'Huge hits fire it up and make it lunge sooner.',
+      summary: 'If you hit it for 5 or more at once, its next attack comes almost immediately.',
     },
     {
       key: 'powderBomber',
@@ -124,7 +124,7 @@ const COMBAT = {
       unlockAt: 1,
       deathEffect: 'frontRowBlast',
       deathEffectDamage: 4,
-      summary: 'Blows up when brought down.',
+      summary: 'When defeated, it explodes and hits your whole front row for 4.',
     },
   ],
 };

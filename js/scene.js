@@ -48,6 +48,7 @@ class GameScene extends Phaser.Scene {
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
+    this._combatTipState = null;
     this._renderAllQueued = false;
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
@@ -1180,6 +1181,8 @@ class GameScene extends Phaser.Scene {
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
+    this._combatTipState = null;
+    if (this._cardTips) this._cardTips.hide();
     G.combat = null;
   }
 
@@ -1634,6 +1637,106 @@ class GameScene extends Phaser.Scene {
     const tempo = enemy.attackMs <= 1000 ? 'strikes fast' : (enemy.attackMs >= 1550 ? 'strikes slow' : 'strikes steadily');
     const power = enemy.damage >= 2 ? 'hits hard' : 'hits lightly';
     return `${durability}. ${tempo.charAt(0).toUpperCase()}${tempo.slice(1)}. ${power.charAt(0).toUpperCase()}${power.slice(1)}.`;
+  }
+
+  combatTooltipBounds() {
+    const L = this.L;
+    return {
+      left: 18 * L.k,
+      top: 90 * L.k,
+      right: L.W - 18 * L.k,
+      bottom: handCardsTopY(L) - 18 * L.k,
+    };
+  }
+
+  combatFighterDisplayName(fighter) {
+    if (!fighter) return 'Fighter';
+    if (fighter.side === 'enemy') return fighter.name || 'Enemy';
+    const def = TYPES[fighter.type];
+    return (def && def.name) || fighter.type || 'Pirate';
+  }
+
+  combatFighterStrengthValue(fighter) {
+    if (!fighter) return 0;
+    if (fighter.side === 'enemy') return Math.max(0, Number(fighter.damage) || 0);
+    return Math.max(0, this.combatAttackDamage(fighter));
+  }
+
+  combatFighterDescription(fighter) {
+    if (!fighter) return '';
+    if (fighter.side === 'enemy') return this.combatEnemyCharacteristics(fighter);
+    return fighter.weaponKey
+      ? `${this.combatFighterDisplayName(fighter)} attacks with ${WEAPON_TYPES[fighter.weaponKey].emoji} ${WEAPON_TYPES[fighter.weaponKey].name}.`
+      : 'No weapon equipped. Front-row melee attacker.';
+  }
+
+  combatFighterTooltipEntries(fighter) {
+    if (!fighter) return [];
+    return [{
+      key: `fighter-${fighter.id}`,
+      title: `${this.combatFighterDisplayName(fighter)} · ⚔️ ${this.combatFighterStrengthValue(fighter)}`,
+      body: this.combatFighterDescription(fighter),
+    }];
+  }
+
+  combatWeaponTooltipEntries(weaponKey) {
+    const weapon = WEAPON_TYPES[weaponKey];
+    if (!weapon) return [];
+    return [{
+      key: `weapon-${weaponKey}`,
+      title: `${weapon.emoji} ${weapon.name}`,
+      body: weapon.summary,
+    }];
+  }
+
+  clearCombatTooltip() {
+    this._combatTipState = null;
+    if (this._cardTips) this._cardTips.hide();
+  }
+
+  showCombatTooltip(target, entries, opts = {}) {
+    if (!this._cardTips) return false;
+    const tips = Array.isArray(entries) ? entries.filter(Boolean) : [];
+    if (!tips.length) {
+      this.clearCombatTooltip();
+      return false;
+    }
+    this._cardTips.setBoundsRect(this.combatTooltipBounds());
+    const state = {
+      key: opts.key || null,
+      kind: opts.kind || null,
+      fighterId: opts.fighterId || null,
+      targetKind: opts.targetKind || 'body',
+      placement: opts.placement || 'side',
+      entries: tips.map((entry) => ({ ...entry })),
+    };
+    const shown = this._cardTips.showForCard(target, tips, {
+      key: state.key,
+      placement: state.placement,
+    });
+    this._combatTipState = shown ? state : null;
+    return shown;
+  }
+
+  hideCombatTooltipForKey(key, opts = {}) {
+    if (this._combatTipState && this._combatTipState.key === key) this._combatTipState = null;
+    if (!this._cardTips) return false;
+    if (opts.force) {
+      this._cardTips.hide();
+      return true;
+    }
+    return this._cardTips.hideForKey(key);
+  }
+
+  restoreCombatTooltip() {
+    if (!this._cardTips || !this._combatTipState || !this._combatTipState.fighterId) return false;
+    const node = this._combatNodes ? this._combatNodes[this._combatTipState.fighterId] : null;
+    if (!node || !node.scene) return false;
+    this._cardTips.setBoundsRect(this.combatTooltipBounds());
+    return this._cardTips.showForCard(node, this._combatTipState.entries, {
+      key: this._combatTipState.key,
+      placement: this._combatTipState.placement || 'side',
+    });
   }
 
   combatOpposingSide(side) {
@@ -2950,7 +3053,7 @@ class GameScene extends Phaser.Scene {
       return {
         icon: '🏴‍☠️',
         line1: 'Arrange your pirates.',
-        line2: 'Drag rows, tap cats to inspect',
+        line2: 'Drag rows. Hover or tap cats for tooltips',
       };
     }
 
@@ -3557,6 +3660,7 @@ class GameScene extends Phaser.Scene {
     const hp = Math.max(0, opts.hp || 0);
     const hpRatio = hp / maxHp;
     const ct = this.add.container(x, y);
+    let weaponNode = null;
     const bg = this.add.graphics();
     bg.fillStyle(uiColorInt(opts.side === 'enemy' ? '#E0AEA8' : UI_THEME.colors.sand), 1);
     bg.fillRoundedRect(-w / 2, -h / 2, w, h, r);
@@ -3575,10 +3679,10 @@ class GameScene extends Phaser.Scene {
     }
 
     if (opts.weaponKey && WEAPON_TYPES[opts.weaponKey]) {
-      const weapon = this.add.text(-w / 2 + 5 * L.k * scale, -h / 2 + 4 * L.k * scale, WEAPON_TYPES[opts.weaponKey].emoji, uiBodyStyle(L, UI_THEME.colors.ink, {
+      weaponNode = this.add.text(-w / 2 + 5 * L.k * scale, -h / 2 + 4 * L.k * scale, WEAPON_TYPES[opts.weaponKey].emoji, uiBodyStyle(L, UI_THEME.colors.ink, {
         fontSize: L.fs(Math.max(10, 14 * scale)),
       })).setOrigin(0, 0);
-      ct.add(weapon);
+      ct.add(weaponNode);
     }
 
     const hpLabel = this.add.text(0, h / 2 - 22 * L.k * scale, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
@@ -3601,166 +3705,106 @@ class GameScene extends Phaser.Scene {
     ct.setSize(w, h);
     if (opts.interactive) {
       let suppressTap = false;
-      const hit = this.add.zone(0, 0, w, h)
+      let touchDragPrimed = false;
+      let activeTargetKind = 'body';
+      let pointerDownStartedOnWeapon = false;
+      const bodyWidth = weaponNode ? Math.max(8 * L.k * scale, w - 20 * L.k * scale) : w;
+      const bodyZone = this.add.zone(weaponNode ? 6 * L.k * scale : 0, 0, bodyWidth, h)
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
-      hit.on('pointerdown', (ptr) => {
-        suppressTap = false;
+      const touchLike = (ptr) => isTouchLikePointer(ptr);
+      const stopPtr = (ptr) => {
         if (ptr && ptr.event) ptr.event.stopPropagation();
+      };
+      const setTargetKind = (kind) => {
+        activeTargetKind = kind === 'weapon' ? 'weapon' : 'body';
+      };
+      bodyZone.on('pointerdown', (ptr) => {
+        suppressTap = false;
+        touchDragPrimed = !!opts.draggable && touchLike(ptr);
+        pointerDownStartedOnWeapon = false;
+        setTargetKind('body');
+        stopPtr(ptr);
       });
       if (opts.onHover) {
-        hit.on('pointerover', () => {
+        bodyZone.on('pointerover', () => {
           if (this.combatSetupDragging()) return;
-          opts.onHover();
+          setTargetKind('body');
+          opts.onHover({ targetKind: 'body' });
         });
       }
       if (opts.onOut) {
-        hit.on('pointerout', () => {
+        bodyZone.on('pointerout', () => {
           if (this.combatSetupDragging()) return;
-          opts.onOut();
+          opts.onOut({ targetKind: 'body' });
         });
       }
       if (opts.draggable) {
-        this.input.setDraggable(hit, true);
-        hit.on('dragstart', (pointer) => {
+        this.input.setDraggable(bodyZone, true);
+        bodyZone.on('dragstart', (pointer) => {
           suppressTap = true;
+          setTargetKind('body');
+          if (touchDragPrimed && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDragStart) opts.onDragStart(pointer, ct);
         });
-        hit.on('drag', (pointer) => {
+        bodyZone.on('drag', (pointer) => {
+          if (touchDragPrimed && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDrag) opts.onDrag(pointer, ct);
         });
-        hit.on('dragend', (pointer) => {
+        bodyZone.on('dragend', (pointer) => {
+          touchDragPrimed = false;
           if (opts.onDragEnd) opts.onDragEnd(pointer, ct);
         });
       }
       if (opts.onTap) {
-        hit.on('pointerup', (ptr) => {
-          if (ptr && ptr.event) ptr.event.stopPropagation();
+        bodyZone.on('pointerup', (ptr) => {
+          stopPtr(ptr);
           if (suppressTap) {
             suppressTap = false;
             return;
           }
-          opts.onTap();
+          setTargetKind('body');
+          opts.onTap({ targetKind: 'body' });
         });
       }
-      ct.add(hit);
+      ct.add(bodyZone);
+      if (weaponNode && opts.onWeaponHover) {
+        const weaponHit = this.add.zone(
+          -w / 2 + 12 * L.k * scale,
+          -h / 2 + 12 * L.k * scale,
+          24 * L.k * scale,
+          24 * L.k * scale
+        ).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        weaponHit.on('pointerdown', (ptr) => {
+          suppressTap = false;
+          touchDragPrimed = false;
+          pointerDownStartedOnWeapon = true;
+          setTargetKind('weapon');
+          stopPtr(ptr);
+        });
+        weaponHit.on('pointerover', () => {
+          if (this.combatSetupDragging()) return;
+          setTargetKind('weapon');
+          opts.onWeaponHover({ targetKind: 'weapon' });
+        });
+        weaponHit.on('pointerout', () => {
+          if (this.combatSetupDragging()) return;
+          if (opts.onWeaponOut) opts.onWeaponOut({ targetKind: 'weapon' });
+        });
+        weaponHit.on('pointerup', (ptr) => {
+          stopPtr(ptr);
+          if (pointerDownStartedOnWeapon && opts.onWeaponTap) {
+            opts.onWeaponTap({ targetKind: 'weapon' });
+          } else if (opts.onTap) {
+            opts.onTap({ targetKind: 'body' });
+          }
+          pointerDownStartedOnWeapon = false;
+        });
+        ct.add(weaponHit);
+      }
     }
     if (opts.alive === false) ct.setAlpha(0.4);
     this.addTo(containerKey, ct);
-  }
-
-  renderCombatSetupPopup(opts = {}, combat = G.combat) {
-    if (!combat || combat.mode !== 'setup') return;
-    const L = this.L;
-    const side = opts.side === 'enemy' ? 'enemy' : 'player';
-    const viewMap = side === 'enemy' ? this._combatEnemyViews : this._combatPlayerViews;
-    const view = viewMap ? viewMap[opts.id] : null;
-    if (!view) return;
-    const popupW = 164 * L.k;
-    const padX = 11 * L.k;
-    const padY = 8 * L.k;
-    const contentW = popupW - padX * 2;
-    const gapY = 4 * L.k;
-    const cardW = 60 * L.k;
-    const cardH = 99 * L.k;
-    const popupGap = 8 * L.k;
-    const slotW = 40 * L.k;
-    const slotH = 24 * L.k;
-    const showsWeaponSlot = side === 'player';
-    const nameText = opts.name || '';
-    const strengthValue = Math.max(0, Number(opts.strength) || 0);
-    const detailText = opts.detail || '';
-
-    const name = this.add.text(0, 0, nameText, uiHeadingStyle(L, 15, UI_THEME.colors.ink, {
-      align: 'left',
-      wordWrap: { width: contentW },
-    })).setOrigin(0, 0);
-    const strength = this.add.text(0, 0, `⚔️ ${strengthValue}`, uiHeadingStyle(L, 14, UI_THEME.colors.ink, {
-      align: 'left',
-    })).setOrigin(0, 0);
-    const weaponLabel = showsWeaponSlot
-      ? this.add.text(0, 0, 'Weapon', uiBodyStyle(L, UI_THEME.colors.ink)).setOrigin(0, 0)
-      : null;
-    const detail = this.add.text(0, 0, detailText, uiBodyStyle(L, UI_THEME.colors.ink, {
-      align: 'left',
-      wordWrap: { width: contentW },
-    })).setOrigin(0, 0);
-
-    const nameY = 0;
-    const strengthY = nameY + name.height + gapY;
-    const weaponRowY = showsWeaponSlot ? (strengthY + strength.height + gapY) : null;
-    const slotX = showsWeaponSlot ? Math.min(contentW - slotW, weaponLabel.width + 8 * L.k) : 0;
-    const labelY = showsWeaponSlot ? (weaponRowY + Math.max(0, (slotH - weaponLabel.height) / 2)) : null;
-    const detailY = showsWeaponSlot
-      ? (weaponRowY + slotH + gapY)
-      : (strengthY + strength.height + gapY);
-    const popupH = detailY + detail.height + padY * 2;
-    const x = Phaser.Math.Clamp(view.x, 18 * L.k + popupW / 2, L.W - 18 * L.k - popupW / 2);
-    const unclampedY = side === 'enemy'
-      ? view.y - cardH / 2 - popupGap - popupH / 2
-      : view.y + cardH / 2 + popupGap + popupH / 2;
-    const y = Phaser.Math.Clamp(unclampedY, 18 * L.k + popupH / 2, L.H - 18 * L.k - popupH / 2);
-    const left = -popupW / 2 + padX;
-    const top = -popupH / 2 + padY;
-
-    name.setPosition(left, top + nameY);
-    strength.setPosition(left, top + strengthY);
-    if (weaponLabel) weaponLabel.setPosition(left, top + labelY);
-    detail.setPosition(left, top + detailY);
-
-    const ct = this.add.container(x, y);
-
-    const shadow = this.add.graphics();
-    shadow.fillStyle(0x000000, 0.28);
-    shadow.fillRoundedRect(-popupW / 2 + 4 * L.k, -popupH / 2 + 5 * L.k, popupW, popupH, 9 * L.k);
-    ct.add(shadow);
-
-    const bg = this.add.graphics();
-    bg.fillStyle(uiColorInt(UI_THEME.colors.sand), 1);
-    bg.fillRoundedRect(-popupW / 2, -popupH / 2, popupW, popupH, 9 * L.k);
-    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
-    bg.strokeRoundedRect(-popupW / 2, -popupH / 2, popupW, popupH, 9 * L.k);
-    ct.add(bg);
-
-    const popupHit = this.add.zone(0, 0, popupW, popupH)
-      .setOrigin(0.5)
-      .setInteractive();
-    popupHit.on('pointerover', () => this.clearCombatSetupPopupDismiss());
-    popupHit.on('pointerout', () => this.scheduleCombatSetupPopupDismiss(combat));
-    popupHit.on('pointerdown', (ptr) => {
-      if (ptr && ptr.event) ptr.event.stopPropagation();
-      this.clearCombatSetupPopupDismiss();
-    });
-
-    const content = [popupHit, name, strength, detail];
-    if (weaponLabel) content.push(weaponLabel);
-    if (showsWeaponSlot) {
-      const slotBg = this.add.graphics();
-      slotBg.fillStyle(uiColorInt(UI_THEME.colors.sandEdge), 1);
-      slotBg.fillRoundedRect(left + slotX, top + weaponRowY, slotW, slotH, 5 * L.k);
-      slotBg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 1);
-      slotBg.strokeRoundedRect(left + slotX, top + weaponRowY, slotW, slotH, 5 * L.k);
-      const slotText = this.add.text(left + slotX + slotW / 2, top + weaponRowY + slotH / 2, opts.weaponEmoji || '—', uiHeadingStyle(L, 15, UI_THEME.colors.ink))
-        .setOrigin(0.5);
-      content.push(slotBg, slotText);
-      if (opts.onWeaponTap) {
-        const slotHit = this.add.zone(left + slotX + slotW / 2, top + weaponRowY + slotH / 2, slotW, slotH)
-          .setOrigin(0.5)
-          .setInteractive({ useHandCursor: true });
-        slotHit.on('pointerover', () => this.clearCombatSetupPopupDismiss());
-        slotHit.on('pointerout', () => this.scheduleCombatSetupPopupDismiss(combat));
-        slotHit.on('pointerdown', (ptr) => {
-          if (ptr && ptr.event) ptr.event.stopPropagation();
-          this.clearCombatSetupPopupDismiss();
-          this._combatSetupPopupPinned = true;
-          opts.onWeaponTap();
-        });
-        content.push(slotHit);
-      }
-    }
-
-    ct.add(content);
-    this.addTo('overlay', ct);
   }
 
   renderBoardingEncounter() {
@@ -3769,6 +3813,7 @@ class GameScene extends Phaser.Scene {
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
+    if (this._cardTips) this._cardTips.setBoundsRect(this.combatTooltipBounds());
 
     if (!combat || combat.mode === 'setup') {
       const enemies = (combat && combat.enemyParty) || [];
@@ -3801,6 +3846,11 @@ class GameScene extends Phaser.Scene {
           const enemy = enemyById.get(enemyId);
           if (!enemy) return;
           const pos = enemySlots[enemy.id] || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+          const fighterTipEntries = this.combatFighterTooltipEntries({
+            ...enemy,
+            side: 'enemy',
+          });
+          const fighterTipKey = `combat-fighter-${enemy.id}`;
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: enemy.id,
             side: 'enemy',
@@ -3810,9 +3860,32 @@ class GameScene extends Phaser.Scene {
             alive: true,
             scale: enemyVisuals.scale,
             interactive: true,
-            onHover: () => this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: false }),
-            onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
-            onTap: () => this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: true }),
+            onHover: () => {
+              this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: false });
+              this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+                key: fighterTipKey,
+                kind: 'combat-fighter',
+                fighterId: enemy.id,
+                targetKind: 'body',
+              });
+            },
+            onOut: () => {
+              this.scheduleCombatSetupPopupDismiss(combat);
+              this.hideCombatTooltipForKey(fighterTipKey);
+            },
+            onTap: () => {
+              this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: true });
+              if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+                this.clearCombatTooltip();
+                return;
+              }
+              this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+                key: fighterTipKey,
+                kind: 'combat-fighter',
+                fighterId: enemy.id,
+                targetKind: 'body',
+              });
+            },
           });
         });
       });
@@ -3823,6 +3896,17 @@ class GameScene extends Phaser.Scene {
           if (!pirate) return;
           const pos = playerSlots[pirate.id] || { x: L.cx, y: this.combatFormationRowY('player', 0) };
           const preview = this.combatPreviewStats(pirate, combat);
+          const fighterModel = {
+            id: pirate.id,
+            side: 'player',
+            type: pirate.type,
+            weaponKey: preview.weaponKey,
+            damage: preview.damage,
+          };
+          const fighterTipEntries = this.combatFighterTooltipEntries(fighterModel);
+          const fighterTipKey = `combat-fighter-${pirate.id}`;
+          const weaponTipEntries = this.combatWeaponTooltipEntries(preview.weaponKey);
+          const weaponTipKey = `combat-weapon-${pirate.id}`;
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: pirate.id,
             side: 'player',
@@ -3834,12 +3918,74 @@ class GameScene extends Phaser.Scene {
             scale: playerVisuals.scale,
             interactive: true,
             draggable: true,
-            onHover: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false }),
-            onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
-            onTap: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true }),
+            onHover: () => {
+              this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false });
+              this.showCombatTooltip(this._combatNodes[pirate.id], fighterTipEntries, {
+                key: fighterTipKey,
+                kind: 'combat-fighter',
+                fighterId: pirate.id,
+                targetKind: 'body',
+              });
+            },
+            onOut: () => {
+              this.scheduleCombatSetupPopupDismiss(combat);
+              this.hideCombatTooltipForKey(fighterTipKey);
+              this.hideCombatTooltipForKey(weaponTipKey);
+            },
+            onTap: () => {
+              this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true });
+              if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+                this.clearCombatTooltip();
+                return;
+              }
+              this.showCombatTooltip(this._combatNodes[pirate.id], fighterTipEntries, {
+                key: fighterTipKey,
+                kind: 'combat-fighter',
+                fighterId: pirate.id,
+                targetKind: 'body',
+              });
+            },
+            onWeaponHover: () => {
+              this.clearCombatSetupPopupDismiss();
+              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
+                key: weaponTipKey,
+                kind: 'combat-weapon',
+                fighterId: pirate.id,
+                targetKind: 'weapon',
+              });
+            },
+            onWeaponOut: () => {
+              this.scheduleCombatSetupPopupDismiss(combat);
+              this.hideCombatTooltipForKey(weaponTipKey);
+            },
+            onWeaponTap: () => {
+              this.clearCombatSetupPopupDismiss();
+              this._combatSetupPopupPinned = true;
+              if (this._cardTips && this._cardTips.isActiveFor(weaponTipKey)) {
+                this.clearCombatTooltip();
+                return;
+              }
+              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
+                key: weaponTipKey,
+                kind: 'combat-weapon',
+                fighterId: pirate.id,
+                targetKind: 'weapon',
+              });
+            },
+            onDragPreview: () => {
+              if (!weaponTipEntries.length) return;
+              this.clearCombatSetupPopupDismiss();
+              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
+                key: weaponTipKey,
+                kind: 'combat-weapon',
+                fighterId: pirate.id,
+                targetKind: 'weapon',
+              });
+            },
             onDragStart: (_pointer, cardNode) => {
               this._combatSetupDragState = { pirateId: pirate.id };
               this.clearCombatSetupInspection(combat, { silent: true });
+              this.clearCombatTooltip();
               cardNode.setDepth(130);
               cardNode.setScale(1.05);
               cardNode.setAlpha(0.96);
@@ -3858,28 +4004,7 @@ class GameScene extends Phaser.Scene {
           });
         });
       });
-
-      if (inspectedEnemy) {
-        this.renderCombatSetupPopup({
-          id: inspectedEnemy.id,
-          side: 'enemy',
-          name: inspectedEnemy.name || 'Enemy',
-          strength: inspectedEnemy.damage || 0,
-          detail: this.combatEnemyCharacteristics(inspectedEnemy),
-        }, combat);
-      }
-      if (inspectedPirate) {
-        const preview = this.combatPreviewStats(inspectedPirate, combat);
-        const weapon = preview.weaponKey ? WEAPON_TYPES[preview.weaponKey] : null;
-        this.renderCombatSetupPopup({
-          id: inspectedPirate.id,
-          side: 'player',
-          name: TYPES[inspectedPirate.type].name || inspectedPirate.type,
-          strength: preview.damage,
-          detail: weapon ? `Permanent ${weapon.summary || weapon.name}` : 'No permanent weapon. Front-row melee.',
-          weaponEmoji: weapon ? weapon.emoji : '—',
-        }, combat);
-      }
+      this.restoreCombatTooltip();
       return;
     }
 
@@ -3893,6 +4018,8 @@ class GameScene extends Phaser.Scene {
     enemyFighters.forEach((enemy) => {
       const pos = enemySlots[enemy.id];
       if (!pos) return;
+      const fighterTipEntries = this.combatFighterTooltipEntries(enemy);
+      const fighterTipKey = `combat-fighter-${enemy.id}`;
       this.renderCombatMiniCard('island', pos.x, pos.y, {
         id: enemy.id,
         side: 'enemy',
@@ -3901,12 +4028,40 @@ class GameScene extends Phaser.Scene {
         maxHp: enemy.maxHp,
         alive: enemy.alive,
         scale: enemyVisuals.scale,
+        interactive: true,
+        onHover: () => {
+          this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+            key: fighterTipKey,
+            kind: 'combat-fighter',
+            fighterId: enemy.id,
+            targetKind: 'body',
+          });
+        },
+        onOut: () => {
+          this.hideCombatTooltipForKey(fighterTipKey);
+        },
+        onTap: () => {
+          if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+            this.clearCombatTooltip();
+            return;
+          }
+          this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+            key: fighterTipKey,
+            kind: 'combat-fighter',
+            fighterId: enemy.id,
+            targetKind: 'body',
+          });
+        },
       });
     });
 
     playerFighters.forEach((fighter) => {
       const pos = playerSlots[fighter.id];
       if (!pos) return;
+      const fighterTipEntries = this.combatFighterTooltipEntries(fighter);
+      const fighterTipKey = `combat-fighter-${fighter.id}`;
+      const weaponTipEntries = this.combatWeaponTooltipEntries(fighter.weaponKey);
+      const weaponTipKey = `combat-weapon-${fighter.id}`;
       this.renderCombatMiniCard('island', pos.x, pos.y, {
         id: fighter.id,
         side: 'player',
@@ -3916,8 +4071,57 @@ class GameScene extends Phaser.Scene {
         weaponKey: fighter.weaponKey,
         alive: fighter.alive,
         scale: playerVisuals.scale,
+        interactive: true,
+        onHover: () => {
+          this.showCombatTooltip(this._combatNodes[fighter.id], fighterTipEntries, {
+            key: fighterTipKey,
+            kind: 'combat-fighter',
+            fighterId: fighter.id,
+            targetKind: 'body',
+          });
+        },
+        onOut: () => {
+          this.hideCombatTooltipForKey(fighterTipKey);
+          this.hideCombatTooltipForKey(weaponTipKey);
+        },
+        onTap: () => {
+          if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+            this.clearCombatTooltip();
+            return;
+          }
+          this.showCombatTooltip(this._combatNodes[fighter.id], fighterTipEntries, {
+            key: fighterTipKey,
+            kind: 'combat-fighter',
+            fighterId: fighter.id,
+            targetKind: 'body',
+          });
+        },
+        onWeaponHover: () => {
+          this.showCombatTooltip(this._combatNodes[fighter.id], weaponTipEntries, {
+            key: weaponTipKey,
+            kind: 'combat-weapon',
+            fighterId: fighter.id,
+            targetKind: 'weapon',
+          });
+        },
+        onWeaponOut: () => {
+          this.hideCombatTooltipForKey(weaponTipKey);
+        },
+        onWeaponTap: () => {
+          if (this._cardTips && this._cardTips.isActiveFor(weaponTipKey)) {
+            this.clearCombatTooltip();
+            return;
+          }
+          this.showCombatTooltip(this._combatNodes[fighter.id], weaponTipEntries, {
+            key: weaponTipKey,
+            kind: 'combat-weapon',
+            fighterId: fighter.id,
+            targetKind: 'weapon',
+          });
+        },
       });
     });
+    this.restoreCombatTooltip();
   }
 
   // ──────────── RENDERING ────────────
