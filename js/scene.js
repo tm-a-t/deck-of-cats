@@ -3876,7 +3876,6 @@ class GameScene extends Phaser.Scene {
             scale: enemyVisuals.scale,
             interactive: true,
             onHover: () => {
-              this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: false });
               this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
                 key: fighterTipKey,
                 kind: 'combat-fighter',
@@ -3885,11 +3884,9 @@ class GameScene extends Phaser.Scene {
               });
             },
             onOut: () => {
-              this.scheduleCombatSetupPopupDismiss(combat);
               this.hideCombatTooltipForKey(fighterTipKey);
             },
             onTap: () => {
-              this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: true });
               if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
                 this.clearCombatTooltip();
                 return;
@@ -3934,7 +3931,6 @@ class GameScene extends Phaser.Scene {
             interactive: true,
             draggable: true,
             onHover: () => {
-              this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false });
               this.showCombatTooltip(this._combatNodes[pirate.id], fighterTipEntries, {
                 key: fighterTipKey,
                 kind: 'combat-fighter',
@@ -3943,12 +3939,10 @@ class GameScene extends Phaser.Scene {
               });
             },
             onOut: () => {
-              this.scheduleCombatSetupPopupDismiss(combat);
               this.hideCombatTooltipForKey(fighterTipKey);
               this.hideCombatTooltipForKey(weaponTipKey);
             },
             onTap: () => {
-              this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: true });
               if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
                 this.clearCombatTooltip();
                 return;
@@ -3961,7 +3955,6 @@ class GameScene extends Phaser.Scene {
               });
             },
             onWeaponHover: () => {
-              this.clearCombatSetupPopupDismiss();
               this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
                 key: weaponTipKey,
                 kind: 'combat-weapon',
@@ -3970,12 +3963,9 @@ class GameScene extends Phaser.Scene {
               });
             },
             onWeaponOut: () => {
-              this.scheduleCombatSetupPopupDismiss(combat);
               this.hideCombatTooltipForKey(weaponTipKey);
             },
             onWeaponTap: () => {
-              this.clearCombatSetupPopupDismiss();
-              this._combatSetupPopupPinned = true;
               if (this._cardTips && this._cardTips.isActiveFor(weaponTipKey)) {
                 this.clearCombatTooltip();
                 return;
@@ -3989,7 +3979,6 @@ class GameScene extends Phaser.Scene {
             },
             onDragPreview: () => {
               if (!weaponTipEntries.length) return;
-              this.clearCombatSetupPopupDismiss();
               this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
                 key: weaponTipKey,
                 kind: 'combat-weapon',
@@ -4008,6 +3997,14 @@ class GameScene extends Phaser.Scene {
               if (!pointer) return;
               cardNode.setPosition(pointer.x, pointer.y);
               cardNode.setDepth(130);
+              if (weaponTipEntries.length) {
+                this.showCombatTooltip(cardNode, weaponTipEntries, {
+                  key: weaponTipKey,
+                  kind: 'combat-weapon',
+                  fighterId: pirate.id,
+                  targetKind: 'weapon',
+                });
+              }
             },
             onDragEnd: (pointer) => {
               const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
