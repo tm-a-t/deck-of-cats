@@ -2957,18 +2957,12 @@ class GameScene extends Phaser.Scene {
       const layer = G.map.layers[li];
       if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
       const turnsAway = li - currentLayer;
-      const boardingNo = this.mapBoardingNumberForLayer(li);
       const bp = this.encounterBlueprintForLayer(li);
       const desc = bp && bp.encounterDesc ? bp.encounterDesc : null;
-      const totalCount = bp ? bp.totalCount : Phaser.Math.Clamp(
-        2 + Math.floor((boardingNo + 1) / 2),
-        COMBAT.enemyCountMin,
-        COMBAT.enemyCountMax
-      );
       return {
         icon: '🏴‍☠️',
-        line1: `In ${turnsAway} turn${turnsAway === 1 ? '' : 's'}  ·  ${totalCount} foe${totalCount === 1 ? '' : 's'}`,
-        line2: desc || `Battle #${boardingNo}`,
+        line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
+        line2: desc || `Battle #${this.mapBoardingNumberForLayer(li)}`,
       };
     }
 
