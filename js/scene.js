@@ -3717,6 +3717,7 @@ class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       const touchLike = (ptr) => isTouchLikePointer(ptr);
+      const dragPreviewEnabled = (ptr = null) => !!(touchLike(ptr) || (this.L && this.L.IS_MOBILE));
       const stopPtr = (ptr) => {
         if (ptr && ptr.event) ptr.event.stopPropagation();
       };
@@ -3725,7 +3726,7 @@ class GameScene extends Phaser.Scene {
       };
       bodyZone.on('pointerdown', (ptr) => {
         suppressTap = false;
-        touchDragPrimed = !!opts.draggable && touchLike(ptr);
+        touchDragPrimed = !!opts.draggable && dragPreviewEnabled(ptr);
         pointerDownStartedOnWeapon = false;
         setTargetKind('body');
         stopPtr(ptr);
@@ -3751,11 +3752,11 @@ class GameScene extends Phaser.Scene {
         bodyZone.on('dragstart', (pointer) => {
           suppressTap = true;
           setTargetKind('body');
-          if (touchDragPrimed && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
+          if (dragPreviewEnabled(pointer) && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDragStart) opts.onDragStart(pointer, ct);
         });
         bodyZone.on('drag', (pointer) => {
-          if (touchDragPrimed && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
+          if (dragPreviewEnabled(pointer) && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDrag) opts.onDrag(pointer, ct);
         });
         bodyZone.on('dragend', (pointer) => {
