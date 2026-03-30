@@ -3708,8 +3708,12 @@ class GameScene extends Phaser.Scene {
       let touchDragPrimed = false;
       let activeTargetKind = 'body';
       let pointerDownStartedOnWeapon = false;
-      const bodyWidth = weaponNode ? Math.max(8 * L.k * scale, w - 20 * L.k * scale) : w;
-      const bodyZone = this.add.zone(weaponNode ? 6 * L.k * scale : 0, 0, bodyWidth, h)
+      const weaponHitSize = 24 * L.k * scale;
+      const weaponHitCenterX = -w / 2 + 12 * L.k * scale;
+      const weaponReservedWidth = weaponNode ? Math.max(weaponHitSize, 28 * L.k * scale) : 0;
+      const bodyWidth = weaponNode ? Math.max(8 * L.k * scale, w - weaponReservedWidth) : w;
+      const bodyCenterX = weaponNode ? (weaponReservedWidth / 2) : 0;
+      const bodyZone = this.add.zone(bodyCenterX, 0, bodyWidth, h)
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       const touchLike = (ptr) => isTouchLikePointer(ptr);
@@ -3725,6 +3729,9 @@ class GameScene extends Phaser.Scene {
         pointerDownStartedOnWeapon = false;
         setTargetKind('body');
         stopPtr(ptr);
+        if (touchLike(ptr) && opts.onTap) {
+          opts.onTap({ targetKind: 'body' });
+        }
       });
       if (opts.onHover) {
         bodyZone.on('pointerover', () => {
@@ -3763,6 +3770,7 @@ class GameScene extends Phaser.Scene {
             suppressTap = false;
             return;
           }
+          if (touchLike(ptr)) return;
           setTargetKind('body');
           opts.onTap({ targetKind: 'body' });
         });
@@ -3770,10 +3778,10 @@ class GameScene extends Phaser.Scene {
       ct.add(bodyZone);
       if (weaponNode && opts.onWeaponHover) {
         const weaponHit = this.add.zone(
-          -w / 2 + 12 * L.k * scale,
+          weaponHitCenterX,
           -h / 2 + 12 * L.k * scale,
-          24 * L.k * scale,
-          24 * L.k * scale
+          weaponHitSize,
+          weaponHitSize
         ).setOrigin(0.5).setInteractive({ useHandCursor: true });
         weaponHit.on('pointerdown', (ptr) => {
           suppressTap = false;
@@ -3781,6 +3789,9 @@ class GameScene extends Phaser.Scene {
           pointerDownStartedOnWeapon = true;
           setTargetKind('weapon');
           stopPtr(ptr);
+          if (touchLike(ptr) && opts.onWeaponTap) {
+            opts.onWeaponTap({ targetKind: 'weapon' });
+          }
         });
         weaponHit.on('pointerover', () => {
           if (this.combatSetupDragging()) return;
@@ -3793,6 +3804,10 @@ class GameScene extends Phaser.Scene {
         });
         weaponHit.on('pointerup', (ptr) => {
           stopPtr(ptr);
+          if (touchLike(ptr)) {
+            pointerDownStartedOnWeapon = false;
+            return;
+          }
           if (pointerDownStartedOnWeapon && opts.onWeaponTap) {
             opts.onWeaponTap({ targetKind: 'weapon' });
           } else if (opts.onTap) {
@@ -3985,7 +4000,6 @@ class GameScene extends Phaser.Scene {
             onDragStart: (_pointer, cardNode) => {
               this._combatSetupDragState = { pirateId: pirate.id };
               this.clearCombatSetupInspection(combat, { silent: true });
-              this.clearCombatTooltip();
               cardNode.setDepth(130);
               cardNode.setScale(1.05);
               cardNode.setAlpha(0.96);
