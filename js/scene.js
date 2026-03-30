@@ -48,6 +48,7 @@ class GameScene extends Phaser.Scene {
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
+    this._activeHeldCombatTooltipKey = null;
     this._combatTipState = null;
     this._renderAllQueued = false;
     this._combatSetupPopupPinned = false;
@@ -73,6 +74,12 @@ class GameScene extends Phaser.Scene {
       if (!G.shopAnimating) this.renderAll();
     };
     this.scale.on('resize', this._onResize);
+    this._onCombatHoldPointerUp = () => {
+      if (!this._activeHeldCombatTooltipKey) return;
+      this.hideCombatTooltipForKey(this._activeHeldCombatTooltipKey, { force: true });
+      this._activeHeldCombatTooltipKey = null;
+    };
+    this.input.on('pointerup', this._onCombatHoldPointerUp);
 
     this._panelShutdownHandlers = {
       map: () => {
@@ -101,6 +108,9 @@ class GameScene extends Phaser.Scene {
     }
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this._onResize);
+      if (this._onCombatHoldPointerUp) {
+        this.input.off('pointerup', this._onCombatHoldPointerUp);
+      }
       Object.entries(this._panelShutdownHandlers || {}).forEach(([key, handler]) => {
         this.scene.get(key).events.off(Phaser.Scenes.Events.SHUTDOWN, handler);
       });
@@ -1178,6 +1188,7 @@ class GameScene extends Phaser.Scene {
     this.clearCombatSetupPopupDismiss();
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
+    this._activeHeldCombatTooltipKey = null;
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
@@ -1699,6 +1710,7 @@ class GameScene extends Phaser.Scene {
 
   clearCombatTooltip() {
     this._combatTipState = null;
+    this._activeHeldCombatTooltipKey = null;
     if (this._cardTips) this._cardTips.hide();
   }
 
@@ -1728,6 +1740,7 @@ class GameScene extends Phaser.Scene {
 
   hideCombatTooltipForKey(key, opts = {}) {
     if (this._combatTipState && this._combatTipState.key === key) this._combatTipState = null;
+    if (this._activeHeldCombatTooltipKey === key) this._activeHeldCombatTooltipKey = null;
     if (!this._cardTips) return false;
     if (opts.force) {
       this._cardTips.hide();
@@ -3735,6 +3748,7 @@ class GameScene extends Phaser.Scene {
         tooltipHoldTimer = this.time.delayedCall(260, () => {
           tooltipHoldTimer = null;
           opts.onHoldTooltip({ pointer: ptr, targetKind: 'body' });
+          this._activeHeldCombatTooltipKey = opts.tooltipKey || null;
         });
       };
       bodyZone.on('pointerdown', (ptr) => {
@@ -3773,6 +3787,9 @@ class GameScene extends Phaser.Scene {
         });
         bodyZone.on('dragend', (pointer) => {
           clearTooltipHold();
+          if (this._activeHeldCombatTooltipKey === (opts.tooltipKey || null)) {
+            this.hideCombatTooltipForKey(this._activeHeldCombatTooltipKey, { force: true });
+          }
           if (opts.onDragEnd) opts.onDragEnd(pointer, ct);
         });
       }
@@ -3844,6 +3861,7 @@ class GameScene extends Phaser.Scene {
           const fighterTipKey = `combat-fighter-${enemy.id}`;
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: enemy.id,
+            tooltipKey: fighterTipKey,
             side: 'enemy',
             emoji: enemy.emoji,
             hp: enemy.hp,
@@ -3903,6 +3921,7 @@ class GameScene extends Phaser.Scene {
           const playerTipKey = `combat-player-${pirate.id}`;
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: pirate.id,
+            tooltipKey: playerTipKey,
             side: 'player',
             pirateType: pirate.type,
             hp: preview.hp,
@@ -3996,6 +4015,7 @@ class GameScene extends Phaser.Scene {
       const fighterTipKey = `combat-fighter-${enemy.id}`;
       this.renderCombatMiniCard('island', pos.x, pos.y, {
         id: enemy.id,
+        tooltipKey: fighterTipKey,
         side: 'enemy',
         emoji: enemy.emoji,
         hp: enemy.hp,
@@ -4044,6 +4064,7 @@ class GameScene extends Phaser.Scene {
       const playerTipKey = `combat-player-${fighter.id}`;
       this.renderCombatMiniCard('island', pos.x, pos.y, {
         id: fighter.id,
+        tooltipKey: playerTipKey,
         side: 'player',
         pirateType: fighter.type,
         hp: fighter.hp,
