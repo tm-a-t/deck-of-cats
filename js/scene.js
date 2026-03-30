@@ -4305,6 +4305,7 @@ class GameScene extends Phaser.Scene {
     this.renderHand();
     this.renderBtn();
     this.renderNav();
+    if (G.phase === 'boarding') this.startBoardingSetupIntroIfNeeded();
   }
 
   renderTop() {
