@@ -55,6 +55,11 @@ class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.85);
     this.root.add(streakTxt);
+
+    const versionTxt = this.add.text(L.W - 18 * L.k, L.H - 18 * L.k, `v${GAME_VERSION}`, uiBodyStyle(L, UI_THEME.colors.cocoa))
+      .setOrigin(1, 1)
+      .setAlpha(0.7);
+    this.root.add(versionTxt);
   }
 
   resetGameScenes() {

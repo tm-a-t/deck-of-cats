@@ -68,7 +68,9 @@ If the selected node is an island:
 If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
 - Boarding starts with a **setup step**:
-  - All player pirates are shown immediately as compact mini cards.
+  - The normal hand is drawn first.
+  - If that draw requires a reshuffle, boarding waits for the whole draw/reshuffle sequence to finish so the hand is complete before cards start moving to combat.
+  - After that, each player card leaves the hand and animates into its compact battle position; a card is never shown in both places at once.
   - Initial setup places melee pirates in the front row and ranged pirates in the middle row.
   - Player may drag those mini cards to rearrange pirates arbitrarily across the front, middle, and back rows, including left-to-right order within a row.
   - Player may inspect a pirate by hovering/tapping that mini card.
@@ -90,22 +92,32 @@ If the selected node is an enemy ship:
     - `⚓ Anchor`: melee, deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row.
     - `🧨 Bomb Lance`: melee, deals **8 damage** but only strikes **once** per boarding.
     - `🥏 Chakram`: ranged, deals **2 damage** on its first shot and gains **+1 damage** after each shot in that boarding.
-- Enemy boarding parties are generated independently of the map node's legacy `strength` value:
-  - Encounters use 3–5 enemies drawn from this roster:
-    - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
-    - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
-    - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
-    - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
-    - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
-  - A random boarding usually centers on **one main enemy type**, with at most a small side group from one other type.
+- Enemy boarding parties are generated from encounter blueprints stored on each map ship node:
+  - **Enemy roster** has two tiers:
+    - **Weak (swarm/support):**
+      - `🐀 Bilge Rat`: melee, 6 HP, 2 damage, fast but fragile.
+      - `🔔 Cabin Boy`: ranged, 5 HP, 2 damage, targets the backmost pirate.
+    - **Strong:**
+      - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
+      - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
+      - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
+      - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
+      - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
+  - **Difficulty scaling by boarding number:**
+    - Boardings 1–2 (early): 3 enemies total; only 1–2 strong enemies, the rest are weak swarm fillers. Only `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber` are eligible as strong picks.
+    - Boardings 3–4 (mid): 3–4 enemies; more strong enemies with a few weak supports. `🪤 Netter` unlocks at boarding **3**.
+    - Boardings 5–6 (late): 4–5 enemies; almost entirely strong enemies. `🔥 Flint Duelist` unlocks at boarding **5**.
+  - Each encounter centers on **one main strong enemy type**: most strong slots are filled with the main type, with at most one slot for a secondary strong type (50% chance when enough strong slots exist). Remaining slots are filled with weak swarm enemies in early/mid battles.
   - Each enemy party is distributed across up to 3 rows with a variable split.
   - Enemy rows are always filled from the **front backward**; random setup never leaves an empty front or middle row with enemies behind it.
   - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.
-  - Difficulty scales by **boarding count** through party size and unlocked enemy types; enemy stats stay at their printed values.
-  - Early boardings use `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber`; `🪤 Netter` unlocks starting at boarding **4**, and `🔥 Flint Duelist` unlocks starting at boarding **6**.
+  - Enemy stats stay at their printed values; difficulty rises through party size, composition, and unlocked types.
+  - A short description of the main enemy type (e.g. "Heavy shields ahead") appears in the goal display under "Enemy in X turns" so the player can prepare.
 - Combat resolution:
   - Both crews attack automatically once `Fight!` is pressed.
   - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
+  - During autoplay, player pirates still fighting remain on the table as mini cards.
+  - The hand stays hidden during active combat, even when pirates die.
   - Boarding formations use up to 3 centered rows per side: front, middle, and back.
   - Any number of fighters may start in a given row.
   - The current front row is always the frontmost living row.
@@ -136,10 +148,13 @@ If the selected node is an enemy ship:
 - **Victory**:
   - Equipped weapons persist.
   - No combat casualties persist.
-  - Hand discarded, draw up to 5 new pirates, proceed to map phase.
+  - After combat ends, the game shows a short result state with `Won Combat` and a `Continue` button.
+  - In that result state, the hand becomes visible again with pirates who retreated, while surviving pirates remain on the combat table.
+  - On `Continue`, both the hand cards and the surviving combat-table pirates move to discard, then the player draws up to 5 new pirates and proceeds to map phase.
   - If this was the final map node → **Victory screen**.
 - **Defeat**:
-  - **Game Over** screen.
+  - After combat ends, the game shows `Lost Combat` with a `Game Over` button.
+  - Pressing that button opens the **Game Over** screen.
 - **Battle Test**:
   - Always starts with 5 pirates so the row-rearranging setup is fully available.
   - Some pirates begin pre-equipped so the weapon behaviors are visible immediately.
@@ -149,36 +164,51 @@ If the selected node is an enemy ship:
 
 ## Map Generation
 
-Total: **50 layers**, yielding **10 enemy ships** total.
+Total: **30 layers**, yielding **6 enemy ships** total.
 
-### Early Game (layers 0–14): 3 segments
+### Early Game (layers 0–9): 2 segments
 
-Each segment = 4 island layers + 1 battle layer = 5 layers. 3 segments = 15 layers.
+Each segment = 4 island layers + 1 battle layer = 5 layers. 2 segments = 10 layers.
 
 - Segment 1 (layers 0–3) is a single mandatory path with no route choice before the first battle.
-- Segments 2 and 3 use 3 parallel non-intersecting paths.
+- Segment 2 uses 3 parallel non-intersecting paths.
 - All available paths converge at the battle node at the end of each segment.
 - After a battle, paths fan back out to 3 for the next segment.
 
 **Island restrictions in early game:**
 - Layers 0–8: no Treasure Island, no Skull Island, no Siren Island.
-- Layers 9–14: no Siren Island (Treasure and Skull are allowed).
+- Layers 9: no Siren Island (Treasure and Skull are allowed).
 
-**Boarding difficulty note:**
-- Ship nodes still appear at the same layers.
-- The old map `strength` values are currently ignored by boarding resolution.
-- Prototype boarding difficulty scales with **boarding count** through party size and unlocked enemy types.
+**Encounter blueprints:**
+- Each ship node stores a pre-generated encounter blueprint determining the main enemy type, support composition, and total count.
+- The blueprint also provides a short description shown in the goal display before the battle.
 
-### Mid/Late Game (layers 15–49)
+**Early ship strength:**
+
+| Ship # | Layer | Strength |
+|--------|-------|----------|
+| 1 | 4 | 6 |
+| 2 | 9 | 8 |
+
+### Mid/Late Game (layers 10–29)
 
 - Non-ship layers have 2–3 island nodes (random).
-- Ship nodes at layers 19, 24, 29, 34, 39, 44, 49 (every 5th layer).
-- Siren Island can appear starting at layer 15 (50% chance per layer of being included in the island pool).
+- Ship nodes every 5th layer (layers 14, 19, 24, 29).
+- Siren Island can appear starting at layer 10 (50% chance per layer of being included in the island pool).
 - Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
+
+**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 2 + 4)`
+
+| Ship # | Layer | Strength |
+|--------|-------|----------|
+| 3 | 14 | 11 |
+| 4 | 19 | 14 |
+| 5 | 24 | 17 |
+| 6 | 29 | 21 |
 
 ### Victory Condition
 
-Win the boarding at the final layer (layer 49, ship #10).
+Win the boarding at the final layer (layer 29, ship #6).
 
 ---
 
@@ -267,13 +297,13 @@ Win the boarding at the final layer (layer 49, ship #10).
 |------|-----|--------|------|
 | Brute | 2 | → 🔨 | 1🪨 → 3☠️ |
 | Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
-| Corsair | 2 | → 🪓🪓 | → 2☠️ |
+| Corsair | 2 | → 🔨🔨 | → 2☠️ |
 | Herald | 2 | → 3☠️ | — (no ship action) |
 | Deckhand | 2 | 1🪨 (90%) | → 🔨+1☠️ |
 | Carpenter | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
 | Stonemason | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
 | Privateer | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
+| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 2☠️ |
 | Raider | 4 | → 🪓🪓 | 💀 get lost |
 | Bosun | 5 | Can't land | → 3☠️ |
 | Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
@@ -288,8 +318,8 @@ Win the boarding at the final layer (layer 49, ship #10).
 | Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
 | Woodsman | 7 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
 | Prospector | 7 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 5☠️ |
-| Explorer | 9 | 1🪙 (65%) | 1🪙 → 6☠️ |
+| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 6☠️+1🪵+1🪨 |
+| Explorer | 9 | 1🪙 (65%) | 1🪙 → 5☠️+🔱 |
 | Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
 
 ### Tier 3: Late-Game (cost 13)

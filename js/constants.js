@@ -26,6 +26,7 @@ const UI_THEME = {
 };
 
 const BG_COLOR = UI_THEME.colors.gameBg;
+const GAME_VERSION = '0.0.3';
 
 const CARD_MOTION = {
   handAppearDelay: 80,
@@ -60,6 +61,30 @@ const COMBAT = {
   enemyCountMax: 5,
   enemyArchetypes: [
     {
+      key: 'bilgeRat',
+      name: 'Bilge Rat',
+      emoji: '🐀',
+      hp: 6,
+      damage: 2,
+      attackMs: 1100,
+      color: '#8a7a60',
+      tier: 'weak',
+      summary: 'Scurries in fast but crumbles quickly.',
+    },
+    {
+      key: 'cabinBoy',
+      name: 'Cabin Boy',
+      emoji: '🔔',
+      hp: 5,
+      damage: 2,
+      attackMs: 1250,
+      color: '#6888a0',
+      tier: 'weak',
+      attackRange: 'ranged',
+      targetMode: 'backmostAny',
+      summary: 'Pelts your back line with junk from afar.',
+    },
+    {
       key: 'shellback',
       name: 'Shellback',
       emoji: '🛡️',
@@ -67,10 +92,12 @@ const COMBAT = {
       damage: 4,
       attackMs: 1450,
       color: '#6a8a72',
+      tier: 'strong',
       unlockAt: 1,
       passiveKey: 'braceRowVsMultiTarget',
       passiveValue: 2,
       summary: 'Front-liner. When you hit its whole row, each Shellback there takes 2 less damage.',
+      encounterDesc: 'Heavy shields ahead',
     },
     {
       key: 'deckSniper',
@@ -80,10 +107,12 @@ const COMBAT = {
       damage: 4,
       attackMs: 950,
       color: '#8f5f99',
+      tier: 'strong',
       unlockAt: 1,
       attackRange: 'ranged',
       targetMode: 'backmostArmed',
       summary: 'Ranged. Shoots your backmost armed pirate first.',
+      encounterDesc: 'Sharpshooters spotted',
     },
     {
       key: 'netter',
@@ -93,12 +122,14 @@ const COMBAT = {
       damage: 3,
       attackMs: 1350,
       color: '#4e8381',
-      unlockAt: 4,
+      tier: 'strong',
+      unlockAt: 3,
       attackRange: 'ranged',
       targetMode: 'backmostAny',
       onHitEffectKey: 'snareOnHit',
       onHitEffectValue: { delayMs: 350, rangedDelayMs: 1200 },
       summary: 'Ranged. Nets your backmost pirate and delays ranged cats much longer.',
+      encounterDesc: 'Nets and tangles',
     },
     {
       key: 'flintDuelist',
@@ -108,10 +139,12 @@ const COMBAT = {
       damage: 5,
       attackMs: 1050,
       color: '#c85f41',
-      unlockAt: 6,
+      tier: 'strong',
+      unlockAt: 5,
       triggerKey: 'rushOnHeavyHit',
       triggerValue: { threshold: 5, nextAttackMs: 220 },
       summary: 'If you hit it for 5 or more at once, its next attack comes almost immediately.',
+      encounterDesc: 'Quick-draw duelists',
     },
     {
       key: 'powderBomber',
@@ -121,10 +154,12 @@ const COMBAT = {
       damage: 4,
       attackMs: 1250,
       color: '#7d4a33',
+      tier: 'strong',
       unlockAt: 1,
       deathEffect: 'frontRowBlast',
       deathEffectDamage: 4,
       summary: 'When defeated, it explodes and hits your whole front row for 4.',
+      encounterDesc: 'Explosive crew aboard',
     },
   ],
 };
@@ -558,7 +593,14 @@ function pirateShipCostDesc(ship) {
 function pirateShipGainDesc(ship) {
   if (!ship) return '';
   const gains = [];
-  if (ship.pRes && ship.pN > 0) gains.push(pirateDescCount(ship.pRes, ship.pN));
+  if (Array.isArray(ship.gains) && ship.gains.length) {
+    for (const gain of ship.gains) {
+      if (!gain || !gain.res || gain.n <= 0) continue;
+      gains.push(pirateDescCount(gain.res, gain.n));
+    }
+  } else if (ship.pRes && ship.pN > 0) {
+    gains.push(pirateDescCount(ship.pRes, ship.pN));
+  }
   if (ship.extraEnthusiasm) gains.push(pirateDescCount('enthusiasm', ship.extraEnthusiasm));
   if (ship.prodWeapon) gains.push(pirateDescCount(ship.prodWeapon, ship.prodWeaponN || 1));
   return pirateDescJoin(gains);
@@ -662,7 +704,11 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
   }
 
   if (ship) {
-    if (ship.pRes === 'enthusiasm' && ship.pN > 0) addEnthusiasmTip();
+    const shipGains = Array.isArray(ship.gains) ? ship.gains : [];
+    if (
+      (ship.pRes === 'enthusiasm' && ship.pN > 0)
+      || shipGains.some(gain => gain && gain.res === 'enthusiasm' && gain.n > 0)
+    ) addEnthusiasmTip();
     if (ship.extraEnthusiasm) addEnthusiasmTip();
     if (ship.removeSelf) {
       addTip(
@@ -750,7 +796,7 @@ const TYPES = {
   },
   corsair: {
     name: 'Corsair', cat: [1,8,42,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'axe', count: 2 } },
+    island: { guaranteed: { weapon: 'hammer', count: 2 } },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 2,
   },
@@ -812,13 +858,13 @@ const TYPES = {
   smuggler: {
     name: 'Smuggler', cat: [7,25,46,16,0,5], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5 },
+    ship:   { cRes: 'gold', cN: 1, gains: [{ res: 'enthusiasm', n: 6 }, { res: 'wood', n: 1 }, { res: 'stone', n: 1 }] },
     cost: 8,
   },
   explorer: {
     name: 'Explorer', cat: [13,23,38,17,0,2], canIsland: true,
     island: { res: 'gold', amt: 1, chance: 0.65, descSuffix: 'decent odds' },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 6 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5, prodWeapon: 'trident', prodWeaponN: 1 },
     cost: 9,
   },
   // ---- tier 3: late-game powerhouses (24-32☠️) ----
@@ -863,7 +909,7 @@ const TYPES = {
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
     island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'trident', prodWeaponN: 1 },
+    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
   },
 };

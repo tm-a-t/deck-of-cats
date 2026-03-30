@@ -97,6 +97,7 @@ function buildBattleTestCombatState(repeatState) {
     enemyName: typeof repeatState.enemyName === 'string' && repeatState.enemyName
       ? repeatState.enemyName
       : 'Boarding Party',
+    encounterDesc: repeatState.encounterDesc || null,
     enemyParty,
     playerSetupRows: cloneBattleTestRows(repeatState.playerSetupRows),
     enemySetupRows: cloneBattleTestRows(repeatState.enemySetupRows),

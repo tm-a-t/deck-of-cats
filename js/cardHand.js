@@ -696,6 +696,7 @@ class CardHand {
     const isSending = opts.isSending;
     const allowInteraction = opts.allowInteraction !== false;
     const blockedCard = opts.blockedCard || (() => false);
+    const hiddenCard = opts.hiddenCard || (() => false);
     const highlightTargetIdx = opts.highlightTargetIdx;
     const onSendToIsland = opts.onSendToIsland;
     const onCardPointerDown = opts.onCardPointerDown;
@@ -710,6 +711,7 @@ class CardHand {
     const visible = [];
     hand.forEach((p, i) => {
       if (sent.includes(i) || sendingSet.has(i)) return;
+      if (hiddenCard(p, i)) return;
       visible.push({ pirate: p, handIdx: i });
     });
 
