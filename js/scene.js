@@ -1160,8 +1160,7 @@ class GameScene extends Phaser.Scene {
 
   boardingHandVisible(combat = G.combat) {
     if (!combat) return false;
-    if (combat.mode === 'intro' || combat.mode === 'resolved') return true;
-    return combat.mode === 'fighting' && this.combatReturnedPirateIds(combat).length > 0;
+    return combat.mode === 'intro' || combat.mode === 'resolved';
   }
 
   boardingHandHiddenCard(combat = G.combat) {
