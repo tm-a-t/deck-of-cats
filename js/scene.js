@@ -4311,39 +4311,46 @@ class GameScene extends Phaser.Scene {
     this.clearCt('top');
     const L = this.L;
     const pad = 18 * L.k;
-    const labelY = 18 * L.k;
-    const valueY = 40 * L.k;
     const sectionGap = 16 * L.k;
+    const stackGap = 10 * L.k;
     const iconTextGap = 8 * L.k;
     const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
-    const blocks = [{ title: 'Current goal', state: goal }];
+    const blocks = [{ kind: 'goal', state: goal }];
     if (this.isLandingRoundPhase()) {
       const nextEnemy = this.nextEnemyState();
-      if (nextEnemy) blocks.push({ title: 'Next enemy', state: nextEnemy });
+      if (nextEnemy) blocks.push({ kind: 'nextEnemy', state: nextEnemy });
     }
+    const stackBlocks = L.IS_MOBILE && blocks.length > 1;
 
     let blockX = pad;
+    let blockY = 18 * L.k;
 
-    blocks.forEach(({ title, state }) => {
+    blocks.forEach(({ kind, state }) => {
       const remainingWidth = Math.max(120 * L.k, L.W - rightReserve - blockX);
-      const label = this.add.text(blockX, labelY, title, uiHeadingStyle(L, 16, UI_THEME.colors.paper))
-        .setOrigin(0, 0);
-      const icon = this.add.text(blockX, valueY - 2 * L.k, state.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
+      const icon = this.add.text(blockX, blockY, state.icon, uiHeadingStyle(L, 26, UI_THEME.colors.paper))
         .setOrigin(0, 0);
       const textX = blockX + icon.width + iconTextGap;
-      const preferredTextWidth = title === 'Next enemy' ? 180 * L.k : 220 * L.k;
-      const textWidth = Math.max(96 * L.k, Math.min(preferredTextWidth, remainingWidth - (textX - blockX)));
-      const text = this.add.text(textX, valueY + 1 * L.k, `${state.line1}\n${state.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
+      const maxTextWidth = Math.max(96 * L.k, remainingWidth - (textX - blockX));
+      const preferredTextWidth = stackBlocks
+        ? maxTextWidth
+        : Math.min(kind === 'nextEnemy' ? 180 * L.k : 220 * L.k, maxTextWidth);
+      const text = this.add.text(textX, blockY + 1 * L.k, `${state.line1}\n${state.line2}`, uiBodyStyle(L, UI_THEME.colors.paper, {
         lineSpacing: uiLineSpacingPx(L, UI_THEME.fonts.bodyPx, 15),
-        wordWrap: { width: textWidth },
+        wordWrap: { width: preferredTextWidth },
       })).setOrigin(0, 0);
-      const blockWidth = Math.max(label.width, (textX - blockX) + text.width);
+      const blockWidth = (textX - blockX) + text.width;
+      const blockBottom = Math.max(icon.y + icon.height, text.y + text.height);
 
-      [label, icon, text].forEach((node) => {
+      [icon, text].forEach((node) => {
         this.addTo('top', node);
       });
-      blockX += blockWidth + sectionGap;
+
+      if (stackBlocks) {
+        blockY = blockBottom + stackGap;
+      } else {
+        blockX += blockWidth + sectionGap;
+      }
     });
   }
 
