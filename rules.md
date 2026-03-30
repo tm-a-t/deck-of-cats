@@ -274,13 +274,13 @@ Win the boarding at the final layer (layer 29, ship #6).
 |------|-----|--------|------|
 | Brute | 2 | → 🔨 | 1🪨 → 3☠️ |
 | Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
-| Corsair | 2 | → 🪓🪓 | → 2☠️ |
+| Corsair | 2 | → 🔨🔨 | → 2☠️ |
 | Herald | 2 | → 3☠️ | — (no ship action) |
 | Deckhand | 2 | 1🪨 (90%) | → 🔨+1☠️ |
 | Carpenter | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
 | Stonemason | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
 | Privateer | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 🔱+1☠️ |
+| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 2☠️ |
 | Raider | 4 | → 🪓🪓 | 💀 get lost |
 | Bosun | 5 | Can't land | → 3☠️ |
 | Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
@@ -295,8 +295,8 @@ Win the boarding at the final layer (layer 29, ship #6).
 | Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
 | Woodsman | 7 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
 | Prospector | 7 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 5☠️ |
-| Explorer | 9 | 1🪙 (65%) | 1🪙 → 6☠️ |
+| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 6☠️+1🪵+1🪨 |
+| Explorer | 9 | 1🪙 (65%) | 1🪙 → 5☠️+🔱 |
 | Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
 
 ### Tier 3: Late-Game (cost 13)

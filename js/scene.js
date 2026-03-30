@@ -1058,45 +1058,48 @@ class GameScene extends Phaser.Scene {
 
   resolveShip(pirate) {
     const s = TYPES[pirate.type].ship;
+    const shipGains = Array.isArray(s.gains) ? s.gains.filter(gain => gain && gain.res && gain.n > 0) : [];
+    const applyShipGains = () => {
+      const gainItems = [];
+      if (shipGains.length) {
+        for (const gain of shipGains) {
+          if (gain.res === 'enthusiasm') G.enthusiasm += gain.n;
+          else G.res[gain.res] += gain.n;
+          gainItems.push({ res: gain.res, n: gain.n });
+        }
+      } else if (s.pRes && s.pN > 0) {
+        if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
+        else G.res[s.pRes] += s.pN;
+        gainItems.push({ res: s.pRes, n: s.pN });
+      }
+      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
+      return {
+        gainItems,
+        extraEnthusiasm: s.extraEnthusiasm || 0,
+        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+      };
+    };
     if (s.costs) {
       for (const c of s.costs) {
         if ((G.res[c.res] || 0) < c.n) return { ok: false };
       }
       for (const c of s.costs) G.res[c.res] -= c.n;
-      if (s.pRes === 'enthusiasm') G.enthusiasm += (s.pN || 0);
-      else if (s.pRes) G.res[s.pRes] += (s.pN || 0);
-      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
       return {
         ok: true,
-        pRes: s.pRes || null,
-        pN: s.pN || 0,
-        extraEnthusiasm: s.extraEnthusiasm || 0,
-        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+        ...applyShipGains(),
       };
     }
     if (!s.cRes) {
-      if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
-      else if (s.pRes) G.res[s.pRes] += s.pN;
-      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
       return {
         ok: true,
-        pRes: s.pRes,
-        pN: s.pN,
-        extraEnthusiasm: s.extraEnthusiasm || 0,
-        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+        ...applyShipGains(),
       };
     }
     if ((G.res[s.cRes] || 0) >= s.cN) {
       G.res[s.cRes] -= s.cN;
-      if (s.pRes === 'enthusiasm') G.enthusiasm += s.pN;
-      else G.res[s.pRes] += s.pN;
-      if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
       return {
         ok: true,
-        pRes: s.pRes,
-        pN: s.pN,
-        extraEnthusiasm: s.extraEnthusiasm || 0,
-        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+        ...applyShipGains(),
       };
     }
     return { ok: false };
