@@ -43,6 +43,7 @@ class MenuScene extends Phaser.Scene {
       { label: 'Battle Test', cb: () => this.startBattleTest() },
       { label: 'Costumes', cb: () => this.scene.start('costumes') },
       { label: 'All Pirates', cb: () => this.scene.start('allPirates') },
+      { label: 'Survey', cb: () => this.openSurvey() },
     ];
     const linksY = playY + 78 * L.k;
     links.forEach((item, idx) => {
@@ -78,6 +79,19 @@ class MenuScene extends Phaser.Scene {
     this.resetGameScenes();
     initBattleTestState();
     this.scene.start('game');
+  }
+
+  openSurvey() {
+    const url = this.getSurveyUrl();
+    if (typeof window === 'undefined') return;
+    const popup = typeof window.open === 'function'
+      ? window.open(url, '_blank', 'noopener,noreferrer')
+      : null;
+    if (!popup && window.location) window.location.assign(url);
+  }
+
+  getSurveyUrl() {
+    return `https://docs.google.com/forms/d/e/1FAIpQLScEAnKUl-glUgItxfcCDSrcqFNn07DhO5ipk-EzOtM2bTvo8Q/viewform?usp=pp_url&entry.67414477=${encodeURIComponent(GAME_VERSION)}`;
   }
 
   mkBtn(x, y, label, cb, opts = {}) {
