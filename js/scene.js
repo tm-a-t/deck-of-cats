@@ -3104,8 +3104,8 @@ class GameScene extends Phaser.Scene {
       }
       return {
         icon: '🏴‍☠️',
-        line1: 'Arrange your pirates.',
-        line2: 'Drag rows, tap cats to inspect',
+        line1: 'Arrange your pirates in 3 rows.',
+        line2: 'Drag to move',
       };
     }
 
@@ -3688,10 +3688,8 @@ class GameScene extends Phaser.Scene {
   renderCombatSetupRowGuides(containerKey) {
     const L = this.L;
     const guideCfg = {
-      fill: UI_THEME.colors.cocoa,
-      stroke: UI_THEME.colors.sandEdge,
-      fillAlpha: 0.2,
-      strokeAlpha: 0.55,
+      stroke: UI_THEME.colors.outline,
+      strokeAlpha: 1,
     };
     const visuals = this.combatFormationVisuals('player');
     const sampleSlots = this.combatSetupSlotLayout('player', 0, 5, visuals);
@@ -3699,14 +3697,19 @@ class GameScene extends Phaser.Scene {
     const guideW = sampleSlots.length >= 2
       ? (sampleSlots[sampleSlots.length - 1].x - sampleSlots[0].x) + cardW + 14 * L.k
       : (cardW + 14 * L.k);
-    const guideH = 34 * L.k;
-    for (let rowIndex = 0; rowIndex < this.combatSetupRowTotal(); rowIndex++) {
+    const lineX1 = L.cx - guideW / 2;
+    const lineX2 = L.cx + guideW / 2;
+    const rowTotal = this.combatSetupRowTotal();
+    for (let rowIndex = 0; rowIndex < rowTotal - 1; rowIndex++) {
       const rowY = this.combatFormationRowY('player', rowIndex);
+      const nextRowY = this.combatFormationRowY('player', rowIndex + 1);
+      const lineY = (rowY + nextRowY) / 2;
       const guide = this.add.graphics();
-      guide.fillStyle(uiColorInt(guideCfg.fill), guideCfg.fillAlpha);
-      guide.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(guideCfg.stroke), guideCfg.strokeAlpha);
-      guide.fillRoundedRect(L.cx - guideW / 2, rowY - guideH / 2, guideW, guideH, 10 * L.k);
-      guide.strokeRoundedRect(L.cx - guideW / 2, rowY - guideH / 2, guideW, guideH, 10 * L.k);
+      guide.lineStyle(Math.max(2, Math.round(2 * L.k)), uiColorInt(guideCfg.stroke), guideCfg.strokeAlpha);
+      guide.beginPath();
+      guide.moveTo(lineX1, lineY);
+      guide.lineTo(lineX2, lineY);
+      guide.strokePath();
       this.addTo(containerKey, guide);
     }
   }
