@@ -2,20 +2,97 @@
    PIRATES — Map Generation
    ============================================================ */
 
-const MAP_LAYERS = 50;
-const EARLY_SEGMENTS = 3;
+const MAP_LAYERS = 30;
+const EARLY_SEGMENTS = 2;
 const EARLY_PATHS = 3;
 const STEPS_PER_SEGMENT = 4;
 const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
 const FIRST_LINEAR_SEGMENTS = 1;
+const TOTAL_BATTLES = 6;
 
 function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
 }
 
+function generateEncounterBlueprint(boardingNo) {
+  const archetypes = COMBAT.enemyArchetypes;
+  const weak = archetypes.filter(a => a.tier === 'weak');
+  const strong = archetypes.filter(a => a.tier === 'strong');
+
+  const eligibleStrong = strong.filter(a =>
+    boardingNo >= Math.max(1, Math.floor(Number(a.unlockAt) || 1))
+  );
+
+  let mainKey, supportKeys, totalCount, desc;
+
+  if (boardingNo <= 2) {
+    totalCount = 3;
+    const strongCount = Math.min(boardingNo, 2);
+    const weakCount = totalCount - strongCount;
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : weak[Math.floor(Math.random() * weak.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    supportKeys = [];
+    for (let i = 1; i < strongCount; i++) supportKeys.push(mainKey);
+    for (let i = 0; i < weakCount; i++) {
+      supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
+    }
+  } else if (boardingNo <= 4) {
+    totalCount = 3 + Math.floor(boardingNo / 3);
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : strong[Math.floor(Math.random() * strong.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    const strongCount = Math.min(totalCount - 1, 1 + Math.floor(boardingNo / 2));
+    const weakCount = totalCount - strongCount;
+    const otherStrong = eligibleStrong.filter(a => a.key !== mainKey);
+    const secondaryCount = Math.random() < 0.5 && otherStrong.length ? 1 : 0;
+    const secondaryArch = otherStrong.length
+      ? otherStrong[Math.floor(Math.random() * otherStrong.length)]
+      : null;
+    supportKeys = [];
+    for (let i = 1; i < strongCount - secondaryCount; i++) supportKeys.push(mainKey);
+    if (secondaryArch) {
+      for (let i = 0; i < secondaryCount; i++) supportKeys.push(secondaryArch.key);
+    }
+    for (let i = 0; i < weakCount; i++) {
+      supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
+    }
+  } else {
+    totalCount = Math.min(COMBAT.enemyCountMax, 3 + Math.floor(boardingNo / 2));
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : strong[Math.floor(Math.random() * strong.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    supportKeys = [];
+    const otherStrong = eligibleStrong.filter(a => a.key !== mainKey);
+    const secondaryCount = Math.random() < 0.5 && otherStrong.length ? 1 : 0;
+    const secondaryArch = otherStrong.length
+      ? otherStrong[Math.floor(Math.random() * otherStrong.length)]
+      : null;
+    const strongFill = totalCount - 1 - secondaryCount;
+    for (let i = 0; i < strongFill; i++) supportKeys.push(mainKey);
+    if (secondaryArch) {
+      for (let i = 0; i < secondaryCount; i++) supportKeys.push(secondaryArch.key);
+    }
+  }
+
+  return {
+    mainKey,
+    supportKeys,
+    totalCount,
+    encounterDesc: desc || null,
+  };
+}
+
 function generateMap() {
   const layers = [];
   let nextId = 0;
+  let battlesSoFar = 0;
 
   // Early game: first segment is linear, later segments use 3 non-intersecting paths
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
@@ -32,27 +109,31 @@ function generateMap() {
       }
       layers.push(layer);
     }
-    const shipNumber = seg + 1;
+    battlesSoFar++;
+    const bp = generateEncounterBlueprint(battlesSoFar);
     layers.push([{
       id: nextId++, type: 'ship',
-      strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
+      strength: Math.trunc(Math.pow(battlesSoFar, 1.2) * 4 + 2),
+      encounter: bp,
       conns: [],
     }]);
   }
 
-  // Remaining layers: existing logic
+  // Remaining layers: place ship every 5th layer, island layers in between
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS; li++) {
     const isShip = (li + 1) % 5 === 0;
     if (isShip) {
-      const shipNumber = (li + 1) / 5;
+      battlesSoFar++;
+      const bp = generateEncounterBlueprint(battlesSoFar);
       layers.push([{
         id: nextId++, type: 'ship',
-        strength: Math.trunc(Math.pow(shipNumber, 1.2) * 4 + 2),
+        strength: Math.trunc(Math.pow(battlesSoFar, 1.2) * 4 + 2),
+        encounter: bp,
         conns: [],
       }]);
     } else {
       const count = 2 + Math.floor(Math.random() * 2);
-      const allowSacrifice = li >= 15 && Math.random() < 0.5;
+      const allowSacrifice = li >= 10 && Math.random() < 0.5;
       const available = ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
