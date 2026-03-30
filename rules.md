@@ -69,6 +69,7 @@ If the selected node is an enemy ship:
 - All pirates currently in hand participate; no island phase, no shop phase.
 - Boarding starts with a **setup step**:
   - The normal hand is drawn first.
+  - If that draw requires a reshuffle, boarding waits for the whole draw/reshuffle sequence to finish so the hand is complete before cards start moving to combat.
   - After that, each player card leaves the hand and animates into its compact battle position; a card is never shown in both places at once.
   - Initial setup places melee pirates in the front row and ranged pirates in the middle row.
   - Player may drag those mini cards to rearrange pirates arbitrarily across the front, middle, and back rows, including left-to-right order within a row.

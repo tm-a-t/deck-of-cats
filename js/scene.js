@@ -59,6 +59,7 @@ class GameScene extends Phaser.Scene {
     this._cardHand = new CardHand(this);
     this._cardTips = new CardTooltipController(this, { depth: 165 });
     this._pendingHandAppearById = null;
+    this._pendingHandAppearUntil = 0;
     this._animateInitialMapHand = needsFreshState;
     this.normalizeCrewWeapons();
 
@@ -277,6 +278,10 @@ class GameScene extends Phaser.Scene {
     // are all set by MapScene.selectMapNode() before transitioning here.
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStart();
+    }
+    // TEST: Draw cards if boarding hand is empty (reshuffle test scenario)
+    if (G.phase === 'boarding' && (!G.hand || G.hand.length === 0)) {
+      this.drawCardsIntoHand(5);
     }
     if (!(this._animateInitialMapHand && G.phase === 'map')) {
       this.renderAll();
@@ -1110,6 +1115,10 @@ class GameScene extends Phaser.Scene {
     const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
     const handCards = Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.slice() : [];
     if (!combat || combat.mode !== 'intro' || combat.introStarted) return;
+    if ((this._pendingHandAppearUntil || 0) > this.time.now) {
+      this.queueRenderAll();
+      return;
+    }
     if (!handCards.length) {
       if (Array.isArray(G.hand) && G.hand.length) {
         this.queueRenderAll();
@@ -3120,6 +3129,7 @@ class GameScene extends Phaser.Scene {
       };
       endAt = Math.max(endAt, entryDelay + duration);
     });
+    this._pendingHandAppearUntil = Math.max(this._pendingHandAppearUntil || 0, this.time.now + endAt);
     return endAt;
   }
 
@@ -3134,6 +3144,7 @@ class GameScene extends Phaser.Scene {
       found = true;
     });
     this._pendingHandAppearById = null;
+    this._pendingHandAppearUntil = 0;
     return found ? byIdx : null;
   }
 
