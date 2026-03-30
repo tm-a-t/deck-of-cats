@@ -226,7 +226,8 @@ function createPirateCard(scene, opts) {
   const y = opts.y || 0;
   const rotation = opts.rotation || 0;
   const depth = opts.depth != null ? opts.depth : 10;
-  const scale = opts.scale != null ? opts.scale : 1;
+  const scaleX = opts.scaleX != null ? opts.scaleX : (opts.scale != null ? opts.scale : 1);
+  const scaleY = opts.scaleY != null ? opts.scaleY : scaleX;
 
   const built = buildCardTexture(scene, opts.type, L, {
     slotState: opts.slotState || 'none',
@@ -239,7 +240,7 @@ function createPirateCard(scene, opts) {
   const ct = scene.add.container(x, y, [cardImg]);
   ct.setRotation(rotation);
   ct.setDepth(depth);
-  ct.setScale(scale);
+  ct.setScale(scaleX, scaleY);
 
   if (opts.alpha != null) cardImg.setAlpha(opts.alpha);
   if (opts.tint != null) cardImg.setTint(opts.tint);
@@ -257,6 +258,8 @@ function createPirateCard(scene, opts) {
     cardImg,
     cw: built.cw,
     ch: built.ch,
+    scaleX,
+    scaleY,
   };
 }
 
@@ -267,8 +270,11 @@ function createCardBandOverlay(scene, opts) {
   const isIslandBand = opts.band === 'island';
   const bandH = isIslandBand ? built.islandBandH : built.shipBandH;
   const bandTexKey = isIslandBand ? built.islandBandTexKey : built.shipBandTexKey;
-  const visualScale = opts.scale != null ? opts.scale : 1;
-  const imageScale = (built.textureResolution > 1 ? 1 / built.textureResolution : 1) * visualScale;
+  const visualScaleX = opts.scaleX != null ? opts.scaleX : (opts.scale != null ? opts.scale : 1);
+  const visualScaleY = opts.scaleY != null ? opts.scaleY : visualScaleX;
+  const imageScaleBase = built.textureResolution > 1 ? 1 / built.textureResolution : 1;
+  const imageScaleX = imageScaleBase * visualScaleX;
+  const imageScaleY = imageScaleBase * visualScaleY;
   const accentColor = uiColorInt(opts.color || UI_THEME.colors.cocoa);
   const x = opts.x || 0;
   const y = opts.y || 0;
@@ -286,12 +292,12 @@ function createCardBandOverlay(scene, opts) {
     bandH + accentPad * 2,
     Math.round((CARD.RADIUS + 1) * k)
   );
-  accent.setScale(visualScale * 0.985).setAlpha(0);
+  accent.setScale(visualScaleX * 0.985, visualScaleY * 0.985).setAlpha(0);
   accent.y += settleOffset;
 
   const bandImg = scene.add.image(x, y, bandTexKey).setOrigin(0.5);
   if (opts.depth != null) bandImg.setDepth(opts.depth);
-  bandImg.setScale(imageScale * 0.985).setAlpha(0);
+  bandImg.setScale(imageScaleX * 0.985, imageScaleY * 0.985).setAlpha(0);
   bandImg.y += settleOffset;
   if (opts.bandTint != null) bandImg.setTint(uiColorInt(opts.bandTint));
 
@@ -299,7 +305,16 @@ function createCardBandOverlay(scene, opts) {
     opts.parentContainer.add([bandImg, accent]);
   }
 
-  return { accent, bandImg, visualScale, imageScale, x, y };
+  return {
+    accent,
+    bandImg,
+    visualScaleX,
+    visualScaleY,
+    imageScaleX,
+    imageScaleY,
+    x,
+    y,
+  };
 }
 
 function showCardBandOverlay(scene, overlay, opts = {}) {
@@ -309,8 +324,8 @@ function showCardBandOverlay(scene, overlay, opts = {}) {
   const ease = opts.ease || 'Back.easeOut';
   scene.tweens.add({
     targets: overlay.accent,
-    scaleX: overlay.visualScale * showScale,
-    scaleY: overlay.visualScale * showScale,
+    scaleX: overlay.visualScaleX * showScale,
+    scaleY: overlay.visualScaleY * showScale,
     y: overlay.y,
     alpha: 1,
     duration,
@@ -318,8 +333,8 @@ function showCardBandOverlay(scene, overlay, opts = {}) {
   });
   scene.tweens.add({
     targets: overlay.bandImg,
-    scaleX: overlay.imageScale * showScale,
-    scaleY: overlay.imageScale * showScale,
+    scaleX: overlay.imageScaleX * showScale,
+    scaleY: overlay.imageScaleY * showScale,
     y: overlay.y,
     alpha: 1,
     duration,
@@ -349,8 +364,8 @@ function hideCardBandOverlay(scene, overlay, opts = {}) {
   }
   scene.tweens.add({
     targets: overlay.accent,
-    scaleX: overlay.visualScale * hideScale,
-    scaleY: overlay.visualScale * hideScale,
+    scaleX: overlay.visualScaleX * hideScale,
+    scaleY: overlay.visualScaleY * hideScale,
     y: overlay.y - exitOffset,
     alpha: 0,
     duration,
@@ -359,8 +374,8 @@ function hideCardBandOverlay(scene, overlay, opts = {}) {
   });
   scene.tweens.add({
     targets: overlay.bandImg,
-    scaleX: overlay.imageScale * hideScale,
-    scaleY: overlay.imageScale * hideScale,
+    scaleX: overlay.imageScaleX * hideScale,
+    scaleY: overlay.imageScaleY * hideScale,
     y: overlay.y - exitOffset,
     alpha: 0,
     duration,

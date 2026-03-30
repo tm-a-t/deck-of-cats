@@ -476,6 +476,65 @@ class GameScene extends Phaser.Scene {
     return Math.min(L.Y_ISL_CY, L.H * (L.IS_MOBILE ? 0.34 : 0.37));
   }
 
+  playAreaPerspective() {
+    const L = this.L;
+    const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
+    const baseY = this.islandCenterY();
+    return {
+      centerX: L.cx,
+      centerY: baseY,
+      width: outlineW,
+      topY: baseY - 62 * L.k,
+      bottomY: baseY + 72 * L.k,
+      nearScaleY: 0.96,
+      farScaleY: 0.72,
+      sideInsetNear: 0.04,
+      sideInsetFar: 0.22,
+      cardScaleNear: 1,
+      cardScaleFar: 0.78,
+      combatTopInset: 16 * L.k,
+      combatBottomInset: 18 * L.k,
+    };
+  }
+
+  playAreaDepthRatio(depth) {
+    return Phaser.Math.Clamp(depth, 0, 1);
+  }
+
+  projectPlayAreaPoint(xNorm, depth) {
+    const persp = this.playAreaPerspective();
+    const ratio = this.playAreaDepthRatio(depth);
+    const halfW = persp.width / 2;
+    const sideInset = Phaser.Math.Linear(persp.sideInsetNear, persp.sideInsetFar, ratio) * halfW;
+    const usableHalfW = Math.max(0, halfW - sideInset);
+    return {
+      x: persp.centerX + Phaser.Math.Clamp(xNorm, -1, 1) * usableHalfW,
+      y: Phaser.Math.Linear(persp.bottomY, persp.topY, ratio),
+      ratio,
+    };
+  }
+
+  projectPlayAreaScale(depth, opts = {}) {
+    const ratio = this.playAreaDepthRatio(depth);
+    const scale = Phaser.Math.Linear(
+      opts.cardScaleNear != null ? opts.cardScaleNear : 1,
+      opts.cardScaleFar != null ? opts.cardScaleFar : 0.8,
+      ratio
+    );
+    const scaleY = scale * Phaser.Math.Linear(
+      opts.nearScaleY != null ? opts.nearScaleY : 0.96,
+      opts.farScaleY != null ? opts.farScaleY : 0.72,
+      ratio
+    );
+    return { scaleX: scale, scaleY: scaleY, scale, ratio };
+  }
+
+  islandCardDepth(si) {
+    const maxDepth = Math.max(1, this.maxSend() - 1);
+    if (maxDepth <= 0) return 0.2;
+    return Phaser.Math.Clamp(si / maxDepth, 0.18, 0.72);
+  }
+
   sentCardScale() {
     return 1;
   }
@@ -485,24 +544,76 @@ class GameScene extends Phaser.Scene {
   }
 
   sentCardPlacement(si) {
-    const L = this.L;
+    const m = this.maxSend();
+    const xNorm = m <= 1 ? 0 : ((si / (m - 1)) * 2 - 1);
+    const depth = this.islandCardDepth(si);
+    const point = this.projectPlayAreaPoint(xNorm * 0.92, depth);
+    const scale = this.projectPlayAreaScale(depth, this.playAreaPerspective());
     return {
-      x: L.cx + this.sentOffsetX(si),
-      y: this.islandCenterY() - 22 * L.k,
+      x: point.x,
+      y: point.y,
       rotation: this.sentCardRotation(si),
-      scale: this.sentCardScale(),
+      scale: scale.scaleX,
+      scaleX: scale.scaleX,
+      scaleY: scale.scaleY,
+      depthRatio: depth,
     };
   }
 
   sentCardIslandEffectPosition(si) {
     const L = this.L;
     const placement = this.sentCardPlacement(si);
-    const cardH = Math.round(CARD.H * L.k) * placement.scale;
+    const cardH = Math.round(CARD.H * L.k) * (placement.scaleY != null ? placement.scaleY : placement.scale);
     const islandBand = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k);
     return {
       x: placement.x,
-      y: placement.y - cardH / 2 + (islandBand.height * placement.scale) / 2,
+      y: placement.y - cardH / 2 + (islandBand.height * (placement.scaleY != null ? placement.scaleY : placement.scale)) / 2,
       scale: placement.scale,
+      scaleX: placement.scaleX != null ? placement.scaleX : placement.scale,
+      scaleY: placement.scaleY != null ? placement.scaleY : placement.scale,
+    };
+  }
+
+  combatPlayAreaBand(side, rowIndex, rowCount) {
+    const persp = this.playAreaPerspective();
+    const rows = Math.max(1, rowCount || 1);
+    const ratio = rows <= 1 ? 0.5 : Phaser.Math.Clamp(rowIndex / (rows - 1), 0, 1);
+    if (side === 'enemy') {
+      return Phaser.Math.Linear(0.58, 0.95, ratio);
+    }
+    return Phaser.Math.Linear(0.42, 0.05, ratio);
+  }
+
+  combatProjectedRow(side, rowIndex, rowCount, count, opts = {}) {
+    const visuals = this.combatFormationVisuals(side);
+    const depth = this.combatPlayAreaBand(side, rowIndex, rowCount);
+    const rowScale = this.projectPlayAreaScale(depth, visuals);
+    const point = this.projectPlayAreaPoint(0, depth);
+    const spacingBoost = side === 'enemy'
+      ? Phaser.Math.Linear(1.05, 1.12, this.playAreaDepthRatio(depth))
+      : Phaser.Math.Linear(1.02, 1.1, this.playAreaDepthRatio(depth));
+    const maxStep = (opts.maxStep != null ? opts.maxStep : visuals.maxStep) * rowScale.scaleX * spacingBoost;
+    const edgePad = opts.edgePad != null ? opts.edgePad : (visuals.edgePad * rowScale.scaleX);
+    const slots = cardRowLayout(count, this.L, {
+      y: point.y,
+      maxStep,
+      edgePad,
+      scale: rowScale.scaleX,
+    }).map((slot) => ({
+      x: slot.x,
+      y: point.y,
+      rotation: slot.rotation,
+      index: slot.index,
+      scaleX: rowScale.scaleX,
+      scaleY: rowScale.scaleY,
+      depthRatio: depth,
+    }));
+    return {
+      slots,
+      y: point.y,
+      depth,
+      scaleX: rowScale.scaleX,
+      scaleY: rowScale.scaleY,
     };
   }
 
@@ -567,7 +678,8 @@ class GameScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: ghost, x: toX, y: toY,
-      displayWidth: cardStartW * placement.scale, displayHeight: cardStartH * placement.scale,
+      displayWidth: cardStartW * (placement.scaleX != null ? placement.scaleX : placement.scale),
+      displayHeight: cardStartH * (placement.scaleY != null ? placement.scaleY : placement.scale),
       rotation: placement.rotation,
       duration: CARD_MOTION.sendToIslandDuration, ease: 'Power2',
       onComplete: () => {
@@ -723,6 +835,8 @@ class GameScene extends Phaser.Scene {
       x: effectPos.x,
       y: effectPos.y,
       scale: effectPos.scale,
+      scaleX: effectPos.scaleX,
+      scaleY: effectPos.scaleY,
       color,
       parentContainer: this.ct.fx,
       depth: 66,
@@ -812,7 +926,8 @@ class GameScene extends Phaser.Scene {
   showIslandResult(pirate, sentSlot, r, x, y) {
     const L = this.L;
     const sentPlacement = this.sentCardPlacement(sentSlot);
-    const bandH = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k).height * sentPlacement.scale;
+    const bandH = cardIslandBandMetrics(Math.round(CARD.H * L.k), L.k).height
+      * (sentPlacement.scaleY != null ? sentPlacement.scaleY : sentPlacement.scale);
     const fy = y - bandH / 2 - 18 * L.k;
 
     if (r.recall !== undefined) {
@@ -1380,17 +1495,13 @@ class GameScene extends Phaser.Scene {
   }
 
   combatSetupSlotLayout(side, rowIndex, count, opts = {}) {
-    const visuals = this.combatFormationVisuals(side);
-    const scale = opts.scale != null ? opts.scale : visuals.scale;
-    const maxStep = opts.maxStep != null ? opts.maxStep : visuals.maxStep;
-    const edgePad = opts.edgePad != null ? opts.edgePad : visuals.edgePad;
     if (count <= 0) return [];
-    return cardRowLayout(count, this.L, {
-      y: this.combatFormationRowY(side, rowIndex),
-      maxStep,
-      edgePad,
-      scale,
-    });
+    const projected = this.combatProjectedRow(side, rowIndex, this.combatSetupRowTotal(), count, opts);
+    return projected.slots;
+  }
+
+  combatSetupRowY(side, rowIndex) {
+    return this.combatProjectedRow(side, rowIndex, this.combatSetupRowTotal(), 1).y;
   }
 
   combatSetupSlotMap(side, rows, opts = {}) {
@@ -1401,7 +1512,7 @@ class GameScene extends Phaser.Scene {
       rowIds.forEach((id, idx) => {
         positions[id] = slots[idx] || slots[0] || {
           x: this.L.cx,
-          y: this.combatFormationRowY(side, rowIndex),
+          y: this.combatSetupRowY(side, rowIndex),
         };
       });
     });
@@ -1414,7 +1525,7 @@ class GameScene extends Phaser.Scene {
     let rowIndex = 0;
     let bestRowDist = Infinity;
     for (let idx = 0; idx < this.combatSetupRowTotal(); idx++) {
-      const rowDist = Math.abs((pointer && pointer.y) - this.combatFormationRowY('player', idx));
+      const rowDist = Math.abs((pointer && pointer.y) - this.combatSetupRowY('player', idx));
       if (rowDist < bestRowDist) {
         bestRowDist = rowDist;
         rowIndex = idx;
@@ -1792,27 +1903,24 @@ class GameScene extends Phaser.Scene {
   }
 
   combatFormationRowY(side, displayRow) {
-    const rowIndex = Math.max(0, displayRow || 0);
-    const visuals = this.combatFormationVisuals(side);
-    if (side === 'enemy') return visuals.frontY - rowIndex * visuals.rowGap;
-    return visuals.frontY + rowIndex * visuals.rowGap;
+    const rows = this.combatFormationRows(this.combatFighters(side), { livingOnly: true });
+    const totalRows = Math.max(1, rows.length || 1);
+    return this.combatProjectedRow(side, Math.max(0, displayRow || 0), totalRows, 1).y;
   }
 
   combatFormationVisuals(side) {
-    const scale = 1;
-    const cardH = 99 * this.L.k * scale;
-    const halfCardH = cardH / 2;
-    const rowGap = cardH + 8 * this.L.k;
-    const topInset = 18 * this.L.k + halfCardH;
-    const bottomInset = this.L.Y_NAV - 64 * this.L.k - halfCardH;
+    const persp = this.playAreaPerspective();
     return {
-      scale,
-      rowGap,
-      maxStep: 72 * this.L.k,
-      edgePad: side === 'enemy' ? 32 * this.L.k : 24 * this.L.k,
+      scale: 1,
+      maxStep: side === 'enemy' ? 64 * this.L.k : 72 * this.L.k,
+      edgePad: side === 'enemy' ? 42 * this.L.k : 30 * this.L.k,
+      cardScaleNear: side === 'enemy' ? 0.84 : 0.98,
+      cardScaleFar: side === 'enemy' ? 0.62 : 0.74,
+      nearScaleY: side === 'enemy' ? 0.86 : 0.92,
+      farScaleY: side === 'enemy' ? 0.6 : 0.7,
       frontY: side === 'enemy'
-        ? topInset + rowGap * 2
-        : bottomInset - rowGap * 2,
+        ? persp.topY + persp.combatTopInset
+        : persp.bottomY - persp.combatBottomInset,
     };
   }
 
@@ -1827,13 +1935,13 @@ class GameScene extends Phaser.Scene {
       : visuals.edgePad;
 
     rows.forEach((rowFighters, displayRow) => {
-      const rowY = this.combatFormationRowY(side, displayRow);
-      const slots = cardRowLayout(rowFighters.length, this.L, {
-        y: rowY,
+      const projected = this.combatProjectedRow(side, displayRow, rows.length || 1, rowFighters.length, {
+        scale,
         maxStep,
         edgePad,
-        scale,
       });
+      const rowY = projected.y;
+      const slots = projected.slots;
       rowFighters.forEach((fighter, idx) => {
         positions[fighter.id] = slots[idx] || slots[0] || { x: this.L.cx, y: rowY };
       });
@@ -3266,6 +3374,8 @@ class GameScene extends Phaser.Scene {
           y: visible.container.y,
           rotation: visible.container.rotation,
           scale: visible.container.scaleX || 1,
+          scaleX: visible.container.scaleX || 1,
+          scaleY: visible.container.scaleY || visible.container.scaleX || 1,
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
         });
@@ -3280,6 +3390,8 @@ class GameScene extends Phaser.Scene {
           y: view.y,
           rotation: 0,
           scale: 0.5,
+          scaleX: view.scaleX != null ? view.scaleX : 0.5,
+          scaleY: view.scaleY != null ? view.scaleY : (view.scaleX != null ? view.scaleX : 0.5),
           slotState: combatFighter.weaponKey ? 'armed' : 'none',
           slotWeaponKey: combatFighter.weaponKey || null,
         });
@@ -3293,6 +3405,8 @@ class GameScene extends Phaser.Scene {
         y: placement.y,
         rotation: placement.rotation || 0,
         scale: placement.scale != null ? placement.scale : 1,
+        scaleX: placement.scaleX != null ? placement.scaleX : (placement.scale != null ? placement.scale : 1),
+        scaleY: placement.scaleY != null ? placement.scaleY : (placement.scale != null ? placement.scale : 1),
         slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
         slotWeaponKey: this.pirateWeaponKey(pirate),
       });
@@ -3304,8 +3418,10 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const delay = opts.delay || 0;
     const duration = opts.duration != null ? opts.duration : CARD_MOTION.ghostDuration;
-    const startScale = card.scale != null ? card.scale : 1;
-    const endScale = opts.endScale != null ? opts.endScale : 0.34;
+    const startScaleX = card.scaleX != null ? card.scaleX : (card.scale != null ? card.scale : 1);
+    const startScaleY = card.scaleY != null ? card.scaleY : startScaleX;
+    const endScaleX = opts.endScaleX != null ? opts.endScaleX : (opts.endScale != null ? opts.endScale : 0.34);
+    const endScaleY = opts.endScaleY != null ? opts.endScaleY : endScaleX;
     const startRotation = card.rotation || 0;
     const endRotation = opts.endRotation != null ? opts.endRotation : Phaser.Math.FloatBetween(-0.14, 0.14);
     const endAlpha = opts.endAlpha != null ? opts.endAlpha : 0.16;
@@ -3327,7 +3443,7 @@ class GameScene extends Phaser.Scene {
         .setOrigin(0.5, 0.5)
         .setDepth(65)
         .setRotation(startRotation)
-        .setScale(startScale * baseScale);
+        .setScale(startScaleX * baseScale, startScaleY * baseScale);
       this.ct.fx.add(ghost);
 
       let destroyed = false;
@@ -3352,8 +3468,9 @@ class GameScene extends Phaser.Scene {
           const y = q * q * card.y + 2 * q * p * cpY + p * p * targetY;
           ghost.setPosition(x, y);
           ghost.setRotation(Phaser.Math.Linear(startRotation, endRotation, p));
-          const scale = Phaser.Math.Linear(startScale, endScale, p);
-          ghost.setScale(scale * baseScale);
+          const scaleX = Phaser.Math.Linear(startScaleX, endScaleX, p);
+          const scaleY = Phaser.Math.Linear(startScaleY, endScaleY, p);
+          ghost.setScale(scaleX * baseScale, scaleY * baseScale);
           ghost.setAlpha(Phaser.Math.Linear(1, endAlpha, p));
         },
         onStop: destroyGhost,
@@ -3530,14 +3647,17 @@ class GameScene extends Phaser.Scene {
       strokeAlpha: 0.55,
     };
     const visuals = this.combatFormationVisuals('player');
-    const sampleSlots = this.combatSetupSlotLayout('player', 0, 5, visuals);
-    const cardW = 60 * L.k * visuals.scale;
-    const guideW = sampleSlots.length >= 2
-      ? (sampleSlots[sampleSlots.length - 1].x - sampleSlots[0].x) + cardW + 14 * L.k
-      : (cardW + 14 * L.k);
-    const guideH = 34 * L.k;
     for (let rowIndex = 0; rowIndex < this.combatSetupRowTotal(); rowIndex++) {
-      const rowY = this.combatFormationRowY('player', rowIndex);
+      const sampleSlots = this.combatSetupSlotLayout('player', rowIndex, 5, visuals);
+      const firstScaleX = sampleSlots[0] && sampleSlots[0].scaleX != null ? sampleSlots[0].scaleX : visuals.scale;
+      const firstScaleY = sampleSlots[0] && sampleSlots[0].scaleY != null ? sampleSlots[0].scaleY : visuals.scale;
+      const cardW = 60 * L.k * firstScaleX;
+      const guideW = sampleSlots.length >= 2
+        ? (sampleSlots[sampleSlots.length - 1].x - sampleSlots[0].x) + cardW + 14 * L.k
+        : (cardW + 14 * L.k);
+      const guideH = 34 * L.k * firstScaleY;
+      const projected = this.combatProjectedRow('player', rowIndex, this.combatSetupRowTotal(), 1, visuals);
+      const rowY = projected.y;
       const guide = this.add.graphics();
       guide.fillStyle(uiColorInt(guideCfg.fill), guideCfg.fillAlpha);
       guide.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(guideCfg.stroke), guideCfg.strokeAlpha);
@@ -3549,10 +3669,11 @@ class GameScene extends Phaser.Scene {
 
   renderCombatMiniCard(containerKey, x, y, opts = {}) {
     const L = this.L;
-    const scale = opts.scale != null ? opts.scale : 1;
-    const w = 60 * L.k * scale;
-    const h = 99 * L.k * scale;
-    const r = 4 * L.k * scale;
+    const scaleX = opts.scaleX != null ? opts.scaleX : (opts.scale != null ? opts.scale : 1);
+    const scaleY = opts.scaleY != null ? opts.scaleY : scaleX;
+    const w = 60 * L.k * scaleX;
+    const h = 99 * L.k * scaleY;
+    const r = 4 * L.k * Math.min(scaleX, scaleY);
     const maxHp = Math.max(1, opts.maxHp || opts.hp || 1);
     const hp = Math.max(0, opts.hp || 0);
     const hpRatio = hp / maxHp;
@@ -3565,38 +3686,38 @@ class GameScene extends Phaser.Scene {
     ct.add(bg);
 
     if (opts.side === 'player') {
-      const sprite = this.add.image(0, -8 * L.k * scale, catTexKey(opts.pirateType)).setOrigin(0.5);
-      sprite.setDisplaySize(40 * L.k * scale, 40 * L.k * scale);
+      const sprite = this.add.image(0, -8 * L.k * scaleY, catTexKey(opts.pirateType)).setOrigin(0.5);
+      sprite.setDisplaySize(40 * L.k * scaleX, 40 * L.k * scaleY);
       ct.add(sprite);
     } else {
-      const emoji = this.add.text(0, -8 * L.k * scale, opts.emoji || '☠️', uiHeadingStyle(L, Math.max(14, 32 * scale), UI_THEME.colors.paper))
+      const emoji = this.add.text(0, -8 * L.k * scaleY, opts.emoji || '☠️', uiHeadingStyle(L, Math.max(14, 32 * Math.max(scaleX, scaleY)), UI_THEME.colors.paper))
         .setOrigin(0.5);
       ct.add(emoji);
     }
 
     if (opts.weaponKey && WEAPON_TYPES[opts.weaponKey]) {
-      const weapon = this.add.text(-w / 2 + 5 * L.k * scale, -h / 2 + 4 * L.k * scale, WEAPON_TYPES[opts.weaponKey].emoji, uiBodyStyle(L, UI_THEME.colors.ink, {
-        fontSize: L.fs(Math.max(10, 14 * scale)),
+      const weapon = this.add.text(-w / 2 + 5 * L.k * scaleX, -h / 2 + 4 * L.k * scaleY, WEAPON_TYPES[opts.weaponKey].emoji, uiBodyStyle(L, UI_THEME.colors.ink, {
+        fontSize: L.fs(Math.max(10, 14 * Math.max(scaleX, scaleY))),
       })).setOrigin(0, 0);
       ct.add(weapon);
     }
 
-    const hpLabel = this.add.text(0, h / 2 - 22 * L.k * scale, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
-      fontSize: L.fs(Math.max(10, 12 * scale)),
+    const hpLabel = this.add.text(0, h / 2 - 22 * L.k * scaleY, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
+      fontSize: L.fs(Math.max(10, 12 * Math.max(scaleX, scaleY))),
       fontStyle: 'bold',
     })).setOrigin(0.5, 0.5);
     ct.add(hpLabel);
     this.addCombatHpBar(ct, {
       x: 0,
-      y: h / 2 - 12 * L.k * scale,
-      width: w - 12 * L.k * scale,
-      height: 8 * L.k * scale,
+      y: h / 2 - 12 * L.k * scaleY,
+      width: w - 12 * L.k * scaleX,
+      height: 8 * L.k * scaleY,
       ratio: hpRatio,
       fillColor: opts.side === 'enemy' ? '#d67d4d' : '#66bb6a',
     });
 
-    if (opts.side === 'player') this._combatPlayerViews[opts.id] = { x, y };
-    else this._combatEnemyViews[opts.id] = { x, y };
+    if (opts.side === 'player') this._combatPlayerViews[opts.id] = { x, y, scaleX, scaleY };
+    else this._combatEnemyViews[opts.id] = { x, y, scaleX, scaleY };
     this._combatNodes[opts.id] = ct;
     ct.setSize(w, h);
     if (opts.interactive) {
@@ -3808,7 +3929,8 @@ class GameScene extends Phaser.Scene {
             hp: enemy.hp,
             maxHp: enemy.maxHp,
             alive: true,
-            scale: enemyVisuals.scale,
+            scaleX: pos.scaleX != null ? pos.scaleX : enemyVisuals.scale,
+            scaleY: pos.scaleY != null ? pos.scaleY : enemyVisuals.scale,
             interactive: true,
             onHover: () => this.setCombatSetupInspectedEnemy(enemy.id, combat, { pinned: false }),
             onOut: () => this.scheduleCombatSetupPopupDismiss(combat),
@@ -3831,7 +3953,8 @@ class GameScene extends Phaser.Scene {
             maxHp: preview.hp,
             weaponKey: preview.weaponKey,
             alive: true,
-            scale: playerVisuals.scale,
+            scaleX: pos.scaleX != null ? pos.scaleX : playerVisuals.scale,
+            scaleY: pos.scaleY != null ? pos.scaleY : playerVisuals.scale,
             interactive: true,
             draggable: true,
             onHover: () => this.setCombatSetupInspectedPirate(pirate.id, combat, { pinned: false }),
@@ -3841,7 +3964,7 @@ class GameScene extends Phaser.Scene {
               this._combatSetupDragState = { pirateId: pirate.id };
               this.clearCombatSetupInspection(combat, { silent: true });
               cardNode.setDepth(130);
-              cardNode.setScale(1.05);
+              cardNode.setScale(pos.scaleX * 1.05, pos.scaleY * 1.05);
               cardNode.setAlpha(0.96);
             },
             onDrag: (pointer, cardNode) => {
@@ -3900,7 +4023,8 @@ class GameScene extends Phaser.Scene {
         hp: enemy.hp,
         maxHp: enemy.maxHp,
         alive: enemy.alive,
-        scale: enemyVisuals.scale,
+        scaleX: pos.scaleX != null ? pos.scaleX : enemyVisuals.scale,
+        scaleY: pos.scaleY != null ? pos.scaleY : enemyVisuals.scale,
       });
     });
 
@@ -3915,7 +4039,8 @@ class GameScene extends Phaser.Scene {
         maxHp: fighter.maxHp,
         weaponKey: fighter.weaponKey,
         alive: fighter.alive,
-        scale: playerVisuals.scale,
+        scaleX: pos.scaleX != null ? pos.scaleX : playerVisuals.scale,
+        scaleY: pos.scaleY != null ? pos.scaleY : playerVisuals.scale,
       });
     });
   }
@@ -3976,13 +4101,14 @@ class GameScene extends Phaser.Scene {
     if (this._cardTips) this._cardTips.hide();
     this.clearCt('island');
     const L = this.L;
-    const cx = L.cx;
-    const cy = this.islandCenterY();
-    const titleY = cy + 96 * L.k;
+    const persp = this.playAreaPerspective();
+    const cx = persp.centerX;
+    const cy = persp.centerY;
+    const titleY = persp.bottomY + 16 * L.k;
     const titleDescMargin = 8 * L.k;
     const titleLineSpacing = Math.round(-18 * L.k);
-    const outlineW = Math.min(L.W - 40 * L.k, 360 * L.k);
-    const outlineH = 144 * L.k;
+    const outlineW = persp.width;
+    const outlineH = persp.bottomY - persp.topY;
     this._combatEnemyViews = {};
     this._combatPlayerViews = {};
     this._combatNodes = {};
@@ -4005,7 +4131,13 @@ class GameScene extends Phaser.Scene {
 
     const outline = this.add.graphics();
     outline.lineStyle(Math.max(2, 6 * L.k), uiColorInt(UI_THEME.colors.outline), 1);
-    outline.strokeEllipse(cx, cy, outlineW, outlineH);
+    outline.beginPath();
+    outline.moveTo(cx - outlineW * 0.5 * (1 - persp.sideInsetNear), persp.bottomY);
+    outline.lineTo(cx + outlineW * 0.5 * (1 - persp.sideInsetNear), persp.bottomY);
+    outline.lineTo(cx + outlineW * 0.5 * (1 - persp.sideInsetFar), persp.topY);
+    outline.lineTo(cx - outlineW * 0.5 * (1 - persp.sideInsetFar), persp.topY);
+    outline.closePath();
+    outline.strokePath();
     this.addTo('island', outline);
 
     const title = this.add.text(cx, titleY, G.island.name, uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
@@ -4028,7 +4160,8 @@ class GameScene extends Phaser.Scene {
         x: placement.x,
         y: placement.y,
         rotation: placement.rotation,
-        scale: placement.scale,
+        scaleX: placement.scaleX,
+        scaleY: placement.scaleY,
         depth: 12 + si,
         interactive: true,
         slotState: this.weaponAssignmentActive() && !this.pirateHasWeapon(p)
