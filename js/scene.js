@@ -1689,6 +1689,14 @@ class GameScene extends Phaser.Scene {
     }];
   }
 
+  combatPlayerTooltipEntries(fighter) {
+    if (!fighter) return [];
+    return [
+      ...this.combatFighterTooltipEntries(fighter),
+      ...this.combatWeaponTooltipEntries(fighter.weaponKey),
+    ];
+  }
+
   clearCombatTooltip() {
     this._combatTipState = null;
     if (this._cardTips) this._cardTips.hide();
@@ -3705,44 +3713,47 @@ class GameScene extends Phaser.Scene {
     ct.setSize(w, h);
     if (opts.interactive) {
       let suppressTap = false;
-      let touchDragPrimed = false;
-      let activeTargetKind = 'body';
-      let pointerDownStartedOnWeapon = false;
-      const weaponHitSize = 24 * L.k * scale;
-      const weaponHitCenterX = -w / 2 + 12 * L.k * scale;
-      const weaponReservedWidth = weaponNode ? Math.max(weaponHitSize, 28 * L.k * scale) : 0;
-      const bodyWidth = weaponNode ? Math.max(8 * L.k * scale, w - weaponReservedWidth) : w;
-      const bodyCenterX = weaponNode ? (weaponReservedWidth / 2) : 0;
-      const bodyZone = this.add.zone(bodyCenterX, 0, bodyWidth, h)
+      let tooltipHoldTimer = null;
+      const clearTooltipHold = () => {
+        if (tooltipHoldTimer && !tooltipHoldTimer.hasDispatched) {
+          tooltipHoldTimer.remove(false);
+        }
+        tooltipHoldTimer = null;
+      };
+      const bodyZone = this.add.zone(0, 0, w, h)
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       const touchLike = (ptr) => isTouchLikePointer(ptr);
-      const dragPreviewEnabled = (ptr = null) => !!(touchLike(ptr) || (this.L && this.L.IS_MOBILE));
+      const useMobileHold = () => !!(this.L && this.L.IS_MOBILE);
+      const shouldHoldForTooltip = () => useMobileHold();
       const stopPtr = (ptr) => {
         if (ptr && ptr.event) ptr.event.stopPropagation();
       };
-      const setTargetKind = (kind) => {
-        activeTargetKind = kind === 'weapon' ? 'weapon' : 'body';
+      const startTooltipHold = (ptr) => {
+        if (!opts.onHoldTooltip) return;
+        clearTooltipHold();
+        tooltipHoldTimer = this.time.delayedCall(260, () => {
+          tooltipHoldTimer = null;
+          opts.onHoldTooltip({ pointer: ptr, targetKind: 'body' });
+        });
       };
       bodyZone.on('pointerdown', (ptr) => {
         suppressTap = false;
-        touchDragPrimed = !!opts.draggable && dragPreviewEnabled(ptr);
-        pointerDownStartedOnWeapon = false;
-        setTargetKind('body');
         stopPtr(ptr);
-        if (touchLike(ptr) && opts.onTap) {
-          opts.onTap({ targetKind: 'body' });
+        if (shouldHoldForTooltip()) {
+          startTooltipHold(ptr);
         }
       });
       if (opts.onHover) {
         bodyZone.on('pointerover', () => {
           if (this.combatSetupDragging()) return;
-          setTargetKind('body');
+          if (useMobileHold()) return;
           opts.onHover({ targetKind: 'body' });
         });
       }
       if (opts.onOut) {
         bodyZone.on('pointerout', () => {
+          clearTooltipHold();
           if (this.combatSetupDragging()) return;
           opts.onOut({ targetKind: 'body' });
         });
@@ -3750,74 +3761,37 @@ class GameScene extends Phaser.Scene {
       if (opts.draggable) {
         this.input.setDraggable(bodyZone, true);
         bodyZone.on('dragstart', (pointer) => {
+          clearTooltipHold();
           suppressTap = true;
-          setTargetKind('body');
-          if (dragPreviewEnabled(pointer) && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
+          if (useMobileHold() && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDragStart) opts.onDragStart(pointer, ct);
         });
         bodyZone.on('drag', (pointer) => {
-          if (dragPreviewEnabled(pointer) && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
+          clearTooltipHold();
+          if (useMobileHold() && opts.onDragPreview) opts.onDragPreview(pointer, ct, { targetKind: 'body' });
           if (opts.onDrag) opts.onDrag(pointer, ct);
         });
         bodyZone.on('dragend', (pointer) => {
-          touchDragPrimed = false;
+          clearTooltipHold();
           if (opts.onDragEnd) opts.onDragEnd(pointer, ct);
         });
       }
       if (opts.onTap) {
         bodyZone.on('pointerup', (ptr) => {
+          clearTooltipHold();
           stopPtr(ptr);
           if (suppressTap) {
             suppressTap = false;
             return;
           }
-          if (touchLike(ptr)) return;
-          setTargetKind('body');
+          if (shouldHoldForTooltip()) return;
           opts.onTap({ targetKind: 'body' });
         });
       }
+      bodyZone.on('pointermove', () => {
+        clearTooltipHold();
+      });
       ct.add(bodyZone);
-      if (weaponNode && opts.onWeaponHover) {
-        const weaponHit = this.add.zone(
-          weaponHitCenterX,
-          -h / 2 + 12 * L.k * scale,
-          weaponHitSize,
-          weaponHitSize
-        ).setOrigin(0.5).setInteractive({ useHandCursor: true });
-        weaponHit.on('pointerdown', (ptr) => {
-          suppressTap = false;
-          touchDragPrimed = false;
-          pointerDownStartedOnWeapon = true;
-          setTargetKind('weapon');
-          stopPtr(ptr);
-          if (touchLike(ptr) && opts.onWeaponTap) {
-            opts.onWeaponTap({ targetKind: 'weapon' });
-          }
-        });
-        weaponHit.on('pointerover', () => {
-          if (this.combatSetupDragging()) return;
-          setTargetKind('weapon');
-          opts.onWeaponHover({ targetKind: 'weapon' });
-        });
-        weaponHit.on('pointerout', () => {
-          if (this.combatSetupDragging()) return;
-          if (opts.onWeaponOut) opts.onWeaponOut({ targetKind: 'weapon' });
-        });
-        weaponHit.on('pointerup', (ptr) => {
-          stopPtr(ptr);
-          if (touchLike(ptr)) {
-            pointerDownStartedOnWeapon = false;
-            return;
-          }
-          if (pointerDownStartedOnWeapon && opts.onWeaponTap) {
-            opts.onWeaponTap({ targetKind: 'weapon' });
-          } else if (opts.onTap) {
-            opts.onTap({ targetKind: 'body' });
-          }
-          pointerDownStartedOnWeapon = false;
-        });
-        ct.add(weaponHit);
-      }
     }
     if (opts.alive === false) ct.setAlpha(0.4);
     this.addTo(containerKey, ct);
@@ -3916,10 +3890,8 @@ class GameScene extends Phaser.Scene {
             weaponKey: preview.weaponKey,
             damage: preview.damage,
           };
-          const fighterTipEntries = this.combatFighterTooltipEntries(fighterModel);
-          const fighterTipKey = `combat-fighter-${pirate.id}`;
-          const weaponTipEntries = this.combatWeaponTooltipEntries(preview.weaponKey);
-          const weaponTipKey = `combat-weapon-${pirate.id}`;
+          const playerTipEntries = this.combatPlayerTooltipEntries(fighterModel);
+          const playerTipKey = `combat-player-${pirate.id}`;
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: pirate.id,
             side: 'player',
@@ -3932,59 +3904,42 @@ class GameScene extends Phaser.Scene {
             interactive: true,
             draggable: true,
             onHover: () => {
-              this.showCombatTooltip(this._combatNodes[pirate.id], fighterTipEntries, {
-                key: fighterTipKey,
-                kind: 'combat-fighter',
+              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
+                key: playerTipKey,
+                kind: 'combat-player',
                 fighterId: pirate.id,
                 targetKind: 'body',
               });
             },
             onOut: () => {
-              this.hideCombatTooltipForKey(fighterTipKey);
-              this.hideCombatTooltipForKey(weaponTipKey);
+              this.hideCombatTooltipForKey(playerTipKey);
             },
             onTap: () => {
-              if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+              if (this._cardTips && this._cardTips.isActiveFor(playerTipKey)) {
                 this.clearCombatTooltip();
                 return;
               }
-              this.showCombatTooltip(this._combatNodes[pirate.id], fighterTipEntries, {
-                key: fighterTipKey,
-                kind: 'combat-fighter',
+              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
+                key: playerTipKey,
+                kind: 'combat-player',
                 fighterId: pirate.id,
                 targetKind: 'body',
               });
             },
-            onWeaponHover: () => {
-              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
-                key: weaponTipKey,
-                kind: 'combat-weapon',
+            onHoldTooltip: () => {
+              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
+                key: playerTipKey,
+                kind: 'combat-player',
                 fighterId: pirate.id,
-                targetKind: 'weapon',
-              });
-            },
-            onWeaponOut: () => {
-              this.hideCombatTooltipForKey(weaponTipKey);
-            },
-            onWeaponTap: () => {
-              if (this._cardTips && this._cardTips.isActiveFor(weaponTipKey)) {
-                this.clearCombatTooltip();
-                return;
-              }
-              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
-                key: weaponTipKey,
-                kind: 'combat-weapon',
-                fighterId: pirate.id,
-                targetKind: 'weapon',
+                targetKind: 'body',
               });
             },
             onDragPreview: () => {
-              if (!weaponTipEntries.length) return;
-              this.showCombatTooltip(this._combatNodes[pirate.id], weaponTipEntries, {
-                key: weaponTipKey,
-                kind: 'combat-weapon',
+              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
+                key: playerTipKey,
+                kind: 'combat-player',
                 fighterId: pirate.id,
-                targetKind: 'weapon',
+                targetKind: 'body',
               });
             },
             onDragStart: (_pointer, cardNode) => {
@@ -3998,14 +3953,12 @@ class GameScene extends Phaser.Scene {
               if (!pointer) return;
               cardNode.setPosition(pointer.x, pointer.y);
               cardNode.setDepth(130);
-              if (weaponTipEntries.length) {
-                this.showCombatTooltip(cardNode, weaponTipEntries, {
-                  key: weaponTipKey,
-                  kind: 'combat-weapon',
-                  fighterId: pirate.id,
-                  targetKind: 'weapon',
-                });
-              }
+              this.showCombatTooltip(cardNode, playerTipEntries, {
+                key: playerTipKey,
+                kind: 'combat-player',
+                fighterId: pirate.id,
+                targetKind: 'body',
+              });
             },
             onDragEnd: (pointer) => {
               const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
@@ -4070,10 +4023,8 @@ class GameScene extends Phaser.Scene {
     playerFighters.forEach((fighter) => {
       const pos = playerSlots[fighter.id];
       if (!pos) return;
-      const fighterTipEntries = this.combatFighterTooltipEntries(fighter);
-      const fighterTipKey = `combat-fighter-${fighter.id}`;
-      const weaponTipEntries = this.combatWeaponTooltipEntries(fighter.weaponKey);
-      const weaponTipKey = `combat-weapon-${fighter.id}`;
+      const playerTipEntries = this.combatPlayerTooltipEntries(fighter);
+      const playerTipKey = `combat-player-${fighter.id}`;
       this.renderCombatMiniCard('island', pos.x, pos.y, {
         id: fighter.id,
         side: 'player',
@@ -4085,50 +4036,34 @@ class GameScene extends Phaser.Scene {
         scale: playerVisuals.scale,
         interactive: true,
         onHover: () => {
-          this.showCombatTooltip(this._combatNodes[fighter.id], fighterTipEntries, {
-            key: fighterTipKey,
-            kind: 'combat-fighter',
+          this.showCombatTooltip(this._combatNodes[fighter.id], playerTipEntries, {
+            key: playerTipKey,
+            kind: 'combat-player',
             fighterId: fighter.id,
             targetKind: 'body',
           });
         },
         onOut: () => {
-          this.hideCombatTooltipForKey(fighterTipKey);
-          this.hideCombatTooltipForKey(weaponTipKey);
+          this.hideCombatTooltipForKey(playerTipKey);
         },
         onTap: () => {
-          if (this._cardTips && this._cardTips.isActiveFor(fighterTipKey)) {
+          if (this._cardTips && this._cardTips.isActiveFor(playerTipKey)) {
             this.clearCombatTooltip();
             return;
           }
-          this.showCombatTooltip(this._combatNodes[fighter.id], fighterTipEntries, {
-            key: fighterTipKey,
-            kind: 'combat-fighter',
+          this.showCombatTooltip(this._combatNodes[fighter.id], playerTipEntries, {
+            key: playerTipKey,
+            kind: 'combat-player',
             fighterId: fighter.id,
             targetKind: 'body',
           });
         },
-        onWeaponHover: () => {
-          this.showCombatTooltip(this._combatNodes[fighter.id], weaponTipEntries, {
-            key: weaponTipKey,
-            kind: 'combat-weapon',
+        onHoldTooltip: () => {
+          this.showCombatTooltip(this._combatNodes[fighter.id], playerTipEntries, {
+            key: playerTipKey,
+            kind: 'combat-player',
             fighterId: fighter.id,
-            targetKind: 'weapon',
-          });
-        },
-        onWeaponOut: () => {
-          this.hideCombatTooltipForKey(weaponTipKey);
-        },
-        onWeaponTap: () => {
-          if (this._cardTips && this._cardTips.isActiveFor(weaponTipKey)) {
-            this.clearCombatTooltip();
-            return;
-          }
-          this.showCombatTooltip(this._combatNodes[fighter.id], weaponTipEntries, {
-            key: weaponTipKey,
-            kind: 'combat-weapon',
-            fighterId: fighter.id,
-            targetKind: 'weapon',
+            targetKind: 'body',
           });
         },
       });
