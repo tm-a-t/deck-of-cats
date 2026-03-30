@@ -3784,13 +3784,13 @@ class GameScene extends Phaser.Scene {
             suppressTap = false;
             return;
           }
-          if (shouldHoldForTooltip()) return;
+          if (shouldHoldForTooltip()) {
+            if (opts.onOut) opts.onOut({ targetKind: 'body' });
+            return;
+          }
           opts.onTap({ targetKind: 'body' });
         });
       }
-      bodyZone.on('pointermove', () => {
-        clearTooltipHold();
-      });
       ct.add(bodyZone);
     }
     if (opts.alive === false) ct.setAlpha(0.4);
@@ -3866,6 +3866,14 @@ class GameScene extends Phaser.Scene {
                 this.clearCombatTooltip();
                 return;
               }
+              this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+                key: fighterTipKey,
+                kind: 'combat-fighter',
+                fighterId: enemy.id,
+                targetKind: 'body',
+              });
+            },
+            onHoldTooltip: () => {
               this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
                 key: fighterTipKey,
                 kind: 'combat-fighter',
@@ -4010,6 +4018,14 @@ class GameScene extends Phaser.Scene {
             this.clearCombatTooltip();
             return;
           }
+          this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
+            key: fighterTipKey,
+            kind: 'combat-fighter',
+            fighterId: enemy.id,
+            targetKind: 'body',
+          });
+        },
+        onHoldTooltip: () => {
           this.showCombatTooltip(this._combatNodes[enemy.id], fighterTipEntries, {
             key: fighterTipKey,
             kind: 'combat-fighter',
