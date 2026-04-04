@@ -223,7 +223,7 @@ Win the boarding at the final layer (layer 29, ship #6).
 | Skull Island | 💀 | +2☠️ at round start |
 | Siren Island | 🧜 | Pirates sent are permanently lost after their action |
 
-**Island bonus doubling**: applies to chance-based gathering, conversion outputs, and multi-resource outputs that match the island's bonus resource.
+**Island bonus doubling**: applies to standard gathering, conversion outputs, and multi-resource outputs that match the island's bonus resource.
 
 ---
 
@@ -233,12 +233,10 @@ Win the boarding at the final layer (layer 29, ship #6).
 2. **Exile Sent** (Marooner): permanently removes the previously-sent pirate on the island from the game. No effect if no one was sent before.
 3. **Guaranteed**: produces fixed resources or weapons with no chance of failure.
 4. **Convert** (Trader, Profiteer): spends input resources, produces output resources. Output doubled by island bonus. Can only go ashore if the player has enough input resources.
-5. **Chance-based**: standard resource gathering.
-   - If target is gold and player has 🗺️: chance increases by +30% (capped at 95%), consumes 1 🗺️.
+5. **Gather**: standard resource gathering.
+   - Gain the listed resource every time.
    - Island bonus doubles yield amount.
-   - Bonus enthusiasm (e.g. Survivalist) is always granted regardless of success.
-   - **On success**: gain target resource.
-   - **On miss**: 1% chance to get 🗺️; otherwise get 1 of a random other resource (doubled by island bonus if matching).
+   - Bonus enthusiasm (e.g. Survivalist) is always granted.
 
 ---
 
@@ -287,8 +285,8 @@ Win the boarding at the final layer (layer 29, ship #6).
 
 | Name | Island | Ship |
 |------|--------|------|
-| Rigger | 1🪵 (90%) | 4🪵 → 2☠️ |
-| Ballaster | 1🪨 (90%) | 4🪨 → 2☠️ |
+| Rigger | 1🪵 | 4🪵 → 2☠️ |
+| Ballaster | 1🪨 | 4🪨 → 2☠️ |
 | Armsman | → 🔨 | — |
 
 ### Tier 1: Early Upgrades (cost 2–5)
@@ -299,11 +297,11 @@ Win the boarding at the final layer (layer 29, ship #6).
 | Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
 | Corsair | 2 | → 🔨🔨 | → 2☠️ |
 | Herald | 2 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 1🪨 (90%) | → 🔨+1☠️ |
-| Carpenter | 3 | 1🪵 (95%) | 2🪵 → 🪓+2☠️ |
-| Stonemason | 3 | 1🪨 (95%) | 2🪨 → ⛓️+2☠️ |
-| Privateer | 3 | 1🪙 (45%) | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 1🪵 (90%) +2☠️ | → 2☠️ |
+| Deckhand | 2 | 1🪨 | → 🔨+1☠️ |
+| Carpenter | 3 | 1🪵 | 2🪵 → 🪓+2☠️ |
+| Stonemason | 3 | 1🪨 | 2🪨 → ⛓️+2☠️ |
+| Privateer | 3 | 1🪙 | 2🪙 → 🔫🔫+4☠️ |
+| Survivalist | 3 | 1🪵 +2☠️ | → 2☠️ |
 | Raider | 4 | → 🪓🪓 | 💀 get lost |
 | Bosun | 5 | Can't land | → 3☠️ |
 | Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
@@ -314,20 +312,20 @@ Win the boarding at the final layer (layer 29, ship #6).
 | Name | ☠️ | Island | Ship |
 |------|-----|--------|------|
 | Marooner | 6 | Exile previous pirate on island | → 🗡️ |
-| Drifter | 6 | 2🪵 (90%) | 💀 get lost |
+| Drifter | 6 | 2🪵 | 💀 get lost |
 | Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
-| Woodsman | 7 | 1🪵 (90%) | 2🪵 → 🏹🏹+4☠️ |
-| Prospector | 7 | 1🪨 (90%) | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 1🪙 (45%) | 1🪙 → 6☠️+1🪵+1🪨 |
-| Explorer | 9 | 1🪙 (65%) | 1🪙 → 5☠️+🔱 |
+| Woodsman | 7 | 1🪵 | 2🪵 → 🏹🏹+4☠️ |
+| Prospector | 7 | 1🪨 | 2🪨 → 🧨🧨+4☠️ |
+| Smuggler | 8 | 1🪙 | 1🪙 → 6☠️+1🪵+1🪨 |
+| Explorer | 9 | 1🪙 | 1🪙 → 5☠️+🔱 |
 | Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
 
 ### Tier 3: Late-Game (cost 13)
 
 | Name | ☠️ | Island | Ship |
 |------|-----|--------|------|
-| Master Rigger | 13 | 2🪵 (90%) | 2🪵 → 🪝🪝+4☠️ |
-| Master Ballaster | 13 | 2🪨 (90%) | 2🪨 → 🔫🔫+4☠️ |
+| Master Rigger | 13 | 2🪵 | 2🪵 → 🪝🪝+4☠️ |
+| Master Ballaster | 13 | 2🪨 | 2🪨 → 🔫🔫+4☠️ |
 
 ### Special Abilities Detail
 
@@ -337,7 +335,7 @@ Win the boarding at the final layer (layer 29, ship #6).
 
 **Convert** (Trader: 3🪵→3🪨; Profiteer: 1🪙→2🪙): converts resources. Output doubled by matching island bonus. Can only go ashore if the player has enough input resources.
 
-**Chance-based gatherers** (including Drifter: 2🪵 at 90%): follow the standard gather roll. On a miss, they may still bring back a different resource or a 🗺️.
+**Gatherers** (including Drifter: 2🪵): always gain their listed resource. Matching island bonus still doubles that yield.
 
 **Get Lost** (Raider, Profiteer, Drifter): ship action permanently removes them from the game. Their island action works normally.
 
@@ -345,14 +343,7 @@ Win the boarding at the final layer (layer 29, ship #6).
 
 **Siren Island interaction**: any pirate sent to Siren Island executes their island action normally, then is permanently removed from the game afterward.
 
-**Survivalist bonus**: island action grants 1🪵 (90% chance) **plus** a guaranteed +2☠️ regardless of success.
-
----
-
-## Treasure Map (🗺️)
-
-- Obtained: 1% chance on a missed island gathering roll.
-- Effect: when a pirate targeting gold goes ashore, if the player has 🗺️, gold chance increases by +30% (capped at 95%), consuming 1 🗺️.
+**Survivalist bonus**: island action grants 1🪵 **plus** a guaranteed +2☠️.
 
 ---
 
@@ -363,7 +354,6 @@ Win the boarding at the final layer (layer 29, ship #6).
 | 🪵 | Wood | Ship actions input; weapon production |
 | 🪨 | Stone | Ship actions input; weapon production |
 | 🪙 | Gold | Ship actions input; high-tier conversions |
-| 🗺️ | Treasure Map | Auto-consumed for +30% gold chance |
 | ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
 
 ## Streak

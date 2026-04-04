@@ -313,7 +313,6 @@ function baseDecisionTokens(api, G, kindId) {
   t.push(220 + bucket(G.res.wood || 0, [0, 1, 2, 3, 5, 8, 12, 18, 26]));
   t.push(240 + bucket(G.res.stone || 0, [0, 1, 2, 3, 5, 8, 12, 18, 26]));
   t.push(260 + bucket(G.res.gold || 0, [0, 1, 2, 3, 4, 6, 9, 13, 20]));
-  t.push(280 + bucket(G.res.map || 0, [0, 1, 2, 3, 5]));
   t.push(300 + bucket(totalWeapons(G.weapons), [0, 1, 2, 3, 5, 8, 12, 20, 32]));
   t.push(320 + bucket(G.cannons || 0, [0, 1, 2, 3, 5, 8, 12, 20, 32]));
   t.push(340 + bucket(G.allCrew.length, [10, 12, 14, 16, 18, 21, 24, 28, 32, 40, 56, 80]));

@@ -495,18 +495,10 @@ function tweenPanelStates(scene, fromStates, toStates, opts = {}) {
   });
 }
 
-const RES_EMOJI = { wood: '🪵', stone: '🪨', gold: '🪙', map: '🗺️', enthusiasm: '☠️' };
+const RES_EMOJI = { wood: '🪵', stone: '🪨', gold: '🪙', enthusiasm: '☠️' };
 
 function normalizePirateDescText(text) {
-  return String(text || '').replace(/,\s+(?=(?:very risky|decent odds|reliable|safe|risky)\b)/gi, ' ');
-}
-
-function pirateDescWithSuffix(text, suffix) {
-  const base = String(text || '').trim();
-  const extra = String(suffix || '').trim();
-  if (!base) return extra;
-  if (!extra) return base;
-  return `${base} ${extra}`;
+  return String(text || '').trim();
 }
 
 function pirateDescEmoji(kind) {
@@ -528,16 +520,6 @@ function pirateDescJoin(parts, joiner = '+') {
   return parts.filter(Boolean).join(joiner);
 }
 
-function pirateIslandDescSuffix(island) {
-  if (!island) return '';
-  if (island.descSuffix) return island.descSuffix;
-  if (island.chance == null) return '';
-  if (island.chance >= 0.95) return 'safe';
-  if (island.chance >= 0.9) return 'reliable';
-  if (island.chance >= 0.65) return 'decent odds';
-  return 'very risky';
-}
-
 function pirateIslandDesc(def, opts = {}) {
   const cantLandText = opts.cantLandText != null ? opts.cantLandText : '—';
   if (!def || !def.canIsland || !def.island) return cantLandText;
@@ -548,32 +530,24 @@ function pirateIslandDesc(def, opts = {}) {
 
   if (island.guaranteed) {
     const gain = island.guaranteed;
-    if (gain.weapon) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount(gain.weapon, gain.count || 1), pirateIslandDescSuffix(island)));
-    if (gain.weapons) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount('weapons', gain.weapons), pirateIslandDescSuffix(island)));
-    if (gain.res) return normalizePirateDescText(pirateDescWithSuffix(pirateDescCount(gain.res, gain.amt), pirateIslandDescSuffix(island)));
+    if (gain.weapon) return normalizePirateDescText(pirateDescCount(gain.weapon, gain.count || 1));
+    if (gain.weapons) return normalizePirateDescText(pirateDescCount('weapons', gain.weapons));
+    if (gain.res) return normalizePirateDescText(pirateDescCount(gain.res, gain.amt));
     return '—';
   }
 
   if (island.convert) {
     return normalizePirateDescText(
-      pirateDescWithSuffix(
-        `${pirateDescCount(island.convert.cRes, island.convert.cN)} → ${pirateDescCount(island.convert.pRes, island.convert.pN)}`,
-        pirateIslandDescSuffix(island)
-      )
+      `${pirateDescCount(island.convert.cRes, island.convert.cN)} → ${pirateDescCount(island.convert.pRes, island.convert.pN)}`
     );
   }
 
   if (Array.isArray(island.multi) && island.multi.length) {
-    return normalizePirateDescText(
-      pirateDescWithSuffix(
-        pirateDescJoin(island.multi.map(item => pirateDescCount(item.res, item.amt))),
-        pirateIslandDescSuffix(island)
-      )
-    );
+    return normalizePirateDescText(pirateDescJoin(island.multi.map(item => pirateDescCount(item.res, item.amt))));
   }
 
   if (island.res) {
-    const base = pirateDescWithSuffix(pirateDescCount(island.res, island.amt), pirateIslandDescSuffix(island));
+    const base = pirateDescCount(island.res, island.amt);
     const bonusPart = island.bonusEnthusiasm ? ` +${pirateDescCount('enthusiasm', island.bonusEnthusiasm)}` : '';
     return normalizePirateDescText(`${base}${bonusPart}`);
   }
@@ -753,13 +727,13 @@ const TYPES = {
   // ---- starter ----
   lumberjack: {
     name: 'Rigger', cat: [2,33,44,16,0,5], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 4, pRes: 'enthusiasm', pN: 2 },
     cost: null,
   },
   miner: {
     name: 'Ballaster', cat: [7,25,43,16,0,2], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'stone', amt: 1 },
     ship:   { cRes: 'stone', cN: 4, pRes: 'enthusiasm', pN: 2 },
     cost: null,
   },
@@ -772,13 +746,13 @@ const TYPES = {
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   carpenter: {
     name: 'Carpenter', cat: [3,30,45,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.95, descSuffix: 'safe' },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'axe', prodWeaponN: 1 },
     cost: 3,
   },
   stonemason: {
     name: 'Stonemason', cat: [5,23,39,16,0,2], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.95, descSuffix: 'safe' },
+    island: { res: 'stone', amt: 1 },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'chain', prodWeaponN: 1 },
     cost: 3,
   },
@@ -802,7 +776,7 @@ const TYPES = {
   },
   privateer: {
     name: 'Privateer', cat: [1,12,45,27,16,4], canIsland: true,
-    island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
+    island: { res: 'gold', amt: 1 },
     ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
     cost: 3,
   },
@@ -814,7 +788,7 @@ const TYPES = {
   },
   deckhand: {
     name: 'Deckhand', cat: [4,34,40,16,0,6], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'risky' },
+    island: { res: 'stone', amt: 1 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'hammer', prodWeaponN: 1 },
     cost: 2,
   },
@@ -839,44 +813,44 @@ const TYPES = {
   // ---- tier 2: solid mid-game (12-16☠️) ----
   trader: {
     name: 'Trader', cat: [8,34,46,16,0,5], canIsland: true,
-    island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 }, descSuffix: 'safe' },
+    island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 } },
     ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2, prodWeapon: 'anchor', prodWeaponN: 1 },
     cost: 7,
   },
   woodsman: {
     name: 'Woodsman', cat: [11,25,43,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'bow', prodWeaponN: 2 },
     cost: 7,
   },
   prospector: {
     name: 'Prospector', cat: [7,30,45,16,0,2], canIsland: true,
-    island: { res: 'stone', amt: 1, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'stone', amt: 1 },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'blunderbuss', prodWeaponN: 2 },
     cost: 7,
   },
   smuggler: {
     name: 'Smuggler', cat: [7,25,46,16,0,5], canIsland: true,
-    island: { res: 'gold', amt: 1, chance: 0.45, descSuffix: 'very risky' },
+    island: { res: 'gold', amt: 1 },
     ship:   { cRes: 'gold', cN: 1, gains: [{ res: 'enthusiasm', n: 6 }, { res: 'wood', n: 1 }, { res: 'stone', n: 1 }] },
     cost: 8,
   },
   explorer: {
     name: 'Explorer', cat: [13,23,38,17,0,2], canIsland: true,
-    island: { res: 'gold', amt: 1, chance: 0.65, descSuffix: 'decent odds' },
+    island: { res: 'gold', amt: 1 },
     ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5, prodWeapon: 'trident', prodWeaponN: 1 },
     cost: 9,
   },
   // ---- tier 3: late-game powerhouses (24-32☠️) ----
   masterLumberjack: {
     name: 'Master Rigger', cat: [10,28,40,16,0,8], canIsland: true,
-    island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'wood', amt: 2 },
     ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'hookshot', prodWeaponN: 2 },
     cost: 13,
   },
   masterMiner: {
     name: 'Master Ballaster', cat: [15,34,43,17,0,9], canIsland: true,
-    island: { res: 'stone', amt: 2, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'stone', amt: 2 },
     ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
     cost: 13,
   },
@@ -895,7 +869,7 @@ const TYPES = {
   },
   drifter: {
     name: 'Drifter', cat: [14,37,42,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 2, chance: 0.9, descSuffix: 'reliable' },
+    island: { res: 'wood', amt: 2 },
     ship:   { removeSelf: true },
     cost: 6,
   },
@@ -908,7 +882,7 @@ const TYPES = {
   },
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
-    island: { res: 'wood', amt: 1, chance: 0.9, bonusEnthusiasm: 2, descSuffix: 'risky' },
+    island: { res: 'wood', amt: 1, bonusEnthusiasm: 2 },
     ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
   },

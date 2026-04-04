@@ -22,7 +22,6 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 
 - Pirate descriptions must be derived from the pirate definitions in `TYPES` via shared helpers in `js/constants.js`.
 - Do not hand-maintain separate description strings as a second source of truth.
-- If a pirate needs specific wording like `reliable`, `safe`, `risky`, `decent odds`, or `very risky`, store that wording in the pirate definition metadata and let the shared helpers render it. Do not switch those descriptions to raw percentages.
 - When formatting resource/item counts inside those generated descriptions, use repeated emoji for counts 1–3 and numeric counts only for 4+.
 
 ### Scenes
@@ -65,7 +64,7 @@ All gameplay rules are in [rules.md](rules.md). This is the source of truth.
 | `deck` | `Array` | Draw pile |
 | `discard` | `Array` | Discard pile |
 | `hand` | `Array` | Current hand (up to 5) |
-| `res` | `{wood, stone, gold, map}` | Resource counts |
+| `res` | `{wood, stone, gold}` | Resource counts |
 | `weapons` | `int` | 🗡️ temporary attack bonus |
 | `cannons` | `int` | 💣 permanent attack bonus |
 | `enthusiasm` | `int` | ☠️ currency for buying pirates |

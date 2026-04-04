@@ -150,7 +150,7 @@ const G = {
   deck: [],
   discard: [],
   hand: [],
-  res: { wood: 0, stone: 0, gold: 0, map: 0 },
+  res: { wood: 0, stone: 0, gold: 0 },
   weapons: 0,
   cannons: 0,
   enthusiasm: 0,

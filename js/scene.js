@@ -703,32 +703,13 @@ class GameScene extends Phaser.Scene {
       return { ok: true, items };
     }
 
-    let chance = def.island.chance;
     const tgt = def.island.res;
     const amt = this.islandYieldAmount(tgt, def.island.amt, isl);
 
-    if (tgt === 'gold' && G.res.map > 0) {
-      chance = Math.min(chance + 0.30, 0.95);
-      G.res.map--;
-    }
-
     const islBonusE = def.island.bonusEnthusiasm || 0;
     if (islBonusE) G.enthusiasm += islBonusE;
-
-    if (Math.random() < chance) {
-      G.res[tgt] += amt;
-      return { ok: true, res: tgt, n: amt, bonusEnthusiasm: islBonusE };
-    }
-
-    if (Math.random() < 0.01) {
-      G.res.map++;
-      return { ok: false, res: 'map', n: 1, bonusEnthusiasm: islBonusE };
-    }
-    const others = ['wood', 'stone', 'gold'].filter(r => r !== tgt);
-    const alt = Phaser.Utils.Array.GetRandom(others);
-    const altAmt = this.islandYieldAmount(alt, 1, isl);
-    G.res[alt] += altAmt;
-    return { ok: false, res: alt, n: altAmt, bonusEnthusiasm: islBonusE };
+    G.res[tgt] += amt;
+    return { ok: true, res: tgt, n: amt, bonusEnthusiasm: islBonusE };
   }
 
   sacrificePirate(pirate, x, y) {
@@ -885,20 +866,12 @@ class GameScene extends Phaser.Scene {
       effectText = { x, y: fy, text: msg, color: '#66bb6a' };
       gainItems = r.items.map(i => ({ emoji: RES_EMOJI[i.res], count: i.n }));
     } else {
-      const em = RES_EMOJI[r.res] || '🗺️';
+      const em = RES_EMOJI[r.res] || '';
       const eBonus = r.bonusEnthusiasm ? ' +' + r.bonusEnthusiasm + '☠️' : '';
       gainItems = [{ emoji: em, count: r.n }];
       if (r.bonusEnthusiasm) gainItems.push({ emoji: '☠️', count: r.bonusEnthusiasm });
-      if (r.ok) {
-        overlayColor = '#66bb6a';
-        effectText = { x, y: fy, text: '+' + r.n + em + eBonus, color: '#66bb6a' };
-      } else if (r.res === 'map') {
-        overlayColor = '#ffd54f';
-        effectText = { x, y: fy, text: '+🗺️!' + eBonus, color: '#ffd54f', hold: 400 };
-      } else {
-        overlayColor = '#ffa726';
-        effectText = { x, y: fy, text: 'Miss +' + r.n + em + eBonus, color: '#ffa726', hold: 400 };
-      }
+      overlayColor = '#66bb6a';
+      effectText = { x, y: fy, text: '+' + r.n + em + eBonus, color: '#66bb6a' };
     }
 
     return this.playResolvedEffect({
@@ -3308,7 +3281,6 @@ class GameScene extends Phaser.Scene {
       { key: 'wood', emoji: RES_EMOJI.wood, count: G.res.wood || 0 },
       { key: 'stone', emoji: RES_EMOJI.stone, count: G.res.stone || 0 },
       { key: 'gold', emoji: RES_EMOJI.gold, count: G.res.gold || 0 },
-      { key: 'map', emoji: RES_EMOJI.map, count: G.res.map || 0 },
       { key: 'enthusiasm', emoji: '☠️', count: G.enthusiasm || 0 },
     ].filter((item) => item.count > 0 || keep.has(item.key));
   }
@@ -3435,7 +3407,6 @@ class GameScene extends Phaser.Scene {
       [RES_EMOJI.wood]: 'wood',
       [RES_EMOJI.stone]: 'stone',
       [RES_EMOJI.gold]: 'gold',
-      [RES_EMOJI.map]: 'map',
       '☠️': 'enthusiasm',
     })[emoji];
     const layout = this.inventoryLayout(key ? [key] : []);
