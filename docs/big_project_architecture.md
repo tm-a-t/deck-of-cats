@@ -1,6 +1,6 @@
 # Deck of Cats Big Project Architecture
 
-This document extends [architecture.md](architecture.md) and describes how the project should evolve if Deck of Cats grows from a prototype into a large long-lived game.
+This document extends [architecture.md](../../newCrewGame/docs/architecture.md) and describes how the project should evolve if Deck of Cats grows from a prototype into a large long-lived game.
 
 The current architecture is good for a small Phaser prototype. It will not scale cleanly to a codebase with many developers, large content volume, live operations, or multiple platforms.
 

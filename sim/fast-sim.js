@@ -655,6 +655,8 @@ function makeSimScene(api) {
   scene._sendingToIsland = new Set();
   scene._sacrificedIds = new Set();
   scene.renderAll = () => {};
+  // Headless sim can still hit direct UI refresh calls from GameScene.
+  scene.renderNav = () => {};
   scene.float = () => {};
   scene.showGameOver = () => {};
   scene.showVictory = () => {};
