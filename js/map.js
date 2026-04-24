@@ -9,6 +9,24 @@ const STEPS_PER_SEGMENT = 4;
 const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
 const FIRST_LINEAR_SEGMENTS = 1;
 const TOTAL_BATTLES = 6;
+const HEAL_LAYER_INDICES = new Set([10, 20]);
+
+function healingIslandIndex() {
+  return ISLANDS.findIndex(island => island && island.healWounded);
+}
+
+function regularIslandIndices(opts = {}) {
+  const allowSacrifice = !!opts.allowSacrifice;
+  return ISLANDS
+    .map((_, i) => i)
+    .filter((i) => {
+      const island = ISLANDS[i];
+      if (!island) return false;
+      if (island.healWounded) return false;
+      if (island.sacrifice && !allowSacrifice) return false;
+      return true;
+    });
+}
 
 function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
@@ -104,8 +122,8 @@ function generateMap() {
     for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
       const li = seg * (STEPS_PER_SEGMENT + 1) + step;
       const available = (li < 9)
-        ? ISLANDS.map((_, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
-        : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice);
+        ? regularIslandIndices().filter(i => i !== 2 && i !== 4)
+        : regularIslandIndices();
       const layer = [];
       for (let pi = 0; pi < pathCount; pi++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];
@@ -125,6 +143,12 @@ function generateMap() {
 
   // Remaining layers: place ship every 5th layer, island layers in between
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS; li++) {
+    const healIdx = healingIslandIndex();
+    if (HEAL_LAYER_INDICES.has(li) && healIdx >= 0) {
+      layers.push([{ id: nextId++, type: 'island', islandIdx: healIdx, conns: [] }]);
+      continue;
+    }
+
     const isShip = (li + 1) % 5 === 0;
     if (isShip) {
       battlesSoFar++;
@@ -138,7 +162,7 @@ function generateMap() {
     } else {
       const count = 2 + Math.floor(Math.random() * 2);
       const allowSacrifice = li >= 10 && Math.random() < 0.5;
-      const available = ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
+      const available = regularIslandIndices({ allowSacrifice });
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];

@@ -8,6 +8,9 @@ function mkP(type, opts = {}) {
     id: uid++,
     type,
     weaponKey: WEAPON_TYPES[opts.weaponKey] ? opts.weaponKey : null,
+    might: Math.max(0, Math.floor(Number(opts.might) || 0)),
+    tempo: Math.max(0, Math.floor(Number(opts.tempo) || 0)),
+    wounded: !!opts.wounded,
   };
 }
 
@@ -64,6 +67,9 @@ function cloneBattleTestPirate(pirate) {
   const cloned = mkP(pirate.type);
   if (pirate.id != null) cloned.id = pirate.id;
   cloned.weaponKey = WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null;
+  cloned.might = Math.max(0, Math.floor(Number(pirate.might) || 0));
+  cloned.tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0));
+  cloned.wounded = !!pirate.wounded;
   return cloned;
 }
 
@@ -181,6 +187,7 @@ function initState() {
     island: null,
     enemyShip: null,
     combat: null,
+    healing: null,
     boardingCount: 0,
     gameOver: false,
     shop: initialShop(4, 0),
@@ -232,6 +239,7 @@ function initBattleTestState(repeatState = null) {
     island: null,
     enemyShip,
     combat: useRepeatState ? repeatCombat : null,
+    healing: null,
     boardingCount: encounterNo,
     gameOver: false,
     shop: [],

@@ -285,6 +285,7 @@ class PilePanelScene extends Phaser.Scene {
         interactive: true,
         slotState: WEAPON_TYPES[pirate.weaponKey] ? 'armed' : 'none',
         slotWeaponKey: WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null,
+        wounded: !!pirate.wounded,
       });
       const showTips = () => this._cardTips && this._cardTips.showForCard(card.container, tips, { key: tipKey });
       card.cardImg.on('pointerover', () => {

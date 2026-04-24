@@ -138,6 +138,9 @@ class GameScene extends Phaser.Scene {
       cards.forEach((pirate) => {
         if (!pirate) return;
         pirate.weaponKey = WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null;
+        pirate.might = Math.max(0, Math.floor(Number(pirate.might) || 0));
+        pirate.tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0));
+        pirate.wounded = !!pirate.wounded;
       });
     });
   }
@@ -149,6 +152,191 @@ class GameScene extends Phaser.Scene {
 
   pirateHasWeapon(pirate) {
     return !!this.pirateWeaponKey(pirate);
+  }
+
+  pirateMight(pirate) {
+    return Math.max(0, Math.floor(Number(pirate && pirate.might) || 0));
+  }
+
+  pirateTempo(pirate) {
+    return Math.max(0, Math.floor(Number(pirate && pirate.tempo) || 0));
+  }
+
+  pirateBuffCount(pirate) {
+    return this.pirateMight(pirate) + this.pirateTempo(pirate);
+  }
+
+  pirateBuffSummary(pirate) {
+    const parts = [];
+    const might = this.pirateMight(pirate);
+    const tempo = this.pirateTempo(pirate);
+    if (might > 0) parts.push(`${BUFF_EMOJI.might}${might}`);
+    if (tempo > 0) parts.push(`${BUFF_EMOJI.tempo}${tempo}`);
+    return parts.join(' ');
+  }
+
+  pirateWounded(pirate) {
+    return !!(pirate && pirate.wounded);
+  }
+
+  woundedCrew() {
+    return (G.allCrew || []).filter((pirate) => pirate && this.pirateWounded(pirate));
+  }
+
+  activeCombatHandPirates() {
+    return (G.hand || []).filter((pirate) => pirate && !this.pirateWounded(pirate));
+  }
+
+  markPirateWounded(pirateId) {
+    const pirate = (G.allCrew || []).find((candidate) => candidate && candidate.id === pirateId);
+    if (!pirate || pirate.wounded) return false;
+    pirate.wounded = true;
+    return true;
+  }
+
+  healingLimit() {
+    const fromState = G.healing && G.healing.max;
+    const fromIsland = G.island && G.island.healWounded;
+    return Math.max(0, Math.floor(Number(fromState != null ? fromState : fromIsland) || 0));
+  }
+
+  healingUsed() {
+    return Array.isArray(G.healing && G.healing.healedIds) ? G.healing.healedIds.length : 0;
+  }
+
+  ensureHealingState() {
+    if (!G.healing) {
+      G.healing = {
+        max: this.healingLimit(),
+        healedIds: [],
+      };
+    }
+    if (!Array.isArray(G.healing.healedIds)) G.healing.healedIds = [];
+    G.healing.max = this.healingLimit();
+    return G.healing;
+  }
+
+  healPirate(pirateId) {
+    if (G.phase !== 'healing') return false;
+    const state = this.ensureHealingState();
+    if (this.healingUsed() >= this.healingLimit()) return false;
+    const pirate = (G.allCrew || []).find((candidate) => candidate && candidate.id === pirateId);
+    if (!pirate || !pirate.wounded || state.healedIds.includes(pirate.id)) return false;
+
+    pirate.wounded = false;
+    state.healedIds.push(pirate.id);
+    const label = (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate';
+    this.float(this.L.cx, this.endActionY() - 54 * this.L.k, `${label} healed`, '#66bb6a');
+    this.renderAll();
+    return true;
+  }
+
+  continueFromHealing() {
+    if (G.phase !== 'healing') return;
+    G.healing = null;
+    G.phase = 'map';
+    G.island = null;
+    this.closePanels();
+    this.renderAll();
+    this.enterMapPhase();
+  }
+
+  setPirateWeapon(pirate, weaponKey) {
+    if (!pirate) return null;
+    pirate.weaponKey = WEAPON_TYPES[weaponKey] ? weaponKey : null;
+    return pirate.weaponKey;
+  }
+
+  addPirateBuff(pirate, buffKey, count = 1) {
+    if (!pirate || !BUFF_EMOJI[buffKey]) return 0;
+    const amount = Math.max(0, Math.floor(Number(count) || 0));
+    if (amount <= 0) return 0;
+    pirate[buffKey] = Math.max(0, Math.floor(Number(pirate[buffKey]) || 0)) + amount;
+    return amount;
+  }
+
+  leftmostIslandPirateEntry() {
+    const sent = Array.isArray(G.sent) ? G.sent : [];
+    for (let sentSlot = 0; sentSlot < sent.length; sentSlot++) {
+      const handIdx = sent[sentSlot];
+      const pirate = G.hand && G.hand[handIdx];
+      if (!pirate) continue;
+      if (this._sacrificedIds.has(pirate.id)) continue;
+      return { pirate, handIdx, sentSlot };
+    }
+    return null;
+  }
+
+  leftmostIslandPirate() {
+    const entry = this.leftmostIslandPirateEntry();
+    return entry ? entry.pirate : null;
+  }
+
+  islandPirateEffectPoint(sentSlot) {
+    if (sentSlot == null || sentSlot < 0) return null;
+    return this.sentCardIslandEffectPosition(sentSlot);
+  }
+
+  applyPersonalGainsToPirate(pirate, gains) {
+    const personalGains = normalizePersonalGains(gains);
+    if (!pirate || !personalGains.length) return { applied: false, gains: [] };
+
+    const applied = [];
+    personalGains.forEach((gain) => {
+      if (gain.buff) {
+        const added = this.addPirateBuff(pirate, gain.buff, gain.count);
+        if (added > 0) applied.push({ buff: gain.buff, count: added });
+      }
+    });
+
+    return {
+      applied: applied.length > 0,
+      gains: applied,
+      text: personalGainText(applied),
+      pirate,
+    };
+  }
+
+  splitPersonalGains(gains) {
+    const personalGains = normalizePersonalGains(gains);
+    const weaponGains = personalGains.filter((gain) => !!gain.weapon);
+    const buffGains = personalGains.filter((gain) => !!gain.buff);
+    return { personalGains, weaponGains, buffGains };
+  }
+
+  applyShipPersonalGains(gains) {
+    const { personalGains, weaponGains, buffGains } = this.splitPersonalGains(gains);
+    if (!personalGains.length) return { applied: false, gains: [] };
+    const weaponGrant = weaponGains.length === 1
+      ? createWeaponGrant(weaponGains[0].weapon, weaponGains[0].count)
+      : null;
+    if (!buffGains.length) {
+      return {
+        applied: false,
+        gains: [],
+        weaponGrant,
+      };
+    }
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) {
+      return {
+        applied: false,
+        gains: buffGains,
+        lost: true,
+        text: 'No island pirate',
+        color: '#ffa726',
+        weaponGrant,
+      };
+    }
+    const applied = this.applyPersonalGainsToPirate(target.pirate, buffGains);
+    return {
+      ...applied,
+      applied: applied.applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+      color: '#66bb6a',
+      weaponGrant,
+    };
   }
 
   canAssignWeaponToHandIndex(handIdx) {
@@ -276,6 +464,7 @@ class GameScene extends Phaser.Scene {
       maxSend: src.maxSend != null ? src.maxSend : (opts.maxSend != null ? opts.maxSend : null),
       bonusEnthusiasm: src.bonusEnthusiasm || 0,
       sacrifice: !!src.sacrifice,
+      healWounded: Math.max(0, Math.floor(Number(src.healWounded || opts.healWounded) || 0)),
     };
   }
 
@@ -328,16 +517,23 @@ class GameScene extends Phaser.Scene {
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
+      G.healing = null;
       G.enemyShip = {
         strength: node.strength,
         encounterNo: G.boardingCount,
         encounter: node.encounter || null,
       };
     } else {
-      G.phase = 'sending';
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
       G.enemyShip = null;
-      if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+      if (G.island.healWounded) {
+        G.phase = 'healing';
+        G.healing = { max: G.island.healWounded, healedIds: [] };
+      } else {
+        G.phase = 'sending';
+        G.healing = null;
+        if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+      }
     }
 
     this.closePanels();
@@ -350,6 +546,7 @@ class GameScene extends Phaser.Scene {
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
+    G.healing = null;
     this.clearCombatState();
     if (this._animateInitialMapHand) {
       this.queueHandAppear(G.hand, { delay: CARD_MOTION.handAppearDelay });
@@ -586,7 +783,11 @@ class GameScene extends Phaser.Scene {
     const toX = placement.x;
     const toY = placement.y;
 
-    const { texKey: sendTex } = buildCardTexture(this, p.type, L);
+    const { texKey: sendTex } = buildCardTexture(this, p.type, L, {
+      slotState: this.pirateHasWeapon(p) ? 'armed' : 'none',
+      slotWeaponKey: this.pirateWeaponKey(p),
+      wounded: !!p.wounded,
+    });
     const ghost = this.add.image(fromX, fromY, sendTex);
     ghost.setOrigin(0.5, 0.5).setDepth(60);
     const cardStartW = Math.round(CARD.W * L.k);
@@ -1000,6 +1201,8 @@ class GameScene extends Phaser.Scene {
     const s = def.ship;
     const spendItems = [];
     const gainItems = [];
+    const weaponGrant = r.ok ? (r.weaponGrant || null) : null;
+    const personalReward = r.ok ? r.personalReward : null;
     if (r.ok) {
       if (s.costs) {
         for (const c of s.costs) spendItems.push({ emoji: c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res], count: c.n });
@@ -1025,23 +1228,40 @@ class GameScene extends Phaser.Scene {
       overlayColor: r.ok ? shipEffectSuccessColor : shipEffectFailColor,
       spendItems,
       gainItems,
-      weaponGrant: r.ok ? r.weaponGrant : null,
-      weaponTextPos: (r.ok && r.weaponGrant)
-        ? { x, y: y - 116 * L.k, color: '#66bb6a' }
-        : null,
+      weaponGrant,
+      weaponTextPos: weaponGrant ? { x, y: y - 116 * L.k, color: '#66bb6a' } : null,
     });
+    if (personalReward && personalReward.text) {
+      const showPersonalReward = () => {
+        if (!this.sys || !this.sys.isActive()) return;
+        let fxX = x;
+        let fxY = y - 116 * L.k;
+        if (personalReward.sentSlot != null) {
+          const point = this.islandPirateEffectPoint(personalReward.sentSlot);
+          if (point) {
+            fxX = point.x;
+            fxY = point.y;
+          }
+        }
+        this.effectText(
+          fxX,
+          fxY,
+          personalReward.applied ? `+${personalReward.text}` : personalReward.text,
+          personalReward.color || '#66bb6a'
+        );
+        if (personalReward.applied) this.renderIsland();
+      };
+      if (effect.gainStartDelay > 0) this.time.delayedCall(effect.gainStartDelay, showPersonalReward);
+      else showPersonalReward();
+    }
     const shipWait = 1000 + effect.spendDuration;
     this.scheduleEffectFollowup({
       gainStartDelay: effect.gainStartDelay,
       fallbackDelay: shipWait,
       hasPendingWeapons: this._pendingWeaponQueue.length > 0,
-      tryStartAssignment: () => {
-        if (this._pendingWeaponQueue.length === 0) return false;
-        if (!this.maybeStartPendingWeaponAssignment({ onComplete: () => resolveAndContinue(0) })) {
-          resolveAndContinue(0);
-        }
-        return true;
-      },
+      tryStartAssignment: () => this.maybeStartPendingWeaponAssignment({
+        onComplete: () => resolveAndContinue(0),
+      }),
       fallback: () => resolveAndContinue(0),
     });
   }
@@ -1077,10 +1297,12 @@ class GameScene extends Phaser.Scene {
         gainItems.push({ res: s.pRes, n: s.pN });
       }
       if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
+      const personalReward = this.applyShipPersonalGains(s.personalGains);
       return {
         gainItems,
         extraEnthusiasm: s.extraEnthusiasm || 0,
-        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+        weaponGrant: personalReward.weaponGrant || null,
+        personalReward: personalReward.applied || personalReward.lost ? personalReward : null,
       };
     };
     if (s.costs) {
@@ -1339,9 +1561,10 @@ class GameScene extends Phaser.Scene {
     const rows = this.combatEmptySetupRows();
     (G.hand || []).forEach((pirate) => {
       if (!pirate) return;
+      if (this.pirateWounded(pirate)) return;
       const weaponKey = this.pirateWeaponKey(pirate);
       const weapon = weaponKey ? WEAPON_TYPES[weaponKey] : null;
-      const rowIndex = weapon && weapon.range === 'ranged' ? 1 : 0;
+      const rowIndex = weapon && weapon.range === 'ranged' ? 2 : 0;
       rows[rowIndex].push(pirate.id);
     });
     return rows;
@@ -1472,10 +1695,14 @@ class GameScene extends Phaser.Scene {
     const key = side === 'enemy' ? 'enemySetupRows' : 'playerSetupRows';
     const ids = side === 'enemy'
       ? (combat.enemyParty || []).filter(Boolean).map((enemy) => enemy.id)
-      : (G.hand || []).filter(Boolean).map((pirate) => pirate.id);
+      : (G.hand || []).filter((pirate) => pirate && !this.pirateWounded(pirate)).map((pirate) => pirate.id);
     const fallback = side === 'enemy'
       ? this.combatRandomEnemySetupRows(combat.enemyParty || [])
       : this.combatDefaultPlayerSetupRows(combat);
+    if (side === 'player') {
+      combat[key] = this.combatNormalizeSetupRows(fallback, ids);
+      return combat[key];
+    }
     combat[key] = this.combatNormalizeSetupRows(combat[key], ids, fallback);
     if (side === 'enemy') combat[key] = this.combatCompactSetupRows(combat[key]);
     return combat[key];
@@ -1826,10 +2053,35 @@ class GameScene extends Phaser.Scene {
 
   combatFighterDescription(fighter) {
     if (!fighter) return '';
-    if (fighter.side === 'enemy') return this.combatEnemyCharacteristics(fighter);
-    return fighter.weaponKey
-      ? `${this.combatFighterDisplayName(fighter)} attacks with ${WEAPON_TYPES[fighter.weaponKey].emoji} ${WEAPON_TYPES[fighter.weaponKey].name}.`
-      : 'No weapon equipped. Front-row melee attacker.';
+    if (fighter.side === 'enemy') {
+      const enemyParts = [this.combatEnemyCharacteristics(fighter)];
+      const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
+      const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+      const statuses = [];
+      if (poison > 0) statuses.push(`${poison} poison`);
+      if (wounds > 0) statuses.push(`${wounds} wounds`);
+      if (statuses.length) enemyParts.push(`Status: ${statuses.join(', ')}.`);
+      return enemyParts.join(' ');
+    }
+    const parts = [];
+    if (fighter.weaponKey && WEAPON_TYPES[fighter.weaponKey]) {
+      parts.push(`${this.combatFighterDisplayName(fighter)} attacks with ${WEAPON_TYPES[fighter.weaponKey].emoji} ${WEAPON_TYPES[fighter.weaponKey].name}.`);
+    } else {
+      parts.push('No weapon equipped. Front-row melee attacker.');
+    }
+    const buffs = [];
+    const might = Math.max(0, Math.floor(Number(fighter.might) || 0));
+    const tempo = Math.max(0, Math.floor(Number(fighter.tempo) || 0));
+    if (might > 0) buffs.push(`${BUFF_EMOJI.might}${might}`);
+    if (tempo > 0) buffs.push(`${BUFF_EMOJI.tempo}${tempo}`);
+    if (buffs.length) parts.push(`Buffs: ${buffs.join(' ')}.`);
+    const statuses = [];
+    const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
+    const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+    if (poison > 0) statuses.push(`${poison} poison`);
+    if (wounds > 0) statuses.push(`${wounds} wounds`);
+    if (statuses.length) parts.push(`Status: ${statuses.join(', ')}.`);
+    return parts.join(' ');
   }
 
   combatFighterTooltipEntries(fighter) {
@@ -1932,14 +2184,31 @@ class GameScene extends Phaser.Scene {
     const weaponKey = this.combatPirateWeaponKey(pirate, combat);
     const weapon = this.combatWeaponByKey(weaponKey);
     const baseDamage = Number(COMBAT.pirateDamage) || 0;
+    const might = this.pirateMight(pirate);
+    const tempo = this.pirateTempo(pirate);
+    const buffCount = might + tempo;
+    let damage = this.combatWeaponBaseDamage(baseDamage, weapon) + might;
+    if (weapon && weapon.damagePerBuff) damage += buffCount * weapon.damagePerBuff;
+    let attackMultiplier = weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1;
+    if (tempo > 0) attackMultiplier *= Math.pow(0.8, tempo);
+    if (weapon && weapon.attackMsMultiplierPerBuff) {
+      attackMultiplier *= Math.pow(weapon.attackMsMultiplierPerBuff, buffCount);
+    }
+    let targetMode = (weapon && weapon.targetMode) || 'frontBand';
+    if (weapon && weapon.frontRowAllAtBuffCount && buffCount >= weapon.frontRowAllAtBuffCount) {
+      targetMode = 'frontRowAll';
+    }
     return {
       hp: COMBAT.pirateHp + (weapon && weapon.hpBonus ? weapon.hpBonus : 0),
       baseDamage,
-      damage: this.combatWeaponBaseDamage(baseDamage, weapon),
-      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * (weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1))),
+      damage: Math.max(0, Math.floor(damage)),
+      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * attackMultiplier)),
       weaponKey,
       attackRange: (weapon && weapon.range) || 'melee',
-      targetMode: (weapon && weapon.targetMode) || 'frontBand',
+      targetMode,
+      might,
+      tempo,
+      buffCount,
     };
   }
 
@@ -1962,6 +2231,11 @@ class GameScene extends Phaser.Scene {
       weaponKey: stats.weaponKey,
       attackRange: stats.attackRange,
       targetMode: stats.targetMode,
+      might: stats.might,
+      tempo: stats.tempo,
+      buffCount: stats.buffCount,
+      poison: 0,
+      wounds: 0,
     };
   }
 
@@ -1991,6 +2265,8 @@ class GameScene extends Phaser.Scene {
       triggerKey: enemy.triggerKey || null,
       triggerValue: enemy.triggerValue ? { ...enemy.triggerValue } : null,
       summary: enemy.summary || null,
+      poison: 0,
+      wounds: 0,
     };
   }
 
@@ -2001,6 +2277,7 @@ class GameScene extends Phaser.Scene {
       (Array.isArray(rowIds) ? rowIds : []).forEach((pirateId, rowOrder) => {
         const pirate = piratesById.get(pirateId);
         if (!pirate) return;
+        if (this.pirateWounded(pirate)) return;
         fighters.push(this.buildPlayerCombatFighter(pirate, rowIndex, rowOrder, combat));
       });
     });
@@ -2356,6 +2633,43 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  combatApplyPoison(target, stacks = 1, deathPositions = []) {
+    const totalStacks = Math.max(0, Math.floor(Number(stacks) || 0));
+    if (!target || !target.alive || totalStacks <= 0) {
+      return { applied: false, repeats: 0, damage: 0, defeated: false };
+    }
+
+    let repeats = 0;
+    let damage = 0;
+    const wounds = Math.max(0, Math.floor(Number(target.wounds) || 0));
+    const totalApplications = totalStacks * (wounds + 1);
+    for (let i = 0; i < totalApplications; i++) {
+      if (!target.alive) break;
+      const poisonDamage = Math.max(0, Math.floor(Number(target.poison) || 0));
+      if (poisonDamage > 0) {
+        target.hp = Math.max(0, target.hp - poisonDamage);
+        damage += poisonDamage;
+        if (target.hp <= 0) {
+          const defeated = this.defeatCombatFighter(target, deathPositions);
+          return { applied: true, repeats: repeats + 1, damage, defeated };
+        }
+      }
+      target.poison = Math.max(0, Math.floor(Number(target.poison) || 0)) + 1;
+      repeats += 1;
+    }
+
+    return { applied: repeats > 0, repeats, damage, defeated: false };
+  }
+
+  combatApplyWounds(target, stacks = 1) {
+    const totalStacks = Math.max(0, Math.floor(Number(stacks) || 0));
+    if (!target || !target.alive || totalStacks <= 0) {
+      return { applied: false, added: 0 };
+    }
+    target.wounds = Math.max(0, Math.floor(Number(target.wounds) || 0)) + totalStacks;
+    return { applied: true, added: totalStacks };
+  }
+
   healCombatRowBehind(attacker, amount) {
     const healAmount = Math.max(0, Number(amount) || 0);
     if (!attacker || healAmount <= 0) return [];
@@ -2460,7 +2774,10 @@ class GameScene extends Phaser.Scene {
     const deathPoint = this.combatWorldPoint(fighter);
     fighter.alive = false;
     fighter.incomingUntil = 0;
-    if (fighter.side === 'player') this.queueCombatPirateReturn(fighter, deathPoint);
+    if (fighter.side === 'player') {
+      if (!this.isBattleTest()) this.markPirateWounded(fighter.pirateId);
+      this.queueCombatPirateReturn(fighter, deathPoint);
+    }
     if (Array.isArray(deathPositions)) deathPositions.push(deathPoint);
     return true;
   }
@@ -2742,6 +3059,31 @@ class GameScene extends Phaser.Scene {
       }
       this.combatApplyAttackerOnHitEffect(attacker, target, now, addStatusText);
       this.combatApplyTargetReaction(target, targetDamage, plan, now, addStatusText);
+      if (weapon && weapon.woundsOnHit) {
+        const woundResult = this.combatApplyWounds(target, weapon.woundsOnHit);
+        if (woundResult.applied) {
+          addStatusText(
+            target.id,
+            woundResult.added > 1 ? `+${woundResult.added} Wounds` : 'Wounded!',
+            '#ffb74d'
+          );
+        }
+      }
+      if (weapon && weapon.poisonOnHit) {
+        const poisonResult = this.combatApplyPoison(target, weapon.poisonOnHit, deathPositions);
+        if (poisonResult.applied) {
+          damageByTargetId[target.id] = (damageByTargetId[target.id] || 0) + poisonResult.damage;
+          addStatusText(
+            target.id,
+            poisonResult.repeats > 1 ? `Poison x${poisonResult.repeats}!` : 'Poisoned!',
+            '#81c784'
+          );
+        }
+        if (poisonResult.defeated) {
+          defeatedTargets.push(target);
+          return;
+        }
+      }
     });
     const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, now, deathPositions);
 
@@ -3194,6 +3536,16 @@ class GameScene extends Phaser.Scene {
       };
     }
 
+    if (G.phase === 'healing') {
+      const wounded = this.woundedCrew().length;
+      const remaining = Math.max(0, this.healingLimit() - this.healingUsed());
+      return {
+        icon: WOUNDED_EMOJI,
+        line1: 'Heal wounded pirates.',
+        line2: wounded ? `${remaining} heals left` : 'No wounded pirates',
+      };
+    }
+
     if (G.phase === 'boarding' && G.enemyShip) {
       const combat = this.ensureBoardingCombat();
       if (combat && combat.mode === 'intro') {
@@ -3217,10 +3569,12 @@ class GameScene extends Phaser.Scene {
           line2: combat.result === 'win' ? 'Taking the ship' : 'The crew fell',
         };
       }
+      const ready = this.activeCombatHandPirates().length;
+      const sittingOut = (G.hand || []).filter((pirate) => this.pirateWounded(pirate)).length;
       return {
         icon: '🏴‍☠️',
-        line1: 'Arrange your pirates in 3 rows.',
-        line2: 'Drag rows. Hover or hold cards for tooltips',
+        line1: 'Crew auto-formed for boarding.',
+        line2: sittingOut ? `${ready} ready, ${sittingOut} wounded sit out` : `${ready} pirates ready to fight`,
       };
     }
 
@@ -3272,6 +3626,7 @@ class GameScene extends Phaser.Scene {
     if (G.island.maxSend != null) return `Send up to ${G.island.maxSend} pirates`;
     if (G.island.bonusEnthusiasm) return `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
     if (G.island.sacrifice) return 'Pirates sent here are lost forever';
+    if (G.island.healWounded) return `Heal up to ${G.island.healWounded} wounded pirates`;
     return 'Set sail and gather what you can';
   }
 
@@ -3288,6 +3643,9 @@ class GameScene extends Phaser.Scene {
   currentIslandAction() {
     if (G.busy) return null;
     if (this.weaponAssignmentActive()) return null;
+    if (G.phase === 'healing') {
+      return { label: 'Continue', onClick: () => this.continueFromHealing(), variant: 'continue' };
+    }
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
       if (!combat || combat.mode === 'intro' || combat.mode === 'fighting') return null;
@@ -3545,6 +3903,7 @@ class GameScene extends Phaser.Scene {
           scale: visible.container.scaleX || 1,
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: !!pirate.wounded,
         });
         return;
       }
@@ -3559,6 +3918,7 @@ class GameScene extends Phaser.Scene {
           scale: 0.5,
           slotState: combatFighter.weaponKey ? 'armed' : 'none',
           slotWeaponKey: combatFighter.weaponKey || null,
+          wounded: !!pirate.wounded,
         });
         return;
       }
@@ -3572,6 +3932,7 @@ class GameScene extends Phaser.Scene {
         scale: placement.scale != null ? placement.scale : 1,
         slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
         slotWeaponKey: this.pirateWeaponKey(pirate),
+        wounded: !!pirate.wounded,
       });
     });
     return cards;
@@ -3598,6 +3959,7 @@ class GameScene extends Phaser.Scene {
       const built = buildCardTexture(this, card.type, L, {
         slotState: card.slotState || 'none',
         slotWeaponKey: card.slotWeaponKey || null,
+        wounded: !!card.wounded,
       });
       const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
       const ghost = this.add.image(card.x, card.y, built.texKey)
@@ -3683,6 +4045,9 @@ class GameScene extends Phaser.Scene {
           y: from.y - idx * 4 * this.L.k,
           rotation: -0.12 + idx * 0.06,
           scale: 0.34,
+          slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+          slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: !!pirate.wounded,
         }, to, {
           delay: cursor + idx * CARD_MOTION.reshuffleStagger,
           duration: CARD_MOTION.reshuffleDuration,
@@ -4072,6 +4437,11 @@ class GameScene extends Phaser.Scene {
             type: pirate.type,
             weaponKey: preview.weaponKey,
             damage: preview.damage,
+            might: preview.might,
+            tempo: preview.tempo,
+            buffCount: preview.buffCount,
+            poison: 0,
+            wounds: 0,
           };
           const playerTipEntries = this.combatPlayerTooltipEntries(fighterModel);
           const playerTipKey = `combat-player-${pirate.id}`;
@@ -4086,7 +4456,6 @@ class GameScene extends Phaser.Scene {
             alive: true,
             scale: playerVisuals.scale,
             interactive: true,
-            draggable: true,
             onHover: () => {
               this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
                 key: playerTipKey,
@@ -4117,38 +4486,6 @@ class GameScene extends Phaser.Scene {
                 fighterId: pirate.id,
                 targetKind: 'body',
               });
-            },
-            onDragPreview: () => {
-              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
-                key: playerTipKey,
-                kind: 'combat-player',
-                fighterId: pirate.id,
-                targetKind: 'body',
-              });
-            },
-            onDragStart: (_pointer, cardNode) => {
-              this._combatSetupDragState = { pirateId: pirate.id };
-              this.clearCombatSetupInspection(combat, { silent: true });
-              cardNode.setDepth(130);
-              cardNode.setScale(1.05);
-              cardNode.setAlpha(0.96);
-            },
-            onDrag: (pointer, cardNode) => {
-              if (!pointer) return;
-              cardNode.setPosition(pointer.x, pointer.y);
-              cardNode.setDepth(130);
-              this.showCombatTooltip(cardNode, playerTipEntries, {
-                key: playerTipKey,
-                kind: 'combat-player',
-                fighterId: pirate.id,
-                targetKind: 'body',
-              });
-            },
-            onDragEnd: (pointer) => {
-              const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
-              this._combatSetupDragState = null;
-              this.moveCombatSetupPirate(pirate.id, drop.rowIndex, drop.insertIndex, combat);
-              this.renderAll();
             },
           });
         });
@@ -4389,6 +4726,7 @@ class GameScene extends Phaser.Scene {
           ? 'assign'
           : (this.pirateHasWeapon(p) ? 'armed' : 'none'),
         slotWeaponKey: this.pirateWeaponKey(p),
+        wounded: !!p.wounded,
         L,
         container: this.ct.island,
       });
@@ -4422,12 +4760,85 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  renderHealingChoices() {
+    const L = this.L;
+    const candidates = this.woundedCrew();
+    const max = this.healingLimit();
+    const used = this.healingUsed();
+    const remaining = Math.max(0, max - used);
+    const statusText = candidates.length
+      ? (remaining > 0 ? `Choose wounded pirates to heal (${used}/${max})` : `Healing limit reached (${used}/${max})`)
+      : 'No wounded pirates to heal';
+
+    this.addTo('phase', this.add.text(L.cx, L.Y_ISL_LBL + 118 * L.k, statusText, uiHeadingStyle(L, 22, UI_THEME.colors.paper, {
+      align: 'center',
+      wordWrap: { width: L.W - 80 * L.k },
+    })).setOrigin(0.5, 0.5));
+
+    if (!candidates.length) return;
+
+    const perRow = L.IS_MOBILE ? 4 : 8;
+    const baseScale = L.IS_MOBILE ? 0.44 : 0.52;
+    const rows = [];
+    for (let i = 0; i < candidates.length; i += perRow) {
+      rows.push(candidates.slice(i, i + perRow));
+    }
+    const rowGap = CARD.H * L.k * baseScale * 0.86;
+    const firstY = L.Y_ISL_LBL + 206 * L.k;
+
+    rows.forEach((row, rowIndex) => {
+      const rowY = firstY + rowIndex * rowGap;
+      const slots = cardRowLayout(row.length, L, {
+        y: rowY,
+        scale: baseScale,
+        maxStep: 76 * L.k,
+        edgePad: 30 * L.k,
+      });
+      row.forEach((pirate, idx) => {
+        const slot = slots[idx];
+        const tipKey = `heal-${pirate.id}`;
+        const cardView = createPirateCard(this, {
+          type: pirate.type,
+          x: slot.x,
+          y: slot.y,
+          scale: baseScale,
+          depth: 22 + rowIndex,
+          interactive: true,
+          slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+          slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: true,
+          L,
+          container: this.ct.phase,
+        });
+        if (remaining <= 0) {
+          cardView.cardImg.setTint(0x8a8a8a);
+          cardView.cardImg.setAlpha(0.72);
+        }
+        const showTips = () => this._cardTips && this._cardTips.showForCard(cardView.container, pirateCardEffectTips(pirate), { key: tipKey });
+        cardView.cardImg.on('pointerover', showTips);
+        cardView.cardImg.on('pointerout', () => {
+          if (this._cardTips) this._cardTips.hideForKey(tipKey);
+        });
+        cardView.cardImg.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          if (remaining <= 0) return;
+          this.healPirate(pirate.id);
+        });
+      });
+    });
+  }
+
   renderPhase() {
     this.clearCt('phase');
     if (this.weaponAssignmentActive()) {
       return;
     }
     const L = this.L;
+
+    if (G.phase === 'healing') {
+      this.renderHealingChoices();
+      return;
+    }
 
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
@@ -4477,6 +4888,11 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
+    if (G.phase === 'healing') {
+      this.clearCt('hand');
+      this._cardHand.destroy();
+      return;
+    }
     if (isBoarding && combat && combat.mode === 'intro' && combat.introStarted) {
       return;
     }
@@ -4503,7 +4919,7 @@ class GameScene extends Phaser.Scene {
     };
 
     const isSending = G.phase === 'sending' && !isWeaponAssignment;
-    const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
+    const allowInteraction = isWeaponAssignment || isSending;
     const handVisible = !(isBoarding && combat && !this.boardingHandVisible(combat));
 
     if (!handVisible) return;
