@@ -183,6 +183,10 @@ class GameScene extends Phaser.Scene {
     return (G.allCrew || []).filter((pirate) => pirate && this.pirateWounded(pirate));
   }
 
+  readyCrew() {
+    return (G.allCrew || []).filter((pirate) => pirate && !this.pirateWounded(pirate));
+  }
+
   activeCombatHandPirates() {
     return (G.hand || []).filter((pirate) => pirate && !this.pirateWounded(pirate));
   }
@@ -1453,6 +1457,72 @@ class GameScene extends Phaser.Scene {
     return true;
   }
 
+  boardingCanDrawReinforcements() {
+    if (this.isBattleTest()) return false;
+    if (G.phase !== 'boarding') return false;
+    return this.readyCrew().length > 0;
+  }
+
+  discardBoardingHand() {
+    const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map((pirate) => pirate.id));
+    G.discard.push(...(G.hand || []).filter((pirate) => pirate && allCrewIds.has(pirate.id)));
+    G.hand = [];
+  }
+
+  drawReadyBoardingHand(n) {
+    const max = Math.max(0, Math.floor(Number(n) || 0));
+    const cards = [];
+    const selectedIds = new Set();
+
+    const takeFromDeck = () => {
+      for (let idx = G.deck.length - 1; idx >= 0 && cards.length < max; idx--) {
+        const pirate = G.deck[idx];
+        if (!pirate || this.pirateWounded(pirate) || selectedIds.has(pirate.id)) continue;
+        cards.push(pirate);
+        selectedIds.add(pirate.id);
+        G.deck.splice(idx, 1);
+      }
+    };
+
+    takeFromDeck();
+    if (cards.length < max && G.discard.length) {
+      G.deck.push(...Phaser.Utils.Array.Shuffle([...G.discard]));
+      G.discard = [];
+      takeFromDeck();
+    }
+
+    G.hand = cards;
+    return cards;
+  }
+
+  drawBoardingReinforcements(combat = G.combat) {
+    if (!combat || combat.mode !== 'fighting') return false;
+    if (!this.boardingCanDrawReinforcements()) return false;
+
+    this.discardBoardingHand();
+    const cards = this.drawReadyBoardingHand(5);
+    if (!cards.length) return false;
+
+    const rows = this.combatDefaultPlayerSetupRows(combat);
+    combat.playerSetupRows = rows;
+    combat.playerFighters = this.buildPlayerCombatFighters(rows, combat);
+    combat.reinforcementCount = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) + 1;
+
+    const now = this.time.now;
+    (combat.playerFighters || []).forEach((fighter) => {
+      if (!fighter) return;
+      fighter.nextAttackAt = now + Phaser.Math.Between(COMBAT.initialDelayMin, COMBAT.initialDelayMax);
+      fighter.incomingUntil = 0;
+      fighter.attacksMade = 0;
+    });
+    combat.nextAttackStartAt = Math.max(combat.nextAttackStartAt || 0, now + COMBAT.attackStartGapMs);
+
+    this.effectText(this.L.cx, this.combatFormationRowY('player', 0) - 42 * this.L.k, 'Reinforcements!', '#8bd17c', false);
+    this.renderAll();
+    this.scheduleNextCombatAttack();
+    return true;
+  }
+
   startBoardingSetupIntroIfNeeded() {
     const combat = G.phase === 'boarding' ? this.ensureBoardingCombat() : null;
     const handCards = Array.isArray(this._cardHand && this._cardHand.cards) ? this._cardHand.cards.slice() : [];
@@ -1817,6 +1887,34 @@ class GameScene extends Phaser.Scene {
     return merged;
   }
 
+  combatEnemyLateScaling(boardingNo) {
+    const tier = Math.max(0, Math.floor(Number(boardingNo) || 0) - 6);
+    if (tier <= 0) return null;
+    return {
+      tier,
+      label: tier >= 2 ? 'Elite' : 'Veteran',
+      hpBonus: tier * 4,
+      damageBonus: Math.ceil(tier / 2),
+      attackMsMultiplier: Math.max(0.78, 1 - tier * 0.06),
+    };
+  }
+
+  combatScaledEnemyOverrides(archetype, boardingNo) {
+    const scaling = this.combatEnemyLateScaling(boardingNo);
+    if (!archetype || !scaling) return {};
+    const hp = Math.max(1, Math.floor(Number(archetype.hp) || 1) + scaling.hpBonus);
+    const damage = Math.max(1, Math.floor(Number(archetype.damage) || 1) + scaling.damageBonus);
+    const attackMs = Math.max(250, Math.round((Number(archetype.attackMs) || 1000) * scaling.attackMsMultiplier));
+    return {
+      name: `${scaling.label} ${archetype.name}`,
+      hp,
+      maxHp: hp,
+      damage,
+      attackMs,
+      summary: `${archetype.summary || ''} Late-run enemy: +${scaling.hpBonus} HP, +${scaling.damageBonus} damage.`,
+    };
+  }
+
   combatArchetypeByKey(key) {
     return COMBAT.enemyArchetypes.find((a) => a.key === key) || null;
   }
@@ -1900,7 +1998,11 @@ class GameScene extends Phaser.Scene {
 
     archetypes.forEach((archetype, i) => {
       if (!archetype) return;
-      enemies.push(this.buildCombatEnemyMember(archetype, `${archetype.key}_${boardingNo}_${i}`));
+      enemies.push(this.buildCombatEnemyMember(
+        archetype,
+        `${archetype.key}_${boardingNo}_${i}`,
+        this.combatScaledEnemyOverrides(archetype, boardingNo)
+      ));
     });
 
     const mainArch = blueprint ? this.combatArchetypeByKey(blueprint.mainKey) : null;
@@ -2693,10 +2795,21 @@ class GameScene extends Phaser.Scene {
   combatResultFromLiving() {
     const livingPlayers = this.combatLiving('player');
     const livingEnemies = this.combatLiving('enemy');
-    if (!livingPlayers.length || !livingEnemies.length) {
-      return livingPlayers.length > 0 ? 'win' : 'loss';
-    }
+    if (!livingPlayers.length && !this.boardingCanDrawReinforcements()) return 'loss';
+    if (!livingEnemies.length) return 'win';
+    if (!livingPlayers.length) return this.boardingCanDrawReinforcements() ? 'reinforce' : 'loss';
     return null;
+  }
+
+  handleCombatResult(result) {
+    if (!result) return false;
+    if (result === 'reinforce') {
+      if (this.drawBoardingReinforcements()) return true;
+      this.finishBoardingCombat('loss');
+      return true;
+    }
+    this.finishBoardingCombat(result);
+    return true;
   }
 
   showCombatAftermath(blastEvents = [], deathPositions = []) {
@@ -2759,10 +2872,7 @@ class GameScene extends Phaser.Scene {
         this.renderAll();
 
         const result = this.combatResultFromLiving();
-        if (result) {
-          this.finishBoardingCombat(result);
-          return;
-        }
+        if (this.handleCombatResult(result)) return;
         this.scheduleNextCombatAttack();
       });
       target.bleedTimers.push(bleedTimer);
@@ -2944,7 +3054,7 @@ class GameScene extends Phaser.Scene {
     const livingPlayers = this.combatLiving('player');
     const livingEnemies = this.combatLiving('enemy');
     if (!livingPlayers.length || !livingEnemies.length) {
-      this.finishBoardingCombat(livingPlayers.length > 0 ? 'win' : 'loss');
+      this.handleCombatResult(this.combatResultFromLiving());
       return;
     }
 
@@ -3009,7 +3119,7 @@ class GameScene extends Phaser.Scene {
 
     const plan = this.combatTargetPlanFor(attacker);
     if (!plan || !plan.targets || !plan.targets.length) {
-      this.finishBoardingCombat(attacker.side === 'player' ? 'win' : 'loss');
+      this.handleCombatResult(this.combatResultFromLiving() || (attacker.side === 'player' ? 'win' : 'loss'));
       return;
     }
 
@@ -3110,10 +3220,7 @@ class GameScene extends Phaser.Scene {
       });
       this.showCombatAftermath(blastEvents, deathPositions);
       this.renderAll();
-      if (combatResult) {
-        this.finishBoardingCombat(combatResult);
-        return;
-      }
+      if (this.handleCombatResult(combatResult)) return;
       this.scheduleNextCombatAttack();
     });
   }
@@ -3556,17 +3663,18 @@ class GameScene extends Phaser.Scene {
         };
       }
       if (combat && combat.mode === 'fighting') {
+        const wave = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0));
         return {
           icon: '⚔️',
           line1: 'Boarding underway.',
-          line2: `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes`,
+          line2: `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes${wave ? ` · hand ${wave + 1}` : ''}`,
         };
       }
       if (combat && combat.mode === 'resolved') {
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
-          line1: combat.result === 'win' ? 'Deck cleared.' : 'Boarding lost.',
-          line2: combat.result === 'win' ? 'Taking the ship' : 'The crew fell',
+          line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',
+          line2: combat.result === 'win' ? 'Taking the ship' : 'All pirates are wounded',
         };
       }
       const ready = this.activeCombatHandPirates().length;
@@ -4847,7 +4955,7 @@ class GameScene extends Phaser.Scene {
         const resultText = this.add.text(
           L.cx,
           this.islandContinueY() - 44 * L.k,
-          won ? 'Won Combat' : 'Lost Combat',
+          won ? 'Won Combat' : 'Crew Exhausted',
           uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
         ).setOrigin(0.5, 0.5);
         this.addTo('phase', resultText);

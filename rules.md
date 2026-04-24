@@ -97,9 +97,13 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Fight!` starts autoplay combat.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - In regular runs, defeated player pirates become `🩹 Wounded`.
+- If all current player fighters fall while enemies remain, the run does not immediately end.
+- The defeated current hand goes to discard and a new combat hand is drawn from the deck/discard using only pirates that are not `🩹 Wounded`.
+- The replacement combat hand draws up to 5 ready pirates; if fewer than 5 ready pirates remain, it draws all of them.
+- A regular run is lost only when the crew has no ready pirates left, meaning every pirate in `allCrew` is `🩹 Wounded`.
 - After a win, the whole current hand goes to discard, a new hand is drawn, and the player returns to the map.
-- After a loss, the run goes to `Game Over`.
-- Winning the final ship on layer 29 ends the run with the `Victory` screen.
+- After that all-wounded loss, the run goes to `Game Over`.
+- Winning the final ship on layer 39 ends the run with the `Victory` screen.
 
 ## Pirate Injury And Healing
 
@@ -107,6 +111,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Wounded pirates still stay in the deck, hand, discard, and crew.
 - Wounded pirates can still be sent to islands and can still resolve normal ship actions.
 - Wounded pirates do not participate in boarding while wounded.
+- During an ongoing boarding, wounded pirates are skipped when drawing replacement combat hands.
 - A wounded pirate card shows a `🩹` badge.
 - `Infirmary Island` heals up to 5 wounded pirates chosen by the player from the whole crew.
 - Healing removes the `🩹 Wounded` status immediately.
@@ -230,32 +235,34 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
 - `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
 - `Boarding 5` and `Boarding 6`: exactly 5 enemies, all strong. `Flint Duelist` unlocks at `Boarding 5`.
+- `Boarding 7`: exactly 5 enemies, all strong, upgraded to `Veteran`: `+4 HP`, `+1 damage`, and `6%` faster attacks.
+- `Boarding 8`: exactly 5 enemies, all strong, upgraded to `Elite`: `+8 HP`, `+1 damage`, and `12%` faster attacks.
 - Each ship node stores a pre-generated blueprint with one main archetype and a short `encounterDesc` hint shown before the fight.
 - Enemy setup generation prefers melee in front and ranged deeper; the formation never leaves living enemies behind an empty front row.
 
 ## Map Generation And Victory
 
-- A run has `30` layers total and `6` ship nodes.
+- A run has `40` layers total and `8` ship nodes.
 - Early block:
   - `layers 0–3`: one linear path of island nodes
   - `layer 4`: first ship node
   - `layers 5–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, and `Siren` do not appear there.
-- `layer 10` and `layer 20` are mandatory single-node `Infirmary Island` layers.
+- `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
 - From `layer 10` onward, normal non-infirmary island layers contain `2–3` nodes.
 - From `layer 10` onward, `Siren Island` is added to that layer's pool with `50%` chance; the other islands may always appear.
-- After `layer 9`, ship nodes are placed at `layers 14, 19, 24, 29`.
+- After `layer 9`, ship nodes are placed at `layers 14, 19, 24, 29, 34, 39`.
 - `Infirmary Island` does not appear randomly; it appears only on its mandatory layers.
 - On later map layers, each normal node connects to `1–2` nodes in the next layer; the code guarantees every next-layer node is reachable and tries to avoid crossing paths.
-- Ship nodes still receive numeric `strength` values: `6`, `8`, `11`, `14`, `17`, `21`, but current boarding combat does not directly use those values.
-- Normal-run victory happens by winning `Boarding 6` on `layer 29`.
+- Ship nodes still receive numeric `strength` values: `6`, `8`, `11`, `14`, `17`, `21`, `24`, `28`, but current boarding combat does not directly use those values.
+- Normal-run victory happens by winning `Boarding 8` on `layer 39`.
 
 ## Battle Test
 
 - `Battle Test` from the menu does not use the map, shop, deck, or discard pile.
 - It starts with 5 random pirates from the full `TYPES` list.
-- `round` and boarding number are rolled randomly from `1` to `6`.
+- `round` and boarding number are rolled randomly from `1` to `8`.
 - The crew receives `1–5` random weapons via `rollWeaponKeys(..., { ensureDistinct: true })`.
 - Battle Test does not persist `🩹 Wounded` injuries after combat.
 - After combat:

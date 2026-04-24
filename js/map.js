@@ -2,14 +2,14 @@
    PIRATES — Map Generation
    ============================================================ */
 
-const MAP_LAYERS = 30;
+const MAP_LAYERS = 40;
 const EARLY_SEGMENTS = 2;
 const EARLY_PATHS = 3;
 const STEPS_PER_SEGMENT = 4;
 const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
 const FIRST_LINEAR_SEGMENTS = 1;
-const TOTAL_BATTLES = 6;
-const HEAL_LAYER_INDICES = new Set([10, 20]);
+const TOTAL_BATTLES = 8;
+const HEAL_LAYER_INDICES = new Set([10, 20, 30]);
 
 function healingIslandIndex() {
   return ISLANDS.findIndex(island => island && island.healWounded);

@@ -212,7 +212,7 @@ function initBattleTestState(repeatState = null) {
         || repeatState.boardingCount
         || repeatState.round
     ) || 1)
-    : Phaser.Math.Between(1, 6);
+    : Phaser.Math.Between(1, TOTAL_BATTLES);
   if (!useRepeatState) {
     const weaponCount = Phaser.Math.Between(1, crew.length);
     equipPiratesFromWeaponQueue(crew, rollWeaponKeys(weaponCount, { ensureDistinct: true }), { shuffleTargets: true });
