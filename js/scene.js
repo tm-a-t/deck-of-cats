@@ -791,6 +791,8 @@ class GameScene extends Phaser.Scene {
       slotState: this.pirateHasWeapon(p) ? 'armed' : 'none',
       slotWeaponKey: this.pirateWeaponKey(p),
       wounded: !!p.wounded,
+      might: this.pirateMight(p),
+      tempo: this.pirateTempo(p),
     });
     const ghost = this.add.image(fromX, fromY, sendTex);
     ghost.setOrigin(0.5, 0.5).setDepth(60);
@@ -4012,6 +4014,8 @@ class GameScene extends Phaser.Scene {
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
           wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         });
         return;
       }
@@ -4027,6 +4031,8 @@ class GameScene extends Phaser.Scene {
           slotState: combatFighter.weaponKey ? 'armed' : 'none',
           slotWeaponKey: combatFighter.weaponKey || null,
           wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         });
         return;
       }
@@ -4041,6 +4047,8 @@ class GameScene extends Phaser.Scene {
         slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
         slotWeaponKey: this.pirateWeaponKey(pirate),
         wounded: !!pirate.wounded,
+        might: this.pirateMight(pirate),
+        tempo: this.pirateTempo(pirate),
       });
     });
     return cards;
@@ -4068,6 +4076,8 @@ class GameScene extends Phaser.Scene {
         slotState: card.slotState || 'none',
         slotWeaponKey: card.slotWeaponKey || null,
         wounded: !!card.wounded,
+        might: card.might || 0,
+        tempo: card.tempo || 0,
       });
       const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
       const ghost = this.add.image(card.x, card.y, built.texKey)
@@ -4156,6 +4166,8 @@ class GameScene extends Phaser.Scene {
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
           wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         }, to, {
           delay: cursor + idx * CARD_MOTION.reshuffleStagger,
           duration: CARD_MOTION.reshuffleDuration,
@@ -4333,6 +4345,41 @@ class GameScene extends Phaser.Scene {
         fontSize: L.fs(Math.max(10, 14 * scale)),
       })).setOrigin(0, 0);
       ct.add(weaponNode);
+    }
+
+    if (opts.side === 'player') {
+      const buffParts = [];
+      const might = Math.max(0, Math.floor(Number(opts.might) || 0));
+      const tempo = Math.max(0, Math.floor(Number(opts.tempo) || 0));
+      if (might > 0) buffParts.push(`${BUFF_EMOJI.might}${might}`);
+      if (tempo > 0) buffParts.push(`${BUFF_EMOJI.tempo}${tempo}`);
+      if (buffParts.length) {
+        const buffText = buffParts.join(' ');
+        const buffLabel = this.add.text(0, h / 2 - 35 * L.k * scale, buffText, uiBodyStyle(L, UI_THEME.colors.ink, {
+          fontSize: L.fs(Math.max(8, 9 * scale)),
+          fontStyle: 'bold',
+        })).setOrigin(0.5, 0.5);
+        const padX = 4 * L.k * scale;
+        const padY = 2 * L.k * scale;
+        const buffBg = this.add.graphics();
+        buffBg.fillStyle(uiColorInt('#f4df74'), 0.92);
+        buffBg.lineStyle(Math.max(1, Math.round(1 * L.k * scale)), uiColorInt('#9d8424'), 1);
+        buffBg.fillRoundedRect(
+          -buffLabel.width / 2 - padX,
+          buffLabel.y - buffLabel.height / 2 - padY,
+          buffLabel.width + padX * 2,
+          buffLabel.height + padY * 2,
+          Math.max(2, Math.round(4 * L.k * scale))
+        );
+        buffBg.strokeRoundedRect(
+          -buffLabel.width / 2 - padX,
+          buffLabel.y - buffLabel.height / 2 - padY,
+          buffLabel.width + padX * 2,
+          buffLabel.height + padY * 2,
+          Math.max(2, Math.round(4 * L.k * scale))
+        );
+        ct.add([buffBg, buffLabel]);
+      }
     }
 
     const hpLabel = this.add.text(0, h / 2 - 22 * L.k * scale, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
@@ -4561,6 +4608,8 @@ class GameScene extends Phaser.Scene {
             hp: preview.hp,
             maxHp: preview.hp,
             weaponKey: preview.weaponKey,
+            might: preview.might,
+            tempo: preview.tempo,
             alive: true,
             scale: playerVisuals.scale,
             interactive: true,
@@ -4671,6 +4720,8 @@ class GameScene extends Phaser.Scene {
         hp: fighter.hp,
         maxHp: fighter.maxHp,
         weaponKey: fighter.weaponKey,
+        might: fighter.might,
+        tempo: fighter.tempo,
         alive: fighter.alive,
         scale: playerVisuals.scale,
         interactive: true,
@@ -4835,6 +4886,8 @@ class GameScene extends Phaser.Scene {
           : (this.pirateHasWeapon(p) ? 'armed' : 'none'),
         slotWeaponKey: this.pirateWeaponKey(p),
         wounded: !!p.wounded,
+        might: this.pirateMight(p),
+        tempo: this.pirateTempo(p),
         L,
         container: this.ct.island,
       });
@@ -4915,6 +4968,8 @@ class GameScene extends Phaser.Scene {
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
           wounded: true,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
           L,
           container: this.ct.phase,
         });
