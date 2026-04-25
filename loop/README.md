@@ -7,6 +7,7 @@ Minimal no-human agentic loop for improving Deck of Cats.
 1. Copy `loop/config.example.json` to `loop/config.json`.
 2. Set `poki.developers_game_url` to the game page in Poki for Developers.
 3. Make sure the configured persistent browser profile is already logged into Poki.
+4. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
 
 ## Run
 
@@ -17,6 +18,20 @@ python3 -m loop.agent_loop forever --interval-minutes 60
 ```
 
 Runtime state and per-cycle logs are written to ignored files under `loop/state.json` and `loop/runs/`.
+
+## Telegram Monitoring
+
+When both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` are set, the loop sends concise status updates to the configured admin chat through the Telegram Bot API. The monitor is outbound-only: it does not poll Telegram, accept commands, or pause the loop for approvals.
+
+Example:
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456:bot-token"
+export TELEGRAM_ADMIN_CHAT_ID="-1001234567890"
+python3 -m loop.agent_loop forever --interval-minutes 60
+```
+
+Messages are sent for cycle start/finish, role starts/results, selected design input, external Poki submission decisions, designer proposals, developer results, and validation. If Telegram is unavailable or the env vars are missing, the loop continues normally. Notification failures are recorded locally as `telegram_notification_failed` events without logging the bot token.
 
 ## Process
 

@@ -4,9 +4,16 @@ from pathlib import Path
 import tempfile
 
 from loop.agent_loop.io_utils import read_json
+from loop.agent_loop.orchestrator import cycle_finished_message, role_result_message, role_started_message
 from loop.agent_loop.paths import LOOP_DIR, PROMPTS_DIR, ROLES, SCHEMA_BY_ROLE, SCHEMAS_DIR
 from loop.agent_loop.prompts import base_context, prompt_for, validate_payload
 from loop.agent_loop.state import load_config, load_state, save_state
+from loop.agent_loop.telegram_monitor import (
+    TELEGRAM_MESSAGE_LIMIT,
+    TelegramMonitor,
+    TelegramNotificationError,
+    truncate_message,
+)
 from loop.agent_loop.validation import gameplay_docs_check
 
 
@@ -36,6 +43,8 @@ def self_test() -> dict:
         validate_payload(role, payload)
 
     assert_validation_cases()
+    assert_telegram_monitor_cases()
+    assert_telegram_message_copy_cases()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         state_path = Path(tmpdir) / "state.json"
@@ -111,3 +120,92 @@ def assert_validation_cases() -> None:
     missing_changelog = gameplay_docs_check(["rules.md"], gameplay_payload)
     if missing_changelog["ok"]:
         raise RuntimeError("validation should fail without changelog.md")
+
+
+def assert_telegram_monitor_cases() -> None:
+    if TelegramMonitor.from_env({}) is not None:
+        raise RuntimeError("telegram monitor should be disabled when env vars are missing")
+
+    calls = []
+
+    def fake_transport(url: str, payload: dict[str, object], timeout: float) -> dict[str, object]:
+        calls.append({"url": url, "payload": payload, "timeout": timeout})
+        return {"ok": True}
+
+    monitor = TelegramMonitor.from_env(
+        {"TELEGRAM_BOT_TOKEN": "secret-token", "TELEGRAM_ADMIN_CHAT_ID": "-100123"},
+        transport=fake_transport,
+    )
+    if monitor is None:
+        raise RuntimeError("telegram monitor should be enabled when env vars are present")
+
+    monitor.send_message("Loop started")
+    if len(calls) != 1:
+        raise RuntimeError("telegram monitor did not call transport once")
+    payload = calls[0]["payload"]
+    if payload.get("chat_id") != "-100123" or payload.get("text") != "Loop started":
+        raise RuntimeError("telegram monitor sent unexpected chat id or message text")
+
+    long_message = "x" * (TELEGRAM_MESSAGE_LIMIT + 100)
+    truncated = truncate_message(long_message)
+    if len(truncated) > TELEGRAM_MESSAGE_LIMIT or not truncated.endswith("..."):
+        raise RuntimeError("telegram message truncation failed")
+
+    def failing_transport(url: str, payload: dict[str, object], timeout: float) -> dict[str, object]:
+        raise RuntimeError("request failed for secret-token")
+
+    failing_monitor = TelegramMonitor("secret-token", "-100123", transport=failing_transport)
+    try:
+        failing_monitor.send_message("Loop started")
+    except TelegramNotificationError as exc:
+        if "secret-token" in str(exc):
+            raise RuntimeError("telegram error leaked bot token") from exc
+    else:
+        raise RuntimeError("telegram monitor should raise on transport failure")
+
+    if failing_monitor.safe_send(None, "Loop started", reason="self-test", log_failure=False):
+        raise RuntimeError("telegram safe_send should be non-fatal and return false on failure")
+
+
+def assert_telegram_message_copy_cases() -> None:
+    samples = [
+        role_started_message("designer", "self-test"),
+        role_result_message(
+            "designer",
+            {
+                "payload": {
+                    "status": "ok",
+                    "summary": "proposal",
+                    "proposal_title": "Clearer Route Choice",
+                    "hypothesis": "Players will understand the next choice faster.",
+                    "risk_level": "low",
+                }
+            },
+            "self-test",
+        ),
+        role_result_message(
+            "developer",
+            {
+                "payload": {
+                    "status": "ok",
+                    "summary": "done",
+                    "changed_files": ["loop/agent_loop/orchestrator.py"],
+                    "validation_commands": ["python3 -m loop.agent_loop self-test"],
+                }
+            },
+            "self-test",
+        ),
+        cycle_finished_message(
+            {
+                "run_id": "self-test",
+                "status": "passed",
+                "summary": "cycle completed",
+                "validation": {"ok": True, "summary": "all checks passed"},
+            }
+        ),
+    ]
+    for sample in samples:
+        if sample.startswith("Run "):
+            raise RuntimeError(f"telegram message should put the action before the run id: {sample}")
+        if not sample.endswith("(run self-test)"):
+            raise RuntimeError(f"telegram message should end with the run id: {sample}")
