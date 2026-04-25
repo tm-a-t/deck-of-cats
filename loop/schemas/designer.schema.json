@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "hypothesis": { "type": "string" },
+    "proposal_title": { "type": "string" },
+    "rule_change": { "type": "string" },
+    "implementation_brief": { "type": "string" },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risk_level": { "type": "string", "enum": ["low", "medium", "high"] }
+  },
+  "required": [
+    "status",
+    "summary",
+    "hypothesis",
+    "proposal_title",
+    "rule_change",
+    "implementation_brief",
+    "acceptance_criteria",
+    "risk_level"
+  ]
+}

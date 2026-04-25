@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "source": { "type": "string" },
+          "captured_at": { "type": "string" },
+          "kind": { "type": "string", "enum": ["recording", "log", "metric", "comment", "other"] },
+          "summary": { "type": "string" },
+          "evidence": { "type": "string" },
+          "severity": { "type": "string", "enum": ["info", "low", "medium", "high"] }
+        },
+        "required": ["id", "source", "captured_at", "kind", "summary", "evidence", "severity"]
+      }
+    },
+    "details": { "type": "string" }
+  },
+  "required": ["status", "summary", "feedback", "details"]
+}
