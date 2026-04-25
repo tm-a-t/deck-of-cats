@@ -21,6 +21,7 @@ PROMPTS_DIR = LOOP_DIR / "prompts"
 SCHEMAS_DIR = LOOP_DIR / "schemas"
 STATE_PATH = LOOP_DIR / "state.json"
 RUNS_DIR = LOOP_DIR / "runs"
+LIVE_LOG_PATH = LOOP_DIR / "live.log"
 
 ROLES = ("poki_feedback", "tester", "poki_submit", "designer", "developer", "repair")
 SCHEMA_BY_ROLE = {
@@ -110,6 +111,44 @@ def write_json(path: Path, data: dict) -> None:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
     tmp.replace(path)
+
+
+def short_log_value(value: object) -> str:
+    if isinstance(value, str):
+        text = value
+    elif isinstance(value, (int, float, bool)) or value is None:
+        text = str(value)
+    else:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    text = " ".join(text.split())
+    if len(text) > 240:
+        return text[:237] + "..."
+    return text
+
+
+def emit_log(run_dir: Path, event: str, message: str, **fields: object) -> None:
+    now = utc_now().isoformat()
+    payload = {
+        "timestamp_utc": now,
+        "run_id": run_dir.name,
+        "event": event,
+        "message": message,
+        **fields,
+    }
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    with (run_dir / "events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+
+    suffix = ""
+    if fields:
+        parts = [f"{key}={short_log_value(value)}" for key, value in sorted(fields.items())]
+        suffix = " | " + " ".join(parts)
+    line = f"{now} [{run_dir.name}] {event}: {message}{suffix}\n"
+    for path in (run_dir / "loop.log", LIVE_LOG_PATH):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(line)
 
 
 def read_text(path: Path, default: str = "") -> str:
@@ -351,9 +390,27 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
     args.extend(codex_cfg.get("extra_exec_args", []))
     args.append(prompt)
 
+    emit_log(
+        run_dir,
+        "role_started",
+        f"{role} started",
+        role=role,
+        sandbox=sandbox,
+        timeout_seconds=timeout,
+    )
     result = run_process(args, cwd=ROOT, timeout=int(timeout))
     stdout_path.write_text(result["stdout"], encoding="utf-8")
     stderr_path.write_text(result["stderr"], encoding="utf-8")
+    emit_log(
+        run_dir,
+        "role_process_finished",
+        f"{role} process finished",
+        role=role,
+        ok=result["ok"],
+        returncode=result["returncode"],
+        timed_out=result["timed_out"],
+        duration_seconds=result["duration_seconds"],
+    )
 
     step = {
         "role": role,
@@ -370,6 +427,7 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
     }
     if not result["ok"]:
         step["error"] = "codex exec failed"
+        emit_log(run_dir, "role_failed", f"{role} failed", role=role, error=step["error"])
         return step
 
     raw = read_text(last_path, result["stdout"])
@@ -378,9 +436,18 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
         validate_payload(role, payload)
         step["payload"] = payload
         step["ok"] = payload.get("status") not in ("failed",)
+        emit_log(
+            run_dir,
+            "role_payload",
+            f"{role} returned {payload.get('status')}",
+            role=role,
+            status=payload.get("status"),
+            summary=payload.get("summary", ""),
+        )
     except Exception as exc:  # noqa: BLE001 - this is boundary parsing.
         step["ok"] = False
         step["error"] = f"invalid {role} JSON: {exc}"
+        emit_log(run_dir, "role_failed", f"{role} returned invalid JSON", role=role, error=step["error"])
     return step
 
 
@@ -443,6 +510,7 @@ def record_submission(state: dict, run_id: str, revision: str, payload: dict) ->
 
 
 def command_check(name: str, args: list[str], run_dir: Path, timeout: int) -> dict:
+    emit_log(run_dir, "validation_started", f"{name} started", check=name, timeout_seconds=timeout)
     result = run_process(args, cwd=ROOT, timeout=timeout)
     slug = name.replace(" ", "-")
     stdout_path = run_dir / f"check-{slug}.stdout.txt"
@@ -452,6 +520,16 @@ def command_check(name: str, args: list[str], run_dir: Path, timeout: int) -> di
     summary = "ok" if result["ok"] else "failed"
     if result["timed_out"]:
         summary = "timed out"
+    emit_log(
+        run_dir,
+        "validation_finished",
+        f"{name} {summary}",
+        check=name,
+        ok=result["ok"],
+        returncode=result["returncode"],
+        timed_out=result["timed_out"],
+        duration_seconds=result["duration_seconds"],
+    )
     return {
         "name": name,
         "ok": result["ok"],
@@ -498,10 +576,13 @@ def free_port() -> int:
 def static_server_smoke(config: dict, run_dir: Path) -> dict:
     timeout = int(config["validation"]["timeout_seconds"])
     expected_title = config["validation"]["expected_title"]
+    emit_log(run_dir, "validation_started", "static smoke started", check="static smoke")
     try:
         port = free_port()
     except OSError as exc:
-        return static_file_smoke(config, f"localhost bind unavailable: {exc}")
+        result = static_file_smoke(config, f"localhost bind unavailable: {exc}")
+        emit_log(run_dir, "validation_finished", result["summary"], check=result["name"], ok=result["ok"])
+        return result
 
     log_path = run_dir / "check-static-server.log"
     with log_path.open("w", encoding="utf-8") as log:
@@ -514,7 +595,9 @@ def static_server_smoke(config: dict, run_dir: Path) -> dict:
                 text=True,
             )
         except OSError as exc:
-            return static_file_smoke(config, f"static server unavailable: {exc}")
+            result = static_file_smoke(config, f"static server unavailable: {exc}")
+            emit_log(run_dir, "validation_finished", result["summary"], check=result["name"], ok=result["ok"])
+            return result
         try:
             url = f"http://127.0.0.1:{port}/index.html"
             html = ""
@@ -531,13 +614,15 @@ def static_server_smoke(config: dict, run_dir: Path) -> dict:
 
             ok = expected_title in html
             summary = "ok" if ok else f"expected title not found; last_error={last_error}"
-            return {
+            result = {
                 "name": "static server smoke",
                 "ok": ok,
                 "summary": summary,
                 "url": url,
                 "log_path": str(log_path.relative_to(ROOT)),
             }
+            emit_log(run_dir, "validation_finished", summary, check="static server smoke", ok=ok)
+            return result
         finally:
             proc.terminate()
             try:
@@ -561,8 +646,16 @@ def static_file_smoke(config: dict, reason: str) -> dict:
 
 
 def validate_after_developer(config: dict, run_dir: Path, developer_payload: dict) -> dict:
+    emit_log(run_dir, "validation_started", "post-developer validation started", check="post-developer")
     changed_files = collect_changed_files()
     checks = [gameplay_docs_check(changed_files, developer_payload)]
+    emit_log(
+        run_dir,
+        "validation_finished",
+        checks[0]["summary"],
+        check=checks[0]["name"],
+        ok=checks[0]["ok"],
+    )
 
     best_log = run_dir / "sim-best-purchases.log"
     sim_args = [
@@ -582,6 +675,14 @@ def validate_after_developer(config: dict, run_dir: Path, developer_payload: dic
     checks.append(static_server_smoke(config, run_dir))
 
     ok = all(check.get("ok") for check in checks)
+    emit_log(
+        run_dir,
+        "validation_finished",
+        "post-developer validation finished",
+        check="post-developer",
+        ok=ok,
+        summary="all checks passed" if ok else "one or more checks failed",
+    )
     return {
         "ok": ok,
         "summary": "all checks passed" if ok else "one or more checks failed",
@@ -612,6 +713,7 @@ def finish_cycle(state: dict, report: dict, status: str, summary: str, used_feed
         }
     )
     state["cycles"] = state["cycles"][-100:]
+    emit_log(RUNS_DIR / report["run_id"], "cycle_finished", summary, status=status)
     return report
 
 
@@ -624,6 +726,7 @@ def run_once(config: dict) -> dict:
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     state = load_state()
+    emit_log(run_dir, "cycle_started", "cycle started", revision=git_revision())
     report = {
         "run_id": run_id,
         "started_at_utc": utc_now().isoformat(),
@@ -644,8 +747,16 @@ def run_once(config: dict) -> dict:
     feedback_payload = step_payload(feedback_step)
     if feedback_step["ok"] and feedback_payload.get("status") == "ok":
         used_feedback = new_feedback_items(feedback_payload, state)
+    emit_log(
+        run_dir,
+        "feedback_checked",
+        "feedback check finished",
+        status=feedback_payload.get("status", "failed") if feedback_payload else "failed",
+        new_feedback_count=len(used_feedback),
+    )
 
     if used_feedback:
+        emit_log(run_dir, "design_input_selected", "using new Poki feedback", kind="poki_feedback")
         design_input = {
             "kind": "poki_feedback",
             "summary": f"{len(used_feedback)} new Poki feedback item(s)",
@@ -653,6 +764,7 @@ def run_once(config: dict) -> dict:
             "feedback_check": feedback_payload,
         }
     else:
+        emit_log(run_dir, "design_input_needed", "no new feedback; running local AI tester")
         tester_context = base_context(config, state, run_id)
         tester_context["feedback_check"] = feedback_payload or {
             "status": "blocked" if not feedback_step["ok"] else "ok",
@@ -681,6 +793,7 @@ def run_once(config: dict) -> dict:
             revision = git_revision()
             allowed, reason = can_submit_external(state, config, revision)
             if allowed:
+                emit_log(run_dir, "external_submission_started", "submitting build to Poki playtest")
                 submit_context = base_context(config, state, run_id)
                 submit_context["tester_summary"] = tester_payload
                 submit_step = add_step(run_codex("poki_submit", submit_context, config, run_dir))
@@ -691,7 +804,9 @@ def run_once(config: dict) -> dict:
                 record_submission(state, run_id, revision, submission_payload)
             else:
                 submission_payload = {"status": "skipped", "summary": reason}
+                emit_log(run_dir, "external_submission_skipped", reason)
 
+        emit_log(run_dir, "design_input_selected", "using local AI tester summary", kind="local_ai_test")
         design_input = {
             "kind": "local_ai_test",
             "summary": tester_payload.get("design_input_summary", tester_payload.get("summary", "")),
@@ -781,6 +896,7 @@ def run_once_safe(config: dict) -> dict:
             "error_type": type(exc).__name__,
         }
         write_report(run_dir, report)
+        emit_log(run_dir, "cycle_finished", report["summary"], status="failed", error_type=type(exc).__name__)
         state.setdefault("cycles", []).append(
             {
                 "run_id": run_id,
