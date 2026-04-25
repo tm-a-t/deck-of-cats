@@ -11,12 +11,23 @@ Minimal no-human agentic loop for improving Deck of Cats.
 ## Run
 
 ```bash
-python3 loop/run.py self-test
-python3 loop/run.py once
-python3 loop/run.py forever --interval-minutes 60
+python3 -m loop.agent_loop self-test
+python3 -m loop.agent_loop once
+python3 -m loop.agent_loop forever --interval-minutes 60
 ```
 
 Runtime state and per-cycle logs are written to ignored files under `loop/state.json` and `loop/runs/`.
+
+## Code Layout
+
+- `agent_loop/` — Python package for the loop implementation.
+- `agent_loop/__main__.py` — CLI entrypoint for `python3 -m loop.agent_loop ...`.
+- `agent_loop/cli.py` — argument parsing and command dispatch.
+- `agent_loop/orchestrator.py` — high-level loop flow.
+- `agent_loop/codex_runner.py` — `codex exec` invocation and output parsing.
+- `agent_loop/validation.py` — post-developer smoke checks.
+- `agent_loop/prompts.py` — prompt rendering and role payload validation.
+- `prompts/`, `schemas/` — role prompt text and Codex output schemas.
 
 ## Logs
 
