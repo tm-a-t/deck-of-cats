@@ -1,8 +1,7 @@
 {
   "loop": {
     "interval_minutes": 60,
-    "external_submissions_per_day": 2,
-    "repair_attempts": 1
+    "external_submissions_per_day": 2
   },
   "codex": {
     "executable": "codex",
@@ -20,8 +19,7 @@
       "poki_submit": "danger-full-access",
       "designer": "read-only",
       "tester": "danger-full-access",
-      "developer": "workspace-write",
-      "repair": "workspace-write"
+      "developer": "workspace-write"
     }
   },
   "poki": {

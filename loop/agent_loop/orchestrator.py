@@ -8,7 +8,7 @@ from loop.agent_loop.logging_utils import emit_log
 from loop.agent_loop.paths import RUNS_DIR
 from loop.agent_loop.prompts import base_context
 from loop.agent_loop.state import load_state, save_state
-from loop.agent_loop.validation import validate_after_developer
+from loop.agent_loop.validation import summarize_developer_result
 
 
 def write_report(run_dir, report: dict) -> None:
@@ -120,13 +120,17 @@ def run_once(config: dict) -> dict:
         save_state(state)
         return report
 
-    validation = validate_after_developer(config, run_dir, developer_payload)
-    report["validation"] = validation
+    report["validation"] = summarize_developer_result(developer_payload)
+    emit_log(
+        run_dir,
+        "developer_validation_reported",
+        report["validation"]["summary"],
+        ok=report["validation"]["ok"],
+    )
     write_report(run_dir, report)
-    validation = maybe_repair(config, state, run_id, run_dir, design_input, designer_payload, developer_payload, validation, report, add_step)
 
-    status = "passed" if validation["ok"] else "failed"
-    summary = "cycle completed" if validation["ok"] else "developer validation failed"
+    status = "passed" if report["validation"]["ok"] else "failed"
+    summary = "cycle completed" if report["validation"]["ok"] else "developer reported incomplete validation"
     report = finish_cycle(state, report, status, summary, used_feedback)
     write_report(run_dir, report)
     save_state(state)
@@ -209,27 +213,6 @@ def run_designer_lane(config, state, run_id, run_dir, report, design_input, add_
     write_report(run_dir, report)
     save_state(state)
     return {"failed_report": report}
-
-
-def maybe_repair(config, state, run_id, run_dir, design_input, designer_payload, developer_payload, validation, report, add_step):
-    repair_attempts = int(config["loop"].get("repair_attempts", 0))
-    for attempt in range(repair_attempts):
-        if validation["ok"]:
-            break
-        repair_context = base_context(config, state, run_id)
-        repair_context["design_input"] = design_input
-        repair_context["designer_proposal"] = designer_payload
-        repair_context["developer_result"] = developer_payload
-        repair_context["validation_failure"] = validation
-        repair_context["repair_attempt"] = attempt + 1
-        repair_step = add_step(run_codex("repair", repair_context, config, run_dir))
-        repair_payload = step_payload(repair_step)
-        if not repair_step["ok"] or repair_payload.get("status") != "ok":
-            break
-        validation = validate_after_developer(config, run_dir, repair_payload)
-        report["validation"] = validation
-        write_report(run_dir, report)
-    return validation
 
 
 def run_once_safe(config: dict) -> dict:

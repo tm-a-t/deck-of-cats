@@ -18,6 +18,15 @@ python3 -m loop.agent_loop forever --interval-minutes 60
 
 Runtime state and per-cycle logs are written to ignored files under `loop/state.json` and `loop/runs/`.
 
+## Process
+
+1. `poki_feedback` looks for new Poki playtest feedback.
+2. If none is found, `tester` plays/checks the current build.
+3. If the tester recommends external testing, `poki_submit` sends the build to Poki.
+4. `designer` chooses one focused improvement.
+5. `developer` implements, validates, and fixes before returning.
+6. The orchestrator records the Developer result, updates loop state, and repeats in `forever` mode.
+
 ## Code Layout
 
 - `agent_loop/` — Python package for the loop implementation.
@@ -25,7 +34,7 @@ Runtime state and per-cycle logs are written to ignored files under `loop/state.
 - `agent_loop/cli.py` — argument parsing and command dispatch.
 - `agent_loop/orchestrator.py` — high-level loop flow.
 - `agent_loop/codex_runner.py` — `codex exec` invocation and output parsing.
-- `agent_loop/validation.py` — post-developer smoke checks.
+- `agent_loop/validation.py` — lightweight sanity reporting for Developer results.
 - `agent_loop/prompts.py` — prompt rendering and role payload validation.
 - `prompts/`, `schemas/` — role prompt text and Codex output schemas.
 

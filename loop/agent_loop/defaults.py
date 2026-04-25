@@ -5,7 +5,6 @@ DEFAULT_CONFIG = {
     "loop": {
         "interval_minutes": 60,
         "external_submissions_per_day": 2,
-        "repair_attempts": 1,
     },
     "codex": {
         "executable": "codex",
@@ -24,7 +23,6 @@ DEFAULT_CONFIG = {
             "designer": "read-only",
             "tester": "danger-full-access",
             "developer": "workspace-write",
-            "repair": "workspace-write",
         },
         "role_timeouts_seconds": {
             "poki_feedback": 900,
@@ -32,7 +30,6 @@ DEFAULT_CONFIG = {
             "poki_submit": 1800,
             "designer": 1200,
             "developer": 2400,
-            "repair": 1800,
         },
     },
     "poki": {

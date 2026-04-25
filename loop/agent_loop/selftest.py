@@ -87,14 +87,5 @@ def fixture_payloads() -> dict[str, dict]:
             "details": "ok",
             "changed_files": ["rules.md", "changelog.md"],
             "validation_commands": ["node sim/fast-sim.js --runs 1 --json"],
-            "needs_repair": False,
-        },
-        "repair": {
-            "status": "ok",
-            "summary": "done",
-            "details": "ok",
-            "changed_files": ["rules.md", "changelog.md"],
-            "validation_commands": ["node sim/fast-sim.js --runs 1 --json"],
-            "needs_repair": False,
         },
     }

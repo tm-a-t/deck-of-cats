@@ -13,15 +13,13 @@
     "validation_commands": {
       "type": "array",
       "items": { "type": "string" }
-    },
-    "needs_repair": { "type": "boolean" }
+    }
   },
   "required": [
     "status",
     "summary",
     "details",
     "changed_files",
-    "validation_commands",
-    "needs_repair"
+    "validation_commands"
   ]
 }

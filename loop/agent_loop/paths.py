@@ -11,12 +11,11 @@ STATE_PATH = LOOP_DIR / "state.json"
 RUNS_DIR = LOOP_DIR / "runs"
 LIVE_LOG_PATH = LOOP_DIR / "live.log"
 
-ROLES = ("poki_feedback", "tester", "poki_submit", "designer", "developer", "repair")
+ROLES = ("poki_feedback", "tester", "poki_submit", "designer", "developer")
 SCHEMA_BY_ROLE = {
     "poki_feedback": "poki_feedback.schema.json",
     "tester": "tester.schema.json",
     "poki_submit": "poki_submit.schema.json",
     "designer": "designer.schema.json",
     "developer": "developer.schema.json",
-    "repair": "developer.schema.json",
 }

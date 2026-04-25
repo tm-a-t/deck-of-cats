@@ -105,15 +105,6 @@ def validate_payload(role: str, payload: dict) -> None:
             "details",
             "changed_files",
             "validation_commands",
-            "needs_repair",
-        ),
-        "repair": (
-            "status",
-            "summary",
-            "details",
-            "changed_files",
-            "validation_commands",
-            "needs_repair",
         ),
     }
     missing = [key for key in required_by_role[role] if key not in payload]
