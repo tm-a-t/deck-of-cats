@@ -45,11 +45,16 @@ DEFAULT_CONFIG = {
         "sandbox": "workspace-write",
         "timeout_seconds": 1800,
         "extra_exec_args": [],
+        "role_extra_exec_args": {
+            "poki_feedback": ["--enable", "computer_use", "--enable", "browser_use", "--enable", "in_app_browser"],
+            "tester": ["--enable", "computer_use", "--enable", "browser_use", "--enable", "in_app_browser"],
+            "poki_submit": ["--enable", "computer_use", "--enable", "browser_use", "--enable", "in_app_browser"],
+        },
         "role_sandboxes": {
             "poki_feedback": "danger-full-access",
             "poki_submit": "danger-full-access",
             "designer": "read-only",
-            "tester": "workspace-write",
+            "tester": "danger-full-access",
             "developer": "workspace-write",
             "repair": "workspace-write",
         },
@@ -388,6 +393,7 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
         ]
     )
     args.extend(codex_cfg.get("extra_exec_args", []))
+    args.extend(codex_cfg.get("role_extra_exec_args", {}).get(role, []))
     args.append(prompt)
 
     emit_log(

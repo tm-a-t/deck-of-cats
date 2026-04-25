@@ -6,6 +6,7 @@ Goal: upload the configured build and request Poki Playtest recordings automatic
 
 Rules:
 - Do not ask the user for help, credentials, or confirmation.
+- Use Codex browser/computer-use tools if they are available in this session.
 - If a CLI upload command is configured and usable, you may use it for uploading. The public CLI may not request tests, so use the Poki web console for the test request.
 - Use `poki.test_type` from context; default is `playtest-recordings`.
 - If already logged out, rate-limited, missing required account stage, or blocked by Poki UI, return `status: "blocked"` with exact details.

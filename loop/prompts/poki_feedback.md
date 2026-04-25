@@ -6,6 +6,7 @@ Goal: use the Poki browser workflow to find new real-player feedback from Playte
 
 Rules:
 - Do not ask the user for help, credentials, or confirmation.
+- Use Codex browser/computer-use tools if they are available in this session.
 - Use the configured persistent browser profile/session from context when browser tooling supports it.
 - If Poki is logged out, unavailable, or the browser tooling cannot access it, return `status: "blocked"` with exact details.
 - Prefer stable feedback IDs from Poki. If no ID is visible, use a stable label from recording/log date plus title.
