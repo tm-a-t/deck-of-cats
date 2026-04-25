@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "details": { "type": "string" },
+    "gameplay_change": { "type": "boolean" },
+    "changed_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "validation_commands": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": [
+    "status",
+    "summary",
+    "details",
+    "gameplay_change",
+    "changed_files",
+    "validation_commands"
+  ]
+}

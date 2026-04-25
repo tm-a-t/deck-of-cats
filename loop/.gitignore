@@ -1,0 +1,7 @@
+config.json
+state.json
+live.log
+runs/
+browser/
+__pycache__/
+*.local.json
