@@ -6,6 +6,7 @@
     "status": { "type": "string", "enum": ["ok", "blocked", "failed"] },
     "summary": { "type": "string" },
     "details": { "type": "string" },
+    "gameplay_change": { "type": "boolean" },
     "changed_files": {
       "type": "array",
       "items": { "type": "string" }
@@ -19,6 +20,7 @@
     "status",
     "summary",
     "details",
+    "gameplay_change",
     "changed_files",
     "validation_commands"
   ]

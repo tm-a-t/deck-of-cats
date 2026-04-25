@@ -103,6 +103,7 @@ def validate_payload(role: str, payload: dict) -> None:
             "status",
             "summary",
             "details",
+            "gameplay_change",
             "changed_files",
             "validation_commands",
         ),

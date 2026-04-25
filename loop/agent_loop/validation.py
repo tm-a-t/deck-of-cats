@@ -6,20 +6,21 @@ from loop.agent_loop.git_utils import collect_changed_files
 def gameplay_docs_check(changed_files: list[str], developer_payload: dict) -> dict:
     changed = set(changed_files)
     declared = {str(path).strip() for path in developer_payload.get("changed_files", []) if str(path).strip()}
-    gameplay_changed = any(path.startswith("js/") or path in {"index.html", "rules.md"} for path in changed)
+    gameplay_changed = bool(developer_payload.get("gameplay_change"))
     errors = []
     if declared:
         undeclared_missing = sorted(declared - changed)
         if undeclared_missing:
             errors.append("declared changed files not found in git status: " + ", ".join(undeclared_missing))
     if gameplay_changed and "rules.md" not in changed:
-        errors.append("gameplay files changed without rules.md")
+        errors.append("gameplay_change true without rules.md")
     if "changelog.md" not in changed:
         errors.append("developer step did not change changelog.md")
     return {
         "name": "docs and changed-files guard",
         "ok": not errors,
         "summary": "ok" if not errors else "; ".join(errors),
+        "gameplay_change": gameplay_changed,
         "changed_files": changed_files,
         "declared_changed_files": sorted(declared),
     }

@@ -7,6 +7,7 @@ from loop.agent_loop.io_utils import read_json
 from loop.agent_loop.paths import LOOP_DIR, PROMPTS_DIR, ROLES, SCHEMA_BY_ROLE, SCHEMAS_DIR
 from loop.agent_loop.prompts import base_context, prompt_for, validate_payload
 from loop.agent_loop.state import load_config, load_state, save_state
+from loop.agent_loop.validation import gameplay_docs_check
 
 
 def self_test() -> dict:
@@ -33,6 +34,8 @@ def self_test() -> dict:
 
     for role, payload in fixture_payloads().items():
         validate_payload(role, payload)
+
+    assert_validation_cases()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         state_path = Path(tmpdir) / "state.json"
@@ -85,7 +88,26 @@ def fixture_payloads() -> dict[str, dict]:
             "status": "ok",
             "summary": "done",
             "details": "ok",
+            "gameplay_change": True,
             "changed_files": ["rules.md", "changelog.md"],
             "validation_commands": ["node sim/fast-sim.js --runs 1 --json"],
         },
     }
+
+
+def assert_validation_cases() -> None:
+    gameplay_payload = {"gameplay_change": True, "changed_files": ["rules.md", "changelog.md"]}
+    if not gameplay_docs_check(["rules.md", "changelog.md"], gameplay_payload)["ok"]:
+        raise RuntimeError("gameplay validation should pass when rules.md and changelog.md changed")
+
+    non_gameplay_payload = {"gameplay_change": False, "changed_files": ["js/scene.js", "changelog.md"]}
+    if not gameplay_docs_check(["js/scene.js", "changelog.md"], non_gameplay_payload)["ok"]:
+        raise RuntimeError("non-gameplay validation should not require rules.md")
+
+    missing_rules = gameplay_docs_check(["js/scene.js", "changelog.md"], gameplay_payload)
+    if missing_rules["ok"]:
+        raise RuntimeError("gameplay validation should fail without rules.md")
+
+    missing_changelog = gameplay_docs_check(["rules.md"], gameplay_payload)
+    if missing_changelog["ok"]:
+        raise RuntimeError("validation should fail without changelog.md")
