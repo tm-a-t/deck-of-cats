@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import tempfile
 
 from loop.agent_loop.io_utils import read_json
@@ -21,12 +22,17 @@ from loop.agent_loop.telegram_monitor import (
     truncate_message,
 )
 from loop.agent_loop.validation import gameplay_docs_check
+from loop.agent_loop.workspace import commit_iteration_changes, configured_workspace_root, ensure_workspace_root
 
 
 def self_test() -> dict:
     config = load_config(LOOP_DIR / "config.example.json")
     if not poki_steps_enabled(config):
         raise RuntimeError("Poki steps should be enabled by default")
+    if config["loop"]["worktree"]["branch"] != "loop/auto":
+        raise RuntimeError("default loop worktree branch changed unexpectedly")
+    if config["loop"]["commit"]["policy"] != "any_changes":
+        raise RuntimeError("default loop commit policy should commit any changed cycle")
     disabled_config = {**config, "poki": {**config.get("poki", {}), "enabled": False}}
     if poki_steps_enabled(disabled_config):
         raise RuntimeError("Poki steps should be disabled when poki.enabled is false")
@@ -56,6 +62,7 @@ def self_test() -> dict:
         validate_payload(role, payload)
 
     assert_validation_cases()
+    assert_workspace_cases()
     assert_telegram_monitor_cases()
     assert_telegram_message_copy_cases()
 
@@ -133,6 +140,81 @@ def assert_validation_cases() -> None:
     missing_changelog = gameplay_docs_check(["rules.md"], gameplay_payload)
     if missing_changelog["ok"]:
         raise RuntimeError("validation should fail without changelog.md")
+
+
+def run_git(cwd: Path, args: list[str]) -> str:
+    result = subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr or result.stdout}")
+    return result.stdout
+
+
+def temp_loop_config(worktree_path: str, policy: str = "any_changes") -> dict:
+    return {
+        "loop": {
+            "worktree": {
+                "enabled": True,
+                "path": worktree_path,
+                "branch": "loop/auto",
+            },
+            "commit": {
+                "enabled": True,
+                "policy": policy,
+            },
+        }
+    }
+
+
+def assert_workspace_cases() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        repo = tmp / "repo"
+        repo.mkdir()
+        run_git(repo, ["init"])
+        run_git(repo, ["config", "user.name", "Loop Self Test"])
+        run_git(repo, ["config", "user.email", "loop-self-test@example.invalid"])
+        run_git(repo, ["config", "commit.gpgsign", "false"])
+        (repo / "README.md").write_text("base\n", encoding="utf-8")
+        run_git(repo, ["add", "README.md"])
+        run_git(repo, ["commit", "-m", "initial"])
+
+        config = temp_loop_config("../loop-worktree")
+        expected_workspace = (repo / "../loop-worktree").resolve()
+        if configured_workspace_root(config, repo) != expected_workspace:
+            raise RuntimeError("configured workspace path did not resolve relative to controller root")
+
+        workspace = ensure_workspace_root(config, repo)
+        if workspace != expected_workspace or not workspace.exists():
+            raise RuntimeError("loop worktree was not created at the configured path")
+        if run_git(workspace, ["branch", "--show-current"]).strip() != "loop/auto":
+            raise RuntimeError("loop worktree was not created on the configured branch")
+        if ensure_workspace_root(config, repo) != workspace:
+            raise RuntimeError("existing loop worktree was not reused")
+
+        (workspace / "feature.txt").write_text("changed by loop\n", encoding="utf-8")
+        commit = commit_iteration_changes(config, workspace, "self-test-run", "failed", "failed cycle summary")
+        if commit["status"] != "committed" or not commit["sha"]:
+            raise RuntimeError(f"failed dirty cycle should commit changes: {commit}")
+        if run_git(workspace, ["log", "-1", "--pretty=%s"]).strip() != "loop: changes from loop iteration self-test-run":
+            raise RuntimeError("loop commit subject did not identify the loop iteration")
+        commit_body = run_git(workspace, ["log", "-1", "--pretty=%B"])
+        if "This commit was created automatically by the loop." not in commit_body:
+            raise RuntimeError("loop commit body did not identify the automatic loop commit")
+
+        clean = commit_iteration_changes(config, workspace, "self-test-clean", "passed", "clean cycle")
+        if clean["status"] != "no_changes" or not clean["ok"]:
+            raise RuntimeError(f"clean loop cycle should not create an empty commit: {clean}")
+
+        (workspace / "failed-only.txt").write_text("left dirty\n", encoding="utf-8")
+        skipped = commit_iteration_changes(
+            temp_loop_config("../loop-worktree", policy="passed_changes"),
+            workspace,
+            "self-test-skipped",
+            "failed",
+            "failed cycle summary",
+        )
+        if skipped["status"] != "skipped" or not skipped["ok"]:
+            raise RuntimeError(f"passed_changes policy should skip failed cycles: {skipped}")
 
 
 def assert_telegram_monitor_cases() -> None:

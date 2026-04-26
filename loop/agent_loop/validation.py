@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from loop.agent_loop.git_utils import collect_changed_files
+from loop.agent_loop.paths import ROOT
 
 
 def gameplay_docs_check(changed_files: list[str], developer_payload: dict) -> dict:
@@ -26,8 +29,8 @@ def gameplay_docs_check(changed_files: list[str], developer_payload: dict) -> di
     }
 
 
-def summarize_developer_result(developer_payload: dict) -> dict:
-    changed_files = collect_changed_files()
+def summarize_developer_result(developer_payload: dict, workspace_root: Path = ROOT) -> dict:
+    changed_files = collect_changed_files(workspace_root)
     docs_guard = gameplay_docs_check(changed_files, developer_payload)
     commands = developer_payload.get("validation_commands", [])
     ok = docs_guard["ok"] and bool(commands)

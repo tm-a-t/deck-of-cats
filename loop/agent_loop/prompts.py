@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from loop.agent_loop.git_utils import collect_changed_files, git_revision, git_status_short
 from loop.agent_loop.io_utils import read_text, utc_now
 from loop.agent_loop.paths import PROMPTS_DIR, ROOT
 
 
-def base_context(config: dict, state: dict, run_id: str) -> dict:
+def base_context(config: dict, state: dict, run_id: str, workspace_root: Path = ROOT) -> dict:
     return {
         "run_id": run_id,
         "timestamp_utc": utc_now().isoformat(),
         "repo": {
-            "root": str(ROOT),
-            "revision": git_revision(),
-            "status_short": git_status_short(),
-            "changed_files": collect_changed_files(),
-            "has_changelog": (ROOT / "changelog.md").exists(),
+            "root": str(workspace_root),
+            "controller_root": str(ROOT),
+            "revision": git_revision(workspace_root),
+            "status_short": git_status_short(workspace_root),
+            "changed_files": collect_changed_files(workspace_root),
+            "has_changelog": (workspace_root / "changelog.md").exists(),
         },
         "loop_state": {
             "seen_feedback_ids": state.get("seen_feedback_ids", []),
