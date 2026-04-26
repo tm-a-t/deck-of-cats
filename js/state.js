@@ -34,14 +34,114 @@ function getStreak() {
   return data.streak;
 }
 
-function randomShopType(round, excludeTypes = []) {
-  const maxCost = Math.max(3, round + 1);
-  const eligiblePool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
+function shopMaxCostForRound(round) {
+  return Math.max(3, Math.floor(Number(round) || 0) + 1);
+}
+
+function shopEligiblePool(round) {
+  const maxCost = shopMaxCostForRound(round);
+  return SHOP_POOL.filter(t => TYPES[t] && TYPES[t].cost <= maxCost);
+}
+
+function shopGenerationState(opts = {}) {
+  if (opts && opts.state) return opts.state;
+  return (typeof G !== 'undefined') ? G : null;
+}
+
+function nextScoutedShipNodeForMap(map, opts = {}) {
+  if (!map || !Array.isArray(map.layers)) return null;
+  const currentLayer = Number.isFinite(opts.currentLayer)
+    ? opts.currentLayer
+    : (Number.isFinite(map.currentLayer) ? map.currentLayer : -1);
+
+  for (let li = Math.max(0, currentLayer + 1); li < map.layers.length; li++) {
+    const layer = map.layers[li];
+    if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+    return { node: layer[0], layerIdx: li };
+  }
+  return null;
+}
+
+function scoutedCounterTypesForMap(map, opts = {}) {
+  const info = nextScoutedShipNodeForMap(map, opts);
+  const mainKey = info && info.node && info.node.encounter && info.node.encounter.mainKey;
+  const counters = (SCOUTED_SHIP_COUNTERS && SCOUTED_SHIP_COUNTERS[mainKey]) || [];
+  return counters.filter(t => SHOP_POOL.includes(t) && TYPES[t]);
+}
+
+function isScoutedCounterShopType(type, map, opts = {}) {
+  if (!type) return false;
+  return scoutedCounterTypesForMap(map, opts).includes(type);
+}
+
+function scoutedCounterShopEnabled(opts = {}) {
+  if (opts.disableScoutedCounter) return false;
+  const state = shopGenerationState(opts);
+  const mode = opts.mode || (state && state.mode);
+  return mode !== 'battleTest';
+}
+
+function shopMapForGeneration(opts = {}) {
+  if (opts.map) return opts.map;
+  const state = shopGenerationState(opts);
+  return state && state.map;
+}
+
+function maybeScoutedCounterShopType(round, pickedType, visibleTypes = [], opts = {}) {
+  if (!scoutedCounterShopEnabled(opts)) return pickedType;
+
+  const map = shopMapForGeneration(opts);
+  const counters = scoutedCounterTypesForMap(map, opts);
+  if (!counters.length) return pickedType;
+
+  const visible = Array.isArray(visibleTypes) ? visibleTypes.filter(Boolean) : [];
+  const fullVisible = pickedType ? [...visible, pickedType] : [...visible];
+  if (fullVisible.some(t => counters.includes(t))) return pickedType;
+
+  const maxCost = shopMaxCostForRound(round);
+  const visibleSet = new Set(visible);
+  const eligibleCounters = counters.filter(t =>
+    TYPES[t]
+    && TYPES[t].cost <= maxCost
+    && !visibleSet.has(t)
+  );
+  if (!eligibleCounters.length) return pickedType;
+  return Phaser.Utils.Array.GetRandom(eligibleCounters);
+}
+
+function applyScoutedCounterToShop(shop, round, opts = {}) {
+  const out = Array.isArray(shop) ? [...shop] : [];
+  if (!out.length) return out;
+  const rawIndex = Number.isFinite(opts.newSlotIndex) ? Math.floor(opts.newSlotIndex) : out.length - 1;
+  const newSlotIndex = Phaser.Math.Clamp(rawIndex, 0, out.length - 1);
+  const visibleBefore = out.filter((_, index) => index !== newSlotIndex);
+  out[newSlotIndex] = maybeScoutedCounterShopType(round, out[newSlotIndex], visibleBefore, opts);
+  return out;
+}
+
+function starterShopCounterSlotIndex(shop, round, opts = {}) {
+  const visible = Array.isArray(shop) ? shop.filter(Boolean) : [];
+  if (!visible.length) return 0;
+  const counters = new Set(scoutedCounterTypesForMap(shopMapForGeneration(opts), opts)
+    .filter(t => TYPES[t] && TYPES[t].cost <= shopMaxCostForRound(round)));
+  if (!counters.size || visible.some(t => counters.has(t))) return visible.length - 1;
+
+  for (const lane of STARTER_SHOP_LANES) {
+    if (!lane.some(t => counters.has(t))) continue;
+    const idx = visible.findIndex(t => lane.includes(t) && !counters.has(t));
+    if (idx >= 0) return idx;
+  }
+  return visible.length - 1;
+}
+
+function randomShopType(round, excludeTypes = [], opts = {}) {
+  const eligiblePool = shopEligiblePool(round);
   const basePool = eligiblePool.length ? eligiblePool : SHOP_POOL;
   const exclude = new Set(Array.isArray(excludeTypes) ? excludeTypes : []);
   const distinctPool = basePool.filter(t => !exclude.has(t));
   const pool = distinctPool.length ? distinctPool : basePool;
-  return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
+  const picked = Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
+  return maybeScoutedCounterShopType(round, picked, excludeTypes, opts);
 }
 
 function starterShopTypeFromLane(lane) {
@@ -54,10 +154,16 @@ function starterShop() {
   return Phaser.Utils.Array.Shuffle(picks);
 }
 
-function initialShop(n, round) {
-  if (round === 0 && n === STARTER_SHOP_LANES.length) return starterShop();
+function initialShop(n, round, opts = {}) {
+  if (round === 0 && n === STARTER_SHOP_LANES.length) {
+    const shop = starterShop();
+    return applyScoutedCounterToShop(shop, round, {
+      ...opts,
+      newSlotIndex: starterShopCounterSlotIndex(shop, round, opts),
+    });
+  }
   const arr = [];
-  for (let i = 0; i < n; i++) arr.push(randomShopType(round, arr));
+  for (let i = 0; i < n; i++) arr.push(randomShopType(round, arr, opts));
   return arr;
 }
 
@@ -187,6 +293,7 @@ function initState() {
   for (let i = 0; i < 4; i++) crew.push(mkP('lumberjack'));
   for (let i = 0; i < 4; i++) crew.push(mkP('miner'));
   for (let i = 0; i < 2; i++) crew.push(mkP('armsman'));
+  const map = generateMap();
 
   G = {
     mode: 'run',
@@ -206,12 +313,12 @@ function initState() {
     boardingAlert: 0,
     boardingCount: 0,
     gameOver: false,
-    shop: initialShop(4, 0),
+    shop: initialShop(4, 0, { map, mode: 'run' }),
     shopCreditUsed: false,
     fullCrewDiscount: 0,
     shopAnimating: false,
     busy: false,
-    map: generateMap(),
+    map,
   };
 
   G.hand = drawCards(5);

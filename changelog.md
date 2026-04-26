@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-211930 — rev 34e9c64
+
+- Gameplay: true - Added the Scouted Counter Shop Slot: regular-run shops now force an eligible visible counter for the next scouted ship's main enemy when the cost-gated pool can support one, and shop/sending recommendations label same-tier counter buys. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-shop`, `node sim/fast-sim.js --check-alert-tiers`, `node sim/fast-sim.js --check-opening-commission`, `node sim/fast-sim.js --check-port-drill`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-211930.log`.
+
 ## 2026-04-26 — run 20260426-210722 — rev 196e54e
 
 - Gameplay: true - Added scouted next-ship boarding intel: the top HUD, Shop panel, and nearest unreached ship node now show the next ship's pre-generated base enemy roster while keeping Boarding Alert guards/plunder as a separate suffix; validated with JS syntax checks, a targeted no-mutation/scouted-roster check, `node sim/fast-sim.js --check-alert-tiers`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-210722.log`.

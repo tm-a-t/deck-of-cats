@@ -17,7 +17,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Starting deck: 10 pirates.
 - Starting resources, `☠️`, `Boarding Alert`, and `Full Crew Discount`: `0`.
 - Starting hand: up to 5 pirates.
-- Starting shop: 4 unique pirates from starter shop lanes, shuffled: exactly 1 of `Poisoner`/`Drummer`, exactly 1 of `Sawbones`/`Trainer`, always `Needler`, and exactly 1 of `Herald`/`Survivalist`.
+- Starting shop: 4 unique pirates from starter shop lanes, shuffled: by default 1 of `Poisoner`/`Drummer`, 1 of `Sawbones`/`Trainer`, always `Needler`, and 1 of `Herald`/`Survivalist`. The regular-run scouted counter shop rule can replace one newly generated starter-shop slot if the first scouted ship would otherwise have no visible counter.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
 
 | Pirate | Count | Island | Ship |
@@ -86,6 +86,15 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `randomShopType(round, excludeTypes = [])` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`, first avoiding any excluded visible shop types when the eligible pool has an unused type.
 - The initial display is created as `initialShop(4, 0)`, which uses the curated starter shop lanes instead of full random selection.
 - Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
+- In regular runs, while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
+- The scouted counter rule checks the 4 visible slots after the new slot is generated. If no visible pirate counters the main scouted enemy and the current cost-gated shop pool contains an eligible non-duplicate counter, only the newly generated slot is replaced by one counter.
+- The scouted counter rule does not apply in `Battle Test`, never sells starter pirates, and does nothing when no eligible non-duplicate counter exists.
+- Scouted counter map:
+  - `Shellback` → `Poisoner`, `Needler`, `Plague Captain`
+  - `Powder Bomber` → `Sawbones`, `Scarwright`
+  - `Deck Sniper` → `Needler`, `Bandmaster`
+  - `Netter` → `Drummer`, `Trainer`, `Flagbearer`
+  - `Flint Duelist` → `Poisoner`, `Needler`, `Sawbones`, `Scarwright`, `Plague Captain`
 - Immediate refills after purchases use the current `G.round` and exclude the remaining visible shop types.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates go straight to discard, not to hand.

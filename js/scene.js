@@ -781,6 +781,16 @@ class GameScene extends Phaser.Scene {
     return this.pendingFullCrewDiscount();
   }
 
+  scoutedCounterTypes() {
+    if (this.isBattleTest() || typeof scoutedCounterTypesForMap !== 'function') return [];
+    return scoutedCounterTypesForMap(G.map, { mode: G.mode });
+  }
+
+  isScoutedCounterShopType(type) {
+    if (!type) return false;
+    return this.scoutedCounterTypes().includes(type);
+  }
+
   updateFullCrewDiscountForCompletedIsland() {
     G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
     return G.fullCrewDiscount;
@@ -861,8 +871,9 @@ class GameScene extends Phaser.Scene {
   shopPurchaseQuoteForState(type, state = null) {
     const def = TYPES[type];
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+    const counter = !!(def && this.isScoutedCounterShopType(type));
     if (!def) {
-      return { canBuy: false, credit: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
+      return { canBuy: false, credit: false, counter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
     const isProjection = !!state;
     const source = state || {};
@@ -874,7 +885,7 @@ class GameScene extends Phaser.Scene {
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     if (enthusiasm >= effectiveCost) {
-      return { canBuy: true, credit: false, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
+      return { canBuy: true, credit: false, counter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
     }
     const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
@@ -886,6 +897,7 @@ class GameScene extends Phaser.Scene {
     return {
       canBuy: canCredit,
       credit: canCredit,
+      counter,
       cost,
       effectiveCost,
       discount,
@@ -910,6 +922,12 @@ class GameScene extends Phaser.Scene {
       .filter(item => item.quote && item.quote.canBuy);
     if (!candidates.length) return null;
     candidates.sort((a, b) => {
+      const tierA = a.quote.credit ? 1 : 0;
+      const tierB = b.quote.credit ? 1 : 0;
+      if (tierA !== tierB) return tierA - tierB;
+      const counterA = a.quote.counter ? 1 : 0;
+      const counterB = b.quote.counter ? 1 : 0;
+      if (counterA !== counterB) return counterB - counterA;
       const costA = Math.max(0, Number(a.quote.cost) || 0);
       const costB = Math.max(0, Number(b.quote.cost) || 0);
       if (costA !== costB) return costB - costA;
@@ -938,7 +956,8 @@ class GameScene extends Phaser.Scene {
     const credit = quote.credit && quote.alert > 0
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
-    return `Shop: ${def.name} ${price}${credit}`;
+    const label = quote.counter ? 'Counter ' : '';
+    return `Shop: ${label}${def.name} ${price}${credit}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -1709,7 +1728,7 @@ class GameScene extends Phaser.Scene {
 
     G.shop.splice(si, 1);
     if (G.shop.length) {
-      G.shop.push(randomShopType(G.round, G.shop));
+      G.shop.push(randomShopType(G.round, G.shop, { map: G.map, mode: G.mode }));
     }
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
@@ -1732,7 +1751,7 @@ class GameScene extends Phaser.Scene {
   advanceFromShopping() {
     if (G.shop.length) {
       G.shop.shift();
-      G.shop.push(randomShopType(G.round + 1, G.shop));
+      G.shop.push(randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
     }
     this.prepareNextRound();
   }
@@ -4125,6 +4144,7 @@ class GameScene extends Phaser.Scene {
         layerIdx: li,
         turnsAway: li - currentLayer,
         boardingNo,
+        mainKey: main ? main.key : (node.encounter && node.encounter.mainKey) || null,
         encounterDesc,
         rosterLabels,
         mainLabel: this.enemyRosterMemberLabel(main, boardingNo),

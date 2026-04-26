@@ -38,6 +38,7 @@ function parseArgs(argv) {
     checkOpeningCommission: false,
     checkPortDrill: false,
     checkAlertTiers: false,
+    checkScoutedCounterShop: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -117,6 +118,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-alert-tiers') {
       out.checkAlertTiers = true;
+      continue;
+    }
+    if (a === '--check-scouted-counter-shop') {
+      out.checkScoutedCounterShop = true;
     }
   }
 
@@ -211,6 +216,10 @@ function buildRuntime() {
     globalThis.__simApi = {
       initState,
       randomShopType,
+      initialShop,
+      applyScoutedCounterToShop,
+      scoutedCounterTypesForMap,
+      isScoutedCounterShopType,
       drawCards,
       getAvailableNodes,
       mapNodeById,
@@ -220,6 +229,7 @@ function buildRuntime() {
       ISLANDS,
       QUIET_DOCKS,
       SHOP_CREDIT,
+      SCOUTED_SHIP_COUNTERS,
       GameScene,
       getG: () => G,
       setG: (next) => { G = next; },
@@ -495,14 +505,19 @@ function activeFullCrewDiscount(G) {
 function shopPurchaseQuote(api, G, type) {
   const def = api.TYPES[type];
   const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+  const counter = !!(
+    def
+    && typeof api.isScoutedCounterShopType === 'function'
+    && api.isScoutedCounterShopType(type, G && G.map, { mode: G && G.mode })
+  );
   const discount = Math.min(cost, activeFullCrewDiscount(G));
   const effectiveCost = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
   if (!G || !def) {
-    return { canBuy: false, credit: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0 };
+    return { canBuy: false, credit: false, counter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0 };
   }
   if (enthusiasm >= effectiveCost) {
-    return { canBuy: true, credit: false, cost, effectiveCost, discount, missing: 0, alert: 0 };
+    return { canBuy: true, credit: false, counter, cost, effectiveCost, discount, missing: 0, alert: 0 };
   }
   const missing = effectiveCost - enthusiasm;
   const canCredit = G.mode !== 'battleTest'
@@ -513,6 +528,7 @@ function shopPurchaseQuote(api, G, type) {
   return {
     canBuy: canCredit,
     credit: canCredit,
+    counter,
     cost,
     effectiveCost,
     discount,
@@ -545,6 +561,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     tokens.push(1800 + bucket(cost, [0, 1, 2, 3, 4, 5, 7, 10, 13, 17, 24]));
     tokens.push(1900 + buyState);
     tokens.push(1990 + clamp(quote.discount || 0, 0, 1));
+    tokens.push(1992 + (quote.counter ? 1 : 0));
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
@@ -725,6 +742,7 @@ function buyProbability(api, G, type, buysThisShop) {
 
 function adjustedBuyProbability(api, G, type, buysThisShop, quote) {
   let p = buyProbability(api, G, type, buysThisShop);
+  if (quote && quote.counter) p += quote.credit ? 0.12 : 0.20;
   if (quote && quote.credit) {
     p -= 0.10 + Math.max(0, quote.missing - 1) * 0.08;
     if (G.round <= 2) p += 0.18;
@@ -739,10 +757,10 @@ function pickProbabilisticShopIndex(runtime, api, G, buysThisShop) {
     const type = G.shop[i];
     const quote = shopPurchaseQuote(api, G, type);
     if (!quote.canBuy) continue;
-    buyable.push({ idx: i, cost: quote.cost, credit: quote.credit ? 1 : 0, quote });
+    buyable.push({ idx: i, cost: quote.cost, credit: quote.credit ? 1 : 0, counter: quote.counter ? 1 : 0, quote });
   }
   if (!buyable.length) return -1;
-  buyable.sort((a, b) => b.cost - a.cost || a.credit - b.credit);
+  buyable.sort((a, b) => a.credit - b.credit || b.counter - a.counter || b.cost - a.cost);
 
   for (const item of buyable) {
     const type = G.shop[item.idx];
@@ -944,6 +962,78 @@ function assertPortDrillCheck(condition, message) {
 
 function assertAlertTierCheck(condition, message) {
   if (!condition) throw new Error(`alert tier check failed: ${message}`);
+}
+
+function assertScoutedCounterShopCheck(condition, message) {
+  if (!condition) throw new Error(`scouted counter shop check failed: ${message}`);
+}
+
+function makeScoutedCounterTestMap(mainKey) {
+  return {
+    layers: [
+      [{ id: 1, type: 'island', islandIdx: 0, conns: [2] }],
+      [{ id: 2, type: 'ship', strength: 6, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
+    ],
+    visited: [],
+    currentNodeId: null,
+    currentLayer: -1,
+  };
+}
+
+function runScoutedCounterShopChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const powderMap = makeScoutedCounterTestMap('powderBomber');
+
+  for (let i = 0; i < 20; i++) {
+    const shop = api.initialShop(4, 0, { map: powderMap, mode: 'run' });
+    assertScoutedCounterShopCheck(shop.includes('sawbones'), `initial Powder Bomber shop lacks Sawbones: ${shop.join(',')}`);
+    assertScoutedCounterShopCheck(new Set(shop).size === shop.length, `initial shop has duplicate: ${shop.join(',')}`);
+  }
+  results.push({ name: 'initial Powder Bomber shops include Sawbones', ok: true });
+
+  const missShop = ['poisoner', 'trainer', 'needler', 'herald'];
+  const adjusted = api.applyScoutedCounterToShop(missShop, 0, { map: powderMap, mode: 'run', newSlotIndex: 3 });
+  assertScoutedCounterShopCheck(adjusted.includes('sawbones'), `adjusted miss shop lacks Sawbones: ${adjusted.join(',')}`);
+  assertScoutedCounterShopCheck(new Set(adjusted).size === adjusted.length, `adjusted shop has duplicate: ${adjusted.join(',')}`);
+  assertScoutedCounterShopCheck(adjusted.slice(0, 3).join(',') === missShop.slice(0, 3).join(','), 'counter swap changed non-new slots');
+  results.push({ name: 'counter swap replaces only new slot', ok: true, adjusted });
+
+  const refillBase = ['drummer', 'trainer', 'herald'];
+  const refill = api.randomShopType(2, refillBase, { map: powderMap, mode: 'run' });
+  const refilledShop = [...refillBase, refill];
+  assertScoutedCounterShopCheck(refill === 'sawbones', `purchase refill chose ${refill} instead of Sawbones`);
+  assertScoutedCounterShopCheck(new Set(refilledShop).size === refilledShop.length, `refill shop has duplicate: ${refilledShop.join(',')}`);
+  results.push({ name: 'purchase/Continue refill slot can force counter without duplicates', ok: true, refilledShop });
+
+  const battleShop = api.applyScoutedCounterToShop(missShop, 0, { map: powderMap, mode: 'battleTest', newSlotIndex: 3 });
+  assertScoutedCounterShopCheck(JSON.stringify(battleShop) === JSON.stringify(missShop), `battle test shop changed: ${battleShop.join(',')}`);
+  const unknownShop = api.applyScoutedCounterToShop(missShop, 0, {
+    map: makeScoutedCounterTestMap('unknownEnemy'),
+    mode: 'run',
+    newSlotIndex: 3,
+  });
+  assertScoutedCounterShopCheck(JSON.stringify(unknownShop) === JSON.stringify(missShop), `unknown-counter shop changed: ${unknownShop.join(',')}`);
+  results.push({ name: 'battle test and no-counter maps are unchanged', ok: true });
+
+  api.initState();
+  const G = api.getG();
+  G.mode = 'run';
+  G.map = powderMap;
+  G.round = 2;
+  G.phase = 'shopping';
+  G.enthusiasm = 3;
+  G.fullCrewDiscount = 0;
+  G.shopCreditUsed = false;
+  G.shop = ['needler', 'sawbones', 'trainer', 'herald'];
+  const best = scene.bestVisibleShopPurchase();
+  const plan = scene.shopPlanText();
+  assertScoutedCounterShopCheck(best && best.type === 'sawbones', `best visible buy is ${best && best.type}`);
+  assertScoutedCounterShopCheck(plan.includes('Counter Sawbones'), `plan text lacks counter label: ${plan}`);
+  results.push({ name: 'recommendation prefers same-tier counter and labels it', ok: true, plan });
+
+  return { ok: true, checks: results };
 }
 
 function runAlertTierChecks(runtime) {
@@ -1341,7 +1431,7 @@ async function runShoppingPhase(
 
   if (G.shop.length) {
     G.shop.shift();
-    G.shop.push(api.randomShopType(G.round + 1, G.shop));
+    G.shop.push(api.randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
   }
   prepareNextRoundForSim(api, scene);
 }
@@ -1877,6 +1967,11 @@ async function main() {
   }
   if (opts.checkAlertTiers) {
     const result = runAlertTierChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkScoutedCounterShop) {
+    const result = runScoutedCounterShopChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

@@ -174,6 +174,14 @@ const COMBAT = {
   ],
 };
 
+const SCOUTED_SHIP_COUNTERS = {
+  shellback: ['poisoner', 'needler', 'plagueCaptain'],
+  powderBomber: ['sawbones', 'scarwright'],
+  deckSniper: ['needler', 'bandmaster'],
+  netter: ['drummer', 'trainer', 'flagbearer'],
+  flintDuelist: ['poisoner', 'needler', 'sawbones', 'scarwright', 'plagueCaptain'],
+};
+
 const WEAPON_CATEGORY_EMOJI = '⚔️';
 const WOUNDED_EMOJI = '🩹';
 const BUFF_EMOJI = {
