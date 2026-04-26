@@ -123,6 +123,27 @@ function buildDeckOfCatsTestState(game) {
   const mapAvailable = state && state.map && typeof getAvailableNodes === 'function'
     ? getAvailableNodes(state.map)
     : [];
+  const gameScene = game && game.scene && typeof game.scene.getScene === 'function'
+    ? game.scene.getScene('game')
+    : null;
+  const shopQuotes = state && Array.isArray(state.shop) && gameScene && typeof gameScene.shopPurchaseQuote === 'function'
+    ? state.shop.map((type, index) => ({
+      index,
+      type,
+      ...(gameScene.shopPurchaseQuote(type) || {}),
+    }))
+    : [];
+  const sendingPlan = state && state.phase === 'sending'
+    && gameScene
+    && typeof gameScene.shouldShowSendingPlanComparison === 'function'
+    && gameScene.shouldShowSendingPlanComparison()
+    && typeof gameScene.sendingPlanProjection === 'function'
+    && typeof gameScene.maxSend === 'function'
+      ? {
+        endNow: gameScene.sendingPlanProjection(Array.isArray(state.sent) ? state.sent.length : 0),
+        fillCrew: gameScene.sendingPlanProjection(gameScene.maxSend()),
+      }
+      : null;
 
   return {
     activeScenes: sceneKeys,
@@ -133,6 +154,8 @@ function buildDeckOfCatsTestState(game) {
     resources: state && state.res ? { ...state.res } : { wood: 0, stone: 0, gold: 0 },
     enthusiasm: state ? state.enthusiasm || 0 : 0,
     alert: state ? state.boardingAlert || 0 : 0,
+    fullCrewDiscount: state ? state.fullCrewDiscount || 0 : 0,
+    shopCreditUsed: !!(state && state.shopCreditUsed),
     boardingCount: state ? state.boardingCount || 0 : 0,
     gameOver: !!(state && state.gameOver),
     crew: {
@@ -149,6 +172,8 @@ function buildDeckOfCatsTestState(game) {
     })),
     sent: state && Array.isArray(state.sent) ? [...state.sent] : [],
     shop: state && Array.isArray(state.shop) ? [...state.shop] : [],
+    shopQuotes,
+    sendingPlan,
     mapAvailable,
     island: state && state.island ? {
       name: state.island.name || null,

@@ -688,14 +688,20 @@ class GameScene extends Phaser.Scene {
     return Math.max(0, this.maxSend() - G.sent.length);
   }
 
-  shipWagePreview() {
+  shipWageProjection(sentCount = (Array.isArray(G.sent) ? G.sent.length : 0)) {
     const paysWages = !this.isBattleTest() && G.phase === 'sending' && !!G.island && !G.island.healWounded;
-    const unused = paysWages ? this.unusedSendSlots() : 0;
+    const max = paysWages ? this.maxSend() : 0;
+    const sent = Math.max(0, Math.min(max, Math.floor(Number(sentCount) || 0)));
+    const unused = paysWages ? Math.max(0, max - sent) : 0;
     return {
       unused,
       wages: paysWages ? unused + 1 : 0,
       alert: unused,
     };
+  }
+
+  shipWagePreview() {
+    return this.shipWageProjection();
   }
 
   shipWages() {
@@ -755,30 +761,44 @@ class GameScene extends Phaser.Scene {
   }
 
   updateFullCrewDiscountForCompletedIsland() {
-    const max = this.maxSend();
-    const earned = !this.isBattleTest()
-      && !!G.island
-      && !G.island.healWounded
-      && max > 0
-      && G.sent.length >= max;
-    G.fullCrewDiscount = earned ? 1 : 0;
+    G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
     return G.fullCrewDiscount;
   }
 
-  shopPurchaseQuote(type) {
+  projectFullCrewDiscount(sentCount) {
+    const max = this.maxSend();
+    return !this.isBattleTest()
+      && !!G.island
+      && !G.island.healWounded
+      && max > 0
+      && Math.max(0, Math.floor(Number(sentCount) || 0)) >= max
+      ? 1
+      : 0;
+  }
+
+  shopPurchaseQuoteForState(type, state = null) {
     const def = TYPES[type];
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
-    const discount = Math.min(cost, this.activeFullCrewDiscount());
-    const effectiveCost = Math.max(0, cost - discount);
-    const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0));
     if (!def) {
-      return { canBuy: false, credit: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, spend: 0 };
+      return { canBuy: false, credit: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
+    const isProjection = !!state;
+    const source = state || {};
+    const discountPool = source.fullCrewDiscount != null
+      ? source.fullCrewDiscount
+      : this.activeFullCrewDiscount();
+    const discount = Math.min(cost, Math.max(0, Math.min(1, Math.floor(Number(discountPool) || 0))));
+    const effectiveCost = Math.max(0, cost - discount);
+    const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
+    const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     if (enthusiasm >= effectiveCost) {
       return { canBuy: true, credit: false, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
     }
     const missing = effectiveCost - enthusiasm;
-    const canCredit = this.shopCreditAvailable()
+    const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
+    const allowCredit = source.allowCredit != null ? !!source.allowCredit : (isProjection ? !this.isBattleTest() : this.shopCreditAvailable());
+    const canCredit = allowCredit
+      && !shopCreditUsed
       && missing >= 1
       && missing <= this.shopCreditMaxMissing();
     return {
@@ -790,6 +810,60 @@ class GameScene extends Phaser.Scene {
       missing,
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
+    };
+  }
+
+  shopPurchaseQuote(type, state = null) {
+    return this.shopPurchaseQuoteForState(type, state);
+  }
+
+  bestVisibleShopPurchase(state = null) {
+    if (!Array.isArray(G.shop) || !G.shop.length) return null;
+    const candidates = G.shop
+      .map((type, index) => ({
+        type,
+        index,
+        quote: this.shopPurchaseQuoteForState(type, state),
+      }))
+      .filter(item => item.quote && item.quote.canBuy);
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const costA = Math.max(0, Number(a.quote.cost) || 0);
+      const costB = Math.max(0, Number(b.quote.cost) || 0);
+      if (costA !== costB) return costB - costA;
+      const creditA = a.quote.credit ? 1 : 0;
+      const creditB = b.quote.credit ? 1 : 0;
+      if (creditA !== creditB) return creditA - creditB;
+      return a.index - b.index;
+    });
+    return candidates[0];
+  }
+
+  shopPlanText(state = null) {
+    const best = this.bestVisibleShopPurchase(state);
+    if (!best) return 'Shop: no visible buy';
+    const def = TYPES[best.type];
+    const quote = best.quote;
+    const price = quote.discount > 0
+      ? `${quote.cost}->${quote.effectiveCost}☠️`
+      : `${quote.effectiveCost}☠️`;
+    const credit = quote.credit && quote.alert > 0 ? `, credit +${quote.alert} Alert` : '';
+    return `Shop: ${def.name} ${price}${credit}`;
+  }
+
+  sendingPlanProjection(sentCount) {
+    const wage = this.shipWageProjection(sentCount);
+    const discount = this.projectFullCrewDiscount(sentCount);
+    const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
+    const shopState = {
+      enthusiasm,
+      fullCrewDiscount: discount,
+      shopCreditUsed: false,
+    };
+    return {
+      wage,
+      discount,
+      shopText: this.shopPlanText(shopState),
     };
   }
 
@@ -5340,6 +5414,73 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  shouldShowSendingPlanComparison() {
+    return !this.isBattleTest()
+      && G.phase === 'sending'
+      && !!G.island
+      && !G.island.healWounded;
+  }
+
+  formatSendingPlanLine(plan) {
+    const wage = plan.wage || { wages: 0, alert: 0 };
+    const nextAlert = this.pendingBoardingAlert() + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const guardLabel = this.boardingAlertGuardLabel(this.boardingAlertGuardCount(nextAlert));
+    const alertText = wage.alert > 0
+      ? `Alert +${wage.alert}${guardLabel ? ` (${guardLabel})` : ''}`
+      : 'Alert +0';
+    const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
+    return `+${wage.wages}☠️ Wages · ${alertText} · ${discountText}\n${plan.shopText}`;
+  }
+
+  renderSendingPlanComparison() {
+    if (!this.shouldShowSendingPlanComparison()) return;
+    const L = this.L;
+    const max = this.maxSend();
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    const rows = [
+      { label: 'End now', plan: this.sendingPlanProjection(currentSent) },
+      { label: 'Fill crew', plan: this.sendingPlanProjection(max) },
+    ];
+    const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
+    const rowH = 46 * L.k;
+    const pad = 8 * L.k;
+    const h = pad * 2 + rowH * rows.length;
+    const topBase = L.IS_MOBILE && (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0)
+      ? 104 * L.k
+      : 96 * L.k;
+    const topLimit = this.islandCenterY() - 160 * L.k;
+    const top = Math.max(92 * L.k, Math.min(topBase, topLimit));
+    const x = L.cx;
+    const left = x - w / 2;
+    const rowLeft = left + pad;
+    const labelW = 72 * L.k;
+    const detailX = rowLeft + labelW + 8 * L.k;
+    const detailW = Math.max(120 * L.k, w - labelW - pad * 2 - 8 * L.k);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.cocoa), 0.92);
+    bg.fillRoundedRect(left, top, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.9);
+    bg.strokeRoundedRect(left, top, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.65);
+    bg.lineBetween(left + pad, top + pad + rowH, left + w - pad, top + pad + rowH);
+    this.addTo('phase', bg);
+
+    rows.forEach((row, index) => {
+      const rowY = top + pad + index * rowH;
+      const label = this.add.text(rowLeft, rowY + rowH / 2, row.label, uiHeadingStyle(L, 13, '#f6d28a', {
+        align: 'left',
+      })).setOrigin(0, 0.5);
+      const detail = this.add.text(detailX, rowY + rowH / 2, this.formatSendingPlanLine(row.plan), uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(11),
+        lineSpacing: uiLineSpacingPx(L, 11, 13),
+        wordWrap: { width: detailW },
+      })).setOrigin(0, 0.5);
+      this.addTo('phase', label);
+      this.addTo('phase', detail);
+    });
+  }
+
   renderPhase() {
     this.clearCt('phase');
     if (this.weaponAssignmentActive()) {
@@ -5364,6 +5505,10 @@ class GameScene extends Phaser.Scene {
         ).setOrigin(0.5, 0.5);
         this.addTo('phase', resultText);
       }
+    }
+
+    if (G.phase === 'sending') {
+      this.renderSendingPlanComparison();
     }
 
     if (G.phase !== 'removing') return;
