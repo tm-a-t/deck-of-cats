@@ -59,7 +59,7 @@ def run_process(args: list[str], *, cwd: Path, timeout: int) -> dict:
             stderr=subprocess.PIPE,
             text=True,
         )
-    except FileNotFoundError as exc:
+    except OSError as exc:
         return {
             "ok": False,
             "returncode": 127,

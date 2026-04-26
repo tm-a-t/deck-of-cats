@@ -8,7 +8,7 @@ from loop.agent_loop.paths import ROOT, SCHEMA_BY_ROLE, SCHEMAS_DIR
 from loop.agent_loop.prompts import parse_json_payload, prompt_for, validate_payload
 
 
-def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
+def run_codex(role: str, context: dict, config: dict, run_dir: Path, workspace_root: Path = ROOT) -> dict:
     schema_path = SCHEMAS_DIR / SCHEMA_BY_ROLE[role]
     prompt = prompt_for(role, context)
     prompt_path = run_dir / f"{role}.prompt.md"
@@ -39,8 +39,16 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path) -> dict:
     args.extend(codex_cfg.get("role_extra_exec_args", {}).get(role, []))
     args.append(prompt)
 
-    emit_log(run_dir, "role_started", f"{role} started", role=role, sandbox=sandbox, timeout_seconds=timeout)
-    result = run_process(args, cwd=ROOT, timeout=int(timeout))
+    emit_log(
+        run_dir,
+        "role_started",
+        f"{role} started",
+        role=role,
+        sandbox=sandbox,
+        timeout_seconds=timeout,
+        workspace_root=str(workspace_root),
+    )
+    result = run_process(args, cwd=workspace_root, timeout=int(timeout))
     stdout_path.write_text(result["stdout"], encoding="utf-8")
     stderr_path.write_text(result["stderr"], encoding="utf-8")
     emit_log(
