@@ -8,7 +8,7 @@ DEFAULT_CONFIG = {
         "worktree": {
             "enabled": True,
             "path": "../pirates-v0-loop-worktree",
-            "branch": "loop/auto",
+            "branch": "loop-auto",
         },
         "commit": {
             "enabled": True,
