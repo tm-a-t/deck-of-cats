@@ -29,7 +29,7 @@ def self_test() -> dict:
     config = load_config(LOOP_DIR / "config.example.json")
     if not poki_steps_enabled(config):
         raise RuntimeError("Poki steps should be enabled by default")
-    if config["loop"]["worktree"]["branch"] != "loop/auto":
+    if config["loop"]["worktree"]["branch"] != "loop-auto":
         raise RuntimeError("default loop worktree branch changed unexpectedly")
     if config["loop"]["commit"]["policy"] != "any_changes":
         raise RuntimeError("default loop commit policy should commit any changed cycle")
@@ -149,13 +149,13 @@ def run_git(cwd: Path, args: list[str]) -> str:
     return result.stdout
 
 
-def temp_loop_config(worktree_path: str, policy: str = "any_changes") -> dict:
+def temp_loop_config(worktree_path: str, policy: str = "any_changes", branch: str = "loop-auto") -> dict:
     return {
         "loop": {
             "worktree": {
                 "enabled": True,
                 "path": worktree_path,
-                "branch": "loop/auto",
+                "branch": branch,
             },
             "commit": {
                 "enabled": True,
@@ -177,8 +177,9 @@ def assert_workspace_cases() -> None:
         (repo / "README.md").write_text("base\n", encoding="utf-8")
         run_git(repo, ["add", "README.md"])
         run_git(repo, ["commit", "-m", "initial"])
+        run_git(repo, ["branch", "loop"])
 
-        config = temp_loop_config("../loop-worktree")
+        config = temp_loop_config("../loop-worktree", branch="loop/auto")
         expected_workspace = (repo / "../loop-worktree").resolve()
         if configured_workspace_root(config, repo) != expected_workspace:
             raise RuntimeError("configured workspace path did not resolve relative to controller root")
@@ -186,7 +187,7 @@ def assert_workspace_cases() -> None:
         workspace = ensure_workspace_root(config, repo)
         if workspace != expected_workspace or not workspace.exists():
             raise RuntimeError("loop worktree was not created at the configured path")
-        if run_git(workspace, ["branch", "--show-current"]).strip() != "loop/auto":
+        if run_git(workspace, ["branch", "--show-current"]).strip() != "loop-auto":
             raise RuntimeError("loop worktree was not created on the configured branch")
         if ensure_workspace_root(config, repo) != workspace:
             raise RuntimeError("existing loop worktree was not reused")

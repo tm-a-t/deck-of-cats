@@ -15,6 +15,8 @@ from loop.agent_loop.paths import ROOT
 
 
 VALID_COMMIT_POLICIES = {"any_changes", "passed_changes", "always_try"}
+LEGACY_DEFAULT_WORKTREE_BRANCH = "loop/auto"
+DEFAULT_WORKTREE_BRANCH = "loop-auto"
 
 
 def worktree_enabled(config: dict) -> bool:
@@ -32,7 +34,10 @@ def configured_workspace_root(config: dict, controller_root: Path = ROOT) -> Pat
 
 
 def configured_worktree_branch(config: dict) -> str:
-    return str(config.get("loop", {}).get("worktree", {}).get("branch", "loop/auto")).strip()
+    branch = str(config.get("loop", {}).get("worktree", {}).get("branch", DEFAULT_WORKTREE_BRANCH)).strip()
+    if branch == LEGACY_DEFAULT_WORKTREE_BRANCH:
+        return DEFAULT_WORKTREE_BRANCH
+    return branch
 
 
 def branch_worktree_path(branch: str, controller_root: Path = ROOT) -> Path | None:

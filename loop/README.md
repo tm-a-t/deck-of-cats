@@ -8,7 +8,7 @@ Minimal no-human agentic loop for improving Deck of Cats.
 2. If leaving `poki.enabled` as `true`, set `poki.developers_game_url` to the game page in Poki for Developers.
 3. If leaving `poki.enabled` as `true`, make sure the configured persistent browser profile is already logged into Poki.
 4. Set `poki.enabled` to `false` to skip Poki feedback checks and Poki submissions while still running the local tester, designer, and developer.
-5. By default, the loop auto-creates and reuses a dedicated Git worktree at `../pirates-v0-loop-worktree` on branch `loop/auto`. Override `loop.worktree.path` or `loop.worktree.branch` in `loop/config.json` if needed.
+5. By default, the loop auto-creates and reuses a dedicated Git worktree at `../pirates-v0-loop-worktree` on branch `loop-auto`. Override `loop.worktree.path` or `loop.worktree.branch` in `loop/config.json` if needed.
 6. By default, each cycle commits any worktree changes with a `loop: changes from loop iteration <run_id>` message, including failed cycles that leave changes behind.
 7. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
 
