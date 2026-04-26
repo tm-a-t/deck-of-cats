@@ -694,7 +694,7 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'ship-target',
       'Leftmost Island Pirate',
-      'Ship buffs always go to the leftmost pirate already on the island. If nobody is there, those buffs are lost.'
+      'Ship weapons and buffs go to the leftmost pirate already on the island. If nobody is there, those personal gains are lost.'
     );
   };
 
@@ -759,9 +759,9 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     if (ship.prodWeapon) addWeaponGrantTips(ship.prodWeapon);
     const personalGains = normalizePersonalGains(ship.personalGains);
     if (personalGains.length) {
-      if (personalGains.some((gain) => gain.buff)) addShipTargetingTip();
+      addShipTargetingTip();
       personalGains.forEach((gain) => {
-        if (gain.weapon) addWeaponGrantTips(gain.weapon);
+        if (gain.weapon) addWeaponTip(gain.weapon);
         if (gain.buff) addBuffTip(gain.buff, gain.count);
       });
     }

@@ -287,7 +287,10 @@ class GameScene extends Phaser.Scene {
 
     const applied = [];
     personalGains.forEach((gain) => {
-      if (gain.buff) {
+      if (gain.weapon) {
+        const weaponKey = this.setPirateWeapon(pirate, gain.weapon);
+        if (weaponKey) applied.push({ weapon: weaponKey, count: gain.count });
+      } else if (gain.buff) {
         const added = this.addPirateBuff(pirate, gain.buff, gain.count);
         if (added > 0) applied.push({ buff: gain.buff, count: added });
       }
@@ -309,37 +312,25 @@ class GameScene extends Phaser.Scene {
   }
 
   applyShipPersonalGains(gains) {
-    const { personalGains, weaponGains, buffGains } = this.splitPersonalGains(gains);
+    const personalGains = normalizePersonalGains(gains);
     if (!personalGains.length) return { applied: false, gains: [] };
-    const weaponGrant = weaponGains.length === 1
-      ? createWeaponGrant(weaponGains[0].weapon, weaponGains[0].count)
-      : null;
-    if (!buffGains.length) {
-      return {
-        applied: false,
-        gains: [],
-        weaponGrant,
-      };
-    }
     const target = this.leftmostIslandPirateEntry();
     if (!target) {
       return {
         applied: false,
-        gains: buffGains,
+        gains: personalGains,
         lost: true,
         text: 'No island pirate',
         color: '#ffa726',
-        weaponGrant,
       };
     }
-    const applied = this.applyPersonalGainsToPirate(target.pirate, buffGains);
+    const applied = this.applyPersonalGainsToPirate(target.pirate, personalGains);
     return {
       ...applied,
       applied: applied.applied,
       handIdx: target.handIdx,
       sentSlot: target.sentSlot,
       color: '#66bb6a',
-      weaponGrant,
     };
   }
 

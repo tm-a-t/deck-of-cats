@@ -67,11 +67,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - trigger an exile pick from the overall crew.
 - If a ship action cannot pay its cost, it simply fails.
 - `Cutthroat` pauses ship resolution and enters phase `removing`: the player chooses 1 pirate from `allCrew` that is not in the current hand and permanently exiles it.
-- Ship rewards that grant a weapon do not auto-target. The player chooses which pirate from the current hand gets that weapon.
-- Ship rewards that grant `Might` or `Tempo` always target the leftmost surviving pirate currently on the island.
-- If no surviving pirate is currently on the island, those ship buffs are lost.
-- A newly granted weapon replaces the old weapon on the chosen pirate.
-- Buffs stack on the target pirate.
+- Ship rewards that grant a weapon, `Might`, or `Tempo` always target the leftmost surviving pirate currently on the island.
+- If a ship action grants both a weapon and buffs, all of those personal gains apply to that same leftmost island pirate in definition order.
+- If no surviving pirate is currently on the island, those ship-side personal gains are lost, but any paid resource or `☠️` outputs still resolve normally.
+- A newly granted ship weapon replaces the old weapon on the target pirate.
+- Ship buffs stack on the target pirate.
 
 ### 4. Shop
 
@@ -196,7 +196,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 - Weapon grants never enter a shared inventory.
 - Each pirate can hold only 1 weapon at a time.
-- Whenever a weapon is granted, the player picks the receiving pirate from the current hand.
+- Island weapon grants make the player pick the receiving pirate from the current hand.
+- Ship-side weapon gains target the leftmost surviving pirate currently on the island; if no island pirate is available, the weapon is lost.
 - If a pirate gets a new weapon, the old weapon is replaced.
 - Weapons stay on that pirate until that pirate leaves the crew.
 

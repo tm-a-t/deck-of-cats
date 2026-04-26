@@ -53,3 +53,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-123317 — rev 93098e4
 
 - Gameplay: true - Powder Bombers now fizzle instead of death-blasting when defeated with `1+ Wounds`; validated with targeted death-effect checks and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-123317.log`.
+
+## 2026-04-26 — run 20260426-191311 — rev 025d87d
+
+- Gameplay: true - Ship-side weapon and buff rewards now apply directly to the leftmost surviving island pirate, with no-target personal gains lost while paid outputs still resolve; validated with `node --check js/scene.js`, `node --check js/constants.js`, targeted ship-gain checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-191311.log`.
