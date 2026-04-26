@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from loop.agent_loop.codex_runner import codex_failure_error
 from loop.agent_loop.io_utils import read_json
 from loop.agent_loop.orchestrator import (
     cycle_finished_message,
@@ -33,6 +34,11 @@ def self_test() -> dict:
         raise RuntimeError("default loop worktree branch changed unexpectedly")
     if config["loop"]["commit"]["policy"] != "any_changes":
         raise RuntimeError("default loop commit policy should commit any changed cycle")
+    if config["codex"]["role_timeouts_seconds"]["tester"] != 1200:
+        raise RuntimeError("tester timeout should stay below the outer loop timeout")
+    timeout_error = codex_failure_error("tester", {"timed_out": True}, 1200)
+    if timeout_error != "tester timed out after 1200s before returning JSON":
+        raise RuntimeError("codex timeout error should explain which role timed out")
     disabled_config = {**config, "poki": {**config.get("poki", {}), "enabled": False}}
     if poki_steps_enabled(disabled_config):
         raise RuntimeError("Poki steps should be disabled when poki.enabled is false")

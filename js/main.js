@@ -108,6 +108,78 @@ function syncCanvasResolution(game) {
   }
 }
 
+function buildDeckOfCatsTestState(game) {
+  const state = (typeof G !== 'undefined') ? G : null;
+  const sceneKeys = game && game.scene && Array.isArray(game.scene.scenes)
+    ? game.scene.scenes
+      .filter(scene => scene && scene.sys && scene.sys.isActive())
+      .map(scene => scene.scene && scene.scene.key)
+      .filter(Boolean)
+    : [];
+  const hand = state && Array.isArray(state.hand) ? state.hand : [];
+  const crew = state && Array.isArray(state.allCrew) ? state.allCrew : [];
+  const woundedCrew = crew.filter(pirate => pirate && pirate.wounded).length;
+  const combat = state && state.combat ? state.combat : null;
+  const mapAvailable = state && state.map && typeof getAvailableNodes === 'function'
+    ? getAvailableNodes(state.map)
+    : [];
+
+  return {
+    activeScenes: sceneKeys,
+    mode: state ? state.mode || 'run' : null,
+    phase: state ? state.phase || null : null,
+    round: state ? state.round || 0 : 0,
+    layer: state && state.map ? state.map.currentLayer : null,
+    resources: state && state.res ? { ...state.res } : { wood: 0, stone: 0, gold: 0 },
+    enthusiasm: state ? state.enthusiasm || 0 : 0,
+    alert: state ? state.boardingAlert || 0 : 0,
+    boardingCount: state ? state.boardingCount || 0 : 0,
+    gameOver: !!(state && state.gameOver),
+    crew: {
+      total: crew.length,
+      ready: crew.length - woundedCrew,
+      wounded: woundedCrew,
+    },
+    hand: hand.map((pirate, index) => ({
+      index,
+      id: pirate && pirate.id,
+      type: pirate && pirate.type,
+      wounded: !!(pirate && pirate.wounded),
+      weapon: pirate && pirate.weaponKey || null,
+    })),
+    sent: state && Array.isArray(state.sent) ? [...state.sent] : [],
+    shop: state && Array.isArray(state.shop) ? [...state.shop] : [],
+    mapAvailable,
+    island: state && state.island ? {
+      name: state.island.name || null,
+      maxSend: state.island.maxSend || null,
+    } : null,
+    combat: combat ? {
+      mode: combat.mode || null,
+      result: combat.result || null,
+      enemyName: combat.enemyName || null,
+      encounterDesc: combat.encounterDesc || null,
+      alert: combat.boardingAlert || 0,
+      guards: combat.boardingAlertGuards || 0,
+      enemies: Array.isArray(combat.enemyParty)
+        ? combat.enemyParty.filter(Boolean).map(enemy => ({
+          name: enemy.name || enemy.key || null,
+          hp: enemy.hp || 0,
+          damage: enemy.damage || 0,
+          range: enemy.range || null,
+        }))
+        : [],
+    } : null,
+  };
+}
+
+function installDeckOfCatsTestHook(game) {
+  window.__deckOfCatsTest = {
+    game,
+    getState: () => buildDeckOfCatsTestState(game),
+  };
+}
+
 function bootPhaserGame() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const initialViewport = (typeof resolveViewportSize === 'function')
@@ -132,6 +204,7 @@ function bootPhaserGame() {
     },
     scene: [MenuScene, GameScene, MapScene, ShopScene, DrawPileScene, DiscardPileScene, PauseScene, CostumesScene, AllPiratesScene],
   });
+  installDeckOfCatsTestHook(phaserGame);
 
   window.addEventListener('resize', () => {
     syncCanvasResolution(phaserGame);
