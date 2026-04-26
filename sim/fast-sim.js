@@ -42,6 +42,7 @@ function parseArgs(argv) {
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
+    checkCounterTrophy: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -137,6 +138,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-boarding-trophy') {
       out.checkBoardingTrophy = true;
+      continue;
+    }
+    if (a === '--check-counter-trophy') {
+      out.checkCounterTrophy = true;
     }
   }
 
@@ -842,6 +847,7 @@ function makeSimScene(api) {
   scene.openMapPanel = () => {};
   scene.float = () => {};
   scene.effectText = () => {};
+  scene.animateResourceGain = () => {};
   scene.queueHandAppear = () => 0;
   scene.queueCombatPirateReturn = () => false;
   scene.combatWorldPoint = () => ({ x: 0, y: 0 });
@@ -1524,6 +1530,153 @@ function runBoardingTrophyChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertCounterTrophyCheck(condition, message) {
+  if (!condition) throw new Error(`counter trophy check failed: ${message}`);
+}
+
+function runCounterTrophyChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const fighterFor = (pirate, row, rowOrder, alive = true) => ({
+    id: `player_${pirate.id}`,
+    side: 'player',
+    pirateId: pirate.id,
+    type: pirate.type,
+    row,
+    rowOrder,
+    alive,
+    hp: alive ? 5 : 0,
+    maxHp: 9,
+    damage: 3,
+    attackMs: 1350,
+    attackRange: 'melee',
+  });
+
+  const setupRegular = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: 1,
+      encounter: {
+        mainKey: opts.mainKey || 'powderBomber',
+        supportKeys: ['bilgeRat', 'cabinBoy'],
+        totalCount: 3,
+      },
+    };
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.discard = [];
+    G.deck = [];
+    const pirates = G.allCrew.slice(0, 5);
+    const types = opts.types || ['poisoner', 'sawbones', 'scarwright', 'drummer', 'trainer'];
+    pirates.forEach((pirate, i) => {
+      pirate.type = types[i] || pirate.type;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, 3);
+    G.combat = {
+      mode: 'fighting',
+      playerFighters: opts.playerFighters
+        ? opts.playerFighters(pirates, fighterFor)
+        : [
+          fighterFor(pirates[0], 0, 0),
+          fighterFor(pirates[1], 0, 1),
+          fighterFor(pirates[2], 1, 0),
+        ],
+      enemyFighters: [],
+      boardingAlertGuards: opts.guardCount || 0,
+      returnedPirateIds: [],
+    };
+    return { G, pirates };
+  };
+
+  {
+    const { G, pirates } = setupRegular({ guardCount: 2 });
+    scene.finishBoardingCombat('win');
+    assertCounterTrophyCheck((pirates[0].might || 0) === 1, 'Boarding Trophy did not stack on front survivor');
+    assertCounterTrophyCheck((pirates[1].tempo || 0) === 1, 'front-left matching counter did not gain Tempo');
+    assertCounterTrophyCheck((pirates[2].tempo || 0) === 0, 'back-row counter gained Tempo over front-row counter');
+    assertCounterTrophyCheck(G.res.wood === 1 && G.res.stone === 1, `Alert plunder did not stack: ${JSON.stringify(G.res)}`);
+    assertCounterTrophyCheck(G.combat.counterTrophy && G.combat.counterTrophy.pirateId === pirates[1].id, 'combat did not record the correct counter trophy target');
+    results.push({ name: 'regular win grants front-left matching counter trophy with other win rewards', ok: true, target: pirates[1].id, res: { ...G.res } });
+  }
+
+  {
+    const { G, pirates } = setupRegular();
+    scene.finishBoardingCombat('win');
+    scene.finishBoardingCombat('win');
+    scene.grantCounterTrophy(G.combat);
+    assertCounterTrophyCheck((pirates[1].tempo || 0) === 1, `idempotent counter trophy gave ${pirates[1].tempo || 0}`);
+    assertCounterTrophyCheck(!!G.combat.counterTrophyGranted, 'combat did not record counter trophy grant attempt');
+    results.push({ name: 'counter trophy is idempotent on resolved combat', ok: true, tempo: pirates[1].tempo || 0 });
+  }
+
+  {
+    const { G, pirates } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['poisoner', 'sawbones', 'scarwright'],
+    });
+    scene.finishBoardingCombat('win');
+    assertCounterTrophyCheck(pirates.every((pirate) => (pirate.tempo || 0) === 0), 'no-counter win granted Tempo');
+    assertCounterTrophyCheck(!G.combat.counterTrophy, 'no-counter win stored counter trophy data');
+    results.push({ name: 'regular win with no matching counter grants no counter trophy', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupRegular({
+      playerFighters: (crew, makeFighter) => [
+        makeFighter(crew[0], 0, 0),
+        makeFighter(crew[1], 0, 1, false),
+      ],
+    });
+    scene.finishBoardingCombat('win');
+    assertCounterTrophyCheck(pirates.every((pirate) => (pirate.tempo || 0) === 0), 'defeated matching counter gained Tempo');
+    assertCounterTrophyCheck(!G.combat.counterTrophy, 'defeated-counter win stored counter trophy data');
+    results.push({ name: 'defeated matching counter is not eligible', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupRegular();
+    scene.finishBoardingCombat('loss');
+    assertCounterTrophyCheck(pirates.every((pirate) => (pirate.tempo || 0) === 0), 'loss granted counter trophy');
+    assertCounterTrophyCheck(!G.combat.counterTrophy, 'loss stored counter trophy data');
+    results.push({ name: 'loss grants no counter trophy', ok: true });
+  }
+
+  {
+    api.initBattleTestState();
+    const G = api.getG();
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: 1,
+      encounter: { mainKey: 'powderBomber', supportKeys: [], totalCount: 1 },
+    };
+    const pirate = G.hand[0];
+    pirate.type = 'sawbones';
+    pirate.tempo = 0;
+    G.combat = {
+      mode: 'fighting',
+      playerFighters: [fighterFor(pirate, 0, 0)],
+      enemyFighters: [],
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+    };
+    scene.finishBoardingCombat('win');
+    assertCounterTrophyCheck((pirate.tempo || 0) === 0, 'Battle Test granted counter trophy');
+    assertCounterTrophyCheck(!G.combat.counterTrophy, 'Battle Test stored counter trophy data');
+    results.push({ name: 'Battle Test grants no counter trophy', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function runPortDrillChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1881,6 +2034,9 @@ function finishSimBoardingWin(api, scene) {
   }
   if (scene && typeof scene.grantBoardingTrophy === 'function') {
     scene.grantBoardingTrophy(G.combat);
+  }
+  if (scene && typeof scene.grantCounterTrophy === 'function') {
+    scene.grantCounterTrophy(G.combat);
   }
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
   G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
@@ -2415,6 +2571,11 @@ async function main() {
   }
   if (opts.checkBoardingTrophy) {
     const result = runBoardingTrophyChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkCounterTrophy) {
+    const result = runCounterTrophyChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

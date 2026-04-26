@@ -2476,10 +2476,60 @@ class GameScene extends Phaser.Scene {
     return combat.boardingTrophy;
   }
 
+  counterTrophyMainKey(combat = G.combat) {
+    return (G.enemyShip && G.enemyShip.encounter && G.enemyShip.encounter.mainKey)
+      || (combat && combat.encounterMainKey)
+      || (this.currentEncounterBlueprint() && this.currentEncounterBlueprint().mainKey)
+      || null;
+  }
+
+  grantCounterTrophy(combat = G.combat) {
+    if (!combat || combat.counterTrophyGranted) return null;
+    combat.counterTrophyGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const mainKey = this.counterTrophyMainKey(combat);
+    const counters = (mainKey && SCOUTED_SHIP_COUNTERS && SCOUTED_SHIP_COUNTERS[mainKey]) || [];
+    if (!counters.length) return null;
+
+    const counterSet = new Set(counters);
+    const living = this.combatLiving('player');
+    for (const fighter of living) {
+      if (!fighter || fighter.pirateId == null) continue;
+      const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+        || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId);
+      const type = pirate ? pirate.type : fighter.type;
+      if (!counterSet.has(type)) continue;
+
+      if (!pirate) return null;
+      pirate.tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0)) + 1;
+      const def = TYPES[pirate.type] || {};
+      const enemy = this.combatArchetypeByKey(mainKey);
+      combat.counterTrophy = {
+        pirateId: pirate.id,
+        type: pirate.type,
+        name: def.name || pirate.type,
+        mainKey,
+        enemyName: enemy ? enemy.name : mainKey,
+        count: 1,
+        tempo: pirate.tempo,
+      };
+      return combat.counterTrophy;
+    }
+
+    return null;
+  }
+
   showBoardingTrophy(trophy) {
     if (!trophy || !this.L) return;
     const L = this.L;
     this.effectText(L.cx, this.islandContinueY() - 124 * L.k, 'Boarding Trophy +💪', '#ffca28', 760);
+  }
+
+  showCounterTrophy(trophy) {
+    if (!trophy || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 164 * L.k, 'Counter Trophy +⚡', '#7bdff2', 760);
   }
 
   currentEncounterBlueprint() {
@@ -2524,6 +2574,7 @@ class GameScene extends Phaser.Scene {
 
     return {
       name: `Boarding Party ${boardingNo}`,
+      mainKey: blueprint ? blueprint.mainKey : null,
       encounterDesc: encounterDesc || null,
       enemies,
       rows: this.combatRandomEnemySetupRows(enemies),
@@ -2544,6 +2595,9 @@ class GameScene extends Phaser.Scene {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'boardingAlertGuards')) {
         const alert = this.activeBoardingAlertState();
         G.combat.boardingAlertGuards = alert.guardCount;
+      }
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'encounterMainKey')) {
+        G.combat.encounterMainKey = this.counterTrophyMainKey(G.combat);
       }
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
@@ -2566,6 +2620,7 @@ class GameScene extends Phaser.Scene {
       inspectedPirateId: null,
       inspectedEnemyId: null,
       enemyName: encounter.name,
+      encounterMainKey: encounter.mainKey || null,
       encounterDesc: encounter.encounterDesc || null,
       boardingAlert: alert.amount,
       boardingAlertGuards: alert.guardCount,
@@ -3773,12 +3828,14 @@ class GameScene extends Phaser.Scene {
     if (!combat || combat.mode === 'resolved') return;
     const plunder = result === 'win' ? this.grantBoardingAlertPlunder(combat) : null;
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
+    const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
     G.busy = false;
     this.renderAll();
     this.showBoardingTrophy(trophy);
+    this.showCounterTrophy(counterTrophy);
     this.showBoardingAlertPlunder(plunder);
   }
 
@@ -4299,11 +4356,15 @@ class GameScene extends Phaser.Scene {
       }
       if (combat && combat.mode === 'resolved') {
         const trophy = combat.boardingTrophy;
+        const counterTrophy = combat.counterTrophy;
+        const rewardParts = [];
+        if (trophy) rewardParts.push(`${trophy.name} +💪`);
+        if (counterTrophy) rewardParts.push(`${counterTrophy.name} +⚡`);
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
           line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',
           line2: combat.result === 'win'
-            ? (trophy ? `Trophy: ${trophy.name} +💪` : 'Taking the ship')
+            ? (rewardParts.length ? `Rewards: ${rewardParts.join(' · ')}` : 'Taking the ship')
             : 'All pirates are wounded',
         };
       }
@@ -5763,14 +5824,19 @@ class GameScene extends Phaser.Scene {
           uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
         ).setOrigin(0.5, 0.5);
         this.addTo('phase', resultText);
-        if (won && combat.boardingTrophy) {
-          const trophyText = this.add.text(
-            L.cx,
-            this.islandContinueY() - 76 * L.k,
-            'Boarding Trophy +💪',
-            uiBodyStyle(L, UI_THEME.colors.paper, { align: 'center' })
-          ).setOrigin(0.5, 0.5);
-          this.addTo('phase', trophyText);
+        if (won) {
+          const rewardLines = [];
+          if (combat.boardingTrophy) rewardLines.push('Boarding Trophy +💪');
+          if (combat.counterTrophy) rewardLines.push('Counter Trophy +⚡');
+          rewardLines.forEach((line, i) => {
+            const rewardText = this.add.text(
+              L.cx,
+              this.islandContinueY() - (76 + i * 22) * L.k,
+              line,
+              uiBodyStyle(L, UI_THEME.colors.paper, { align: 'center' })
+            ).setOrigin(0.5, 0.5);
+            this.addTo('phase', rewardText);
+          });
         }
       }
     }

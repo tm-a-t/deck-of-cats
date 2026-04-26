@@ -152,7 +152,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - After a regular-run boarding is won, before the winning hand is discarded, the frontmost then leftmost surviving player fighter in the final combat hand gains `+1 💪 Might` as a `Boarding Trophy`.
 - `Boarding Trophy` triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no player fighter survives.
 - If a boarding is won by a reinforcement hand, only a survivor from that final winning combat hand can receive the `Boarding Trophy`.
-- `Boarding Trophy` can stack with Alert guard plunder on the same win.
+- After a regular-run boarding is won, if the final winning combat hand has at least 1 surviving pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching survivor gains `+1 ⚡ Tempo` as a `Counter Trophy`.
+- `Counter Trophy` uses the same scouted counter map as the Shop, triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no matching counter pirate survives.
+- If a boarding is won by a reinforcement hand, only a matching survivor from that final winning combat hand can receive the `Counter Trophy`.
+- `Boarding Trophy`, `Counter Trophy`, and Alert guard plunder can all stack on the same win.
 - The old "sum team strength against ship strength" system no longer exists.
 - Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.
 - Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.
