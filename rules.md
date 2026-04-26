@@ -113,6 +113,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ### 5. Boarding Round
 
 - Ship nodes move the game directly into `phase = boarding`.
+- In regular runs, the next unreached ship is scouted before the player reaches it.
+- Scouting shows that ship's pre-generated base boarding party from its encounter blueprint before any `Boarding Alert` guards are added.
+- Scouting is limited to the next unreached ship; later ship rosters stay hidden until they become the next ship.
+- Pending or projected `Boarding Alert` guards are previewed separately from the scouted base roster.
+- When the ship is reached, the actual boarding uses the same pre-generated base blueprint plus any consumed `Boarding Alert` guards.
 - Pending `Boarding Alert` persists through islands, shops, and map choices until the next ship node.
 - When a regular-run boarding starts, the current `Boarding Alert` is snapshotted on that boarding and the pending Alert is cleared.
 - The snapshotted Alert adds visible guard reinforcements after the normal boarding party is generated:

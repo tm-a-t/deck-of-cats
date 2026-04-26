@@ -192,6 +192,27 @@ class ShopScene extends Phaser.Scene {
     });
   }
 
+  nextBoardingIntelLine() {
+    const game = this.scene.get('game');
+    if (!game || typeof game.nextShipIntelText !== 'function') return '';
+    return game.nextShipIntelText();
+  }
+
+  renderNextBoardingIntel(panel) {
+    const text = this.nextBoardingIntelLine();
+    if (!text) return '';
+
+    const L = this.L;
+    const label = this.add.text(panel.x + 28 * L.k, panel.y + 86 * L.k, text, {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(13),
+      lineSpacing: uiLineSpacingPx(L, 13, 15),
+      wordWrap: { width: panel.w - 96 * L.k },
+    }).setOrigin(0, 0);
+    this.panelLayer.add(label);
+    return text;
+  }
+
   renderPanel() {
     this.stopFeaturedTicker();
     this.panelLayer.removeAll(true);
@@ -227,6 +248,7 @@ class ShopScene extends Phaser.Scene {
       this.requestClose();
     });
     this.panelLayer.add(close);
+    const intelText = this.renderNextBoardingIntel(m);
 
     const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
     const game = this.scene.get('game');
@@ -241,7 +263,7 @@ class ShopScene extends Phaser.Scene {
 
     const rows = Math.max(1, Math.ceil(G.shop.length / 4));
     const layoutBase = {
-      topPad: 150 * L.k,
+      topPad: (intelText ? 176 : 150) * L.k,
       bottomPad: 100 * L.k,
       footerH: 52 * L.k,
       rowGap: 44 * L.k,

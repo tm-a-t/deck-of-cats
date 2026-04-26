@@ -4081,29 +4081,101 @@ class GameScene extends Phaser.Scene {
     return Math.max(1, count);
   }
 
+  combatEncounterPreviewArchetypes(blueprint) {
+    if (!blueprint || typeof blueprint !== 'object') return [];
+    const main = this.combatArchetypeByKey(blueprint.mainKey);
+    if (!main) return [];
+
+    const total = Math.max(1, Math.floor(Number(blueprint.totalCount) || 1));
+    const archetypes = [main];
+    const supportKeys = Array.isArray(blueprint.supportKeys) ? blueprint.supportKeys : [];
+    supportKeys.forEach((key) => {
+      if (archetypes.length >= total) return;
+      const archetype = this.combatArchetypeByKey(key);
+      if (archetype) archetypes.push(archetype);
+    });
+    while (archetypes.length < total) archetypes.push(main);
+    return archetypes.slice(0, total);
+  }
+
+  enemyRosterMemberLabel(archetype, boardingNo) {
+    if (!archetype) return '';
+    const scaling = this.combatEnemyLateScaling(boardingNo);
+    const name = scaling ? `${scaling.label} ${archetype.name}` : archetype.name;
+    return `${archetype.emoji} ${name}`;
+  }
+
+  nextShipIntel() {
+    if (this.isBattleTest() || !G.map || !Array.isArray(G.map.layers)) return null;
+    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+
+    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
+      const layer = G.map.layers[li];
+      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+      const node = layer[0];
+      const boardingNo = this.mapBoardingNumberForLayer(li);
+      const roster = this.combatEncounterPreviewArchetypes(node.encounter);
+      const rosterLabels = roster
+        .map((archetype) => this.enemyRosterMemberLabel(archetype, boardingNo))
+        .filter(Boolean);
+      const main = roster[0] || (node.encounter ? this.combatArchetypeByKey(node.encounter.mainKey) : null);
+      const encounterDesc = node.encounter && node.encounter.encounterDesc ? node.encounter.encounterDesc : null;
+      return {
+        nodeId: node.id,
+        layerIdx: li,
+        turnsAway: li - currentLayer,
+        boardingNo,
+        encounterDesc,
+        rosterLabels,
+        mainLabel: this.enemyRosterMemberLabel(main, boardingNo),
+      };
+    }
+
+    return null;
+  }
+
+  boardingAlertIntelText(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount), opts = {}) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    if (alert <= 0) return '';
+    const label = this.boardingAlertGuardLabel(guardCount);
+    const includePlunder = opts.includePlunder !== false;
+    const plunder = includePlunder ? this.boardingAlertPlunderLabel(guardCount) : '';
+    const suffix = [label, plunder].filter(Boolean).join(', ');
+    return suffix ? `Alert ${alert}: ${suffix}` : `Alert ${alert}`;
+  }
+
+  nextShipIntelText(intel = null, opts = {}) {
+    const info = intel || this.nextShipIntel();
+    if (!info) return '';
+    const prefix = opts.prefix === false ? '' : 'Next ship: ';
+    const rosterLine = info.rosterLabels && info.rosterLabels.length
+      ? `${prefix}${info.rosterLabels.join(', ')}`
+      : (info.encounterDesc || `Battle #${info.boardingNo}`);
+    const alertAmount = opts.alertAmount != null
+      ? Math.max(0, Math.floor(Number(opts.alertAmount) || 0))
+      : this.pendingBoardingAlert();
+    const alertGuardCount = opts.alertGuardCount != null
+      ? Math.max(0, Math.min(3, Math.floor(Number(opts.alertGuardCount) || 0)))
+      : this.boardingAlertGuardCount(alertAmount);
+    const alertLine = opts.includeAlert === false
+      ? ''
+      : this.boardingAlertIntelText(alertAmount, alertGuardCount, opts);
+    return [rosterLine, alertLine].filter(Boolean).join(' · ');
+  }
+
   isLandingRoundPhase() {
     return !!G.island && G.phase !== 'map' && G.phase !== 'boarding';
   }
 
   nextEnemyState() {
-    if (!G.map || !Array.isArray(G.map.layers)) return null;
-    const pendingAlert = this.pendingBoardingAlert();
-    const alertDesc = this.boardingAlertSummary(pendingAlert);
-
-    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
-    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
-      const layer = G.map.layers[li];
-      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
-      const turnsAway = li - currentLayer;
-      const bp = this.encounterBlueprintForLayer(li);
-      const desc = bp && bp.encounterDesc ? bp.encounterDesc : null;
+    const intel = this.nextShipIntel();
+    if (intel) {
       return {
         icon: '🏴‍☠️',
-        line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: alertDesc || desc || `Battle #${this.mapBoardingNumberForLayer(li)}`,
+        line1: `Enemy in ${intel.turnsAway} turn${intel.turnsAway === 1 ? '' : 's'}.`,
+        line2: this.nextShipIntelText(intel) || `Battle #${intel.boardingNo}`,
       };
     }
-
     return { icon: '⭐', line1: 'No more enemy ships.', line2: 'Sail to the end' };
   }
 
@@ -5308,7 +5380,10 @@ class GameScene extends Phaser.Scene {
     const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
     const blocks = [{ kind: 'goal', state: goal }];
-    if (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0) {
+    const showNextEnemy = !this.isBattleTest()
+      && G.phase !== 'boarding'
+      && (G.phase === 'map' || G.phase === 'sending' || G.phase === 'shopping' || this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0);
+    if (showNextEnemy) {
       const nextEnemy = this.nextEnemyState();
       if (nextEnemy) blocks.push({ kind: 'nextEnemy', state: nextEnemy });
     }

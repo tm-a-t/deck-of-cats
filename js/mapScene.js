@@ -181,6 +181,7 @@ class MapScene extends Phaser.Scene {
     const available = new Set(getAvailableNodes(map));
     const visited = new Set(map.visited);
     const selecting = G.phase === 'map';
+    const nextShipIntel = this.nextShipIntel();
     const activePath = uiColorInt(UI_THEME.colors.cocoa);
     const dimPath = uiColorInt(UI_THEME.colors.outline);
 
@@ -310,10 +311,17 @@ class MapScene extends Phaser.Scene {
 
         // Boarding label
         if (isShip) {
-          const strTxt = this.add.text(nx, ny + r + 8, 'Board', {
+          const isNextShip = nextShipIntel && nextShipIntel.nodeId === node.id;
+          const boardText = isNextShip && nextShipIntel.mainLabel
+            ? `Board\n${nextShipIntel.mainLabel}`
+            : 'Board';
+          const strTxt = this.add.text(nx, ny + r + 8, boardText, {
             fontFamily: UI_THEME.fonts.body,
-            fontSize: L.fs(14),
+            fontSize: L.fs(isNextShip ? 12 : 14),
             color: UI_THEME.colors.ink,
+            align: 'center',
+            lineSpacing: uiLineSpacingPx(L, isNextShip ? 12 : 14, isNextShip ? 14 : 16),
+            wordWrap: { width: 132 * L.k },
           }).setOrigin(0.5, 0);
           this.mapGfx.add(strTxt);
         }
@@ -490,6 +498,12 @@ class MapScene extends Phaser.Scene {
   }
 
   // ──────────── HELPERS ────────────
+
+  nextShipIntel() {
+    const game = this.scene.get('game');
+    if (!game || typeof game.nextShipIntel !== 'function') return null;
+    return game.nextShipIntel();
+  }
 
   uiTxt(x, y, str, style) {
     const t = this.add.text(x, y, str, Object.assign(uiBodyStyle(this.L, UI_THEME.colors.ink), style)).setOrigin(0.5, 0);

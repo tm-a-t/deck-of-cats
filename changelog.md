@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-210722 — rev 196e54e
+
+- Gameplay: true - Added scouted next-ship boarding intel: the top HUD, Shop panel, and nearest unreached ship node now show the next ship's pre-generated base enemy roster while keeping Boarding Alert guards/plunder as a separate suffix; validated with JS syntax checks, a targeted no-mutation/scouted-roster check, `node sim/fast-sim.js --check-alert-tiers`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-210722.log`.
+
 ## 2026-04-26 — run 20260426-201641 — rev 451e99a
 
 - Gameplay: false - Added a sending-phase `End now` vs `Fill crew` planning strip that projects Ship Wages, added Boarding Alert guards, Full Crew Discount, and the best visible shop buy including Dockside Credit Alert; exposed the same projections in local test state. Validated with JS syntax checks, targeted projection/no-mutation checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-201641.log`.
