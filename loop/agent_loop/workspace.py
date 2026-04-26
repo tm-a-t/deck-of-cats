@@ -2,96 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from loop.agent_loop.git_utils import (
-    collect_changed_files,
-    git_branch_exists,
-    git_common_dir,
-    git_current_branch,
-    git_process,
-    git_revision,
-    git_worktree_entries,
-)
-from loop.agent_loop.paths import ROOT
+from loop.agent_loop.git_utils import collect_changed_files, git_process, git_revision
 
 
 VALID_COMMIT_POLICIES = {"any_changes", "passed_changes", "always_try"}
-LEGACY_DEFAULT_WORKTREE_BRANCH = "loop/auto"
-DEFAULT_WORKTREE_BRANCH = "loop-auto"
-
-
-def worktree_enabled(config: dict) -> bool:
-    return bool(config.get("loop", {}).get("worktree", {}).get("enabled", True))
-
-
-def configured_workspace_root(config: dict, controller_root: Path = ROOT) -> Path:
-    if not worktree_enabled(config):
-        return controller_root
-    raw_path = str(config.get("loop", {}).get("worktree", {}).get("path", "../pirates-v0-loop-worktree"))
-    path = Path(raw_path).expanduser()
-    if not path.is_absolute():
-        path = controller_root / path
-    return path.resolve()
-
-
-def configured_worktree_branch(config: dict) -> str:
-    branch = str(config.get("loop", {}).get("worktree", {}).get("branch", DEFAULT_WORKTREE_BRANCH)).strip()
-    if branch == LEGACY_DEFAULT_WORKTREE_BRANCH:
-        return DEFAULT_WORKTREE_BRANCH
-    return branch
-
-
-def branch_worktree_path(branch: str, controller_root: Path = ROOT) -> Path | None:
-    for entry in git_worktree_entries(controller_root):
-        if entry.get("branch") == branch:
-            return Path(str(entry["worktree"])).resolve()
-    return None
-
-
-def is_same_git_repo(path: Path, controller_root: Path = ROOT) -> bool:
-    path_common_dir = git_common_dir(path)
-    controller_common_dir = git_common_dir(controller_root)
-    return path_common_dir is not None and controller_common_dir is not None and path_common_dir == controller_common_dir
-
-
-def ensure_workspace_root(config: dict, controller_root: Path = ROOT) -> Path:
-    controller_root = controller_root.resolve()
-    if not worktree_enabled(config):
-        return controller_root
-
-    path = configured_workspace_root(config, controller_root)
-    branch = configured_worktree_branch(config)
-    if not branch:
-        raise RuntimeError("loop worktree branch is empty")
-    if path == controller_root:
-        raise RuntimeError("loop worktree path must not be the controller checkout")
-
-    if path.exists():
-        if not is_same_git_repo(path, controller_root):
-            raise RuntimeError(f"loop worktree path is not a worktree for this repo: {path}")
-        current_branch = git_current_branch(path)
-        if current_branch != branch:
-            raise RuntimeError(
-                f"loop worktree is on branch {current_branch or 'detached HEAD'}, expected {branch}: {path}"
-            )
-        return path
-
-    existing_path = branch_worktree_path(branch, controller_root)
-    if existing_path is not None and existing_path != path:
-        raise RuntimeError(f"loop worktree branch {branch} is already checked out at {existing_path}")
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if git_branch_exists(branch, controller_root):
-        result = git_process(["worktree", "add", str(path), branch], cwd=controller_root, timeout=120)
-    else:
-        result = git_process(["worktree", "add", "-b", branch, str(path), "HEAD"], cwd=controller_root, timeout=120)
-    if not result["ok"]:
-        detail = (result["stderr"] or result["stdout"] or "unknown git worktree error").strip()
-        raise RuntimeError(f"failed to create loop worktree at {path}: {detail}")
-
-    current_branch = git_current_branch(path)
-    if current_branch != branch:
-        raise RuntimeError(f"created loop worktree on {current_branch or 'detached HEAD'}, expected {branch}: {path}")
-    return path
 
 
 def commit_policy(config: dict) -> str:
@@ -139,7 +53,7 @@ def commit_iteration_changes(
         return {
             "ok": True,
             "status": "no_changes",
-            "summary": "no worktree changes to commit",
+            "summary": "no checkout changes to commit",
             "changed_files": [],
             "sha": None,
         }

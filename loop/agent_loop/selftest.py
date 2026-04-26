@@ -24,15 +24,15 @@ from loop.agent_loop.telegram_monitor import (
     truncate_message,
 )
 from loop.agent_loop.validation import gameplay_docs_check
-from loop.agent_loop.workspace import commit_iteration_changes, configured_workspace_root, ensure_workspace_root
+from loop.agent_loop.workspace import commit_iteration_changes
 
 
 def self_test() -> dict:
     config = load_config(LOOP_DIR / "config.example.json")
     if not poki_steps_enabled(config):
         raise RuntimeError("Poki steps should be enabled by default")
-    if config["loop"]["worktree"]["branch"] != "loop-auto":
-        raise RuntimeError("default loop worktree branch changed unexpectedly")
+    if "worktree" in config["loop"]:
+        raise RuntimeError("loop worktree config should not be present by default")
     if config["loop"]["commit"]["policy"] != "any_changes":
         raise RuntimeError("default loop commit policy should commit any changed cycle")
     if config["loop"]["commit"]["sign"]:
@@ -162,18 +162,11 @@ def run_git(cwd: Path, args: list[str]) -> str:
 
 
 def temp_loop_config(
-    worktree_path: str,
     policy: str = "any_changes",
-    branch: str = "loop-auto",
     sign: bool = False,
 ) -> dict:
     return {
         "loop": {
-            "worktree": {
-                "enabled": True,
-                "path": worktree_path,
-                "branch": branch,
-            },
             "commit": {
                 "enabled": True,
                 "policy": policy,
@@ -195,41 +188,29 @@ def assert_workspace_cases() -> None:
         (repo / "README.md").write_text("base\n", encoding="utf-8")
         run_git(repo, ["add", "README.md"])
         run_git(repo, ["commit", "-m", "initial"])
-        run_git(repo, ["branch", "loop"])
 
-        config = temp_loop_config("../loop-worktree", branch="loop/auto")
-        expected_workspace = (repo / "../loop-worktree").resolve()
-        if configured_workspace_root(config, repo) != expected_workspace:
-            raise RuntimeError("configured workspace path did not resolve relative to controller root")
+        config = temp_loop_config()
+        run_git(repo, ["config", "commit.gpgsign", "true"])
+        run_git(repo, ["config", "gpg.program", "/bin/false"])
 
-        workspace = ensure_workspace_root(config, repo)
-        if workspace != expected_workspace or not workspace.exists():
-            raise RuntimeError("loop worktree was not created at the configured path")
-        if run_git(workspace, ["branch", "--show-current"]).strip() != "loop-auto":
-            raise RuntimeError("loop worktree was not created on the configured branch")
-        if ensure_workspace_root(config, repo) != workspace:
-            raise RuntimeError("existing loop worktree was not reused")
-        run_git(workspace, ["config", "commit.gpgsign", "true"])
-        run_git(workspace, ["config", "gpg.program", "/bin/false"])
-
-        (workspace / "feature.txt").write_text("changed by loop\n", encoding="utf-8")
-        commit = commit_iteration_changes(config, workspace, "self-test-run", "failed", "failed cycle summary")
+        (repo / "feature.txt").write_text("changed by loop\n", encoding="utf-8")
+        commit = commit_iteration_changes(config, repo, "self-test-run", "failed", "failed cycle summary")
         if commit["status"] != "committed" or not commit["sha"]:
             raise RuntimeError(f"failed dirty cycle should commit changes: {commit}")
-        if run_git(workspace, ["log", "-1", "--pretty=%s"]).strip() != "loop: changes from loop iteration self-test-run":
+        if run_git(repo, ["log", "-1", "--pretty=%s"]).strip() != "loop: changes from loop iteration self-test-run":
             raise RuntimeError("loop commit subject did not identify the loop iteration")
-        commit_body = run_git(workspace, ["log", "-1", "--pretty=%B"])
+        commit_body = run_git(repo, ["log", "-1", "--pretty=%B"])
         if "This commit was created automatically by the loop." not in commit_body:
             raise RuntimeError("loop commit body did not identify the automatic loop commit")
 
-        clean = commit_iteration_changes(config, workspace, "self-test-clean", "passed", "clean cycle")
+        clean = commit_iteration_changes(config, repo, "self-test-clean", "passed", "clean cycle")
         if clean["status"] != "no_changes" or not clean["ok"]:
             raise RuntimeError(f"clean loop cycle should not create an empty commit: {clean}")
 
-        (workspace / "failed-only.txt").write_text("left dirty\n", encoding="utf-8")
+        (repo / "failed-only.txt").write_text("left dirty\n", encoding="utf-8")
         skipped = commit_iteration_changes(
-            temp_loop_config("../loop-worktree", policy="passed_changes"),
-            workspace,
+            temp_loop_config(policy="passed_changes"),
+            repo,
             "self-test-skipped",
             "failed",
             "failed cycle summary",

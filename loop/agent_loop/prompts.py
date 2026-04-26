@@ -14,7 +14,6 @@ def base_context(config: dict, state: dict, run_id: str, workspace_root: Path = 
         "timestamp_utc": utc_now().isoformat(),
         "repo": {
             "root": str(workspace_root),
-            "controller_root": str(ROOT),
             "revision": git_revision(workspace_root),
             "status_short": git_status_short(workspace_root),
             "changed_files": collect_changed_files(workspace_root),

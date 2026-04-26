@@ -12,7 +12,7 @@ Rules:
 - Browser automation should inspect the game through `window.__deckOfCatsTest` and `window.__deckOfCatsTest.game`; do not rely on `Phaser.GAMES`.
 - Spend at most 3 minutes on browser/tool setup problems. If still blocked, return `status: "blocked"` with exact details.
 - Return schema-valid JSON by minute 18 even if testing is partial.
-- Do not create scratch files in the repo or loop worktree. Use `/tmp` for any temporary files.
+- Do not create scratch files in the repo checkout. Use `/tmp` for any temporary files.
 - Do not start long-lived stdin sessions. If you start a local server, prefer a bounded helper/harness that cleans itself up.
 - Use Codex browser/computer-use tools if they are available in this session.
 - If no Codex browser/computer-use tool is available, use local browser automation if available. Serve the repo root locally because the game is static.

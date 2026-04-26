@@ -495,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a bounded local Deck of Cats browser harness.")
     parser.add_argument("--json", action="store_true", help="Print compact JSON.")
     parser.add_argument("--timeout-seconds", type=float, default=240.0)
-    parser.add_argument("--root", default=".", help="Repo/worktree root to serve.")
+    parser.add_argument("--root", default=".", help="Repo root to serve.")
     args = parser.parse_args(argv)
 
     payload = run_harness(Path(args.root).resolve(), max(10.0, args.timeout_seconds))
