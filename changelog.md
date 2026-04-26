@@ -65,3 +65,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-195206 — rev 3fafbec
 
 - Gameplay: true - Ship Wages now pay a baseline `1☠️` on completed regular island rounds, so full sends still reach the shop with a small stake while unused slots remain the only source of Boarding Alert; validated with `node --check js/scene.js`, targeted baseline Ship Wages checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-195206.log`. Local browser harness was attempted but blocked by sandbox HTTP server permissions.
+
+## 2026-04-26 — run 20260426-200255 — rev 89a06c4
+
+- Gameplay: true - Added Full Crew Discount: filling every regular island send slot gives `-1☠️` on the first pirate bought in the next Shop, before Dockside Credit and without affecting Quiet Docks; validated with JS syntax checks, targeted Full Crew Discount checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-200255.log`.

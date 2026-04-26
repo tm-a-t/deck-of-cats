@@ -258,9 +258,10 @@ class ShopScene extends Phaser.Scene {
       const pos = this.shopPos(i, G.shop.length, m, shopLayout);
       const quote = game && typeof game.shopPurchaseQuote === 'function'
         ? game.shopPurchaseQuote(type)
-        : { canBuy: G.enthusiasm >= def.cost, credit: false, alert: 0 };
+        : { canBuy: G.enthusiasm >= def.cost, credit: false, alert: 0, cost: def.cost, effectiveCost: def.cost, discount: 0 };
       const canBuy = canBuyNow && quote.canBuy;
       const creditBuy = canBuy && quote.credit;
+      const discountBuy = canBuy && quote.discount > 0;
       const tipKey = `shop-${i}-${type}`;
       const tips = pirateCardEffectTips(type);
       const card = createPirateCard(this, {
@@ -311,13 +312,21 @@ class ShopScene extends Phaser.Scene {
 
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
-      const price = this.add.text(pos.x, priceY, `${def.cost}☠️`, uiBodyStyle(L, UI_THEME.colors.ink))
+      const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
+      const priceText = quote.discount > 0
+        ? `${def.cost}☠️ -> ${effectiveCost}☠️`
+        : `${def.cost}☠️`;
+      const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
+        fontSize: L.fs(quote.discount > 0 ? 13 : 14),
+      }))
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);
 
-      const missing = Math.max(0, def.cost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
+      const missing = quote.missing != null
+        ? Math.max(0, Math.floor(Number(quote.missing) || 0))
+        : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : 'Buy')
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -328,11 +337,11 @@ class ShopScene extends Phaser.Scene {
         y: footerY,
         label: actionLabel,
         L,
-        minW: (creditBuy ? 132 : 74) * L.k,
+        minW: (creditBuy ? 132 : (discountBuy ? 108 : 74)) * L.k,
         minH: 44 * L.k,
         fill: actionFill,
         textColor: actionTextColor,
-        textPx: creditBuy ? 14 : 16,
+        textPx: (creditBuy || discountBuy) ? 14 : 16,
       });
       this.panelLayer.add(action);
 

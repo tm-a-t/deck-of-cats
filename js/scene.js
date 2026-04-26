@@ -508,6 +508,7 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
+    G.fullCrewDiscount = 0;
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
       G.boardingCount++;
@@ -744,17 +745,39 @@ class GameScene extends Phaser.Scene {
     return !this.isBattleTest() && G.phase === 'shopping' && !G.shopCreditUsed;
   }
 
+  pendingFullCrewDiscount() {
+    return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
+  }
+
+  activeFullCrewDiscount() {
+    if (this.isBattleTest() || G.phase !== 'shopping') return 0;
+    return this.pendingFullCrewDiscount();
+  }
+
+  updateFullCrewDiscountForCompletedIsland() {
+    const max = this.maxSend();
+    const earned = !this.isBattleTest()
+      && !!G.island
+      && !G.island.healWounded
+      && max > 0
+      && G.sent.length >= max;
+    G.fullCrewDiscount = earned ? 1 : 0;
+    return G.fullCrewDiscount;
+  }
+
   shopPurchaseQuote(type) {
     const def = TYPES[type];
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+    const discount = Math.min(cost, this.activeFullCrewDiscount());
+    const effectiveCost = Math.max(0, cost - discount);
     const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0));
     if (!def) {
-      return { canBuy: false, credit: false, cost, missing: 0, alert: 0, spend: 0 };
+      return { canBuy: false, credit: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
-    if (enthusiasm >= cost) {
-      return { canBuy: true, credit: false, cost, missing: 0, alert: 0, spend: cost };
+    if (enthusiasm >= effectiveCost) {
+      return { canBuy: true, credit: false, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
     }
-    const missing = cost - enthusiasm;
+    const missing = effectiveCost - enthusiasm;
     const canCredit = this.shopCreditAvailable()
       && missing >= 1
       && missing <= this.shopCreditMaxMissing();
@@ -762,6 +785,8 @@ class GameScene extends Phaser.Scene {
       canBuy: canCredit,
       credit: canCredit,
       cost,
+      effectiveCost,
+      discount,
       missing,
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
@@ -796,6 +821,7 @@ class GameScene extends Phaser.Scene {
   enterShoppingPhase() {
     G.phase = 'shopping';
     G.shopCreditUsed = false;
+    G.fullCrewDiscount = this.isBattleTest() ? 0 : this.pendingFullCrewDiscount();
   }
 
   consumeBoardingAlertForBoarding() {
@@ -1251,6 +1277,7 @@ class GameScene extends Phaser.Scene {
     }
     this._pendingEndSending = false;
     this.closePanels();
+    this.updateFullCrewDiscountForCompletedIsland();
     this.grantShipWages();
     G.phase = 'ship';
     G.busy = true;
@@ -1503,8 +1530,9 @@ class GameScene extends Phaser.Scene {
       G.boardingAlert = this.pendingBoardingAlert() + quote.alert;
       G.shopCreditUsed = true;
     } else {
-      G.enthusiasm -= def.cost;
+      G.enthusiasm = Math.max(0, G.enthusiasm - quote.spend);
     }
+    if (quote.discount > 0) G.fullCrewDiscount = 0;
     const p = mkP(type);
     G.allCrew.push(p);
     G.discard.push(p);
@@ -1515,7 +1543,8 @@ class GameScene extends Phaser.Scene {
     }
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + alertText, '#66bb6a');
+      const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + alertText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
@@ -1548,6 +1577,7 @@ class GameScene extends Phaser.Scene {
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
+    G.fullCrewDiscount = 0;
     this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
@@ -3974,10 +4004,12 @@ class GameScene extends Phaser.Scene {
 
     if (G.phase === 'shopping') {
       const alertLine = this.boardingAlertSummary(this.pendingBoardingAlert());
+      const discount = this.activeFullCrewDiscount();
+      const discountLine = discount > 0 ? `Full Crew Discount -${discount}☠️` : null;
       return {
         icon: '🛒',
         line1: 'Visit the shop.',
-        line2: alertLine || 'Buy crew or continue sailing',
+        line2: [discountLine, alertLine].filter(Boolean).join(' · ') || 'Buy crew or continue sailing',
       };
     }
 

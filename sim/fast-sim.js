@@ -342,6 +342,7 @@ function baseDecisionTokens(api, G, kindId) {
   t.push(420 + bucket(enemyStrength, [0, 6, 12, 18, 24, 32, 44, 60, 80, 120]));
   t.push(430 + bucket(G.boardingAlert || 0, [0, 1, 2, 3, 5, 8, 12, 20]));
   t.push(440 + islandCode(api, G));
+  t.push(450 + clamp(G.fullCrewDiscount || 0, 0, 1));
   t.push(460 + clamp(G.hand.length, 0, 32));
   t.push(500 + clamp(G.sent.length, 0, 8));
   return t;
@@ -471,17 +472,24 @@ function shopCreditAlertPerMissing(api) {
   return Math.max(0, Math.floor(Number((api.SHOP_CREDIT && api.SHOP_CREDIT.alertPerMissing) || 0) || 0));
 }
 
+function activeFullCrewDiscount(G) {
+  if (!G || G.mode === 'battleTest' || G.phase !== 'shopping') return 0;
+  return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
+}
+
 function shopPurchaseQuote(api, G, type) {
   const def = api.TYPES[type];
   const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+  const discount = Math.min(cost, activeFullCrewDiscount(G));
+  const effectiveCost = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
   if (!G || !def) {
-    return { canBuy: false, credit: false, cost, missing: 0, alert: 0 };
+    return { canBuy: false, credit: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0 };
   }
-  if (enthusiasm >= cost) {
-    return { canBuy: true, credit: false, cost, missing: 0, alert: 0 };
+  if (enthusiasm >= effectiveCost) {
+    return { canBuy: true, credit: false, cost, effectiveCost, discount, missing: 0, alert: 0 };
   }
-  const missing = cost - enthusiasm;
+  const missing = effectiveCost - enthusiasm;
   const canCredit = G.mode !== 'battleTest'
     && G.phase === 'shopping'
     && !G.shopCreditUsed
@@ -491,6 +499,8 @@ function shopPurchaseQuote(api, G, type) {
     canBuy: canCredit,
     credit: canCredit,
     cost,
+    effectiveCost,
+    discount,
     missing,
     alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
   };
@@ -513,12 +523,13 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
   for (let slot = 0; slot < 4; slot++) {
     const type = G.shop[slot] || null;
     const typeIdx = type ? (typeIndexMap[type] || 0) : 0;
-    const cost = type ? (api.TYPES[type].cost || 0) : 0;
     const quote = type ? shopPurchaseQuote(api, G, type) : { canBuy: false, credit: false };
+    const cost = type ? (quote.effectiveCost != null ? quote.effectiveCost : (api.TYPES[type].cost || 0)) : 0;
     const buyState = quote.canBuy ? (quote.credit ? 1 : 2) : 0;
     tokens.push(1600 + clamp(typeIdx, 0, 380));
     tokens.push(1800 + bucket(cost, [0, 1, 2, 3, 4, 5, 7, 10, 13, 17, 24]));
     tokens.push(1900 + buyState);
+    tokens.push(1990 + clamp(quote.discount || 0, 0, 1));
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
@@ -817,6 +828,21 @@ function applyShipWagesForSim(scene, G) {
   return wages;
 }
 
+function updateFullCrewDiscountForSim(scene, G) {
+  if (scene && typeof scene.updateFullCrewDiscountForCompletedIsland === 'function') {
+    return scene.updateFullCrewDiscountForCompletedIsland();
+  }
+  const maxSend = scene && typeof scene.maxSend === 'function' ? scene.maxSend() : 0;
+  const earned = G
+    && G.mode !== 'battleTest'
+    && G.island
+    && !G.island.healWounded
+    && maxSend > 0
+    && (G.sent || []).length >= maxSend;
+  G.fullCrewDiscount = earned ? 1 : 0;
+  return G.fullCrewDiscount;
+}
+
 function prepareNextRoundForSim(api, scene) {
   const G = api.getG();
   if (G.phase !== 'shopping') return;
@@ -831,6 +857,7 @@ function prepareNextRoundForSim(api, scene) {
   G.island = null;
   G.healing = null;
   G.combat = null;
+  G.fullCrewDiscount = 0;
   if (scene && scene._sendingToIsland) scene._sendingToIsland.clear();
   if (scene) scene._pendingEndSending = false;
   G.hand = api.drawCards(5);
@@ -862,6 +889,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
     }
   }
 
+  updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
   const queue = [];
@@ -896,6 +924,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
 
   G.phase = 'shopping';
   G.shopCreditUsed = false;
+  G.fullCrewDiscount = Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
 }
 
 async function runModelMapChoice(runtime, api, scene, policy, actionCap, decisions) {
@@ -952,6 +981,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
     if (G.sent.length >= scene.maxSend()) break;
   }
 
+  updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
   const queue = [];
@@ -999,6 +1029,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
 
   G.phase = 'shopping';
   G.shopCreditUsed = false;
+  G.fullCrewDiscount = Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
 }
 
 async function runShoppingPhase(
@@ -1067,7 +1098,9 @@ async function runShoppingPhase(
     if (!bought) break;
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
-      purchases.push(quote && quote.credit ? `${label} (Credit +${quote.alert} Alert)` : label);
+      if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
+      else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
+      else purchases.push(label);
     }
     buysThisShop++;
   }

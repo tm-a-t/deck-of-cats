@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, and `Boarding Alert`: `0`.
+- Starting resources, `☠️`, `Boarding Alert`, and `Full Crew Discount`: `0`.
 - Starting hand: up to 5 pirates.
 - Starting shop: 4 unique pirates from starter shop lanes, shuffled: exactly 1 of `Poisoner`/`Drummer`, exactly 1 of `Sawbones`/`Trainer`, always `Needler`, and exactly 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -50,6 +50,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates.
 - Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot; the baseline `1☠️` adds no Alert. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
 - `Ship Wages` are not doubled by island bonuses, do not trigger on `Infirmary Island` or boarding rounds, and stack normally with `Skull Island` and pirate ship actions.
+- Ending a regular non-`Infirmary Island` round with every available send slot filled grants `Full Crew Discount` for the next Shop phase.
+- `Full Crew Discount` gives `-1☠️` on the first successful pirate purchase in that Shop, cannot reduce a price below `0☠️`, does not stack, and does not add Boarding Alert by itself.
 - Pirates with island conversion cannot be sent unless the input resource is available.
 - `Bosun` cannot go ashore at all.
 - On `Siren Island`, a pirate resolves its island action first and is then permanently removed from the crew.
@@ -84,6 +86,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates go straight to discard, not to hand.
 - The player may buy any number of pirates as long as enough `☠️` remains.
+- `Full Crew Discount`, if earned by filling every island send slot, reduces the effective cost of the first pirate bought in the next Shop by `1☠️`.
+- The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.
+- `Full Crew Discount` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
 - Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
 - A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate normally into discard, and refills that shop slot normally.
 - Affordable purchases do not use `Dockside Credit`, do not add Alert, and do not prevent a later credit purchase in the same Shop phase.
