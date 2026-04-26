@@ -32,7 +32,7 @@ def base_context(config: dict, state: dict, run_id: str, workspace_root: Path = 
         "source_of_truth": {
             "rules": "rules.md",
             "changelog": "changelog.md",
-            "loop_description": "loop.md",
+            "loop_description": "loop/README.md",
         },
     }
 
