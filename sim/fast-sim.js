@@ -911,6 +911,13 @@ function applyPortDrillForSim(scene) {
   return null;
 }
 
+function applyScoutedCacheDrillForSim(scene, pirate) {
+  if (scene && typeof scene.applyScoutedCacheDrill === 'function') {
+    return scene.applyScoutedCacheDrill(pirate, { silent: true });
+  }
+  return null;
+}
+
 function assertOpeningCommissionCheck(condition, message) {
   if (!condition) throw new Error(`opening commission check failed: ${message}`);
 }
@@ -1261,10 +1268,95 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.res.wood === 1, `cache granted wood ${G.res.wood}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `cache alert ${G.boardingAlert} !== 3`);
     assertScoutedCounterCacheCheck(node.scoutedCache.claimed === true, 'cache was not claimed');
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === 'shellback', 'cache island did not arm Cache Drill');
     scene.applyMapNodeSelection(node.id);
     assertScoutedCounterCacheCheck(G.res.wood === 1, `claimed cache granted again to wood ${G.res.wood}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `claimed cache alerted again to ${G.boardingAlert}`);
+    assertScoutedCounterCacheCheck(!G.island.scoutedCacheDrill, 'claimed cache armed Cache Drill again');
     results.push({ name: 'cache selection grants mapped resource and Alert exactly once', ok: true });
+  }
+
+  const setupDrill = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.round = 1;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx != null ? opts.islandIdx : 0]);
+    if (opts.cache !== false) {
+      G.island.scoutedCacheDrill = {
+        mainKey: opts.mainKey || 'shellback',
+        granted: false,
+      };
+    }
+    const pirates = [
+      { id: 9001, type: 'poisoner', weaponKey: null, might: 2, tempo: 0, wounded: false },
+      { id: 9002, type: 'needler', weaponKey: null, might: 0, tempo: 0, wounded: false },
+      { id: 9003, type: 'lumberjack', weaponKey: null, might: 0, tempo: 0, wounded: false },
+    ];
+    G.allCrew = pirates.slice();
+    G.hand = pirates.slice();
+    G.deck = [];
+    G.discard = [];
+    G.sent = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    scene._sacrificedIds.clear();
+    return { G, pirates };
+  };
+
+  const sendForDrill = (G, pirate, handIdx, opts = {}) => {
+    G.sent.push(handIdx);
+    scene.resolveIsland(pirate);
+    if (opts.removeAfterIsland) {
+      removePirateById(G, pirate.id);
+      scene._sacrificedIds.add(pirate.id);
+    }
+    return applyScoutedCacheDrillForSim(scene, pirate);
+  };
+
+  {
+    const { G, pirates } = setupDrill();
+    const reward = sendForDrill(G, pirates[0], 0);
+    assertScoutedCounterCacheCheck(reward && reward.applied, 'matching counter did not receive Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[0].might || 0) === 3, `matching counter might ${pirates[0].might || 0} !== 3`);
+    const second = sendForDrill(G, pirates[1], 1);
+    assertScoutedCounterCacheCheck(!second, 'second matching counter received another Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[1].might || 0) === 0, 'second matching counter gained Might');
+    results.push({ name: 'Cache Drill grants exactly +1 Might to the first surviving matching counter only', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill();
+    const reward = sendForDrill(G, pirates[2], 2);
+    assertScoutedCounterCacheCheck(!reward, 'non-counter received Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[2].might || 0) === 0, 'non-counter gained Might');
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.granted === false, 'non-counter consumed Cache Drill');
+    results.push({ name: 'Cache Drill ignores non-counter pirates without consuming the drill', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill({ mode: 'battleTest' });
+    const reward = sendForDrill(G, pirates[0], 0);
+    assertScoutedCounterCacheCheck(!reward, 'Battle Test received Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Battle Test changed counter Might');
+    results.push({ name: 'Battle Test receives no Cache Drill even with defensive cache state', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill({ cache: false });
+    const reward = sendForDrill(G, pirates[0], 0);
+    assertScoutedCounterCacheCheck(!reward, 'no-cache island received Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'no-cache island changed counter Might');
+    results.push({ name: 'unmarked islands receive no Cache Drill', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill({ islandIdx: 5 });
+    const reward = sendForDrill(G, pirates[0], 0, { removeAfterIsland: true });
+    assertScoutedCounterCacheCheck(!reward, 'Siren-removed counter received Cache Drill');
+    assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Siren-removed counter gained Might');
+    assertScoutedCounterCacheCheck(!G.allCrew.some(p => p.id === pirates[0].id), 'Siren setup failed to remove pirate');
+    results.push({ name: 'Cache Drill skips pirates removed by Siren Island', ok: true });
   }
 
   {
@@ -1958,6 +2050,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
       removePirateById(G, pirate.id);
       scene._sacrificedIds.add(pirate.id);
     }
+    applyScoutedCacheDrillForSim(scene, pirate);
   }
 
   applyPortDrillForSim(scene);
@@ -2050,6 +2143,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
       removePirateById(G, pirate.id);
       scene._sacrificedIds.add(pirate.id);
     }
+    applyScoutedCacheDrillForSim(scene, pirate);
     if (G.sent.length >= scene.maxSend()) break;
   }
 

@@ -37,9 +37,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
 - In regular runs, each ship's immediately preceding normal island layer marks 1 `Scouted Counter Cache` tied to that ship's main scouted enemy.
 - Selecting a marked cache island immediately grants `+1` of the cache resource and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
+- The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`.
 - Cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
-- Caches never appear in `Battle Test`, never apply to ship nodes or `Infirmary Island`, and a claimed cache cannot grant its reward again.
+- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and is not doubled by island bonuses.
+- Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes or `Infirmary Island`, and a claimed cache cannot grant its reward again.
 
 ### 2. Island Round
 
@@ -64,6 +66,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Pirates with island conversion cannot be sent unless the input resource is available.
 - `Bosun` cannot go ashore at all.
 - On `Siren Island`, a pirate resolves its island action first and is then permanently removed from the crew.
+- On a selected `Scouted Counter Cache` island, `Cache Drill` checks after each sent pirate resolves its island action and after any `Siren Island` removal, so a pirate removed by the island cannot receive the `+1 💪 Might`.
 - Island bonuses double only matching resource outputs (`wood`, `stone`, `gold`). They do not double guaranteed effects, `☠️`, recall/exile effects, buffs, or weapon grants.
 - If an island action grants a weapon, the player chooses which pirate from the current hand gets it.
 

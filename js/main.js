@@ -222,8 +222,22 @@ function installDeckOfCatsTestHook(game) {
       }
       state.sent.push(handIdx);
       const result = scene.resolveIsland(pirate);
+      if (state.island && state.island.sacrifice && pirate) {
+        state.allCrew = state.allCrew.filter(p => p.id !== pirate.id);
+        state.deck = state.deck.filter(p => p.id !== pirate.id);
+        state.discard = state.discard.filter(p => p.id !== pirate.id);
+        if (scene._sacrificedIds) scene._sacrificedIds.add(pirate.id);
+      }
+      const cacheDrill = typeof scene.applyScoutedCacheDrill === 'function'
+        ? scene.applyScoutedCacheDrill(pirate, { silent: true })
+        : null;
       if (typeof scene.renderAll === 'function') scene.renderAll();
-      return { ok: true, type: pirate.type, result };
+      return {
+        ok: true,
+        type: pirate.type,
+        result,
+        cacheDrill: cacheDrill ? { text: cacheDrill.text || '', might: pirate.might || 0 } : null,
+      };
     },
   };
 }

@@ -461,6 +461,12 @@ class GameScene extends Phaser.Scene {
       fullSendBuff: normalizePersonalGain(src.fullSendBuff || opts.fullSendBuff),
       sacrifice: !!src.sacrifice,
       healWounded: Math.max(0, Math.floor(Number(src.healWounded || opts.healWounded) || 0)),
+      scoutedCacheDrill: (src.scoutedCacheDrill || opts.scoutedCacheDrill)
+        ? {
+          mainKey: (src.scoutedCacheDrill || opts.scoutedCacheDrill).mainKey || null,
+          granted: !!(src.scoutedCacheDrill || opts.scoutedCacheDrill).granted,
+        }
+        : null,
     };
   }
 
@@ -493,6 +499,74 @@ class GameScene extends Phaser.Scene {
     cache.claimed = true;
 
     return { res, amount, alert, mainKey: cache.mainKey || null };
+  }
+
+  scoutedCacheDrillCounterTypes(mainKey) {
+    if (!mainKey || typeof SCOUTED_SHIP_COUNTERS !== 'object') return [];
+    const counters = SCOUTED_SHIP_COUNTERS[mainKey];
+    return Array.isArray(counters) ? counters.filter(type => !!TYPES[type]) : [];
+  }
+
+  scoutedCacheDrillState() {
+    if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
+    const drill = G.island.scoutedCacheDrill;
+    if (!drill || !drill.mainKey) return null;
+    if (!this.scoutedCacheDrillCounterTypes(drill.mainKey).length) return null;
+    return drill;
+  }
+
+  scoutedCacheDrillDescription() {
+    const drill = this.scoutedCacheDrillState();
+    if (!drill) return '';
+    if (drill.granted) return 'Cache Drill claimed';
+    const names = this.scoutedCacheDrillCounterTypes(drill.mainKey)
+      .map(type => TYPES[type] && TYPES[type].name)
+      .filter(Boolean);
+    const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
+    return `Cache Drill: first ${label || 'counter'} gains +💪`;
+  }
+
+  pirateStillInCrew(pirate) {
+    if (!pirate) return false;
+    return (G.allCrew || []).some(candidate => candidate && candidate.id === pirate.id);
+  }
+
+  applyScoutedCacheDrill(pirate, opts = {}) {
+    const drill = this.scoutedCacheDrillState();
+    if (!drill || drill.granted || !pirate || !pirate.type) return null;
+    if (!this.scoutedCacheDrillCounterTypes(drill.mainKey).includes(pirate.type)) return null;
+    if (!this.pirateStillInCrew(pirate)) return null;
+    if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return null;
+
+    const applied = this.applyPersonalGainsToPirate(pirate, [{ buff: 'might', count: 1 }]);
+    if (!applied.applied) return null;
+
+    drill.granted = true;
+    drill.pirateId = pirate.id;
+    drill.type = pirate.type;
+
+    const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
+    const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
+    const reward = {
+      ...applied,
+      mainKey: drill.mainKey,
+      handIdx,
+      sentSlot,
+      label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
+    };
+    if (!opts.silent) this.showScoutedCacheDrillResult(reward);
+    return reward;
+  }
+
+  showScoutedCacheDrillResult(reward) {
+    if (!reward || !this.L) return;
+    const point = reward.sentSlot != null && reward.sentSlot >= 0
+      ? this.islandPirateEffectPoint(reward.sentSlot)
+      : null;
+    const x = point ? point.x : this.L.cx;
+    const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}`, '#ffca28', 760);
+    this.renderIsland();
   }
 
   startRound() {
@@ -552,6 +626,12 @@ class GameScene extends Phaser.Scene {
     } else {
       cacheGrant = this.applyScoutedCounterCache(node);
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
+      if (cacheGrant && cacheGrant.mainKey && this.scoutedCacheDrillCounterTypes(cacheGrant.mainKey).length) {
+        G.island.scoutedCacheDrill = {
+          mainKey: cacheGrant.mainKey,
+          granted: false,
+        };
+      }
       G.enemyShip = null;
       if (G.island.healWounded) {
         G.phase = 'healing';
@@ -1231,9 +1311,11 @@ class GameScene extends Phaser.Scene {
         if (isSacrifice) {
           this.sacrificePirate(p, effectPos.x, effectPos.y);
         }
+        const cacheDrill = this.applyScoutedCacheDrill(p, { silent: true });
 
         this.renderAll();
         const effect = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
+        if (cacheDrill) this.showScoutedCacheDrillResult(cacheDrill);
         const baseWait = isSacrifice ? 1400 : (effect.spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (effect.spendDuration || 0);
         this.scheduleEffectFollowup({
@@ -4455,19 +4537,21 @@ class GameScene extends Phaser.Scene {
 
   islandDescription() {
     if (!G.island) return 'Choose a route on the map';
-    if (G.island.bonus === 'wood') return 'Pirates gain twice more wood';
-    if (G.island.bonus === 'stone') return 'Pirates gain twice more stone';
-    if (G.island.bonus === 'gold') return 'Pirates gain twice more gold';
-    if (G.island.fullSendBuff) {
+    let base = 'Set sail and gather what you can';
+    if (G.island.bonus === 'wood') base = 'Pirates gain twice more wood';
+    else if (G.island.bonus === 'stone') base = 'Pirates gain twice more stone';
+    else if (G.island.bonus === 'gold') base = 'Pirates gain twice more gold';
+    else if (G.island.fullSendBuff) {
       const drillText = personalGainText([G.island.fullSendBuff]);
-      return `Send ${this.maxSend()} pirates. Full crew: leftmost sent gains ${drillText}`;
-    }
-    if (G.island.extraSend) return 'You can send one extra pirate';
-    if (G.island.maxSend != null) return `Send up to ${G.island.maxSend} pirates`;
-    if (G.island.bonusEnthusiasm) return `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
-    if (G.island.sacrifice) return 'Pirates sent here are lost forever';
-    if (G.island.healWounded) return `Heal up to ${G.island.healWounded} wounded pirates`;
-    return 'Set sail and gather what you can';
+      base = `Send ${this.maxSend()} pirates. Full crew: leftmost sent gains ${drillText}`;
+    } else if (G.island.extraSend) base = 'You can send one extra pirate';
+    else if (G.island.maxSend != null) base = `Send up to ${G.island.maxSend} pirates`;
+    else if (G.island.bonusEnthusiasm) base = `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
+    else if (G.island.sacrifice) base = 'Pirates sent here are lost forever';
+    else if (G.island.healWounded) base = `Heal up to ${G.island.healWounded} wounded pirates`;
+
+    const cacheDrill = this.scoutedCacheDrillDescription();
+    return cacheDrill ? `${cacheDrill}. ${base}` : base;
   }
 
   inventoryDisplayItems(extraKeys = []) {

@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-224644 — rev 1eaf590
+
+- Gameplay: true - Added Cache Drill to Scouted Counter Cache islands: the first surviving sent pirate that counters the cache's scouted enemy gains `+1💪` Might immediately after its island action, once per cache, while non-counters, Battle Test, unmarked/claimed caches, ship/Infirmary nodes, and Siren-removed pirates do not qualify. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-port-drill --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-map-schedule --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-224644.log`.
+
 ## 2026-04-26 — run 20260426-223423 — rev 95c8ba5
 
 - Gameplay: true - Added Scouted Counter Cache route nodes before each scouted ship: one preceding island now offers `+1` mapped counter resource for `+1 Boarding Alert`, marks itself claimed on selection, and displays a compact map badge. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-map-schedule --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-223423.log`.
