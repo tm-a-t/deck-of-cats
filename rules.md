@@ -52,6 +52,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Port Island` adds `+1`, so the maximum becomes 3.
 - On a regular `Port Island`, ending with all 3 send slots filled triggers `Port Drill` before ship actions: the leftmost surviving sent pirate gains `+1 ⚡ Tempo`.
 - `Port Drill` does not trigger on partial Port sends, non-Port islands, `Infirmary Island`/healing rounds, or Battle Test; it adds no `Boarding Alert`, is not doubled by island bonuses, and stacks as normal permanent `Tempo`.
+- In regular runs, ending a non-`Infirmary Island` round exactly 1 send slot short with at least 1 surviving sent pirate triggers `Short Crew Drill` before ship actions: the leftmost surviving sent pirate gains `+1 💪 Might`.
+- `Short Crew Drill` does not trigger on full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, Battle Test, or if every sent pirate was removed by `Siren Island` or another island effect.
+- `Short Crew Drill` adds no `Boarding Alert` beyond normal `Ship Wages`, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.

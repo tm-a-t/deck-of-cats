@@ -125,3 +125,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-205716 — rev ccac8ab
 
 - Gameplay: true - Moved Boarding Alert guard thresholds to `1-2`, `3-5`, and `6+`, surfaced projected guard plunder in Alert summaries and sending/shop previews, and aligned Quiet Docks sim risk with the new `3/6` breakpoints; validated with JS syntax checks, `node sim/fast-sim.js --check-alert-tiers`, `node sim/fast-sim.js --check-opening-commission`, `node sim/fast-sim.js --check-port-drill`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-205716.log`.
+
+## 2026-04-26 — run 20260426-231237 — rev 66e069a
+
+- Gameplay: true - Added Short Crew Drill: ending a regular non-Infirmary island exactly one send slot short now gives the leftmost surviving sent pirate `+1💪` Might before ship actions, creating a partial-send growth line that still pays normal Ship Wages and Alert. Validated with JS syntax checks, `node sim/fast-sim.js --check-short-crew-drill --json`, `node sim/fast-sim.js --check-port-drill --json`, `node sim/fast-sim.js --check-opening-commission --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-231237.log`.

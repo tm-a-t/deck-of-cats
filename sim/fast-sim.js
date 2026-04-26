@@ -37,6 +37,7 @@ function parseArgs(argv) {
     policyActions: 1024,
     checkOpeningCommission: false,
     checkPortDrill: false,
+    checkShortCrewDrill: false,
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
     checkScoutedCounterCache: false,
@@ -119,6 +120,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-port-drill') {
       out.checkPortDrill = true;
+      continue;
+    }
+    if (a === '--check-short-crew-drill') {
+      out.checkShortCrewDrill = true;
       continue;
     }
     if (a === '--check-alert-tiers') {
@@ -911,6 +916,13 @@ function applyPortDrillForSim(scene) {
   return null;
 }
 
+function applyShortCrewDrillForSim(scene) {
+  if (scene && typeof scene.applyShortCrewDrill === 'function') {
+    return scene.applyShortCrewDrill({ silent: true });
+  }
+  return null;
+}
+
 function applyScoutedCacheDrillForSim(scene, pirate) {
   if (scene && typeof scene.applyScoutedCacheDrill === 'function') {
     return scene.applyScoutedCacheDrill(pirate, { silent: true });
@@ -993,6 +1005,10 @@ function runOpeningCommissionChecks(runtime) {
 
 function assertPortDrillCheck(condition, message) {
   if (!condition) throw new Error(`port drill check failed: ${message}`);
+}
+
+function assertShortCrewDrillCheck(condition, message) {
+  if (!condition) throw new Error(`short crew drill check failed: ${message}`);
 }
 
 function assertAlertTierCheck(condition, message) {
@@ -2019,6 +2035,102 @@ function runPortDrillChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function runShortCrewDrillChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const setup = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.round = Math.max(1, Math.floor(Number(opts.round) || 3));
+    G.boardingCount = 0;
+    G.phase = opts.phase || 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx != null ? opts.islandIdx : 0]);
+    G.sent = [];
+    const sentCount = Math.max(0, Math.floor(Number(opts.sent) || 0));
+    for (let i = 0; i < sentCount; i++) G.sent.push(i);
+    G.enthusiasm = 0;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.alert) || 0));
+    G.fullCrewDiscount = 0;
+    scene._sendingToIsland.clear();
+    scene._sacrificedIds.clear();
+    G.hand.forEach((pirate, index) => {
+      pirate.might = index === 0 ? 2 : 0;
+      pirate.tempo = 0;
+    });
+    if (opts.removeSent) {
+      G.sent.forEach((handIdx) => {
+        const pirate = G.hand[handIdx];
+        if (!pirate) return;
+        removePirateById(G, pirate.id);
+        scene._sacrificedIds.add(pirate.id);
+      });
+    }
+    return G;
+  };
+
+  const checkMight = (name, opts, expectedMights, expectedApplied) => {
+    const G = setup(opts);
+    const before = G.hand.map(p => p.might || 0);
+    const result = applyShortCrewDrillForSim(scene);
+    assertShortCrewDrillCheck(!!(result && result.applied) === expectedApplied, `${name} applied ${!!(result && result.applied)} !== ${expectedApplied}`);
+    expectedMights.forEach((might, index) => {
+      assertShortCrewDrillCheck((G.hand[index].might || 0) === might, `${name} hand ${index} might ${G.hand[index].might || 0} !== ${might}`);
+    });
+    results.push({
+      name,
+      ok: true,
+      applied: !!(result && result.applied),
+      before: before.slice(0, expectedMights.length),
+      after: G.hand.slice(0, expectedMights.length).map(p => p.might || 0),
+    });
+    return { G, result };
+  };
+
+  {
+    const { G } = checkMight('normal 1-of-2 grants leftmost Might', { islandIdx: 0, sent: 1 }, [3, 0], true);
+    applyShipWagesForSim(scene, G);
+    assertShortCrewDrillCheck(G.enthusiasm === 2, `normal 1-of-2 wages ${G.enthusiasm} !== 2`);
+    assertShortCrewDrillCheck(G.boardingAlert === 1, `normal 1-of-2 alert ${G.boardingAlert} !== 1`);
+    results.push({ name: 'normal 1-of-2 still pays normal Ship Wages and Alert', ok: true, enthusiasm: G.enthusiasm, boardingAlert: G.boardingAlert });
+  }
+
+  checkMight('port 2-of-3 grants Short Crew Might', { islandIdx: 3, sent: 2 }, [3, 0, 0], true);
+  checkMight('full normal send does not drill', { islandIdx: 0, sent: 2 }, [2, 0], false);
+  checkMight('empty normal send does not drill', { islandIdx: 0, sent: 0 }, [2, 0], false);
+  checkMight('battle test partial send does not drill', { mode: 'battleTest', islandIdx: 0, sent: 1 }, [2, 0], false);
+  checkMight('infirmary sending state does not drill', { islandIdx: 6, sent: 4 }, [2, 0], false);
+  checkMight('healing phase does not drill', { phase: 'healing', islandIdx: 6, sent: 4 }, [2, 0], false);
+  checkMight('Siren-removed sent pirate does not drill', { islandIdx: 5, sent: 1, removeSent: true }, [2, 0], false);
+
+  {
+    const G = setup({ islandIdx: 3, sent: 3 });
+    const shortResult = applyShortCrewDrillForSim(scene);
+    const portResult = applyPortDrillForSim(scene);
+    assertShortCrewDrillCheck(!shortResult, 'full Port send received Short Crew Drill');
+    assertShortCrewDrillCheck(portResult && portResult.applied, 'full Port send did not receive Port Drill');
+    assertShortCrewDrillCheck((G.hand[0].might || 0) === 2, `full Port changed Might to ${G.hand[0].might || 0}`);
+    assertShortCrewDrillCheck((G.hand[0].tempo || 0) === 1, `full Port tempo ${G.hand[0].tempo || 0} !== 1`);
+    results.push({ name: 'full Port send triggers Port Drill instead of Short Crew Drill', ok: true });
+  }
+
+  {
+    setup({ islandIdx: 0, sent: 1 });
+    const line = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+    assertShortCrewDrillCheck(line.includes('Short Crew +💪'), 'partial plan line does not expose Short Crew Might');
+    const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
+    assertShortCrewDrillCheck(!fullLine.includes('Short Crew'), 'full-send line mentions Short Crew');
+    setup({ islandIdx: 3, sent: 2 });
+    const portLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
+    assertShortCrewDrillCheck(portLine.includes('Short Crew +💪'), 'Port partial plan line does not expose Short Crew Might');
+    results.push({ name: 'projection text exposes Short Crew only for one-slot-short sends', ok: true, line, fullLine, portLine });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function prepareNextRoundForSim(api, scene) {
   const G = api.getG();
   if (G.phase !== 'shopping') return;
@@ -2067,6 +2179,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
   }
 
   applyPortDrillForSim(scene);
+  applyShortCrewDrillForSim(scene);
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
@@ -2161,6 +2274,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
   }
 
   applyPortDrillForSim(scene);
+  applyShortCrewDrillForSim(scene);
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
@@ -2824,6 +2938,11 @@ async function main() {
   }
   if (opts.checkPortDrill) {
     const result = runPortDrillChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkShortCrewDrill) {
+    const result = runShortCrewDrillChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

@@ -266,6 +266,7 @@ class GameScene extends Phaser.Scene {
       const pirate = G.hand && G.hand[handIdx];
       if (!pirate) continue;
       if (this._sacrificedIds.has(pirate.id)) continue;
+      if (!this.pirateStillInCrew(pirate)) continue;
       return { pirate, handIdx, sentSlot };
     }
     return null;
@@ -1005,6 +1006,28 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  projectShortCrewDrill(sentCount) {
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    if (this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || max <= 0
+      || sent <= 0
+      || max - sent !== 1) {
+      return null;
+    }
+
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    if (sent === currentSent && !this.leftmostIslandPirateEntry()) return null;
+    const gain = { buff: 'might', count: 1 };
+    return {
+      gain,
+      text: personalGainText([gain]),
+    };
+  }
+
   applyPortDrill(opts = {}) {
     const drill = this.projectPortDrill(Array.isArray(G.sent) ? G.sent.length : 0);
     if (!drill) return null;
@@ -1019,6 +1042,31 @@ class GameScene extends Phaser.Scene {
       const x = point ? point.x : this.L.cx;
       const y = point ? point.y : this.endActionY() - 54 * this.L.k;
       this.effectText(x, y, `+${applied.text || drill.text}`, '#66bb6a');
+      this.renderIsland();
+    }
+
+    return {
+      ...applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+    };
+  }
+
+  applyShortCrewDrill(opts = {}) {
+    const drill = this.projectShortCrewDrill(Array.isArray(G.sent) ? G.sent.length : 0);
+    if (!drill) return null;
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) return null;
+    if (!this.pirateStillInCrew(target.pirate)) return null;
+
+    const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
+    if (!applied.applied) return null;
+
+    if (!opts.silent && this.L) {
+      const point = this.islandPirateEffectPoint(target.sentSlot);
+      const x = point ? point.x : this.L.cx;
+      const y = point ? point.y : this.endActionY() - 54 * this.L.k;
+      this.effectText(x, y, `Short Crew +${applied.text || drill.text}`, '#ffca28');
       this.renderIsland();
     }
 
@@ -1141,6 +1189,7 @@ class GameScene extends Phaser.Scene {
       wage,
       discount,
       portDrill: opts.includePortDrill ? this.projectPortDrill(sentCount) : null,
+      shortCrewDrill: this.projectShortCrewDrill(sentCount),
       shopText: this.shopPlanText(shopState),
     };
   }
@@ -1635,6 +1684,7 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this.closePanels();
     this.applyPortDrill();
+    this.applyShortCrewDrill();
     this.updateFullCrewDiscountForCompletedIsland();
     this.grantShipWages();
     G.phase = 'ship';
@@ -5902,7 +5952,8 @@ class GameScene extends Phaser.Scene {
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
     const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
-    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, plan.shopText].filter(Boolean).join(' · ')}`;
+    const shortCrewText = plan.shortCrewDrill && plan.shortCrewDrill.text ? `Short Crew +${plan.shortCrewDrill.text}` : null;
+    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
   }
 
   renderSendingPlanComparison() {
