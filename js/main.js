@@ -177,6 +177,29 @@ function installDeckOfCatsTestHook(game) {
   window.__deckOfCatsTest = {
     game,
     getState: () => buildDeckOfCatsTestState(game),
+    sendIslandDirect: (handIdx) => {
+      const state = (typeof G !== 'undefined') ? G : null;
+      const scene = game && game.scene ? game.scene.getScene('game') : null;
+      if (!state || !scene || state.phase !== 'sending') return { ok: false, reason: 'not sending' };
+      if (!Array.isArray(state.hand) || !Array.isArray(state.sent)) return { ok: false, reason: 'hand unavailable' };
+      if (state.sent.includes(handIdx)) return { ok: false, reason: 'already sent' };
+      if (typeof scene.maxSend === 'function' && state.sent.length >= scene.maxSend()) {
+        return { ok: false, reason: 'max send reached' };
+      }
+      if (typeof scene.canPreviewIslandDrop === 'function' && !scene.canPreviewIslandDrop(handIdx)) {
+        return { ok: false, reason: 'cannot send' };
+      }
+      const pirate = state.hand[handIdx];
+      const def = pirate && TYPES[pirate.type];
+      const directSafe = def && def.island && def.island.res && !def.island.guaranteed && !def.island.convert;
+      if (!directSafe || typeof scene.resolveIsland !== 'function') {
+        return { ok: false, reason: 'not a direct-safe island pirate' };
+      }
+      state.sent.push(handIdx);
+      const result = scene.resolveIsland(pirate);
+      if (typeof scene.renderAll === 'function') scene.renderAll();
+      return { ok: true, type: pirate.type, result };
+    },
   };
 }
 

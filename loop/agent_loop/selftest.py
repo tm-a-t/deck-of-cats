@@ -6,6 +6,7 @@ import tempfile
 
 from loop.agent_loop.codex_runner import codex_failure_error
 from loop.agent_loop.io_utils import read_json
+from loop.agent_loop.local_tester_harness import playwright_script
 from loop.agent_loop.orchestrator import (
     cycle_finished_message,
     poki_steps_enabled,
@@ -36,6 +37,9 @@ def self_test() -> dict:
         raise RuntimeError("default loop commit policy should commit any changed cycle")
     if config["codex"]["role_timeouts_seconds"]["tester"] != 1200:
         raise RuntimeError("tester timeout should stay below the outer loop timeout")
+    harness_source = playwright_script()
+    if "__deckOfCatsTest" not in harness_source or "Phaser.GAMES" in harness_source:
+        raise RuntimeError("local tester harness should use the Deck of Cats test hook")
     timeout_error = codex_failure_error("tester", {"timed_out": True}, 1200)
     if timeout_error != "tester timed out after 1200s before returning JSON":
         raise RuntimeError("codex timeout error should explain which role timed out")
