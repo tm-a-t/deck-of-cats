@@ -54,6 +54,11 @@ const QUIET_DOCKS = {
   alertReduction: 1,
 };
 
+const SHOP_CREDIT = {
+  maxMissing: 2,
+  alertPerMissing: 1,
+};
+
 const COMBAT = {
   pirateHp: BASE_PIRATE_HP,
   pirateDamage: BASE_PIRATE_ATTACK,

@@ -204,6 +204,7 @@ function buildRuntime() {
       TYPES,
       ISLANDS,
       QUIET_DOCKS,
+      SHOP_CREDIT,
       GameScene,
       getG: () => G,
       setG: (next) => { G = next; },
@@ -462,6 +463,39 @@ function canQuietDocks(api, G) {
     && Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) >= quietDocksCost(api);
 }
 
+function shopCreditMaxMissing(api) {
+  return Math.max(0, Math.floor(Number((api.SHOP_CREDIT && api.SHOP_CREDIT.maxMissing) || 0) || 0));
+}
+
+function shopCreditAlertPerMissing(api) {
+  return Math.max(0, Math.floor(Number((api.SHOP_CREDIT && api.SHOP_CREDIT.alertPerMissing) || 0) || 0));
+}
+
+function shopPurchaseQuote(api, G, type) {
+  const def = api.TYPES[type];
+  const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+  const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
+  if (!G || !def) {
+    return { canBuy: false, credit: false, cost, missing: 0, alert: 0 };
+  }
+  if (enthusiasm >= cost) {
+    return { canBuy: true, credit: false, cost, missing: 0, alert: 0 };
+  }
+  const missing = cost - enthusiasm;
+  const canCredit = G.mode !== 'battleTest'
+    && G.phase === 'shopping'
+    && !G.shopCreditUsed
+    && missing >= 1
+    && missing <= shopCreditMaxMissing(api);
+  return {
+    canBuy: canCredit,
+    credit: canCredit,
+    cost,
+    missing,
+    alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
+  };
+}
+
 function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
   if (actionCap < 6) {
     throw new Error(`policy action cap too small for shop: ${actionCap}`);
@@ -480,15 +514,18 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     const type = G.shop[slot] || null;
     const typeIdx = type ? (typeIndexMap[type] || 0) : 0;
     const cost = type ? (api.TYPES[type].cost || 0) : 0;
-    const affordable = type && cost <= G.enthusiasm ? 1 : 0;
+    const quote = type ? shopPurchaseQuote(api, G, type) : { canBuy: false, credit: false };
+    const buyState = quote.canBuy ? (quote.credit ? 1 : 2) : 0;
     tokens.push(1600 + clamp(typeIdx, 0, 380));
     tokens.push(1800 + bucket(cost, [0, 1, 2, 3, 4, 5, 7, 10, 13, 17, 24]));
-    tokens.push(1900 + affordable);
+    tokens.push(1900 + buyState);
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
   tokens.push(1950 + (canQuietDocks(api, G) ? 1 : 0));
   tokens.push(1960 + bucket(quietDocksCost(api), [0, 1, 2, 3, 4, 5, 7, 10]));
+  tokens.push(1970 + (G.shopCreditUsed ? 1 : 0));
+  tokens.push(1980 + shopCreditMaxMissing(api));
   tokens.push(1999); // explicit skip marker
 
   const valid = [5];
@@ -496,8 +533,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
   for (let i = 0; i < 4; i++) {
     const type = G.shop[i];
     if (!type) continue;
-    const cost = api.TYPES[type].cost || 0;
-    if (cost <= G.enthusiasm) valid.push(i);
+    if (shopPurchaseQuote(api, G, type).canBuy) valid.push(i);
   }
   const mask = makeMask(actionCap, valid);
   return { kind: 'shop', tokens, mask, options };
@@ -661,20 +697,30 @@ function buyProbability(api, G, type, buysThisShop) {
   return clamp(p, 0.10, 0.99);
 }
 
+function adjustedBuyProbability(api, G, type, buysThisShop, quote) {
+  let p = buyProbability(api, G, type, buysThisShop);
+  if (quote && quote.credit) {
+    p -= 0.10 + Math.max(0, quote.missing - 1) * 0.08;
+    if (G.round <= 2) p += 0.18;
+    if (nextShipTurnsAway(G) <= 1) p -= 0.08;
+  }
+  return clamp(p, 0.05, 0.99);
+}
+
 function pickProbabilisticShopIndex(runtime, api, G, buysThisShop) {
-  const affordable = [];
+  const buyable = [];
   for (let i = 0; i < G.shop.length; i++) {
     const type = G.shop[i];
-    const cost = api.TYPES[type].cost || 0;
-    if (cost > G.enthusiasm) continue;
-    affordable.push({ idx: i, cost });
+    const quote = shopPurchaseQuote(api, G, type);
+    if (!quote.canBuy) continue;
+    buyable.push({ idx: i, cost: quote.cost, credit: quote.credit ? 1 : 0, quote });
   }
-  if (!affordable.length) return -1;
-  affordable.sort((a, b) => b.cost - a.cost);
+  if (!buyable.length) return -1;
+  buyable.sort((a, b) => b.cost - a.cost || a.credit - b.credit);
 
-  for (const item of affordable) {
+  for (const item of buyable) {
     const type = G.shop[item.idx];
-    const pBuy = buyProbability(api, G, type, buysThisShop);
+    const pBuy = adjustedBuyProbability(api, G, type, buysThisShop, item.quote);
     const roll = runtime ? runtime.rand() : Math.random();
     if (roll <= pBuy) return item.idx;
   }
@@ -849,6 +895,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
   }
 
   G.phase = 'shopping';
+  G.shopCreditUsed = false;
 }
 
 async function runModelMapChoice(runtime, api, scene, policy, actionCap, decisions) {
@@ -951,6 +998,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
   }
 
   G.phase = 'shopping';
+  G.shopCreditUsed = false;
 }
 
 async function runShoppingPhase(
@@ -1009,13 +1057,18 @@ async function runShoppingPhase(
     }
     const idx = selected.slot;
     const boughtType = G.shop[idx];
-    if (boughtType) purchases.push(api.TYPES[boughtType].name || boughtType);
-    scene.buyPirate(idx, {
+    const quote = boughtType ? shopPurchaseQuote(api, G, boughtType) : null;
+    const bought = scene.buyPirate(idx, {
       deferRender: true,
       silent: true,
       ignoreAnimating: true,
       skipModalRefresh: true,
     });
+    if (!bought) break;
+    if (boughtType) {
+      const label = api.TYPES[boughtType].name || boughtType;
+      purchases.push(quote && quote.credit ? `${label} (Credit +${quote.alert} Alert)` : label);
+    }
     buysThisShop++;
   }
 

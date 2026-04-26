@@ -731,6 +731,42 @@ class GameScene extends Phaser.Scene {
     return Math.max(1, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.alertReduction) || 1) || 1));
   }
 
+  shopCreditMaxMissing() {
+    return Math.max(0, Math.floor(Number((SHOP_CREDIT && SHOP_CREDIT.maxMissing) || 0) || 0));
+  }
+
+  shopCreditAlertPerMissing() {
+    return Math.max(0, Math.floor(Number((SHOP_CREDIT && SHOP_CREDIT.alertPerMissing) || 0) || 0));
+  }
+
+  shopCreditAvailable() {
+    return !this.isBattleTest() && G.phase === 'shopping' && !G.shopCreditUsed;
+  }
+
+  shopPurchaseQuote(type) {
+    const def = TYPES[type];
+    const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0));
+    if (!def) {
+      return { canBuy: false, credit: false, cost, missing: 0, alert: 0, spend: 0 };
+    }
+    if (enthusiasm >= cost) {
+      return { canBuy: true, credit: false, cost, missing: 0, alert: 0, spend: cost };
+    }
+    const missing = cost - enthusiasm;
+    const canCredit = this.shopCreditAvailable()
+      && missing >= 1
+      && missing <= this.shopCreditMaxMissing();
+    return {
+      canBuy: canCredit,
+      credit: canCredit,
+      cost,
+      missing,
+      alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
+      spend: canCredit ? enthusiasm : 0,
+    };
+  }
+
   canUseQuietDocks() {
     if (this.isBattleTest()) return false;
     if (G.phase !== 'shopping' || G.busy || G.shopAnimating) return false;
@@ -754,6 +790,11 @@ class GameScene extends Phaser.Scene {
       this.scene.get('shopModal').renderPanel();
     }
     return true;
+  }
+
+  enterShoppingPhase() {
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
   }
 
   consumeBoardingAlertForBoarding() {
@@ -1226,7 +1267,7 @@ class GameScene extends Phaser.Scene {
     if (this._shipQueuePos >= this._shipQueue.length) {
       this.time.delayedCall(400, () => {
         this.closePanels();
-        G.phase = 'shopping';
+        this.enterShoppingPhase();
         G.busy = false;
         this.renderAll();
       });
@@ -1451,11 +1492,18 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const type = G.shop[si];
     const def = TYPES[type];
-    if (G.enthusiasm < def.cost) {
+    const quote = this.shopPurchaseQuote(type);
+    if (!quote.canBuy) {
       this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Not enough ☠️', '#ef5350');
       return;
     }
-    G.enthusiasm -= def.cost;
+    if (quote.credit) {
+      G.enthusiasm = 0;
+      G.boardingAlert = this.pendingBoardingAlert() + quote.alert;
+      G.shopCreditUsed = true;
+    } else {
+      G.enthusiasm -= def.cost;
+    }
     const p = mkP(type);
     G.allCrew.push(p);
     G.discard.push(p);
@@ -1464,7 +1512,10 @@ class GameScene extends Phaser.Scene {
     if (G.shop.length) {
       G.shop.push(randomShopType(G.round, G.shop));
     }
-    if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
+    if (!opts.silent) {
+      const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + alertText, '#66bb6a');
+    }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
     this.renderAll();

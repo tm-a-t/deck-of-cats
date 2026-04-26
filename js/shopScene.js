@@ -228,7 +228,8 @@ class ShopScene extends Phaser.Scene {
     });
     this.panelLayer.add(close);
 
-    const canBuyNow = G.phase === 'shopping' && !G.busy;
+    const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
+    const game = this.scene.get('game');
 
     if (G.shop.length === 0) {
       const empty = this.add.text(m.x + m.w / 2, m.y + m.h * 0.48, 'No pirates for hire', uiBodyStyle(L, UI_THEME.colors.ink))
@@ -255,7 +256,11 @@ class ShopScene extends Phaser.Scene {
     G.shop.forEach((type, i) => {
       const def = TYPES[type];
       const pos = this.shopPos(i, G.shop.length, m, shopLayout);
-      const canBuy = canBuyNow && G.enthusiasm >= def.cost;
+      const quote = game && typeof game.shopPurchaseQuote === 'function'
+        ? game.shopPurchaseQuote(type)
+        : { canBuy: G.enthusiasm >= def.cost, credit: false, alert: 0 };
+      const canBuy = canBuyNow && quote.canBuy;
+      const creditBuy = canBuy && quote.credit;
       const tipKey = `shop-${i}-${type}`;
       const tips = pirateCardEffectTips(type);
       const card = createPirateCard(this, {
@@ -310,16 +315,24 @@ class ShopScene extends Phaser.Scene {
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);
 
+      const missing = Math.max(0, def.cost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
+      const actionLabel = canBuy
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : 'Buy')
+        : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
+      const actionFill = canBuy
+        ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
+        : UI_THEME.colors.disabled;
+      const actionTextColor = canBuy ? UI_THEME.colors.paper : UI_THEME.colors.ink;
       const action = makeUiPill(this, {
         x: pos.x,
         y: footerY,
-        label: 'Buy',
+        label: actionLabel,
         L,
-        minW: 74 * L.k,
+        minW: (creditBuy ? 132 : 74) * L.k,
         minH: 44 * L.k,
-        fill: canBuy ? UI_THEME.colors.cocoa : UI_THEME.colors.disabled,
-        textColor: canBuy ? UI_THEME.colors.paper : UI_THEME.colors.ink,
-        textPx: 16,
+        fill: actionFill,
+        textColor: actionTextColor,
+        textPx: creditBuy ? 14 : 16,
       });
       this.panelLayer.add(action);
 
@@ -329,10 +342,7 @@ class ShopScene extends Phaser.Scene {
           fill: UI_THEME.colors.cocoaDark,
           textColor: UI_THEME.colors.paper,
         }));
-        action.on('pointerout', () => action.setPillStyle({
-          fill: UI_THEME.colors.cocoa,
-          textColor: UI_THEME.colors.paper,
-        }));
+        action.on('pointerout', () => action.setPillStyle({ fill: actionFill, textColor: UI_THEME.colors.paper }));
         action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
           if (this._cardTips) this._cardTips.hide();
@@ -484,8 +494,10 @@ class ShopScene extends Phaser.Scene {
     if (shopIdx < 0 || shopIdx >= oldN) return;
 
     const type = oldShop[shopIdx];
-    const cost = TYPES[type].cost;
-    if (G.enthusiasm < cost) return;
+    const quote = game && typeof game.shopPurchaseQuote === 'function'
+      ? game.shopPurchaseQuote(type)
+      : { canBuy: G.enthusiasm >= TYPES[type].cost, credit: false, alert: 0 };
+    if (!quote.canBuy) return;
 
     G.shopAnimating = true;
 
@@ -522,7 +534,16 @@ class ShopScene extends Phaser.Scene {
       ghosts.push(card);
     });
 
-    game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
+    const bought = game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
+    if (!bought) {
+      G.shopAnimating = false;
+      ghosts.forEach(g => {
+        if (g.container) g.container.destroy();
+      });
+      rowMask.destroy();
+      this.renderPanel();
+      return;
+    }
     const newN = G.shop.length;
 
     const removed = ghosts[shopIdx];
@@ -575,7 +596,8 @@ class ShopScene extends Phaser.Scene {
       }
       rowMask.destroy();
       G.shopAnimating = false;
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!', '#66bb6a');
+      const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + alertText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });

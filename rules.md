@@ -84,6 +84,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates go straight to discard, not to hand.
 - The player may buy any number of pirates as long as enough `☠️` remains.
+- Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
+- A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate normally into discard, and refills that shop slot normally.
+- Affordable purchases do not use `Dockside Credit`, do not add Alert, and do not prevent a later credit purchase in the same Shop phase.
+- `Dockside Credit` cannot cover 3+ missing `☠️`, cannot be used more than once in the same Shop phase, is unavailable in Battle Test, and resets when the next Shop phase begins.
+- `Dockside Credit` affects only pending `Boarding Alert`; it never changes Alert already snapshotted onto an active boarding.
 - During the Shop phase in regular runs, the player may use `Quiet Docks` while pending `Boarding Alert` is above `0`.
 - `Quiet Docks` costs `2☠️` and reduces pending `Boarding Alert` by `1`.
 - `Quiet Docks` may be bought repeatedly as long as the player has at least `2☠️` and pending Alert remains, can be used before or after pirate purchases, and does not occupy or refill a pirate shop slot.
