@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-215611 — rev 908def7
+
+- Gameplay: true - Added Counter Recruits Report Early: regular-run scouted counter pirates bought within 3 map turns of the next ship now go to the top of the draw pile, including Dockside Credit and Full Crew Discount buys, while other purchases still go to discard; eligible shop slots are labeled `Top deck`. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early`, `node sim/fast-sim.js --check-scouted-counter-shop`, `node sim/fast-sim.js --check-alert-tiers`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-215611.log`.
+
 ## 2026-04-26 — run 20260426-214509 — rev 234051e
 
 - Gameplay: true - Added Boarding Trophy: winning a regular-run boarding now gives `+1💪` Might to the frontmost then leftmost surviving pirate in the final combat hand, once per win, while losses and Battle Test grant none. Validated with JS syntax checks, `node sim/fast-sim.js --check-boarding-trophy`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-214509.log`.

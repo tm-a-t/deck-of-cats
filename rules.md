@@ -97,13 +97,16 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - `Flint Duelist` → `Poisoner`, `Needler`, `Sawbones`, `Scarwright`, `Plague Captain`
 - Immediate refills after purchases use the current `G.round` and exclude the remaining visible shop types.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
-- Bought pirates go straight to discard, not to hand.
+- Bought pirates normally go straight to discard, not to hand.
+- Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
+- The draw pile top is the next card drawn. If multiple eligible counter pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible counter is drawn first.
+- Non-counter purchases, purchases when no ship is scouted, purchases when the scouted ship is more than `3` turns away, and all `Battle Test` purchases still go to discard.
 - The player may buy any number of pirates as long as enough `☠️` remains.
 - `Full Crew Discount`, if earned by filling every island send slot, reduces the effective cost of the first pirate bought in the next Shop by `1☠️`.
 - The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.
 - `Full Crew Discount` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
 - Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
-- A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate normally into discard, and refills that shop slot normally.
+- A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate using the normal purchase destination rules, and refills that shop slot normally.
 - Affordable purchases do not use `Dockside Credit`, do not add Alert, and do not prevent a later credit purchase in the same Shop phase.
 - `Dockside Credit` cannot cover 3+ missing `☠️`, cannot be used more than once in the same Shop phase, is unavailable in Battle Test, and resets when the next Shop phase begins.
 - `Dockside Credit` affects only pending `Boarding Alert`; it never changes Alert already snapshotted onto an active boarding.

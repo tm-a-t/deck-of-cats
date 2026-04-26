@@ -335,12 +335,12 @@ class ShopScene extends Phaser.Scene {
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
-      const counterText = quote.counter ? 'Counter · ' : '';
+      const counterText = quote.topDeck ? 'Counter · Top deck · ' : (quote.counter ? 'Counter · ' : '');
       const priceText = quote.discount > 0
         ? `${counterText}${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${counterText}${def.cost}☠️`;
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs((quote.discount > 0 || quote.counter) ? 13 : 14),
+        fontSize: L.fs(quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)),
       }))
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);
@@ -480,13 +480,14 @@ class ShopScene extends Phaser.Scene {
     });
   }
 
-  animateGhostToDiscard(cardView, cardScale) {
+  animateGhostToPile(cardView, cardScale, kind = 'discard') {
     const game = this.scene.get('game');
-    const target = game.pileButtonCenter('discard');
+    const target = game.pileButtonCenter(kind === 'draw' ? 'draw' : 'discard');
     const startX = cardView.container.x;
     const startY = cardView.container.y;
     const endRot = Phaser.Math.FloatBetween(-0.14, 0.14);
-    const cpX = (startX + target.x) / 2 + 56 * this.L.k;
+    const arcSign = target.x >= startX ? 1 : -1;
+    const cpX = (startX + target.x) / 2 + arcSign * 56 * this.L.k;
     const cpY = Math.min(startY, target.y) - 110 * this.L.k;
     const endScale = Math.min(cardScale, 0.34);
     const dur = 460;
@@ -576,7 +577,7 @@ class ShopScene extends Phaser.Scene {
     const newN = G.shop.length;
 
     const removed = ghosts[shopIdx];
-    const buyDur = this.animateGhostToDiscard(removed, cardScale);
+    const buyDur = this.animateGhostToPile(removed, cardScale, quote.topDeck ? 'draw' : 'discard');
 
     let ni = 0;
     for (let i = 0; i < oldN; i++) {
@@ -626,7 +627,9 @@ class ShopScene extends Phaser.Scene {
       rowMask.destroy();
       G.shopAnimating = false;
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + alertText, '#66bb6a');
+      const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const deckText = quote.topDeck ? ' Top deck' : '';
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + alertText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });

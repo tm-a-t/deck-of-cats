@@ -39,6 +39,7 @@ function parseArgs(argv) {
     checkPortDrill: false,
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
+    checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
   };
@@ -124,6 +125,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-scouted-counter-shop') {
       out.checkScoutedCounterShop = true;
+      continue;
+    }
+    if (a === '--check-counter-recruits-report-early') {
+      out.checkCounterRecruitsReportEarly = true;
       continue;
     }
     if (a === '--check-map-schedule') {
@@ -979,6 +984,10 @@ function assertScoutedCounterShopCheck(condition, message) {
   if (!condition) throw new Error(`scouted counter shop check failed: ${message}`);
 }
 
+function assertCounterRecruitsReportEarlyCheck(condition, message) {
+  if (!condition) throw new Error(`counter recruits report early check failed: ${message}`);
+}
+
 function assertMapScheduleCheck(condition, message) {
   if (!condition) throw new Error(`map schedule check failed: ${message}`);
 }
@@ -1067,6 +1076,21 @@ function makeScoutedCounterTestMap(mainKey) {
   };
 }
 
+function makeDistantScoutedCounterTestMap(mainKey) {
+  return {
+    layers: [
+      [{ id: 1, type: 'island', islandIdx: 0, conns: [2] }],
+      [{ id: 2, type: 'island', islandIdx: 1, conns: [3] }],
+      [{ id: 3, type: 'island', islandIdx: 2, conns: [4] }],
+      [{ id: 4, type: 'island', islandIdx: 3, conns: [5] }],
+      [{ id: 5, type: 'ship', strength: 6, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
+    ],
+    visited: [1],
+    currentNodeId: 1,
+    currentLayer: 0,
+  };
+}
+
 function runScoutedCounterShopChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1119,6 +1143,128 @@ function runScoutedCounterShopChecks(runtime) {
   assertScoutedCounterShopCheck(best && best.type === 'sawbones', `best visible buy is ${best && best.type}`);
   assertScoutedCounterShopCheck(plan.includes('Counter Sawbones'), `plan text lacks counter label: ${plan}`);
   results.push({ name: 'recommendation prefers same-tier counter and labels it', ok: true, plan });
+
+  return { ok: true, checks: results };
+}
+
+function runCounterRecruitsReportEarlyChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const powderMap = makeScoutedCounterTestMap('powderBomber');
+
+  const setupPurchase = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = opts.map === undefined ? powderMap : opts.map;
+    G.round = Math.max(0, Math.floor(Number(opts.round) || 2));
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.enthusiasm = Math.max(0, Math.floor(Number(opts.enthusiasm) || 0));
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
+    G.shopCreditUsed = !!opts.shopCreditUsed;
+    G.hand = [];
+    G.discard = [];
+    const oldTop = G.allCrew[0];
+    G.deck = oldTop ? [oldTop] : [];
+    G.shop = [opts.type || 'sawbones'];
+    return { G, oldTop };
+  };
+
+  {
+    const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck, `eligible quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'eligible counter also appeared in discard');
+    const drawn = api.drawCards(1)[0];
+    assertCounterRecruitsReportEarlyCheck(drawn === bought, 'next draw did not return the bought counter');
+    assertCounterRecruitsReportEarlyCheck(!oldTop || G.deck[G.deck.length - 1] === oldTop, 'older deck card did not remain below bought counter');
+    results.push({ name: 'eligible nearby scouted counter goes to top of deck and draws first', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'trainer', enthusiasm: 3 });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'trainer', 'non-counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'non-counter did not go to discard');
+    assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'non-counter went to deck');
+    results.push({ name: 'non-counter purchases still go to discard', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 3,
+      map: makeDistantScoutedCounterTestMap('powderBomber'),
+    });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.counter && !quote.topDeck, `distant quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'distant counter did not go to discard');
+    assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'distant counter went to deck');
+    results.push({ name: 'counter purchases more than 3 turns from ship still go to discard', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 3,
+      map: { layers: [[{ id: 1, type: 'island', islandIdx: 0, conns: [] }]], visited: [1], currentNodeId: 1, currentLayer: 0 },
+    });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'no-ship purchase did not go to discard');
+    assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'no-ship purchase went to deck');
+    results.push({ name: 'purchases with no scouted ship still go to discard', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 3,
+      mode: 'battleTest',
+    });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'Battle Test purchase did not go to discard');
+    assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'Battle Test purchase went to deck');
+    results.push({ name: 'Battle Test purchases still go to discard', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 1,
+      boardingAlert: 1,
+    });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.topDeck && quote.alert === 2, `credit quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'credit counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `credit did not spend all enthusiasm: ${G.enthusiasm}`);
+    assertCounterRecruitsReportEarlyCheck(G.boardingAlert === 3, `credit Alert ${G.boardingAlert} !== 3`);
+    assertCounterRecruitsReportEarlyCheck(G.shopCreditUsed === true, 'credit flag was not consumed');
+    results.push({ name: 'eligible Dockside Credit counter top-decks and still adds Alert', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 2,
+      fullCrewDiscount: 1,
+    });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.discount === 1 && quote.topDeck, `discount quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'discount counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `discount spend left ${G.enthusiasm} enthusiasm`);
+    assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'discount was not consumed');
+    results.push({ name: 'Full Crew Discount is unchanged for eligible top-deck buys', ok: true });
+  }
 
   return { ok: true, checks: results };
 }
@@ -2190,6 +2336,11 @@ async function main() {
   }
   if (opts.checkScoutedCounterShop) {
     const result = runScoutedCounterShopChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkCounterRecruitsReportEarly) {
+    const result = runCounterRecruitsReportEarlyChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
