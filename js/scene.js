@@ -461,12 +461,20 @@ class GameScene extends Phaser.Scene {
       fullSendBuff: normalizePersonalGain(src.fullSendBuff || opts.fullSendBuff),
       sacrifice: !!src.sacrifice,
       healWounded: Math.max(0, Math.floor(Number(src.healWounded || opts.healWounded) || 0)),
-      scoutedCacheDrill: (src.scoutedCacheDrill || opts.scoutedCacheDrill)
-        ? {
-          mainKey: (src.scoutedCacheDrill || opts.scoutedCacheDrill).mainKey || null,
-          granted: !!(src.scoutedCacheDrill || opts.scoutedCacheDrill).granted,
-        }
-        : null,
+      scoutedCacheDrill: (() => {
+        const drill = src.scoutedCacheDrill || opts.scoutedCacheDrill;
+        return drill
+          ? {
+            mainKey: drill.mainKey || null,
+            granted: !!drill.granted,
+            pirateId: drill.pirateId || null,
+            type: drill.type || null,
+            alertRefundAmount: Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)),
+            alertFloorBeforeCache: Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0)),
+            alertRefunded: !!drill.alertRefunded,
+          }
+          : null;
+      })(),
     };
   }
 
@@ -489,16 +497,17 @@ class GameScene extends Phaser.Scene {
     const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
     if (!res || !RES_EMOJI[res] || (amount <= 0 && alert <= 0)) return null;
 
+    const alertFloorBeforeCache = this.pendingBoardingAlert();
     if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
     if (amount > 0) {
       G.res[res] = Math.max(0, Math.floor(Number(G.res[res]) || 0)) + amount;
     }
     if (alert > 0) {
-      G.boardingAlert = this.pendingBoardingAlert() + alert;
+      G.boardingAlert = alertFloorBeforeCache + alert;
     }
     cache.claimed = true;
 
-    return { res, amount, alert, mainKey: cache.mainKey || null };
+    return { res, amount, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
@@ -523,7 +532,10 @@ class GameScene extends Phaser.Scene {
       .map(type => TYPES[type] && TYPES[type].name)
       .filter(Boolean);
     const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
-    return `Cache Drill: first ${label || 'counter'} gains +💪`;
+    const refundsAlert = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)) > 0
+      && !drill.alertRefunded;
+    const payoff = refundsAlert ? ' gains +💪, disarms cache Alert' : ' gains +💪';
+    return `Cache Drill: first ${label || 'counter'}${payoff}`;
   }
 
   pirateStillInCrew(pirate) {
@@ -544,6 +556,7 @@ class GameScene extends Phaser.Scene {
     drill.granted = true;
     drill.pirateId = pirate.id;
     drill.type = pirate.type;
+    const alertRefund = this.applyScoutedCacheAlertRefund(drill);
 
     const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
     const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
@@ -553,9 +566,26 @@ class GameScene extends Phaser.Scene {
       handIdx,
       sentSlot,
       label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
+      alertRefund,
     };
     if (!opts.silent) this.showScoutedCacheDrillResult(reward);
     return reward;
+  }
+
+  applyScoutedCacheAlertRefund(drill) {
+    if (!drill || drill.alertRefunded) return { amount: 0 };
+    const alertRefundAmount = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0));
+    if (alertRefundAmount <= 0) return { amount: 0 };
+
+    const alertFloorBeforeCache = Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0));
+    const before = this.pendingBoardingAlert();
+    const after = before > alertFloorBeforeCache
+      ? Math.max(alertFloorBeforeCache, before - alertRefundAmount)
+      : before;
+    const amount = Math.max(0, before - after);
+    if (amount > 0) G.boardingAlert = after;
+    drill.alertRefunded = true;
+    return { amount, before, after, floor: alertFloorBeforeCache };
   }
 
   showScoutedCacheDrillResult(reward) {
@@ -565,7 +595,9 @@ class GameScene extends Phaser.Scene {
       : null;
     const x = point ? point.x : this.L.cx;
     const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
-    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}`, '#ffca28', 760);
+    const refundAmount = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.amount) || 0));
+    const refundText = refundAmount > 0 ? ` -${refundAmount > 1 ? refundAmount : ''}Alert` : '';
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText}`, '#ffca28', 760);
     this.renderIsland();
   }
 
@@ -630,6 +662,9 @@ class GameScene extends Phaser.Scene {
         G.island.scoutedCacheDrill = {
           mainKey: cacheGrant.mainKey,
           granted: false,
+          alertRefundAmount: cacheGrant.alert,
+          alertFloorBeforeCache: cacheGrant.alertFloorBeforeCache,
+          alertRefunded: false,
         };
       }
       G.enemyShip = null;

@@ -1269,6 +1269,8 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `cache alert ${G.boardingAlert} !== 3`);
     assertScoutedCounterCacheCheck(node.scoutedCache.claimed === true, 'cache was not claimed');
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === 'shellback', 'cache island did not arm Cache Drill');
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertRefundAmount === 1, `cache refund amount ${G.island.scoutedCacheDrill.alertRefundAmount} !== 1`);
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertFloorBeforeCache === 2, `cache refund floor ${G.island.scoutedCacheDrill.alertFloorBeforeCache} !== 2`);
     scene.applyMapNodeSelection(node.id);
     assertScoutedCounterCacheCheck(G.res.wood === 1, `claimed cache granted again to wood ${G.res.wood}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `claimed cache alerted again to ${G.boardingAlert}`);
@@ -1287,6 +1289,9 @@ function runScoutedCounterCacheChecks(runtime) {
       G.island.scoutedCacheDrill = {
         mainKey: opts.mainKey || 'shellback',
         granted: false,
+        alertRefundAmount: Math.max(0, Math.floor(Number(opts.alertRefundAmount) || 0)),
+        alertFloorBeforeCache: Math.max(0, Math.floor(Number(opts.alertFloorBeforeCache) || 0)),
+        alertRefunded: false,
       };
     }
     const pirates = [
@@ -1300,6 +1305,7 @@ function runScoutedCounterCacheChecks(runtime) {
     G.discard = [];
     G.sent = [];
     G.res = { wood: 0, stone: 0, gold: 0 };
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
     scene._sacrificedIds.clear();
     return { G, pirates };
   };
@@ -1315,30 +1321,36 @@ function runScoutedCounterCacheChecks(runtime) {
   };
 
   {
-    const { G, pirates } = setupDrill();
+    const { G, pirates } = setupDrill({ boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
     const reward = sendForDrill(G, pirates[0], 0);
     assertScoutedCounterCacheCheck(reward && reward.applied, 'matching counter did not receive Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 3, `matching counter might ${pirates[0].might || 0} !== 3`);
+    assertScoutedCounterCacheCheck(reward.alertRefund && reward.alertRefund.amount === 1, `matching counter refund ${reward.alertRefund && reward.alertRefund.amount} !== 1`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 2, `matching counter alert ${G.boardingAlert} !== 2`);
     const second = sendForDrill(G, pirates[1], 1);
     assertScoutedCounterCacheCheck(!second, 'second matching counter received another Cache Drill');
     assertScoutedCounterCacheCheck((pirates[1].might || 0) === 0, 'second matching counter gained Might');
-    results.push({ name: 'Cache Drill grants exactly +1 Might to the first surviving matching counter only', ok: true });
+    assertScoutedCounterCacheCheck(G.boardingAlert === 2, `second matching counter changed alert to ${G.boardingAlert}`);
+    results.push({ name: 'Cache Drill grants +1 Might and refunds its cache Alert to the first surviving matching counter only', ok: true });
   }
 
   {
-    const { G, pirates } = setupDrill();
+    const { G, pirates } = setupDrill({ boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
     const reward = sendForDrill(G, pirates[2], 2);
     assertScoutedCounterCacheCheck(!reward, 'non-counter received Cache Drill');
     assertScoutedCounterCacheCheck((pirates[2].might || 0) === 0, 'non-counter gained Might');
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `non-counter changed alert to ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.granted === false, 'non-counter consumed Cache Drill');
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertRefunded === false, 'non-counter consumed cache Alert refund');
     results.push({ name: 'Cache Drill ignores non-counter pirates without consuming the drill', ok: true });
   }
 
   {
-    const { G, pirates } = setupDrill({ mode: 'battleTest' });
+    const { G, pirates } = setupDrill({ mode: 'battleTest', boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
     const reward = sendForDrill(G, pirates[0], 0);
     assertScoutedCounterCacheCheck(!reward, 'Battle Test received Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Battle Test changed counter Might');
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `Battle Test changed alert to ${G.boardingAlert}`);
     results.push({ name: 'Battle Test receives no Cache Drill even with defensive cache state', ok: true });
   }
 
@@ -1351,10 +1363,11 @@ function runScoutedCounterCacheChecks(runtime) {
   }
 
   {
-    const { G, pirates } = setupDrill({ islandIdx: 5 });
+    const { G, pirates } = setupDrill({ islandIdx: 5, boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
     const reward = sendForDrill(G, pirates[0], 0, { removeAfterIsland: true });
     assertScoutedCounterCacheCheck(!reward, 'Siren-removed counter received Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Siren-removed counter gained Might');
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `Siren-removed counter changed alert to ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(!G.allCrew.some(p => p.id === pirates[0].id), 'Siren setup failed to remove pirate');
     results.push({ name: 'Cache Drill skips pirates removed by Siren Island', ok: true });
   }
