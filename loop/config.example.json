@@ -29,6 +29,13 @@
       "designer": "read-only",
       "tester": "danger-full-access",
       "developer": "workspace-write"
+    },
+    "role_timeouts_seconds": {
+      "poki_feedback": 900,
+      "tester": 1200,
+      "poki_submit": 1800,
+      "designer": 1200,
+      "developer": 2400
     }
   },
   "poki": {

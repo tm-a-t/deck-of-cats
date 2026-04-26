@@ -8,6 +8,12 @@ from loop.agent_loop.paths import ROOT, SCHEMA_BY_ROLE, SCHEMAS_DIR
 from loop.agent_loop.prompts import parse_json_payload, prompt_for, validate_payload
 
 
+def codex_failure_error(role: str, result: dict, timeout: int) -> str:
+    if result.get("timed_out"):
+        return f"{role} timed out after {int(timeout)}s before returning JSON"
+    return "codex exec failed"
+
+
 def run_codex(role: str, context: dict, config: dict, run_dir: Path, workspace_root: Path = ROOT) -> dict:
     schema_path = SCHEMAS_DIR / SCHEMA_BY_ROLE[role]
     prompt = prompt_for(role, context)
@@ -76,7 +82,7 @@ def run_codex(role: str, context: dict, config: dict, run_dir: Path, workspace_r
         "error": None,
     }
     if not result["ok"]:
-        step["error"] = "codex exec failed"
+        step["error"] = codex_failure_error(role, result, int(timeout))
         emit_log(run_dir, "role_failed", f"{role} failed", role=role, error=step["error"])
         return step
 
