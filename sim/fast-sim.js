@@ -35,6 +35,7 @@ function parseArgs(argv) {
     mlTemperature: 1.0,
     mlEpsilon: 0.0,
     policyActions: 1024,
+    checkOpeningCommission: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -102,6 +103,10 @@ function parseArgs(argv) {
     }
     if (a === '--best-log' && argv[i + 1]) {
       out.bestLog = path.resolve(argv[++i]);
+      continue;
+    }
+    if (a === '--check-opening-commission') {
+      out.checkOpeningCommission = true;
     }
   }
 
@@ -841,6 +846,79 @@ function updateFullCrewDiscountForSim(scene, G) {
     && (G.sent || []).length >= maxSend;
   G.fullCrewDiscount = earned ? 1 : 0;
   return G.fullCrewDiscount;
+}
+
+function assertOpeningCommissionCheck(condition, message) {
+  if (!condition) throw new Error(`opening commission check failed: ${message}`);
+}
+
+function runOpeningCommissionChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const setup = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.round = Math.max(0, Math.floor(Number(opts.round) || 0));
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx || 0]);
+    G.sent = [];
+    const sentCount = Math.max(0, Math.floor(Number(opts.sent) || 0));
+    for (let i = 0; i < sentCount; i++) G.sent.push(i);
+    G.enthusiasm = 0;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.alert) || 0));
+    G.fullCrewDiscount = 0;
+    G.shopCreditUsed = false;
+    scene._sendingToIsland.clear();
+    return G;
+  };
+
+  const checkProjection = (name, opts, expected) => {
+    const G = setup(opts);
+    const preview = scene.shipWagePreview();
+    const discount = updateFullCrewDiscountForSim(scene, G);
+    applyShipWagesForSim(scene, G);
+    assertOpeningCommissionCheck(preview.wages === expected.wages, `${name} wages ${preview.wages} !== ${expected.wages}`);
+    assertOpeningCommissionCheck(preview.alert === expected.alert, `${name} alert ${preview.alert} !== ${expected.alert}`);
+    assertOpeningCommissionCheck((preview.openingCommission || 0) === expected.commission, `${name} commission ${preview.openingCommission || 0} !== ${expected.commission}`);
+    assertOpeningCommissionCheck(G.enthusiasm === expected.wages, `${name} granted ${G.enthusiasm} !== ${expected.wages}`);
+    assertOpeningCommissionCheck(G.boardingAlert === expected.alert, `${name} granted alert ${G.boardingAlert} !== ${expected.alert}`);
+    if (expected.discount != null) {
+      assertOpeningCommissionCheck(discount === expected.discount, `${name} discount ${discount} !== ${expected.discount}`);
+    }
+    results.push({ name, ok: true, preview, discount, granted: G.enthusiasm, boardingAlert: G.boardingAlert });
+    return { G, preview, discount };
+  };
+
+  checkProjection('normal round 1 full send', { round: 1, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  checkProjection('normal round 2 full send', { round: 2, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  checkProjection('port round 1 full send', { round: 1, islandIdx: 3, sent: 3 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  checkProjection('normal round 1 empty send', { round: 1, islandIdx: 0, sent: 0 }, { wages: 3, alert: 2, commission: 0, discount: 0 });
+  checkProjection('normal round 1 partial send', { round: 1, islandIdx: 0, sent: 1 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
+  checkProjection('port round 1 partial send', { round: 1, islandIdx: 3, sent: 2 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
+  checkProjection('normal round 3 full send', { round: 3, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+  checkProjection('battle test no commission', { mode: 'battleTest', round: 1, islandIdx: 0, sent: 2 }, { wages: 0, alert: 0, commission: 0, discount: 0 });
+  checkProjection('after boarding no commission', { round: 2, boardingCount: 1, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+
+  const shopCase = checkProjection('opening shop buyable cost 2', { round: 1, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  shopCase.G.phase = 'shopping';
+  const costTwoType = shopCase.G.shop.find(type => api.TYPES[type] && api.TYPES[type].cost === 2);
+  assertOpeningCommissionCheck(!!costTwoType, 'starter shop has no cost-2 pirate');
+  const quote = scene.shopPurchaseQuote(costTwoType);
+  assertOpeningCommissionCheck(quote.canBuy && !quote.credit, `cost-2 ${costTwoType} was not buyable without credit`);
+  results.push({ name: 'starter cost-2 buyable without credit', ok: true, type: costTwoType, quote });
+
+  const uiCase = setup({ round: 1, islandIdx: 0, sent: 2 });
+  const planLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
+  const action = scene.currentIslandAction();
+  assertOpeningCommissionCheck(planLine.includes('+2☠️ Wages') && planLine.includes('Opening'), 'plan line does not expose opening commission total');
+  assertOpeningCommissionCheck(action && action.label.includes('+2☠️'), `work button label mismatch: ${action && action.label}`);
+  results.push({ name: 'projection UI totals agree', ok: true, planLine, actionLabel: action.label, sent: uiCase.sent.length });
+
+  return { ok: true, checks: results };
 }
 
 function prepareNextRoundForSim(api, scene) {
@@ -1631,6 +1709,11 @@ async function main() {
     throw new Error(`unsupported --policy=${opts.policy}; expected heuristic|ml`);
   }
   const runtime = buildRuntime();
+  if (opts.checkOpeningCommission) {
+    const result = runOpeningCommissionChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
   const typeIndexMap = buildTypeIndexMap(runtime.api);
   const logDir = path.dirname(opts.bestLog);
   fs.mkdirSync(logDir, { recursive: true });

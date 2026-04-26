@@ -693,9 +693,11 @@ class GameScene extends Phaser.Scene {
     const max = paysWages ? this.maxSend() : 0;
     const sent = Math.max(0, Math.min(max, Math.floor(Number(sentCount) || 0)));
     const unused = paysWages ? Math.max(0, max - sent) : 0;
+    const openingCommission = paysWages ? this.projectOpeningCommission(sent) : 0;
     return {
       unused,
-      wages: paysWages ? unused + 1 : 0,
+      openingCommission,
+      wages: paysWages ? unused + 1 + openingCommission : 0,
       alert: unused,
     };
   }
@@ -772,6 +774,24 @@ class GameScene extends Phaser.Scene {
       && !G.island.healWounded
       && max > 0
       && Math.max(0, Math.floor(Number(sentCount) || 0)) >= max
+      ? 1
+      : 0;
+  }
+
+  projectOpeningCommission(sentCount) {
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const round = Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = Math.max(0, Math.floor(Number(G.boardingCount) || 0));
+    return !this.isBattleTest()
+      && G.phase === 'sending'
+      && !!G.island
+      && !G.island.healWounded
+      && boardingCount === 0
+      && round >= 1
+      && round <= 2
+      && max > 0
+      && sent >= max
       ? 1
       : 0;
   }
@@ -930,9 +950,12 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const x = this.actionPanelRightX();
     const y = this.endActionY() - 40 * L.k;
+    const commissionText = preview.openingCommission > 0
+      ? `\nincl. +${preview.openingCommission}☠️ Opening Commission`
+      : '';
     const alertSummary = preview.alert > 0 ? this.boardingAlertSummary(nextAlert) : null;
     const alertText = alertSummary ? `\n${alertSummary}` : '';
-    this.effectText(x, y, `+${wages}☠️ Wages${alertText}`, '#66bb6a');
+    this.effectText(x, y, `+${wages}☠️ Wages${commissionText}${alertText}`, '#66bb6a');
     this.animateResourceGain(x, y, [{ emoji: '☠️', count: wages }]);
     return wages;
   }
@@ -5428,8 +5451,11 @@ class GameScene extends Phaser.Scene {
     const alertText = wage.alert > 0
       ? `Alert +${wage.alert}${guardLabel ? ` (${guardLabel})` : ''}`
       : 'Alert +0';
+    const commissionText = wage.openingCommission > 0
+      ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
+      : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
-    return `+${wage.wages}☠️ Wages · ${alertText} · ${discountText}\n${plan.shopText}`;
+    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${discountText} · ${plan.shopText}`;
   }
 
   renderSendingPlanComparison() {
@@ -5442,7 +5468,7 @@ class GameScene extends Phaser.Scene {
       { label: 'Fill crew', plan: this.sendingPlanProjection(max) },
     ];
     const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
-    const rowH = 46 * L.k;
+    const rowH = 54 * L.k;
     const pad = 8 * L.k;
     const h = pad * 2 + rowH * rows.length;
     const topBase = L.IS_MOBILE && (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0)

@@ -73,3 +73,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-200255 — rev 89a06c4
 
 - Gameplay: true - Added Full Crew Discount: filling every regular island send slot gives `-1☠️` on the first pirate bought in the next Shop, before Dockside Credit and without affecting Quiet Docks; validated with JS syntax checks, targeted Full Crew Discount checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-200255.log`.
+
+## 2026-04-26 — run 20260426-203159 — rev 7e5591d
+
+- Gameplay: true - Added Opening Commission: full sends on the first two regular pre-boarding island rounds add `+1☠️` to Ship Wages without adding Boarding Alert, making the first shop buyable while preserving the End-now Alert tradeoff; validated with JS syntax checks, `node sim/fast-sim.js --check-opening-commission`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-203159.log`.
