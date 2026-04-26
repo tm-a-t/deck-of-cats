@@ -15,16 +15,16 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources and `☠️`: `0`.
+- Starting resources, `☠️`, and `Boarding Alert`: `0`.
 - Starting hand: up to 5 pirates.
-- Starting shop: 4 random pirates from `SHOP_POOL` with `cost <= 3`.
+- Starting shop: 4 unique pirates from starter shop lanes, shuffled: exactly 1 of `Poisoner`/`Drummer`, exactly 1 of `Sawbones`/`Trainer`, always `Needler`, and exactly 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
 
 | Pirate | Count | Island | Ship |
 |---|---:|---|---|
 | Rigger | 4 | 🪵 | 4🪵 → ☠️☠️ |
 | Ballaster | 4 | 🪨 | 4🪨 → ☠️☠️ |
-| Armsman | 2 | 🔨 | — |
+| Armsman | 2 | 🔨 | 🪵 → 🔫 Rusty Pistol |
 
 ## Regular Run Flow
 
@@ -45,6 +45,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
+- Stopping before the send limit pays `Ship Wages` before ship actions resolve: if at least 1 send slot is unused, gain `☠️☠️` for the first unused slot and `☠️` for each additional unused slot.
+- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and nothing when both slots are filled.
+- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or nothing for 0, 1, 2, or 3 sent pirates.
+- Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
+- `Ship Wages` are not doubled by island bonuses, do not trigger on `Infirmary Island` or boarding rounds, and stack normally with `Skull Island` and pirate ship actions.
 - Pirates with island conversion cannot be sent unless the input resource is available.
 - `Bosun` cannot go ashore at all.
 - On `Siren Island`, a pirate resolves its island action first and is then permanently removed from the crew.
@@ -72,12 +77,18 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 - The shop appears only after island rounds. There is no shop after boarding.
 - The shop always has 4 slots. Starters (`Rigger`, `Ballaster`, `Armsman`) are never sold there.
-- `randomShopType(round)` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`.
-- The initial display is created as `initialShop(4, 0)`.
-- Immediate refills after purchases use the current `G.round`.
-- The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule: `randomShopType(G.round + 1)`.
+- `randomShopType(round, excludeTypes = [])` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`, first avoiding any excluded visible shop types when the eligible pool has an unused type.
+- The initial display is created as `initialShop(4, 0)`, which uses the curated starter shop lanes instead of full random selection.
+- Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
+- Immediate refills after purchases use the current `G.round` and exclude the remaining visible shop types.
+- The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates go straight to discard, not to hand.
 - The player may buy any number of pirates as long as enough `☠️` remains.
+- During the Shop phase in regular runs, the player may use `Quiet Docks` while pending `Boarding Alert` is above `0`.
+- `Quiet Docks` costs `2☠️` and reduces pending `Boarding Alert` by `1`.
+- `Quiet Docks` may be bought repeatedly as long as the player has at least `2☠️` and pending Alert remains, can be used before or after pirate purchases, and does not occupy or refill a pirate shop slot.
+- `Quiet Docks` affects only pending Alert before the next ship node; it cannot reduce Alert already snapshotted onto an active boarding.
+- Battle Test has no `Quiet Docks` service because it ignores `Boarding Alert`.
 - On `Continue`:
   - the current hand goes to discard only for pirates still present in `allCrew`;
   - exiled and `get lost` pirates do not return;
@@ -88,13 +99,29 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ### 5. Boarding Round
 
 - Ship nodes move the game directly into `phase = boarding`.
+- Pending `Boarding Alert` persists through islands, shops, and map choices until the next ship node.
+- When a regular-run boarding starts, the current `Boarding Alert` is snapshotted on that boarding and the pending Alert is cleared.
+- The snapshotted Alert adds visible guard reinforcements after the normal boarding party is generated:
+  - Alert `1–3`: add 1 extra `Cabin Boy`.
+  - Alert `4–6`: add 1 extra `Cabin Boy` and 1 extra `Bilge Rat`.
+  - Alert `7+`: add 2 extra `Cabin Boys` and 1 extra `Bilge Rat`.
+- Alert guards use normal enemy stats and normal late-run `Veteran`/`Elite` scaling. Alert no longer gives enemies bonus HP.
+- The applied Alert guard count is shown during the boarding. Battle Test ignores `Boarding Alert`.
+- After a regular-run boarding is won, the consumed Alert guards grant plunder once:
+  - each Alert `Cabin Boy` grants `+1🪵`;
+  - each Alert `Bilge Rat` grants `+1🪨`;
+  - Alert `1–3` therefore pays `+1🪵`;
+  - Alert `4–6` pays `+1🪵 +1🪨`;
+  - Alert `7+` pays `+2🪵 +1🪨`.
+- Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved.
 - The old "sum team strength against ship strength" system no longer exists.
 - Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.
-- Before the fight, the current hand is automatically packed into a 3-row formation.
+- Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.
 - Wounded pirates in hand sit out and do not become combat fighters.
-- Default player setup puts armed ranged pirates in the back row and everyone else in the front row.
-- The player cannot manually drag or reorder the boarding formation.
-- `Fight!` starts autoplay combat.
+- Default player setup puts armed ranged pirates in the deepest occupied row behind any melee front and everyone else in the front row.
+- Occupied player setup rows compact toward the front whenever the formation is normalized; no ready pirate remains behind an empty row at fight start.
+- Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.
+- `Fight!` starts autoplay combat using the chosen player formation.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - In regular runs, defeated player pirates become `🩹 Wounded`.
 - If all current player fighters fall while enemies remain, the run does not immediately end.
@@ -134,7 +161,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 |---|---:|---|---|
 | Rigger | — | 🪵 | 4🪵 → ☠️☠️ |
 | Ballaster | — | 🪨 | 4🪨 → ☠️☠️ |
-| Armsman | — | 🔨 | — |
+| Armsman | — | 🔨 | 🪵 → 🔫 Rusty Pistol |
 | Poisoner | 2 | ☠️☠️ | 🪵 → ☠️☠️+🗡️ |
 | Drummer | 2 | ☠️ | 🪵 → ☠️+⚡ |
 | Herald | 2 | ☠️☠️☠️ | — |
@@ -176,6 +203,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 | Weapon | Effect |
 |---|---|
 | 🔨 Hammer | Melee. `+4 HP` |
+| 🔫 Rusty Pistol | Ranged. Deals `2 damage` with normal front-band targeting. No poison, wounds, or buff scaling. |
 | 🗡️ Venom Knife | Melee. Normal hit, then apply `1 poison` |
 | 🧪 Toxin Pistol | Ranged. Targets the living enemy with the lowest HP, then applies `1 poison` |
 | ⚔️ Barbed Blade | Melee. Normal hit, then apply `1 wound` |
@@ -192,7 +220,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - at `0 poison`, applying poison deals `0`, then goes to `1 poison`
   - at `1 poison`, applying poison deals `1`, then goes to `2 poison`
   - at `2 poison`, applying poison deals `2`, then goes to `3 poison`
-- `Wounds` do nothing by themselves.
+- Outside the `Powder Bomber` death-blast exception, `Wounds` do nothing by themselves.
 - If a target has `k wounds` and receives poison, that poison application repeats `k + 1` times.
 - Example:
   - target has `2 wounds` and `1 poison`
@@ -213,7 +241,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Default `frontBand` targeting:
   - if the attacker is position `X` among `N` living allies in its front row and the opposing front row has `M` living targets, then it randomly picks within `floor((X-1)*M/N)` through `ceil(X*M/N)-1`
 - Multi-target row hits lose `2 damage` per target if a living `Shellback` is present in that row. Damage never drops below `1`.
-- `Powder Bomber` explodes immediately on death and deals `4 damage` to the player's current front row.
+- `Powder Bomber` explodes immediately on death and deals `4 damage` to the player's current front row unless it has `1+ Wounds`; wounded bombers fizzle and deal no death-blast damage.
 - Poison damage happens immediately when poison is applied and can finish fighters during an attack.
 
 ## Enemy Boarding Parties
@@ -226,11 +254,12 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 | 🎯 Deck Sniper | 9 HP, 4 damage, 950 ms | Strong ranged; targets the backmost armed pirate, otherwise the backmost pirate |
 | 🪤 Netter | 12 HP, 3 damage, 1350 ms | Strong ranged; targets the backmost pirate and delays the next attack by `350 ms`, or `1200 ms` if that target is ranged |
 | 🔥 Flint Duelist | 11 HP, 5 damage, 1050 ms | Strong melee; if it survives a single-target hit of `5+ damage`, its next attack comes up in `220 ms` |
-| 💣 Powder Bomber | 17 HP, 4 damage, 1250 ms | Strong melee; explodes on death for `4 damage` to the player's front row |
+| 💣 Powder Bomber | 17 HP, 4 damage, 1250 ms | Strong melee; explodes on death for `4 damage` to the player's front row unless it has `1+ Wounds` |
 
 ### Encounter Scaling
 
-- `Boarding 1`: exactly 3 enemies, 1 strong and 2 weak.
+- Counts below describe the normal generated party before any `Boarding Alert` guard reinforcements are added.
+- `Boarding 1`: exactly 3 enemies before Alert guards: 1 random eligible strong enemy, exactly 1 `Bilge Rat`, and exactly 1 `Cabin Boy`.
 - `Boarding 2`: exactly 3 enemies, 2 strong and 1 weak.
 - `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
 - `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
@@ -244,11 +273,12 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 - A run has `40` layers total and `8` ship nodes.
 - Early block:
-  - `layers 0–3`: one linear path of island nodes
+  - `layers 0–3`: three parallel non-crossing island paths
   - `layer 4`: first ship node
   - `layers 5–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
-- Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, and `Siren` do not appear there.
+- Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
+- Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
 - `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
 - From `layer 10` onward, normal non-infirmary island layers contain `2–3` nodes.
 - From `layer 10` onward, `Siren Island` is added to that layer's pool with `50%` chance; the other islands may always appear.

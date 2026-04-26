@@ -341,7 +341,70 @@ class ShopScene extends Phaser.Scene {
       }
     });
 
+    this.renderQuietDocks(m);
     this.renderContinueButton(m);
+  }
+
+  renderQuietDocks(panel) {
+    if (G.phase !== 'shopping') return;
+    const game = this.scene.get('game');
+    if (!game || (typeof game.isBattleTest === 'function' && game.isBattleTest())) return;
+
+    const L = this.L;
+    const pendingAlert = typeof game.pendingBoardingAlert === 'function'
+      ? game.pendingBoardingAlert()
+      : Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+    const guardCount = typeof game.boardingAlertGuardCount === 'function'
+      ? game.boardingAlertGuardCount(pendingAlert)
+      : 0;
+    const guardLabel = typeof game.boardingAlertGuardLabel === 'function'
+      ? game.boardingAlertGuardLabel(guardCount)
+      : '';
+    const cost = typeof game.quietDocksCost === 'function'
+      ? game.quietDocksCost()
+      : Math.max(0, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.cost) || 2) || 0));
+    const enabled = typeof game.canUseQuietDocks === 'function' && game.canUseQuietDocks();
+    const y = panel.y + panel.h - 42 * L.k;
+    const text = pendingAlert > 0
+      ? `Alert ${pendingAlert}${guardLabel ? ` · ${guardLabel}` : ''}`
+      : 'Alert 0 · seas quiet';
+
+    const label = this.add.text(panel.x + 28 * L.k, y - 31 * L.k, text, {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(13),
+      wordWrap: { width: Math.min(panel.w * 0.46, 260 * L.k) },
+    }).setOrigin(0, 0.5);
+    this.panelLayer.add(label);
+
+    const action = makeUiPill(this, {
+      x: panel.x + 28 * L.k,
+      y,
+      label: `Quiet Docks ${cost}☠️`,
+      L,
+      minW: 158 * L.k,
+      minH: 42 * L.k,
+      textPx: 15,
+      fill: enabled ? UI_THEME.colors.cocoa : UI_THEME.colors.disabled,
+      textColor: enabled ? UI_THEME.colors.paper : UI_THEME.colors.ink,
+    });
+    action.setPosition(panel.x + 28 * L.k + action.width / 2, y);
+    this.panelLayer.add(action);
+
+    if (!enabled) return;
+    action.setInteractive({ useHandCursor: true });
+    action.on('pointerover', () => action.setPillStyle({
+      fill: UI_THEME.colors.cocoaDark,
+      textColor: UI_THEME.colors.paper,
+    }));
+    action.on('pointerout', () => action.setPillStyle({
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+    }));
+    action.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      if (this._cardTips) this._cardTips.hide();
+      if (game.useQuietDocks({ skipPanelRefresh: true })) this.renderPanel();
+    });
   }
 
   renderContinueButton(panel) {

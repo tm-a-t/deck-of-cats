@@ -34,15 +34,30 @@ function getStreak() {
   return data.streak;
 }
 
-function randomShopType(round) {
+function randomShopType(round, excludeTypes = []) {
   const maxCost = Math.max(3, round + 1);
-  const pool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
+  const eligiblePool = SHOP_POOL.filter(t => TYPES[t].cost <= maxCost);
+  const basePool = eligiblePool.length ? eligiblePool : SHOP_POOL;
+  const exclude = new Set(Array.isArray(excludeTypes) ? excludeTypes : []);
+  const distinctPool = basePool.filter(t => !exclude.has(t));
+  const pool = distinctPool.length ? distinctPool : basePool;
   return Phaser.Utils.Array.GetRandom(pool.length ? pool : SHOP_POOL);
 }
 
+function starterShopTypeFromLane(lane) {
+  const pool = lane.filter(t => SHOP_POOL.includes(t) && TYPES[t] && TYPES[t].cost <= 3);
+  return Phaser.Utils.Array.GetRandom(pool);
+}
+
+function starterShop() {
+  const picks = STARTER_SHOP_LANES.map(starterShopTypeFromLane).filter(Boolean);
+  return Phaser.Utils.Array.Shuffle(picks);
+}
+
 function initialShop(n, round) {
+  if (round === 0 && n === STARTER_SHOP_LANES.length) return starterShop();
   const arr = [];
-  for (let i = 0; i < n; i++) arr.push(randomShopType(round));
+  for (let i = 0; i < n; i++) arr.push(randomShopType(round, arr));
   return arr;
 }
 
@@ -188,6 +203,7 @@ function initState() {
     enemyShip: null,
     combat: null,
     healing: null,
+    boardingAlert: 0,
     boardingCount: 0,
     gameOver: false,
     shop: initialShop(4, 0),
@@ -240,6 +256,7 @@ function initBattleTestState(repeatState = null) {
     enemyShip,
     combat: useRepeatState ? repeatCombat : null,
     healing: null,
+    boardingAlert: 0,
     boardingCount: encounterNo,
     gameOver: false,
     shop: [],

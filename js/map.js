@@ -7,7 +7,7 @@ const EARLY_SEGMENTS = 2;
 const EARLY_PATHS = 3;
 const STEPS_PER_SEGMENT = 4;
 const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
-const FIRST_LINEAR_SEGMENTS = 1;
+const FIRST_LINEAR_SEGMENTS = 0;
 const TOTAL_BATTLES = 8;
 const HEAL_LAYER_INDICES = new Set([10, 20, 30]);
 
@@ -32,6 +32,23 @@ function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
 }
 
+function chooseIslandIndices(available, count, dealWithoutReplacement = false) {
+  const picked = [];
+  const bag = dealWithoutReplacement ? available.slice() : [];
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+
+  for (let i = 0; i < count; i++) {
+    const islandIdx = bag.length
+      ? bag.pop()
+      : available[Math.floor(Math.random() * available.length)];
+    picked.push(islandIdx);
+  }
+  return picked;
+}
+
 function shipStrength(shipNumber) {
   return Math.trunc(Math.pow(shipNumber, 1.2) * 2 + 4);
 }
@@ -47,7 +64,15 @@ function generateEncounterBlueprint(boardingNo) {
 
   let mainKey, supportKeys, totalCount, desc;
 
-  if (boardingNo <= 2) {
+  if (boardingNo === 1) {
+    totalCount = 3;
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : weak[Math.floor(Math.random() * weak.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    supportKeys = ['bilgeRat', 'cabinBoy'];
+  } else if (boardingNo <= 2) {
     totalCount = 3;
     const strongCount = Math.min(boardingNo, 2);
     const weakCount = totalCount - strongCount;
@@ -116,18 +141,23 @@ function generateMap() {
   let nextId = 0;
   let battlesSoFar = 0;
 
-  // Early game: first segment is linear, later segments use 3 non-intersecting paths
+  // Early game: parallel route forks with straight non-intersecting paths.
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
     const pathCount = earlyPathCount(seg);
     for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
       const li = seg * (STEPS_PER_SEGMENT + 1) + step;
-      const available = (li < 9)
+      const earlyRestricted = li < 9;
+      const available = earlyRestricted
         ? regularIslandIndices().filter(i => i !== 2 && i !== 4)
         : regularIslandIndices();
+      const islandChoices = chooseIslandIndices(
+        available,
+        pathCount,
+        earlyRestricted && pathCount >= available.length
+      );
       const layer = [];
       for (let pi = 0; pi < pathCount; pi++) {
-        const islandIdx = available[Math.floor(Math.random() * available.length)];
-        layer.push({ id: nextId++, type: 'island', islandIdx, conns: [] });
+        layer.push({ id: nextId++, type: 'island', islandIdx: islandChoices[pi], conns: [] });
       }
       layers.push(layer);
     }

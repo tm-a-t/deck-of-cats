@@ -49,6 +49,11 @@ const CARD_MOTION = {
 const BASE_PIRATE_HP = 9;
 const BASE_PIRATE_ATTACK = 3;
 
+const QUIET_DOCKS = {
+  cost: 2,
+  alertReduction: 1,
+};
+
 const COMBAT = {
   pirateHp: BASE_PIRATE_HP,
   pirateDamage: BASE_PIRATE_ATTACK,
@@ -158,7 +163,7 @@ const COMBAT = {
       unlockAt: 1,
       deathEffect: 'frontRowBlast',
       deathEffectDamage: 4,
-      summary: 'When defeated, it explodes and hits your whole front row for 4.',
+      summary: 'When defeated, it explodes and hits your whole front row for 4. Wounds disarm the blast.',
       encounterDesc: 'Explosive crew aboard',
     },
   ],
@@ -183,6 +188,14 @@ const WEAPON_TYPES = {
     targetMode: 'frontBand',
     hpBonus: 4,
     summary: 'Melee. +4 HP.',
+  },
+  rustyPistol: {
+    name: 'Rusty Pistol',
+    emoji: '🔫',
+    range: 'ranged',
+    targetMode: 'frontBand',
+    damageOverride: 2,
+    summary: 'Ranged. Deals 2 damage with normal front-band targeting.',
   },
   venomKnife: {
     name: 'Venom Knife',
@@ -805,7 +818,7 @@ const TYPES = {
   armsman: {
     name: 'Armsman', cat: [1,14,39,27,16,8], canIsland: true,
     island: { guaranteed: { weapon: 'hammer', count: 1 } },
-    ship:   null,
+    ship:   { cRes: 'wood', cN: 1, personalGains: [{ weapon: 'rustyPistol' }] },
     cost: null,
   },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
@@ -933,4 +946,11 @@ const SHOP_POOL = [
   'scarwright', 'flagbearer', 'duelMaster',
   'smuggler', 'bandmaster',
   'quartermaster', 'plagueCaptain', 'admiralsMate',
+];
+
+const STARTER_SHOP_LANES = [
+  ['poisoner', 'drummer'],
+  ['sawbones', 'trainer'],
+  ['needler'],
+  ['herald', 'survivalist'],
 ];

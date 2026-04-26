@@ -136,6 +136,22 @@ function makePhaserStub(mathObj) {
         },
       },
     },
+    Math: {
+      Between(min, max) {
+        const lo = Math.ceil(Math.min(min, max));
+        const hi = Math.floor(Math.max(min, max));
+        return lo + Math.floor(mathObj.random() * (hi - lo + 1));
+      },
+      Clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      },
+      FloatBetween(min, max) {
+        return min + mathObj.random() * (max - min);
+      },
+      Linear(a, b, t) {
+        return a + (b - a) * t;
+      },
+    },
     Scene: class FakeScene {
       constructor() {
         this.scene = {
@@ -184,8 +200,10 @@ function buildRuntime() {
       getAvailableNodes,
       mapNodeById,
       MAP_LAYERS,
+      COMBAT,
       TYPES,
       ISLANDS,
+      QUIET_DOCKS,
       GameScene,
       getG: () => G,
       setG: (next) => { G = next; },
@@ -321,6 +339,7 @@ function baseDecisionTokens(api, G, kindId) {
   t.push(400 + bucket(G.boardingCount || 0, [0, 1, 2, 3, 5, 8, 12, 20]));
   const enemyStrength = G.enemyShip ? G.enemyShip.strength : 0;
   t.push(420 + bucket(enemyStrength, [0, 6, 12, 18, 24, 32, 44, 60, 80, 120]));
+  t.push(430 + bucket(G.boardingAlert || 0, [0, 1, 2, 3, 5, 8, 12, 20]));
   t.push(440 + islandCode(api, G));
   t.push(460 + clamp(G.hand.length, 0, 32));
   t.push(500 + clamp(G.sent.length, 0, 8));
@@ -433,8 +452,18 @@ function buildRemoveDecision(api, G, shipPirateType, targets, typeIndexMap, acti
   return { kind: 'remove', tokens, mask, options };
 }
 
+function quietDocksCost(api) {
+  return Math.max(0, Math.floor(Number((api.QUIET_DOCKS && api.QUIET_DOCKS.cost) || 2) || 0));
+}
+
+function canQuietDocks(api, G) {
+  if (!G || G.mode === 'battleTest' || G.phase !== 'shopping') return false;
+  return Math.max(0, Math.floor(Number(G.boardingAlert) || 0)) > 0
+    && Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) >= quietDocksCost(api);
+}
+
 function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
-  if (actionCap < 5) {
+  if (actionCap < 6) {
     throw new Error(`policy action cap too small for shop: ${actionCap}`);
   }
   const options = [
@@ -442,6 +471,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     { type: 'buy_slot', slot: 1 },
     { type: 'buy_slot', slot: 2 },
     { type: 'buy_slot', slot: 3 },
+    { type: 'quiet_docks' },
     { type: 'skip_shop' },
   ];
   const tokens = baseDecisionTokens(api, G, DECISION_KIND.shop);
@@ -455,9 +485,14 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     tokens.push(1800 + bucket(cost, [0, 1, 2, 3, 4, 5, 7, 10, 13, 17, 24]));
     tokens.push(1900 + affordable);
   }
+  const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+  tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
+  tokens.push(1950 + (canQuietDocks(api, G) ? 1 : 0));
+  tokens.push(1960 + bucket(quietDocksCost(api), [0, 1, 2, 3, 4, 5, 7, 10]));
   tokens.push(1999); // explicit skip marker
 
-  const valid = [4];
+  const valid = [5];
+  if (canQuietDocks(api, G)) valid.push(4);
   for (let i = 0; i < 4; i++) {
     const type = G.shop[i];
     if (!type) continue;
@@ -646,6 +681,38 @@ function pickProbabilisticShopIndex(runtime, api, G, buysThisShop) {
   return -1;
 }
 
+function nextShipTurnsAway(G) {
+  if (!G || !G.map || !Array.isArray(G.map.layers)) return 99;
+  const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+  for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
+    const layer = G.map.layers[li];
+    if (layer && layer.length === 1 && layer[0].type === 'ship') return li - currentLayer;
+  }
+  return 99;
+}
+
+function quietDocksProbability(G, buysThisShop) {
+  const alert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+  let p = 0;
+  if (alert >= 7) p = 0.82;
+  else if (alert >= 4) p = 0.62;
+  else if (alert >= 2) p = 0.34;
+  else if (alert >= 1) p = 0.16;
+
+  const turnsAway = nextShipTurnsAway(G);
+  if (turnsAway <= 1) p += 0.18;
+  else if (turnsAway <= 2) p += 0.10;
+  if (G.enthusiasm <= 2) p -= 0.14;
+  p -= buysThisShop * 0.04;
+  return clamp(p, 0, 0.92);
+}
+
+function pickHeuristicShopAction(runtime, api, G, buysThisShop) {
+  if (canQuietDocks(api, G) && runtime.rand() <= quietDocksProbability(G, buysThisShop)) return 4;
+  const h = pickProbabilisticShopIndex(runtime, api, G, buysThisShop);
+  return (h != null && h >= 0) ? h : 5;
+}
+
 function makeSimScene(api) {
   const scene = new api.GameScene();
   scene.ct = {
@@ -654,14 +721,74 @@ function makeSimScene(api) {
   };
   scene._sendingToIsland = new Set();
   scene._sacrificedIds = new Set();
+  scene._cardHand = { cards: [] };
+  scene._combatEnemyViews = {};
+  scene._combatPlayerViews = {};
+  scene._combatNodes = {};
+  scene._combatEffectTimers = [];
+  scene._combatSetupDragState = null;
+  scene._combatSetupPopupPinned = false;
+  scene._combatSetupPopupDismissTimer = null;
+  scene._boardingIntroTimer = null;
   scene.renderAll = () => {};
   // Headless sim can still hit direct UI refresh calls from GameScene.
   scene.renderNav = () => {};
+  scene.openMapPanel = () => {};
   scene.float = () => {};
+  scene.effectText = () => {};
+  scene.queueHandAppear = () => 0;
+  scene.queueCombatPirateReturn = () => false;
+  scene.combatWorldPoint = () => ({ x: 0, y: 0 });
+  scene.defeatCombatFighter = (fighter, deathPositions) => {
+    if (!fighter || !fighter.alive) return false;
+    fighter.alive = false;
+    fighter.incomingUntil = 0;
+    if (fighter.side === 'player' && !scene.isBattleTest()) scene.markPirateWounded(fighter.pirateId);
+    if (Array.isArray(deathPositions)) deathPositions.push({ x: 0, y: 0 });
+    return true;
+  };
   scene.showGameOver = () => {};
   scene.showVictory = () => {};
+  scene.sys = { isActive: () => true };
+  scene.time = {
+    now: 0,
+    delayedCall: () => ({ hasDispatched: true, remove: () => {} }),
+  };
   scene.L = { k: 1, Y_ISL_CY: 0, cx: 0 };
   return scene;
+}
+
+function applyShipWagesForSim(scene, G) {
+  const preview = (scene && typeof scene.shipWagePreview === 'function')
+    ? scene.shipWagePreview()
+    : { wages: (scene && typeof scene.shipWages === 'function') ? scene.shipWages() : 0, alert: 0 };
+  const wages = Math.max(0, Math.floor(Number(preview.wages) || 0));
+  if (wages > 0) G.enthusiasm += wages;
+  const alert = Math.max(0, Math.floor(Number(preview.alert) || 0));
+  if (alert > 0 && G.mode !== 'battleTest') {
+    G.boardingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0)) + alert;
+  }
+  return wages;
+}
+
+function prepareNextRoundForSim(api, scene) {
+  const G = api.getG();
+  if (G.phase !== 'shopping') return;
+
+  const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
+  G.hand = [];
+  G.sent = [];
+  G.enthusiasm = 0;
+  G.busy = false;
+  G.enemyShip = null;
+  G.island = null;
+  G.healing = null;
+  G.combat = null;
+  if (scene && scene._sendingToIsland) scene._sendingToIsland.clear();
+  if (scene) scene._pendingEndSending = false;
+  G.hand = api.drawCards(5);
+  G.phase = 'map';
 }
 
 function runHeuristicSendingAndShipPhase(runtime, api, scene) {
@@ -688,6 +815,8 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
       scene._sacrificedIds.add(pirate.id);
     }
   }
+
+  applyShipWagesForSim(scene, G);
 
   const queue = [];
   for (let i = 0; i < G.hand.length; i++) {
@@ -776,6 +905,8 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
     if (G.sent.length >= scene.maxSend()) break;
   }
 
+  applyShipWagesForSim(scene, G);
+
   const queue = [];
   for (let i = 0; i < G.hand.length; i++) {
     if (!G.sent.includes(i)) queue.push(i);
@@ -839,8 +970,7 @@ async function runShoppingPhase(
   while (true) {
     const ctx = buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap);
     if (policy.name === 'heuristic') {
-      const h = pickProbabilisticShopIndex(runtime, api, G, buysThisShop);
-      ctx.heuristicAction = (h != null && h >= 0) ? h : 4;
+      ctx.heuristicAction = pickHeuristicShopAction(runtime, api, G, buysThisShop);
     }
     const actionId = await decideAction(runtime, policy, ctx);
     const selected = ctx.options[actionId];
@@ -867,6 +997,16 @@ async function runShoppingPhase(
     });
 
     if (selected.type === 'skip_shop') break;
+    if (selected.type === 'quiet_docks') {
+      const used = scene.useQuietDocks({
+        deferRender: true,
+        silent: true,
+        skipPanelRefresh: true,
+      });
+      if (!used) break;
+      purchases.push('Quiet Docks');
+      continue;
+    }
     const idx = selected.slot;
     const boughtType = G.shop[idx];
     if (boughtType) purchases.push(api.TYPES[boughtType].name || boughtType);
@@ -881,31 +1021,169 @@ async function runShoppingPhase(
 
   if (G.shop.length) {
     G.shop.shift();
-    G.shop.push(api.randomShopType(G.round + 1));
+    G.shop.push(api.randomShopType(G.round + 1, G.shop));
   }
-  scene.prepareNextRound();
+  prepareNextRoundForSim(api, scene);
 }
 
-function runBoardingPhase(api, scene) {
+function initializeSimCombatTimings(runtime, api, fighters, now) {
+  const combat = api.COMBAT || {};
+  const minDelay = Math.max(0, combat.initialDelayMin || 0);
+  const maxDelay = Math.max(minDelay, combat.initialDelayMax || minDelay);
+  fighters.forEach((fighter) => {
+    if (!fighter) return;
+    const span = maxDelay - minDelay + 1;
+    fighter.nextAttackAt = now + minDelay + (span > 0 ? runtime.randInt(span) : 0);
+    fighter.incomingUntil = 0;
+    fighter.attacksMade = 0;
+  });
+}
+
+function finishSimBoardingWin(api, scene) {
   const G = api.getG();
-  const crewStr = G.hand.reduce((sum, p) => sum + (api.TYPES[p.type].str || 0), 0);
-  const totalStr = crewStr + scene.shipBonusStr();
-  const shipStr = G.enemyShip.strength;
+  if (scene && typeof scene.grantBoardingAlertPlunder === 'function') {
+    scene.grantBoardingAlertPlunder(G.combat);
+  }
+  const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
+  G.hand = [];
+  G.sent = [];
 
-  if (totalStr >= shipStr) {
-    G.weapons = clearWeapons(G.weapons);
-    G.discard.push(...G.hand);
-    G.hand = [];
+  if (G.map.currentLayer >= api.MAP_LAYERS - 1) return { state: 'win' };
 
-    if (G.map.currentLayer >= api.MAP_LAYERS - 1) return { state: 'win', totalStr, shipStr };
+  G.enemyShip = null;
+  G.combat = null;
+  G.phase = 'map';
+  G.busy = false;
+  if (scene && scene._sendingToIsland) scene._sendingToIsland.clear();
+  if (scene) scene._pendingEndSending = false;
+  G.hand = api.drawCards(5);
+  return { state: 'continue' };
+}
 
-    G.hand = api.drawCards(5);
-    scene.enterMapPhase();
-    return { state: 'continue', totalStr, shipStr };
+function drawSimBoardingReinforcements(runtime, api, scene, combat, now) {
+  scene.discardBoardingHand();
+  const cards = scene.drawReadyBoardingHand(5);
+  if (!cards.length) return false;
+
+  combat.playerSetupRows = scene.combatDefaultPlayerSetupRows(combat);
+  combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
+  combat.reinforcementCount = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) + 1;
+  initializeSimCombatTimings(runtime, api, combat.playerFighters || [], now);
+  combat.nextAttackStartAt = Math.max(combat.nextAttackStartAt || 0, now + ((api.COMBAT && api.COMBAT.attackStartGapMs) || 300));
+  return true;
+}
+
+function performSimCombatAttack(api, scene, attacker, now) {
+  const combat = api.getG().combat;
+  if (!combat || !attacker || !attacker.alive || !scene.combatCanAttack(attacker)) return null;
+
+  const plan = scene.combatTargetPlanFor(attacker);
+  if (!plan || !plan.targets || !plan.targets.length) {
+    return attacker.side === 'player' ? 'win' : 'loss';
   }
 
-  G.weapons = clearWeapons(G.weapons);
-  return { state: 'loss', totalStr, shipStr };
+  const weapon = scene.combatWeaponForFighter(attacker);
+  const combatRules = api.COMBAT || {};
+  const attackFxMs = combatRules.attackFxMs || 420;
+  const attackStartGapMs = combatRules.attackStartGapMs || 300;
+
+  attacker.nextAttackAt = now + Math.max(0, attacker.attackMs || 0);
+  combat.nextAttackStartAt = now + attackStartGapMs;
+  attacker.attacksMade = (attacker.attacksMade || 0) + 1;
+
+  const damage = scene.combatAttackDamage(attacker);
+  const deathPositions = [];
+  const defeatedTargets = [];
+  const addStatusText = () => {};
+  const damageByTargetId = {};
+
+  plan.targets.forEach((target) => {
+    if (!target || !target.id) return;
+    damageByTargetId[target.id] = scene.combatAdjustedDamage(attacker, target, damage, plan);
+  });
+
+  plan.targets.forEach((target) => {
+    if (!target || !target.alive) return;
+    const targetDamage = damageByTargetId[target.id] != null ? damageByTargetId[target.id] : damage;
+    target.incomingUntil = now + attackFxMs;
+    target.hp = Math.max(0, target.hp - targetDamage);
+    if (target.hp <= 0 && scene.defeatCombatFighter(target, deathPositions)) {
+      defeatedTargets.push(target);
+      return;
+    }
+
+    scene.combatApplyAttackerOnHitEffect(attacker, target, now, addStatusText);
+    scene.combatApplyTargetReaction(target, targetDamage, plan, now, addStatusText);
+
+    if (weapon && weapon.woundsOnHit) scene.combatApplyWounds(target, weapon.woundsOnHit);
+    if (weapon && weapon.poisonOnHit) {
+      const poisonResult = scene.combatApplyPoison(target, weapon.poisonOnHit, deathPositions);
+      if (poisonResult.defeated) defeatedTargets.push(target);
+    }
+  });
+
+  scene.resolveCombatDeathEffects(defeatedTargets, now, deathPositions);
+  if (plan.pullTarget && plan.pullTarget.alive) scene.combatMoveFighterToFrontRow(plan.pullTarget);
+  if (weapon && weapon.healRowBehindOnHit) scene.healCombatRowBehind(attacker, weapon.healRowBehindOnHit);
+  return scene.combatResultFromLiving();
+}
+
+function runBoardingPhase(runtime, api, scene) {
+  const G = api.getG();
+  const combat = scene.ensureBoardingCombat();
+  if (!combat) return { state: 'error' };
+
+  combat.mode = 'fighting';
+  combat.playerSetupRows = scene.combatSetupRows('player', combat);
+  combat.enemySetupRows = scene.combatSetupRows('enemy', combat);
+  combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
+  combat.enemyFighters = scene.buildEnemyCombatFighters(combat.enemySetupRows, combat);
+  combat.nextAttackStartAt = 0;
+
+  let now = 0;
+  initializeSimCombatTimings(runtime, api, [
+    ...(combat.playerFighters || []),
+    ...(combat.enemyFighters || []),
+  ], now);
+
+  const maxTicks = 20000;
+  for (let tick = 0; tick < maxTicks; tick++) {
+    let result = scene.combatResultFromLiving();
+    if (result === 'win') return finishSimBoardingWin(api, scene);
+    if (result === 'loss') return { state: 'loss' };
+    if (result === 'reinforce') {
+      if (!drawSimBoardingReinforcements(runtime, api, scene, combat, now)) return { state: 'loss' };
+      continue;
+    }
+
+    const candidates = [
+      ...scene.combatLiving('player'),
+      ...scene.combatLiving('enemy'),
+    ].filter((fighter) => scene.combatCanAttack(fighter));
+    if (!candidates.length) return { state: 'error' };
+
+    const nextGlobalAttackAt = combat.nextAttackStartAt || 0;
+    candidates.sort((a, b) => {
+      const aAt = Math.max(nextGlobalAttackAt, a.nextAttackAt || 0, a.incomingUntil || 0);
+      const bAt = Math.max(nextGlobalAttackAt, b.nextAttackAt || 0, b.incomingUntil || 0);
+      if (aAt !== bAt) return aAt - bAt;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    const attacker = candidates[0];
+    now = Math.max(nextGlobalAttackAt, attacker.nextAttackAt || 0, attacker.incomingUntil || 0);
+    scene.time.now = now;
+    result = performSimCombatAttack(api, scene, attacker, now);
+
+    if (result === 'win') return finishSimBoardingWin(api, scene);
+    if (result === 'loss') return { state: 'loss' };
+    if (result === 'reinforce' && !drawSimBoardingReinforcements(runtime, api, scene, combat, now)) {
+      return { state: 'loss' };
+    }
+  }
+
+  return { state: 'error' };
 }
 
 function mixSeed(base, a, b, c = 0) {
@@ -981,8 +1259,20 @@ async function simulateAttempt(runtime, api, scene, maxSteps, purchases, policy,
       continue;
     }
 
+    if (G.phase === 'healing') {
+      const limit = scene.healingLimit();
+      const wounded = scene.woundedCrew();
+      wounded.slice(0, limit).forEach((pirate) => {
+        pirate.wounded = false;
+      });
+      G.healing = null;
+      G.island = null;
+      G.phase = 'map';
+      continue;
+    }
+
     if (G.phase === 'boarding') {
-      const res = runBoardingPhase(api, scene);
+      const res = runBoardingPhase(runtime, api, scene);
       if (res.state === 'win') {
         outcome = 'win';
         break;

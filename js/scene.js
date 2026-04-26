@@ -518,6 +518,7 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
     if (node.type === 'ship') {
+      const alert = this.consumeBoardingAlertForBoarding();
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
@@ -526,6 +527,8 @@ class GameScene extends Phaser.Scene {
         strength: node.strength,
         encounterNo: G.boardingCount,
         encounter: node.encounter || null,
+        boardingAlert: alert.amount,
+        boardingAlertGuards: alert.guardCount,
       };
     } else {
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
@@ -686,6 +689,119 @@ class GameScene extends Phaser.Scene {
     if (!G.island) return 0;
     if (G.island.maxSend != null) return G.island.maxSend;
     return 2 + (G.island.extraSend || 0);
+  }
+
+  unusedSendSlots() {
+    if (G.phase !== 'sending' || !G.island || G.island.healWounded) return 0;
+    return Math.max(0, this.maxSend() - G.sent.length);
+  }
+
+  shipWagePreview() {
+    const unused = this.unusedSendSlots();
+    return {
+      unused,
+      wages: unused > 0 ? unused + 1 : 0,
+      alert: unused,
+    };
+  }
+
+  shipWages() {
+    return this.shipWagePreview().wages;
+  }
+
+  pendingBoardingAlert() {
+    return Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+  }
+
+  boardingAlertGuardCount(amount = this.pendingBoardingAlert()) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    if (alert <= 0) return 0;
+    if (alert >= 7) return 3;
+    return alert >= 4 ? 2 : 1;
+  }
+
+  boardingAlertGuardLabel(guardCount) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    if (count <= 0) return '';
+    return `+${count} guard${count === 1 ? '' : 's'}`;
+  }
+
+  boardingAlertSummary(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount)) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    const label = this.boardingAlertGuardLabel(guardCount);
+    return alert > 0 && label ? `Alert ${alert}: ${label}` : null;
+  }
+
+  quietDocksCost() {
+    return Math.max(0, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.cost) || 2) || 0));
+  }
+
+  quietDocksAlertReduction() {
+    return Math.max(1, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.alertReduction) || 1) || 1));
+  }
+
+  canUseQuietDocks() {
+    if (this.isBattleTest()) return false;
+    if (G.phase !== 'shopping' || G.busy || G.shopAnimating) return false;
+    return this.pendingBoardingAlert() > 0 && G.enthusiasm >= this.quietDocksCost();
+  }
+
+  useQuietDocks(opts = {}) {
+    if (!this.canUseQuietDocks()) return false;
+    const beforeAlert = this.pendingBoardingAlert();
+    const reduction = Math.min(this.quietDocksAlertReduction(), beforeAlert);
+    G.enthusiasm -= this.quietDocksCost();
+    G.boardingAlert = Math.max(0, beforeAlert - reduction);
+
+    if (!opts.silent && this.L) {
+      const summary = this.boardingAlertSummary(G.boardingAlert) || 'Alert cleared';
+      this.float(this.L.cx, this.L.Y_ISL_CY - 40 * this.L.k, `Quiet Docks: ${summary}`, '#66bb6a');
+    }
+    if (opts.deferRender) return true;
+    this.renderAll();
+    if (!opts.skipPanelRefresh && this.scene.isActive('shopModal')) {
+      this.scene.get('shopModal').renderPanel();
+    }
+    return true;
+  }
+
+  consumeBoardingAlertForBoarding() {
+    if (this.isBattleTest()) return { amount: 0, guardCount: 0 };
+    const amount = this.pendingBoardingAlert();
+    const guardCount = this.boardingAlertGuardCount(amount);
+    G.boardingAlert = 0;
+    return { amount, guardCount };
+  }
+
+  activeBoardingAlertState() {
+    if (this.isBattleTest()) return { amount: 0, guardCount: 0 };
+    const ship = G.enemyShip || {};
+    const amount = Math.max(0, Math.floor(Number(ship.boardingAlert) || 0));
+    const guardCount = ship.boardingAlertGuards != null
+      ? Math.max(0, Math.min(3, Math.floor(Number(ship.boardingAlertGuards) || 0)))
+      : this.boardingAlertGuardCount(amount);
+    return { amount, guardCount };
+  }
+
+  grantShipWages() {
+    const preview = this.shipWagePreview();
+    const wages = preview.wages;
+    if (wages <= 0) return 0;
+
+    G.enthusiasm += wages;
+    let nextAlert = this.pendingBoardingAlert();
+    if (!this.isBattleTest() && preview.alert > 0) {
+      nextAlert += preview.alert;
+      G.boardingAlert = nextAlert;
+    }
+    const L = this.L;
+    const x = this.actionPanelRightX();
+    const y = this.endActionY() - 40 * L.k;
+    const alertSummary = preview.alert > 0 ? this.boardingAlertSummary(nextAlert) : null;
+    const alertText = alertSummary ? `\n${alertSummary}` : '';
+    this.effectText(x, y, `+${wages}☠️ Wages${alertText}`, '#66bb6a');
+    this.animateResourceGain(x, y, [{ emoji: '☠️', count: wages }]);
+    return wages;
   }
 
   sentOffsetX(si) {
@@ -1102,6 +1218,7 @@ class GameScene extends Phaser.Scene {
     }
     this._pendingEndSending = false;
     this.closePanels();
+    this.grantShipWages();
     G.phase = 'ship';
     G.busy = true;
 
@@ -1354,7 +1471,7 @@ class GameScene extends Phaser.Scene {
 
     G.shop.splice(si, 1);
     if (G.shop.length) {
-      G.shop.push(randomShopType(G.round));
+      G.shop.push(randomShopType(G.round, G.shop));
     }
     if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
     G.shopAnimating = false;
@@ -1373,7 +1490,7 @@ class GameScene extends Phaser.Scene {
   advanceFromShopping() {
     if (G.shop.length) {
       G.shop.shift();
-      G.shop.push(randomShopType(G.round + 1));
+      G.shop.push(randomShopType(G.round + 1, G.shop));
     }
     this.prepareNextRound();
   }
@@ -1639,7 +1756,7 @@ class GameScene extends Phaser.Scene {
       const rowIndex = weapon && weapon.range === 'ranged' ? 2 : 0;
       rows[rowIndex].push(pirate.id);
     });
-    return rows;
+    return this.combatCompactSetupRows(rows);
   }
 
   combatCompactSetupRows(rows) {
@@ -1772,7 +1889,8 @@ class GameScene extends Phaser.Scene {
       ? this.combatRandomEnemySetupRows(combat.enemyParty || [])
       : this.combatDefaultPlayerSetupRows(combat);
     if (side === 'player') {
-      combat[key] = this.combatNormalizeSetupRows(fallback, ids);
+      const sourceRows = Array.isArray(combat[key]) ? combat[key] : fallback;
+      combat[key] = this.combatCompactSetupRows(this.combatNormalizeSetupRows(sourceRows, ids, fallback));
       return combat[key];
     }
     combat[key] = this.combatNormalizeSetupRows(combat[key], ids, fallback);
@@ -1820,10 +1938,12 @@ class GameScene extends Phaser.Scene {
   combatSetupDropTarget(pirateId, pointer, combat = G.combat) {
     const rows = this.combatSetupRows('player', combat)
       .map((row) => row.filter((id) => id !== pirateId));
+    const pointerX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+    const pointerY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
     let rowIndex = 0;
     let bestRowDist = Infinity;
     for (let idx = 0; idx < this.combatSetupRowTotal(); idx++) {
-      const rowDist = Math.abs((pointer && pointer.y) - this.combatFormationRowY('player', idx));
+      const rowDist = Math.abs((Number.isFinite(pointerY) ? pointerY : this.combatFormationRowY('player', 0)) - this.combatFormationRowY('player', idx));
       if (rowDist < bestRowDist) {
         bestRowDist = rowDist;
         rowIndex = idx;
@@ -1834,7 +1954,7 @@ class GameScene extends Phaser.Scene {
     let insertIndex = 0;
     let bestXDist = Infinity;
     insertSlots.forEach((slot, idx) => {
-      const xDist = Math.abs((pointer && pointer.x) - slot.x);
+      const xDist = Math.abs((Number.isFinite(pointerX) ? pointerX : slot.x) - slot.x);
       if (xDist < bestXDist) {
         bestXDist = xDist;
         insertIndex = idx;
@@ -1846,12 +1966,14 @@ class GameScene extends Phaser.Scene {
 
   moveCombatSetupPirate(pirateId, rowIndex, insertIndex, combat = G.combat) {
     if (!combat || combat.mode !== 'setup' || pirateId == null) return false;
+    const readyIds = new Set(this.activeCombatHandPirates().map((pirate) => pirate.id));
+    if (!readyIds.has(pirateId)) return false;
     const rows = this.combatSetupRows('player', combat)
       .map((row) => row.filter((id) => id !== pirateId));
     const nextRowIndex = Phaser.Math.Clamp(Math.floor(Number(rowIndex) || 0), 0, this.combatSetupRowTotal() - 1);
     const nextInsertIndex = Phaser.Math.Clamp(Math.floor(Number(insertIndex) || 0), 0, rows[nextRowIndex].length);
     rows[nextRowIndex].splice(nextInsertIndex, 0, pirateId);
-    combat.playerSetupRows = rows;
+    combat.playerSetupRows = this.combatCompactSetupRows(rows);
     return true;
   }
 
@@ -1979,6 +2101,70 @@ class GameScene extends Phaser.Scene {
     return Phaser.Utils.Array.Shuffle(archetypes);
   }
 
+  boardingAlertGuardArchetypes(guardCount) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    const guardKeys = ['cabinBoy', 'bilgeRat', 'cabinBoy'];
+    return guardKeys.slice(0, count)
+      .map((key) => this.combatArchetypeByKey(key))
+      .filter(Boolean);
+  }
+
+  boardingAlertGuardPlunder(guardCount) {
+    const plunder = { wood: 0, stone: 0, gold: 0 };
+    this.boardingAlertGuardArchetypes(guardCount).forEach((archetype) => {
+      if (!archetype) return;
+      if (archetype.key === 'cabinBoy') plunder.wood += 1;
+      if (archetype.key === 'bilgeRat') plunder.stone += 1;
+    });
+    plunder.total = (plunder.wood || 0) + (plunder.stone || 0) + (plunder.gold || 0);
+    return plunder;
+  }
+
+  boardingAlertPlunderItems(plunder) {
+    const order = ['wood', 'stone', 'gold'];
+    return order
+      .map((key) => ({
+        key,
+        emoji: RES_EMOJI[key],
+        count: Math.max(0, Math.floor(Number(plunder && plunder[key]) || 0)),
+      }))
+      .filter((item) => item.count > 0 && item.emoji);
+  }
+
+  grantBoardingAlertPlunder(combat = G.combat) {
+    if (!combat || combat.alertGuardPlunderGranted) return null;
+    combat.alertGuardPlunderGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const guardCount = Math.max(0, Math.min(3, Math.floor(Number(combat.boardingAlertGuards) || 0)));
+    const plunder = this.boardingAlertGuardPlunder(guardCount);
+    combat.alertGuardPlunder = plunder;
+    if (!plunder.total) return plunder;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    this.boardingAlertPlunderItems(plunder).forEach((item) => {
+      G.res[item.key] = Math.max(0, Math.floor(Number(G.res[item.key]) || 0)) + item.count;
+    });
+    return plunder;
+  }
+
+  showBoardingAlertPlunder(plunder) {
+    if (!plunder || !plunder.total || !this.L) return;
+    const items = this.boardingAlertPlunderItems(plunder);
+    if (!items.length) return;
+
+    const label = items
+      .map((item) => `+${item.count > 1 ? item.count : ''}${item.emoji}`)
+      .join(' ');
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 84 * L.k;
+    this.effectText(x, y, `Guard plunder ${label}`, '#66bb6a', 700);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, items);
+    }
+  }
+
   currentEncounterBlueprint() {
     if (!G.map || !G.map.currentNodeId) return null;
     const node = mapNodeById(G.map, G.map.currentNodeId);
@@ -1995,6 +2181,7 @@ class GameScene extends Phaser.Scene {
   generateCombatEncounter() {
     const boardingNo = this.currentBoardingNumber();
     const blueprint = this.currentEncounterBlueprint();
+    const alert = this.activeBoardingAlertState();
     const archetypes = this.combatEncounterArchetypesFromBlueprint(blueprint, boardingNo);
     const enemies = [];
 
@@ -2003,6 +2190,14 @@ class GameScene extends Phaser.Scene {
       enemies.push(this.buildCombatEnemyMember(
         archetype,
         `${archetype.key}_${boardingNo}_${i}`,
+        this.combatScaledEnemyOverrides(archetype, boardingNo)
+      ));
+    });
+
+    this.boardingAlertGuardArchetypes(alert.guardCount).forEach((archetype, i) => {
+      enemies.push(this.buildCombatEnemyMember(
+        archetype,
+        `alertGuard_${archetype.key}_${boardingNo}_${i}`,
         this.combatScaledEnemyOverrides(archetype, boardingNo)
       ));
     });
@@ -2025,6 +2220,14 @@ class GameScene extends Phaser.Scene {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedEnemyId')) G.combat.inspectedEnemyId = null;
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'returnedPirateIds')) G.combat.returnedPirateIds = [];
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'introStarted')) G.combat.introStarted = false;
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'boardingAlert')) {
+        const alert = this.activeBoardingAlertState();
+        G.combat.boardingAlert = alert.amount;
+      }
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'boardingAlertGuards')) {
+        const alert = this.activeBoardingAlertState();
+        G.combat.boardingAlertGuards = alert.guardCount;
+      }
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
       }
@@ -2037,6 +2240,7 @@ class GameScene extends Phaser.Scene {
     }
 
     const encounter = this.generateCombatEncounter();
+    const alert = this.activeBoardingAlertState();
     this.clearCombatSetupPopupDismiss();
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
@@ -2046,6 +2250,8 @@ class GameScene extends Phaser.Scene {
       inspectedEnemyId: null,
       enemyName: encounter.name,
       encounterDesc: encounter.encounterDesc || null,
+      boardingAlert: alert.amount,
+      boardingAlertGuards: alert.guardCount,
       enemyParty: encounter.enemies,
       playerSetupRows: this.combatDefaultPlayerSetupRows(),
       enemySetupRows: this.combatNormalizeSetupRows(
@@ -2455,20 +2661,26 @@ class GameScene extends Phaser.Scene {
   }
 
   combatFormationVisuals(side) {
-    const scale = 1;
-    const cardH = 99 * this.L.k * scale;
+    const L = this.L || {};
+    const k = Number.isFinite(L.k) ? L.k : 1;
+    const h = Number.isFinite(L.H) ? L.H : 800 * k;
+    const yNav = Number.isFinite(L.Y_NAV) ? L.Y_NAV : h - 26 * k;
+    const topSafe = Math.min(h * 0.22, 88 * k);
+    const bottomSafe = Math.min(h - 32 * k, yNav - 36 * k);
+    const availableH = Math.max(360 * k, bottomSafe - topSafe);
+    const scale = Phaser.Math.Clamp(availableH / ((6 * 99 + 5 * 8) * k), 0.68, 1);
+    const cardH = 99 * k * scale;
     const halfCardH = cardH / 2;
-    const rowGap = cardH + 8 * this.L.k;
-    const topInset = 18 * this.L.k + halfCardH;
-    const bottomInset = this.L.Y_NAV - 64 * this.L.k - halfCardH;
+    const rowGap = cardH + 8 * k * scale;
+    const topCenter = topSafe + halfCardH;
     return {
       scale,
       rowGap,
-      maxStep: 72 * this.L.k,
-      edgePad: side === 'enemy' ? 32 * this.L.k : 24 * this.L.k,
+      maxStep: 72 * k * scale,
+      edgePad: side === 'enemy' ? 32 * k : 24 * k,
       frontY: side === 'enemy'
-        ? topInset + rowGap * 2
-        : bottomInset - rowGap * 2,
+        ? topCenter + rowGap * 2
+        : topCenter + rowGap * 3,
     };
   }
 
@@ -2816,6 +3028,12 @@ class GameScene extends Phaser.Scene {
 
   showCombatAftermath(blastEvents = [], deathPositions = []) {
     blastEvents.forEach((blast) => {
+      if (blast.disarmed) {
+        if (blast.origin) {
+          this.effectText(blast.origin.x, blast.origin.y - 30 * this.L.k, 'Fizzle!', '#b0bec5', false);
+        }
+        return;
+      }
       if (blast.origin) {
         this.effectText(blast.origin.x, blast.origin.y - 30 * this.L.k, 'Boom!', '#ffb74d', false);
       }
@@ -2899,6 +3117,12 @@ class GameScene extends Phaser.Scene {
     const blastEvents = [];
     queued.forEach((fighter) => {
       if (!fighter.alive && fighter.deathEffect === 'frontRowBlast') {
+        const origin = this.combatWorldPoint(fighter);
+        const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+        if (wounds > 0) {
+          blastEvents.push({ origin, disarmed: true });
+          return;
+        }
         const damage = Math.max(0, fighter.deathEffectDamage != null ? fighter.deathEffectDamage : fighter.damage || 0);
         if (damage <= 0) return;
         const targets = this.combatFrontRow(this.combatOpposingSide(fighter.side)).slice();
@@ -2914,7 +3138,7 @@ class GameScene extends Phaser.Scene {
           }
         });
         blastEvents.push({
-          origin: this.combatWorldPoint(fighter),
+          origin,
           damage,
           targetPositions,
         });
@@ -3230,11 +3454,13 @@ class GameScene extends Phaser.Scene {
   finishBoardingCombat(result) {
     const combat = G.combat;
     if (!combat || combat.mode === 'resolved') return;
+    const plunder = result === 'win' ? this.grantBoardingAlertPlunder(combat) : null;
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
     G.busy = false;
     this.renderAll();
+    this.showBoardingAlertPlunder(plunder);
   }
 
   continueFromResolvedBoarding() {
@@ -3281,8 +3507,10 @@ class GameScene extends Phaser.Scene {
     if (G.phase !== 'boarding' || G.busy) return;
     const combat = this.ensureBoardingCombat();
     if (!combat || combat.mode !== 'setup') return;
-    const playerRows = this.combatSetupRows('player', combat);
+    const playerRows = this.combatCompactSetupRows(this.combatSetupRows('player', combat));
     const enemyRows = this.combatSetupRows('enemy', combat);
+    combat.playerSetupRows = playerRows;
+    combat.enemySetupRows = enemyRows;
 
     G.busy = true;
     combat.mode = 'fighting';
@@ -3616,6 +3844,8 @@ class GameScene extends Phaser.Scene {
 
   nextEnemyState() {
     if (!G.map || !Array.isArray(G.map.layers)) return null;
+    const pendingAlert = this.pendingBoardingAlert();
+    const alertDesc = this.boardingAlertSummary(pendingAlert);
 
     const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
     for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
@@ -3627,7 +3857,7 @@ class GameScene extends Phaser.Scene {
       return {
         icon: '🏴‍☠️',
         line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: desc || `Battle #${this.mapBoardingNumberForLayer(li)}`,
+        line2: alertDesc || desc || `Battle #${this.mapBoardingNumberForLayer(li)}`,
       };
     }
 
@@ -3657,19 +3887,22 @@ class GameScene extends Phaser.Scene {
 
     if (G.phase === 'boarding' && G.enemyShip) {
       const combat = this.ensureBoardingCombat();
+      const alert = this.activeBoardingAlertState();
+      const alertLine = this.boardingAlertSummary(alert.amount, alert.guardCount);
       if (combat && combat.mode === 'intro') {
         return {
           icon: '🏴‍☠️',
           line1: 'Boarding party spotted.',
-          line2: 'Crew moving into formation',
+          line2: alertLine || 'Crew moving into formation',
         };
       }
       if (combat && combat.mode === 'fighting') {
         const wave = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0));
+        const baseLine = `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes${wave ? ` · hand ${wave + 1}` : ''}`;
         return {
           icon: '⚔️',
           line1: 'Boarding underway.',
-          line2: `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes${wave ? ` · hand ${wave + 1}` : ''}`,
+          line2: alertLine ? `${baseLine} · ${this.boardingAlertGuardLabel(alert.guardCount)}` : baseLine,
         };
       }
       if (combat && combat.mode === 'resolved') {
@@ -3683,8 +3916,8 @@ class GameScene extends Phaser.Scene {
       const sittingOut = (G.hand || []).filter((pirate) => this.pirateWounded(pirate)).length;
       return {
         icon: '🏴‍☠️',
-        line1: 'Crew auto-formed for boarding.',
-        line2: sittingOut ? `${ready} ready, ${sittingOut} wounded sit out` : `${ready} pirates ready to fight`,
+        line1: 'Arrange boarding formation.',
+        line2: alertLine || (sittingOut ? `${ready} ready, ${sittingOut} wounded sit out` : `${ready} pirates ready to fight`),
       };
     }
 
@@ -3697,10 +3930,11 @@ class GameScene extends Phaser.Scene {
     }
 
     if (G.phase === 'shopping') {
+      const alertLine = this.boardingAlertSummary(this.pendingBoardingAlert());
       return {
         icon: '🛒',
         line1: 'Visit the shop.',
-        line2: 'Buy crew or continue sailing',
+        line2: alertLine || 'Buy crew or continue sailing',
       };
     }
 
@@ -3773,7 +4007,12 @@ class GameScene extends Phaser.Scene {
         if (this._sendingToIsland.size > 0) return null;
         return { label: 'Work on Ship', onClick: () => this.endSending(), variant: 'continue' };
       }
-      return { label: 'End', onClick: () => this.endSending(), variant: 'end' };
+      const preview = this.shipWagePreview();
+      const wageAlert = this.boardingAlertGuardLabel(this.boardingAlertGuardCount(this.pendingBoardingAlert() + preview.alert));
+      const wageLabel = preview.wages > 0
+        ? `End +${preview.wages}☠️${wageAlert ? ` ${wageAlert}` : ''}`
+        : 'End';
+      return { label: wageLabel, onClick: () => this.endSending(), variant: 'end' };
     }
     if (G.phase === 'shopping' && !this._shopPanelOpen) {
       return { label: 'Continue', onClick: () => this.openShopPanel(), variant: 'continue' };
@@ -4600,6 +4839,7 @@ class GameScene extends Phaser.Scene {
           };
           const playerTipEntries = this.combatPlayerTooltipEntries(fighterModel);
           const playerTipKey = `combat-player-${pirate.id}`;
+          const canArrange = combat && combat.mode === 'setup';
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: pirate.id,
             tooltipKey: playerTipKey,
@@ -4613,6 +4853,7 @@ class GameScene extends Phaser.Scene {
             alive: true,
             scale: playerVisuals.scale,
             interactive: true,
+            draggable: canArrange,
             onHover: () => {
               this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
                 key: playerTipKey,
@@ -4643,6 +4884,37 @@ class GameScene extends Phaser.Scene {
                 fighterId: pirate.id,
                 targetKind: 'body',
               });
+            },
+            onDragStart: (pointer, node) => {
+              if (!canArrange) return;
+              const dragX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+              const dragY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
+              this.clearCombatSetupInspection(combat, { silent: true });
+              this.clearCombatTooltip();
+              this._combatSetupDragState = {
+                pirateId: pirate.id,
+                offsetX: Number.isFinite(dragX) ? dragX - node.x : 0,
+                offsetY: Number.isFinite(dragY) ? dragY - node.y : 0,
+              };
+              node.setDepth(120);
+              node.setAlpha(0.9);
+            },
+            onDrag: (pointer, node) => {
+              const dragState = this._combatSetupDragState;
+              if (!dragState || dragState.pirateId !== pirate.id) return;
+              const dragX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+              const dragY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
+              if (Number.isFinite(dragX)) node.x = dragX - dragState.offsetX;
+              if (Number.isFinite(dragY)) node.y = dragY - dragState.offsetY;
+            },
+            onDragEnd: (pointer) => {
+              const dragState = this._combatSetupDragState;
+              if (dragState && dragState.pirateId === pirate.id) {
+                const target = this.combatSetupDropTarget(pirate.id, pointer, combat);
+                this.moveCombatSetupPirate(pirate.id, target.rowIndex, target.insertIndex, combat);
+              }
+              this._combatSetupDragState = null;
+              this.renderAll();
             },
           });
         });
@@ -4785,7 +5057,7 @@ class GameScene extends Phaser.Scene {
     const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
     const blocks = [{ kind: 'goal', state: goal }];
-    if (this.isLandingRoundPhase()) {
+    if (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0) {
       const nextEnemy = this.nextEnemyState();
       if (nextEnemy) blocks.push({ kind: 'nextEnemy', state: nextEnemy });
     }
