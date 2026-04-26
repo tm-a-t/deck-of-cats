@@ -98,6 +98,10 @@ def commit_policy(config: dict) -> str:
     return str(config.get("loop", {}).get("commit", {}).get("policy", "any_changes")).strip()
 
 
+def commit_signing_enabled(config: dict) -> bool:
+    return bool(config.get("loop", {}).get("commit", {}).get("sign", False))
+
+
 def should_attempt_commit(config: dict, cycle_status: str) -> tuple[bool, str]:
     commit_cfg = config.get("loop", {}).get("commit", {})
     if not bool(commit_cfg.get("enabled", True)):
@@ -180,7 +184,10 @@ def commit_iteration_changes(
             "This commit was created automatically by the loop.",
         ]
     )
-    commit_result = git_process(["commit", "-m", subject, "-m", body], cwd=workspace_root, timeout=120)
+    commit_args = ["commit", "-m", subject, "-m", body]
+    if not commit_signing_enabled(config):
+        commit_args.insert(1, "--no-gpg-sign")
+    commit_result = git_process(commit_args, cwd=workspace_root, timeout=120)
     if not commit_result["ok"]:
         detail = (commit_result["stderr"] or commit_result["stdout"] or "git commit failed").strip()
         return {
