@@ -5,12 +5,12 @@ from loop.agent_loop.feedback import can_submit_external, new_feedback_items, re
 from loop.agent_loop.git_utils import git_revision
 from loop.agent_loop.io_utils import stamp, utc_now, write_json
 from loop.agent_loop.logging_utils import emit_log
-from loop.agent_loop.paths import RUNS_DIR
+from loop.agent_loop.paths import ROOT, RUNS_DIR
 from loop.agent_loop.prompts import base_context
 from loop.agent_loop.state import load_state, save_state
 from loop.agent_loop.telegram_monitor import TelegramMonitor, compact_list, compact_text
 from loop.agent_loop.validation import summarize_developer_result
-from loop.agent_loop.workspace import commit_iteration_changes, configured_workspace_root, ensure_workspace_root
+from loop.agent_loop.workspace import commit_iteration_changes
 
 
 ROLE_START_MESSAGES = {
@@ -211,7 +211,7 @@ def run_once(config: dict) -> dict:
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     state = load_state()
-    workspace_root = ensure_workspace_root(config)
+    workspace_root = ROOT
     revision = git_revision(workspace_root)
     monitor = TelegramMonitor.from_env()
     emit_log(run_dir, "cycle_started", "cycle started", revision=revision, workspace_root=str(workspace_root))
@@ -479,8 +479,7 @@ def run_once_safe(config: dict) -> dict:
         run_dir = RUNS_DIR / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         state = load_state()
-        workspace_root = configured_workspace_root(config)
-        workspace_exists = workspace_root.exists()
+        workspace_root = ROOT
         report = {
             "run_id": run_id,
             "started_at_utc": utc_now().isoformat(),
@@ -492,25 +491,16 @@ def run_once_safe(config: dict) -> dict:
             "error_type": type(exc).__name__,
             "workspace": {
                 "root": str(workspace_root),
-                "revision": git_revision(workspace_root) if workspace_exists else "unknown",
+                "revision": git_revision(workspace_root),
             },
         }
-        if workspace_exists:
-            try:
-                commit_result = commit_iteration_changes(config, workspace_root, run_id, "failed", report["summary"])
-            except Exception as commit_exc:  # noqa: BLE001 - best-effort failure report path.
-                commit_result = {
-                    "ok": False,
-                    "status": "failed",
-                    "summary": f"loop commit raised {type(commit_exc).__name__}: {commit_exc}",
-                    "changed_files": [],
-                    "sha": None,
-                }
-        else:
+        try:
+            commit_result = commit_iteration_changes(config, workspace_root, run_id, "failed", report["summary"])
+        except Exception as commit_exc:  # noqa: BLE001 - best-effort failure report path.
             commit_result = {
-                "ok": True,
-                "status": "skipped",
-                "summary": "workspace does not exist; no commit attempted",
+                "ok": False,
+                "status": "failed",
+                "summary": f"loop commit raised {type(commit_exc).__name__}: {commit_exc}",
                 "changed_files": [],
                 "sha": None,
             }
@@ -535,7 +525,7 @@ def run_once_safe(config: dict) -> dict:
                 "run_id": run_id,
                 "status": "failed",
                 "summary": report["summary"],
-                "revision": git_revision(workspace_root) if workspace_exists else "unknown",
+                "revision": git_revision(workspace_root),
                 "timestamp_utc": report["finished_at_utc"],
                 "workspace_root": str(workspace_root),
                 "commit": commit_result,

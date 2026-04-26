@@ -5,11 +5,6 @@ DEFAULT_CONFIG = {
     "loop": {
         "interval_minutes": 60,
         "external_submissions_per_day": 2,
-        "worktree": {
-            "enabled": True,
-            "path": "../pirates-v0-loop-worktree",
-            "branch": "loop-auto",
-        },
         "commit": {
             "enabled": True,
             "policy": "any_changes",

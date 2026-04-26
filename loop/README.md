@@ -8,9 +8,8 @@ Minimal no-human agentic loop for improving Deck of Cats.
 2. If leaving `poki.enabled` as `true`, set `poki.developers_game_url` to the game page in Poki for Developers.
 3. If leaving `poki.enabled` as `true`, make sure the configured persistent browser profile is already logged into Poki.
 4. Set `poki.enabled` to `false` to skip Poki feedback checks and Poki submissions while still running the local tester, designer, and developer.
-5. By default, the loop auto-creates and reuses a dedicated Git worktree at `../pirates-v0-loop-worktree` on branch `loop-auto`. Override `loop.worktree.path` or `loop.worktree.branch` in `loop/config.json` if needed.
-6. By default, each cycle commits any worktree changes with a `loop: changes from loop iteration <run_id>` message, including failed cycles that leave changes behind. These automatic commits are unsigned by default so the unattended loop is not blocked by local signing agents; set `loop.commit.sign` to `true` if the loop environment can sign commits.
-7. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
+5. By default, each cycle commits any checkout changes with a `loop: changes from loop iteration <run_id>` message, including failed cycles that leave changes behind. These automatic commits are unsigned by default so the unattended loop is not blocked by local signing agents; set `loop.commit.sign` to `true` if the loop environment can sign commits.
+6. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
 
 ## Run
 
@@ -22,7 +21,7 @@ python3 -m loop.agent_loop forever --interval-minutes 60
 
 Runtime state and per-cycle logs are written to ignored files under `loop/state.json` and `loop/runs/`.
 
-The runner process still writes state and logs in the controller checkout. Codex roles, Git status/revision checks, validation, Poki build context, and automatic iteration commits run against the configured loop worktree.
+Codex roles, Git status/revision checks, validation, Poki build context, runtime state, logs, and automatic iteration commits all run against the current checkout.
 
 ## Telegram Monitoring
 
@@ -45,7 +44,7 @@ Messages are sent for cycle start/finish, role starts/results, selected design i
 3. If the tester recommends external testing and `poki.enabled` is `true`, `poki_submit` sends the build to Poki.
 4. `designer` chooses one focused improvement.
 5. `developer` implements, validates, and fixes before returning.
-6. The orchestrator records the Developer result, commits any worktree changes for the iteration, updates loop state, and repeats in `forever` mode.
+6. The orchestrator records the Developer result, commits any checkout changes for the iteration, updates loop state, and repeats in `forever` mode.
 
 ## Code Layout
 
