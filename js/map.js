@@ -3,10 +3,10 @@
    ============================================================ */
 
 const MAP_LAYERS = 40;
-const EARLY_SEGMENTS = 2;
+const EARLY_SEGMENT_LENGTHS = [3, 5];
+const EARLY_SEGMENTS = EARLY_SEGMENT_LENGTHS.length;
 const EARLY_PATHS = 3;
-const STEPS_PER_SEGMENT = 4;
-const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
+const EARLY_LAYER_COUNT = EARLY_SEGMENT_LENGTHS.reduce((sum, length) => sum + length + 1, 0);
 const FIRST_LINEAR_SEGMENTS = 0;
 const TOTAL_BATTLES = 8;
 const HEAL_LAYER_INDICES = new Set([10, 20, 30]);
@@ -142,10 +142,12 @@ function generateMap() {
   let battlesSoFar = 0;
 
   // Early game: parallel route forks with straight non-intersecting paths.
+  let segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
+    const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
     const pathCount = earlyPathCount(seg);
-    for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
-      const li = seg * (STEPS_PER_SEGMENT + 1) + step;
+    for (let step = 0; step < segmentLength; step++) {
+      const li = segmentBase + step;
       const earlyRestricted = li < 9;
       const available = earlyRestricted
         ? regularIslandIndices().filter(i => i !== 2 && i !== 4)
@@ -169,6 +171,7 @@ function generateMap() {
       encounter: bp,
       conns: [],
     }]);
+    segmentBase += segmentLength + 1;
   }
 
   // Remaining layers: place ship every 5th layer, island layers in between
@@ -203,25 +206,28 @@ function generateMap() {
   }
 
   // Connections: early segments — straight non-intersecting paths
+  segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
-    const base = seg * (STEPS_PER_SEGMENT + 1);
+    const base = segmentBase;
+    const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
     const pathCount = earlyPathCount(seg);
-    for (let step = 0; step < STEPS_PER_SEGMENT - 1; step++) {
+    for (let step = 0; step < segmentLength - 1; step++) {
       const cur = layers[base + step];
       const nxt = layers[base + step + 1];
       for (let pi = 0; pi < pathCount; pi++) {
         cur[pi].conns = [nxt[pi].id];
       }
     }
-    const lastIslands = layers[base + STEPS_PER_SEGMENT - 1];
-    const battle = layers[base + STEPS_PER_SEGMENT];
+    const lastIslands = layers[base + segmentLength - 1];
+    const battle = layers[base + segmentLength];
     for (const node of lastIslands) {
       node.conns = [battle[0].id];
     }
-    const nextBase = base + STEPS_PER_SEGMENT + 1;
+    const nextBase = base + segmentLength + 1;
     if (nextBase < layers.length) {
       battle[0].conns = layers[nextBase].map(n => n.id);
     }
+    segmentBase = nextBase;
   }
 
   // Connections: remaining layers

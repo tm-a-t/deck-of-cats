@@ -39,6 +39,7 @@ function parseArgs(argv) {
     checkPortDrill: false,
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
+    checkMapSchedule: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -122,6 +123,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-scouted-counter-shop') {
       out.checkScoutedCounterShop = true;
+      continue;
+    }
+    if (a === '--check-map-schedule') {
+      out.checkMapSchedule = true;
     }
   }
 
@@ -966,6 +971,82 @@ function assertAlertTierCheck(condition, message) {
 
 function assertScoutedCounterShopCheck(condition, message) {
   if (!condition) throw new Error(`scouted counter shop check failed: ${message}`);
+}
+
+function assertMapScheduleCheck(condition, message) {
+  if (!condition) throw new Error(`map schedule check failed: ${message}`);
+}
+
+function runMapScheduleChecks(runtime) {
+  const api = runtime.api;
+  const results = [];
+  const expectedShipLayers = [3, 9, 14, 19, 24, 29, 34, 39];
+  const earlyIslandLayers = [0, 1, 2, 4, 5, 6, 7, 8];
+  const expectedEarlyIslandIdx = [0, 1, 3];
+  const earlySegments = [
+    { base: 0, length: 3 },
+    { base: 4, length: 5 },
+  ];
+
+  for (let sample = 0; sample < 12; sample++) {
+    runtime.setSeed((0x6d2b79f5 + sample * 9973) >>> 0);
+    api.initState();
+    const map = api.getG().map;
+    assertMapScheduleCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
+    assertMapScheduleCheck(map.layers.length === api.MAP_LAYERS, `sample ${sample} layer count ${map.layers.length} !== ${api.MAP_LAYERS}`);
+
+    const shipLayers = [];
+    for (let li = 0; li < map.layers.length; li++) {
+      const layer = map.layers[li];
+      if (layer.length === 1 && layer[0].type === 'ship') shipLayers.push(li);
+    }
+    assertMapScheduleCheck(
+      JSON.stringify(shipLayers) === JSON.stringify(expectedShipLayers),
+      `sample ${sample} ship layers ${shipLayers.join(',')} !== ${expectedShipLayers.join(',')}`
+    );
+
+    for (const li of earlyIslandLayers) {
+      const layer = map.layers[li];
+      assertMapScheduleCheck(layer && layer.length === 3, `sample ${sample} layer ${li} has ${layer && layer.length} nodes`);
+      assertMapScheduleCheck(layer.every(node => node.type === 'island'), `sample ${sample} layer ${li} has non-island node`);
+      const islandIdx = layer.map(node => node.islandIdx).sort((a, b) => a - b);
+      assertMapScheduleCheck(
+        JSON.stringify(islandIdx) === JSON.stringify(expectedEarlyIslandIdx),
+        `sample ${sample} layer ${li} islands ${islandIdx.join(',')} are not Forest/Rocky/Port once`
+      );
+    }
+
+    for (const { base, length } of earlySegments) {
+      for (let step = 0; step < length - 1; step++) {
+        const cur = map.layers[base + step];
+        const nxt = map.layers[base + step + 1];
+        for (let pi = 0; pi < cur.length; pi++) {
+          assertMapScheduleCheck(
+            JSON.stringify(cur[pi].conns) === JSON.stringify([nxt[pi].id]),
+            `sample ${sample} layer ${base + step} path ${pi} does not connect straight`
+          );
+        }
+      }
+      const lastIslands = map.layers[base + length - 1];
+      const ship = map.layers[base + length][0];
+      assertMapScheduleCheck(ship && ship.type === 'ship', `sample ${sample} layer ${base + length} is not a ship`);
+      for (const node of lastIslands) {
+        assertMapScheduleCheck(
+          JSON.stringify(node.conns) === JSON.stringify([ship.id]),
+          `sample ${sample} early segment ending ${base + length - 1} does not converge into ship`
+        );
+      }
+    }
+  }
+
+  results.push({
+    name: '40-layer map schedule with early 3/5 islands and straight early paths',
+    ok: true,
+    samples: 12,
+    shipLayers: expectedShipLayers,
+    earlyIslandLayers,
+  });
+  return { ok: true, checks: results };
 }
 
 function makeScoutedCounterTestMap(mainKey) {
@@ -1972,6 +2053,11 @@ async function main() {
   }
   if (opts.checkScoutedCounterShop) {
     const result = runScoutedCounterShopChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkMapSchedule) {
+    const result = runMapScheduleChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

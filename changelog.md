@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-213630 — rev d07181f
+
+- Gameplay: true - Moved the first boarding one island earlier: early map segments are now 3 island layers into ship 1 on layer `3`, then 5 island layers into ship 2 on layer `9`, with later ships unchanged. Validated with JS syntax checks, `node sim/fast-sim.js --check-map-schedule`, existing targeted gameplay checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-213630.log`.
+
 ## 2026-04-26 — run 20260426-211930 — rev 34e9c64
 
 - Gameplay: true - Added the Scouted Counter Shop Slot: regular-run shops now force an eligible visible counter for the next scouted ship's main enemy when the cost-gated pool can support one, and shop/sending recommendations label same-tier counter buys. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-shop`, `node sim/fast-sim.js --check-alert-tiers`, `node sim/fast-sim.js --check-opening-commission`, `node sim/fast-sim.js --check-port-drill`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-211930.log`.
