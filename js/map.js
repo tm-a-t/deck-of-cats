@@ -49,6 +49,54 @@ function chooseIslandIndices(available, count, dealWithoutReplacement = false) {
   return picked;
 }
 
+function scoutedCounterCacheResource(mainKey) {
+  return (SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey]) || null;
+}
+
+function scoutedCounterCacheNode(prevLayer, res) {
+  const candidates = (Array.isArray(prevLayer) ? prevLayer : []).filter((node) => {
+    if (!node || node.type !== 'island') return false;
+    const island = ISLANDS[node.islandIdx];
+    return island && !island.healWounded;
+  });
+  if (!candidates.length) return null;
+
+  const matchingBonus = candidates.find((node) => {
+    const island = ISLANDS[node.islandIdx];
+    return island && island.bonus === res;
+  });
+  if (matchingBonus) return matchingBonus;
+
+  const port = candidates.find((node) => {
+    const island = ISLANDS[node.islandIdx];
+    return island && island.extraSend;
+  });
+  return port || candidates[0];
+}
+
+function markScoutedCounterCaches(layers) {
+  if (!Array.isArray(layers)) return;
+  for (let li = 1; li < layers.length; li++) {
+    const layer = layers[li];
+    if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+
+    const ship = layer[0];
+    const mainKey = ship.encounter && ship.encounter.mainKey;
+    const res = scoutedCounterCacheResource(mainKey);
+    if (!res) continue;
+
+    const node = scoutedCounterCacheNode(layers[li - 1], res);
+    if (!node) continue;
+    node.scoutedCache = {
+      mainKey,
+      res,
+      amount: 1,
+      alert: 1,
+      claimed: false,
+    };
+  }
+}
+
 function shipStrength(shipNumber) {
   return Math.trunc(Math.pow(shipNumber, 1.2) * 2 + 4);
 }
@@ -247,6 +295,8 @@ function generateMap() {
       assignConnections(cur, nxt);
     }
   }
+
+  markScoutedCounterCaches(layers);
 
   return {
     layers,

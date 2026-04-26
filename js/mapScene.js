@@ -326,6 +326,24 @@ class MapScene extends Phaser.Scene {
           this.mapGfx.add(strTxt);
         }
 
+        const cacheText = this.scoutedCacheBadgeText(node);
+        if (cacheText) {
+          makeUiPill(this, {
+            container: this.mapGfx,
+            L,
+            x: nx,
+            y: ny - r - 18 * L.k,
+            label: cacheText,
+            textPx: 12,
+            padX: 7 * L.k,
+            padY: 4 * L.k,
+            minH: 20 * L.k,
+            fill: UI_THEME.colors.cocoaDark,
+            stroke: UI_THEME.colors.sand,
+            textColor: UI_THEME.colors.paper,
+          });
+        }
+
         // Layer number (small, to the side)
         if (ni === 0) {
           const layerNum = this.add.text(this.panel.innerX + 8, ny, '' + (li + 1), {
@@ -503,6 +521,19 @@ class MapScene extends Phaser.Scene {
     const game = this.scene.get('game');
     if (!game || typeof game.nextShipIntel !== 'function') return null;
     return game.nextShipIntel();
+  }
+
+  scoutedCacheBadgeText(node) {
+    const cache = node && node.scoutedCache;
+    if (!cache || cache.claimed) return '';
+    const emoji = RES_EMOJI[cache.res];
+    if (!emoji) return '';
+    const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
+    const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    const parts = [];
+    if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    return parts.join(' ');
   }
 
   uiTxt(x, y, str, style) {

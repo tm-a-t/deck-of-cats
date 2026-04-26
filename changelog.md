@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-223423 — rev 95c8ba5
+
+- Gameplay: true - Added Scouted Counter Cache route nodes before each scouted ship: one preceding island now offers `+1` mapped counter resource for `+1 Boarding Alert`, marks itself claimed on selection, and displays a compact map badge. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-map-schedule --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-223423.log`.
+
 ## 2026-04-26 — run 20260426-222115 — rev 1d3722f
 
 - Gameplay: true - Added Counter Trophy: winning a regular-run boarding now gives `+1⚡` Tempo to the frontmost then leftmost surviving pirate that counters the ship's main scouted enemy, while losses, Battle Test, and wins without surviving counters grant none. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-trophy --json`, `node sim/fast-sim.js --check-boarding-trophy --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-222115.log`.

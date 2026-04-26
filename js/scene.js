@@ -470,6 +470,31 @@ class GameScene extends Phaser.Scene {
     return base * 2;
   }
 
+  applyScoutedCounterCache(node) {
+    if (this.isBattleTest() || !node || node.type !== 'island') return null;
+    const cache = node.scoutedCache;
+    if (!cache || cache.claimed) return null;
+
+    const island = ISLANDS[node.islandIdx];
+    if (!island || island.healWounded) return null;
+
+    const res = cache.res;
+    const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
+    const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    if (!res || !RES_EMOJI[res] || (amount <= 0 && alert <= 0)) return null;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    if (amount > 0) {
+      G.res[res] = Math.max(0, Math.floor(Number(G.res[res]) || 0)) + amount;
+    }
+    if (alert > 0) {
+      G.boardingAlert = this.pendingBoardingAlert() + alert;
+    }
+    cache.claimed = true;
+
+    return { res, amount, alert, mainKey: cache.mainKey || null };
+  }
+
   startRound() {
     // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
     // are all set by MapScene.selectMapNode() before transitioning here.
@@ -510,6 +535,7 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
     G.fullCrewDiscount = 0;
+    let cacheGrant = null;
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
       G.boardingCount++;
@@ -524,6 +550,7 @@ class GameScene extends Phaser.Scene {
         boardingAlertGuards: alert.guardCount,
       };
     } else {
+      cacheGrant = this.applyScoutedCounterCache(node);
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
       G.enemyShip = null;
       if (G.island.healWounded) {
@@ -538,6 +565,13 @@ class GameScene extends Phaser.Scene {
 
     this.closePanels();
     this.renderAll();
+    if (cacheGrant && this.L) {
+      const resText = `${cacheGrant.amount > 1 ? cacheGrant.amount : ''}${RES_EMOJI[cacheGrant.res]}`;
+      const alertText = cacheGrant.alert > 0
+        ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
+        : '';
+      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${alertText}`, '#ffd166');
+    }
     return true;
   }
 

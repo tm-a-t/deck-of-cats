@@ -182,6 +182,14 @@ const SCOUTED_SHIP_COUNTERS = {
   flintDuelist: ['poisoner', 'needler', 'sawbones', 'scarwright', 'plagueCaptain'],
 };
 
+const SCOUTED_COUNTER_CACHE_RES = {
+  shellback: 'wood',
+  powderBomber: 'stone',
+  deckSniper: 'gold',
+  netter: 'wood',
+  flintDuelist: 'wood',
+};
+
 const WEAPON_CATEGORY_EMOJI = '⚔️';
 const WOUNDED_EMOJI = '🩹';
 const BUFF_EMOJI = {

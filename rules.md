@@ -35,6 +35,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If 2+ nodes are available, the player chooses on the map.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
+- In regular runs, each ship's immediately preceding normal island layer marks 1 `Scouted Counter Cache` tied to that ship's main scouted enemy.
+- Selecting a marked cache island immediately grants `+1` of the cache resource and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
+- Cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
+- Cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
+- Caches never appear in `Battle Test`, never apply to ship nodes or `Infirmary Island`, and a claimed cache cannot grant its reward again.
 
 ### 2. Island Round
 

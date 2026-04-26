@@ -39,6 +39,7 @@ function parseArgs(argv) {
     checkPortDrill: false,
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
+    checkScoutedCounterCache: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -126,6 +127,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-scouted-counter-shop') {
       out.checkScoutedCounterShop = true;
+      continue;
+    }
+    if (a === '--check-scouted-counter-cache') {
+      out.checkScoutedCounterCache = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -251,6 +256,7 @@ function buildRuntime() {
       QUIET_DOCKS,
       SHOP_CREDIT,
       SCOUTED_SHIP_COUNTERS,
+      SCOUTED_COUNTER_CACHE_RES,
       GameScene,
       getG: () => G,
       setG: (next) => { G = next; },
@@ -990,6 +996,10 @@ function assertScoutedCounterShopCheck(condition, message) {
   if (!condition) throw new Error(`scouted counter shop check failed: ${message}`);
 }
 
+function assertScoutedCounterCacheCheck(condition, message) {
+  if (!condition) throw new Error(`scouted counter cache check failed: ${message}`);
+}
+
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
   if (!condition) throw new Error(`counter recruits report early check failed: ${message}`);
 }
@@ -1149,6 +1159,167 @@ function runScoutedCounterShopChecks(runtime) {
   assertScoutedCounterShopCheck(best && best.type === 'sawbones', `best visible buy is ${best && best.type}`);
   assertScoutedCounterShopCheck(plan.includes('Counter Sawbones'), `plan text lacks counter label: ${plan}`);
   results.push({ name: 'recommendation prefers same-tier counter and labels it', ok: true, plan });
+
+  return { ok: true, checks: results };
+}
+
+function expectedScoutedCounterCacheNode(api, layer, res) {
+  const candidates = (Array.isArray(layer) ? layer : []).filter((node) => {
+    const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
+    return island && !island.healWounded;
+  });
+  if (!candidates.length) return null;
+
+  const matchingBonus = candidates.find((node) => {
+    const island = api.ISLANDS[node.islandIdx];
+    return island && island.bonus === res;
+  });
+  if (matchingBonus) return matchingBonus;
+
+  const port = candidates.find((node) => {
+    const island = api.ISLANDS[node.islandIdx];
+    return island && island.extraSend;
+  });
+  return port || candidates[0];
+}
+
+function runScoutedCounterCacheChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  let generatedCacheCount = 0;
+
+  for (let sample = 0; sample < 12; sample++) {
+    runtime.setSeed((0x8f53a31d + sample * 7919) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    assertScoutedCounterCacheCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map`);
+
+    const shipCacheLayers = [];
+    for (let li = 1; li < map.layers.length; li++) {
+      const layer = map.layers[li];
+      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+
+      const ship = layer[0];
+      const mainKey = ship.encounter && ship.encounter.mainKey;
+      const res = api.SCOUTED_COUNTER_CACHE_RES[mainKey];
+      const expectedNode = expectedScoutedCounterCacheNode(api, map.layers[li - 1], res);
+      if (!expectedNode) continue;
+
+      const cacheNodes = map.layers[li - 1].filter((node) => node && node.scoutedCache);
+      assertScoutedCounterCacheCheck(cacheNodes.length === 1, `sample ${sample} layer ${li - 1} has ${cacheNodes.length} caches`);
+      const cacheNode = cacheNodes[0];
+      const cache = cacheNode.scoutedCache;
+      assertScoutedCounterCacheCheck(cacheNode.id === expectedNode.id, `sample ${sample} cache node ${cacheNode.id} !== preferred ${expectedNode.id}`);
+      assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
+      assertScoutedCounterCacheCheck(cache.res === res, `sample ${sample} cache res ${cache.res} !== ${res}`);
+      assertScoutedCounterCacheCheck(cache.amount === 1 && cache.alert === 1, `sample ${sample} cache amount/alert ${cache.amount}/${cache.alert}`);
+      assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
+      shipCacheLayers.push(li - 1);
+      generatedCacheCount++;
+    }
+
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const firstCache = firstShipLayer > 0
+      ? map.layers[firstShipLayer - 1].find((node) => node && node.scoutedCache)
+      : null;
+    assertScoutedCounterCacheCheck(firstCache && !firstCache.scoutedCache.claimed, `sample ${sample} first ship cache is missing before route selection`);
+    assertScoutedCounterCacheCheck(shipCacheLayers.length === 8, `sample ${sample} generated ${shipCacheLayers.length} caches`);
+  }
+  results.push({ name: 'generated regular maps mark one preferred cache before every ship', ok: true, samples: 12, generatedCacheCount });
+
+  const selectNode = (node, opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = {
+      layers: [[node], [{ id: 99, type: 'ship', strength: 6, encounter: { mainKey: 'shellback', supportKeys: [], totalCount: 1 }, conns: [] }]],
+      visited: [],
+      currentNodeId: null,
+      currentLayer: -1,
+    };
+    G.phase = 'map';
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.enemyShip = null;
+    G.island = null;
+    G.healing = null;
+    return { G, handled: scene.applyMapNodeSelection(node.id) };
+  };
+
+  {
+    const node = {
+      id: 10,
+      type: 'island',
+      islandIdx: 0,
+      conns: [99],
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+    };
+    const { G, handled } = selectNode(node, { boardingAlert: 2 });
+    assertScoutedCounterCacheCheck(handled, 'cache island selection failed');
+    assertScoutedCounterCacheCheck(G.res.wood === 1, `cache granted wood ${G.res.wood}`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `cache alert ${G.boardingAlert} !== 3`);
+    assertScoutedCounterCacheCheck(node.scoutedCache.claimed === true, 'cache was not claimed');
+    scene.applyMapNodeSelection(node.id);
+    assertScoutedCounterCacheCheck(G.res.wood === 1, `claimed cache granted again to wood ${G.res.wood}`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `claimed cache alerted again to ${G.boardingAlert}`);
+    results.push({ name: 'cache selection grants mapped resource and Alert exactly once', ok: true });
+  }
+
+  {
+    const node = { id: 20, type: 'island', islandIdx: 0, conns: [99] };
+    const { G } = selectNode(node);
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'unmarked island granted a cache');
+    results.push({ name: 'unmarked islands do not grant cache rewards', ok: true });
+  }
+
+  {
+    const node = {
+      id: 30,
+      type: 'island',
+      islandIdx: 6,
+      conns: [99],
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+    };
+    const { G } = selectNode(node);
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'Infirmary Island granted a cache');
+    results.push({ name: 'Infirmary cache markers are ignored defensively', ok: true });
+  }
+
+  {
+    const node = {
+      id: 40,
+      type: 'island',
+      islandIdx: 0,
+      conns: [99],
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+    };
+    const { G } = selectNode(node, { mode: 'battleTest' });
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'Battle Test granted a cache');
+    results.push({ name: 'Battle Test mode ignores cache rewards', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    const ship = {
+      id: 50,
+      type: 'ship',
+      strength: 6,
+      encounter: { mainKey: 'shellback', supportKeys: [], totalCount: 1 },
+      conns: [],
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+    };
+    G.map = { layers: [[ship]], visited: [], currentNodeId: null, currentLayer: -1 };
+    G.phase = 'map';
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.boardingAlert = 0;
+    scene.applyMapNodeSelection(ship.id);
+    assertScoutedCounterCacheCheck(G.res.wood === 0, 'ship node granted cache resource');
+    assertScoutedCounterCacheCheck(G.enemyShip && G.phase === 'boarding', 'ship node did not enter boarding');
+    results.push({ name: 'ship nodes do not grant cache rewards', ok: true });
+  }
 
   return { ok: true, checks: results };
 }
@@ -2556,6 +2727,11 @@ async function main() {
   }
   if (opts.checkScoutedCounterShop) {
     const result = runScoutedCounterShopChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkScoutedCounterCache) {
+    const result = runScoutedCounterCacheChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
