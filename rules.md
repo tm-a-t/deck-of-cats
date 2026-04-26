@@ -142,6 +142,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - Alert `3–5` pays `+1🪵 +1🪨`;
   - Alert `6+` pays `+2🪵 +1🪨`.
 - Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved.
+- After a regular-run boarding is won, before the winning hand is discarded, the frontmost then leftmost surviving player fighter in the final combat hand gains `+1 💪 Might` as a `Boarding Trophy`.
+- `Boarding Trophy` triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no player fighter survives.
+- If a boarding is won by a reinforcement hand, only a survivor from that final winning combat hand can receive the `Boarding Trophy`.
+- `Boarding Trophy` can stack with Alert guard plunder on the same win.
 - The old "sum team strength against ship strength" system no longer exists.
 - Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.
 - Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.

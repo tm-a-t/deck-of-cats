@@ -40,6 +40,7 @@ function parseArgs(argv) {
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
     checkMapSchedule: false,
+    checkBoardingTrophy: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -127,6 +128,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-map-schedule') {
       out.checkMapSchedule = true;
+      continue;
+    }
+    if (a === '--check-boarding-trophy') {
+      out.checkBoardingTrophy = true;
     }
   }
 
@@ -220,6 +225,7 @@ function buildRuntime() {
     `
     globalThis.__simApi = {
       initState,
+      initBattleTestState,
       randomShopType,
       initialShop,
       applyScoutedCounterToShop,
@@ -1180,6 +1186,134 @@ function runAlertTierChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertBoardingTrophyCheck(condition, message) {
+  if (!condition) throw new Error(`boarding trophy check failed: ${message}`);
+}
+
+function runBoardingTrophyChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const fighterFor = (pirate, row, rowOrder, alive = true) => ({
+    id: `player_${pirate.id}`,
+    side: 'player',
+    pirateId: pirate.id,
+    type: pirate.type,
+    row,
+    rowOrder,
+    alive,
+    hp: alive ? 5 : 0,
+    maxHp: 9,
+    damage: 3,
+    attackMs: 1350,
+    attackRange: 'melee',
+  });
+
+  const setupRegular = (guardCount = 0) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.enemyShip = { strength: 6, encounterNo: 1 };
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.discard = [];
+    G.deck = [];
+    const pirates = G.allCrew.slice(0, 4);
+    pirates.forEach((pirate) => {
+      pirate.might = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, 3);
+    G.combat = {
+      mode: 'fighting',
+      playerFighters: [
+        fighterFor(pirates[0], 1, 0),
+        fighterFor(pirates[1], 0, 1),
+        fighterFor(pirates[2], 0, 0),
+      ],
+      enemyFighters: [],
+      boardingAlertGuards: guardCount,
+      returnedPirateIds: [],
+    };
+    return { G, pirates };
+  };
+
+  {
+    const { G, pirates } = setupRegular(2);
+    const result = finishSimBoardingWin(api, scene);
+    assertBoardingTrophyCheck(result.state === 'continue', `regular win state ${result.state}`);
+    assertBoardingTrophyCheck((pirates[2].might || 0) === 1, 'front-left survivor did not gain Might');
+    assertBoardingTrophyCheck((pirates[0].might || 0) === 0 && (pirates[1].might || 0) === 0, 'wrong survivor gained Might');
+    assertBoardingTrophyCheck(G.phase === 'map', 'regular win did not continue to map');
+    assertBoardingTrophyCheck(G.res.wood === 1 && G.res.stone === 1, `guard plunder was not preserved: ${JSON.stringify(G.res)}`);
+    results.push({ name: 'regular win grants front-left survivor trophy and guard plunder', ok: true, target: pirates[2].id, res: { ...G.res } });
+  }
+
+  {
+    const { G, pirates } = setupRegular(0);
+    scene.finishBoardingCombat('win');
+    scene.finishBoardingCombat('win');
+    scene.grantBoardingTrophy(G.combat);
+    assertBoardingTrophyCheck((pirates[2].might || 0) === 1, `idempotent trophy gave ${pirates[2].might || 0}`);
+    assertBoardingTrophyCheck(!!G.combat.boardingTrophyGranted, 'combat did not record trophy grant');
+    results.push({ name: 'trophy is idempotent on resolved combat', ok: true, might: pirates[2].might || 0 });
+  }
+
+  {
+    const { G, pirates } = setupRegular(0);
+    scene.finishBoardingCombat('loss');
+    assertBoardingTrophyCheck(pirates.every((pirate) => (pirate.might || 0) === 0), 'loss granted trophy');
+    assertBoardingTrophyCheck(!G.combat.boardingTrophy, 'loss stored trophy data');
+    results.push({ name: 'loss grants no trophy', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupRegular(0);
+    G.combat.playerFighters = G.combat.playerFighters.map((fighter) => ({ ...fighter, alive: false, hp: 0 }));
+    scene.finishBoardingCombat('win');
+    assertBoardingTrophyCheck(pirates.every((pirate) => (pirate.might || 0) === 0), 'all-defeated win granted trophy');
+    assertBoardingTrophyCheck(!G.combat.boardingTrophy, 'all-defeated win stored trophy data');
+    results.push({ name: 'win with no survivor grants no trophy', ok: true });
+  }
+
+  {
+    api.initBattleTestState();
+    const G = api.getG();
+    const pirate = G.hand[0];
+    pirate.might = 0;
+    G.combat = {
+      mode: 'fighting',
+      playerFighters: [fighterFor(pirate, 0, 0)],
+      enemyFighters: [],
+      boardingAlertGuards: 3,
+      returnedPirateIds: [],
+    };
+    scene.finishBoardingCombat('win');
+    assertBoardingTrophyCheck((pirate.might || 0) === 0, 'Battle Test granted trophy');
+    assertBoardingTrophyCheck(!G.combat.boardingTrophy, 'Battle Test stored trophy data');
+    results.push({ name: 'Battle Test grants no trophy', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupRegular(0);
+    const oldHandPirate = pirates[0];
+    const finalHandPirate = pirates[3];
+    oldHandPirate.might = 0;
+    finalHandPirate.might = 0;
+    G.discard = [oldHandPirate];
+    G.hand = [finalHandPirate];
+    G.combat.playerFighters = [fighterFor(finalHandPirate, 0, 0)];
+    scene.finishBoardingCombat('win');
+    assertBoardingTrophyCheck((finalHandPirate.might || 0) === 1, 'final reinforcement hand survivor did not gain trophy');
+    assertBoardingTrophyCheck((oldHandPirate.might || 0) === 0, 'previous defeated hand gained trophy');
+    results.push({ name: 'reinforcement win rewards only final combat hand', ok: true, target: finalHandPirate.id });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function runPortDrillChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1534,6 +1668,9 @@ function finishSimBoardingWin(api, scene) {
   const G = api.getG();
   if (scene && typeof scene.grantBoardingAlertPlunder === 'function') {
     scene.grantBoardingAlertPlunder(G.combat);
+  }
+  if (scene && typeof scene.grantBoardingTrophy === 'function') {
+    scene.grantBoardingTrophy(G.combat);
   }
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
   G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
@@ -2058,6 +2195,11 @@ async function main() {
   }
   if (opts.checkMapSchedule) {
     const result = runMapScheduleChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkBoardingTrophy) {
+    const result = runBoardingTrophyChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

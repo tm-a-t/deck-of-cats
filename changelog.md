@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-214509 — rev 234051e
+
+- Gameplay: true - Added Boarding Trophy: winning a regular-run boarding now gives `+1💪` Might to the frontmost then leftmost surviving pirate in the final combat hand, once per win, while losses and Battle Test grant none. Validated with JS syntax checks, `node sim/fast-sim.js --check-boarding-trophy`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-214509.log`.
+
 ## 2026-04-26 — run 20260426-213630 — rev d07181f
 
 - Gameplay: true - Moved the first boarding one island earlier: early map segments are now 3 island layers into ship 1 on layer `3`, then 5 island layers into ship 2 on layer `9`, with later ships unchanged. Validated with JS syntax checks, `node sim/fast-sim.js --check-map-schedule`, existing targeted gameplay checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-213630.log`.

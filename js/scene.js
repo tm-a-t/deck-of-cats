@@ -2427,6 +2427,36 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  grantBoardingTrophy(combat = G.combat) {
+    if (!combat || combat.boardingTrophyGranted) return null;
+    combat.boardingTrophyGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const fighter = this.combatLiving('player')[0];
+    if (!fighter || fighter.pirateId == null) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId);
+    if (!pirate) return null;
+
+    pirate.might = Math.max(0, Math.floor(Number(pirate.might) || 0)) + 1;
+    const def = TYPES[pirate.type] || {};
+    combat.boardingTrophy = {
+      pirateId: pirate.id,
+      type: pirate.type,
+      name: def.name || pirate.type,
+      count: 1,
+      might: pirate.might,
+    };
+    return combat.boardingTrophy;
+  }
+
+  showBoardingTrophy(trophy) {
+    if (!trophy || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 124 * L.k, 'Boarding Trophy +💪', '#ffca28', 760);
+  }
+
   currentEncounterBlueprint() {
     if (!G.map || !G.map.currentNodeId) return null;
     const node = mapNodeById(G.map, G.map.currentNodeId);
@@ -3717,11 +3747,13 @@ class GameScene extends Phaser.Scene {
     const combat = G.combat;
     if (!combat || combat.mode === 'resolved') return;
     const plunder = result === 'win' ? this.grantBoardingAlertPlunder(combat) : null;
+    const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
     G.busy = false;
     this.renderAll();
+    this.showBoardingTrophy(trophy);
     this.showBoardingAlertPlunder(plunder);
   }
 
@@ -4241,10 +4273,13 @@ class GameScene extends Phaser.Scene {
         };
       }
       if (combat && combat.mode === 'resolved') {
+        const trophy = combat.boardingTrophy;
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
           line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',
-          line2: combat.result === 'win' ? 'Taking the ship' : 'All pirates are wounded',
+          line2: combat.result === 'win'
+            ? (trophy ? `Trophy: ${trophy.name} +💪` : 'Taking the ship')
+            : 'All pirates are wounded',
         };
       }
       const ready = this.activeCombatHandPirates().length;
@@ -5703,6 +5738,15 @@ class GameScene extends Phaser.Scene {
           uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
         ).setOrigin(0.5, 0.5);
         this.addTo('phase', resultText);
+        if (won && combat.boardingTrophy) {
+          const trophyText = this.add.text(
+            L.cx,
+            this.islandContinueY() - 76 * L.k,
+            'Boarding Trophy +💪',
+            uiBodyStyle(L, UI_THEME.colors.paper, { align: 'center' })
+          ).setOrigin(0.5, 0.5);
+          this.addTo('phase', trophyText);
+        }
       }
     }
 
