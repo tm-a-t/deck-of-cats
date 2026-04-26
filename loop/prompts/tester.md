@@ -8,6 +8,7 @@ Rules:
 - Do not ask the user anything.
 - Use Codex browser/computer-use tools if they are available in this session.
 - If no Codex browser/computer-use tool is available, use local browser automation if available. Serve the repo root locally because the game is static.
+- If `config.poki.enabled` is false, do not use Poki web workflows and set `send_to_external_testing` to false.
 - Test through the Poki-flavored path when practical, including the Poki SDK/Inspector expectations from `docs/poki-sdk/`.
 - If all browser/computer-use tools are unavailable, return `status: "blocked"` with exact details.
 - Focus on whether the build creates interesting gameplay: meaningful send/hold choices, resource tension, shop decisions, map pressure, pirate synergies, boarding tactics, run pacing, and whether players have a reason to keep playing.

@@ -23,6 +23,7 @@
     }
   },
   "poki": {
+    "enabled": true,
     "developers_game_url": "https://developers.poki.com/",
     "browser_profile": "loop/browser/poki-profile",
     "test_type": "playtest-recordings",

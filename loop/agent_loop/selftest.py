@@ -4,7 +4,13 @@ from pathlib import Path
 import tempfile
 
 from loop.agent_loop.io_utils import read_json
-from loop.agent_loop.orchestrator import cycle_finished_message, role_result_message, role_started_message
+from loop.agent_loop.orchestrator import (
+    cycle_finished_message,
+    poki_steps_enabled,
+    role_result_message,
+    role_started_message,
+    skipped_poki_feedback_step,
+)
 from loop.agent_loop.paths import LOOP_DIR, PROMPTS_DIR, ROLES, SCHEMA_BY_ROLE, SCHEMAS_DIR
 from loop.agent_loop.prompts import base_context, prompt_for, validate_payload
 from loop.agent_loop.state import load_config, load_state, save_state
@@ -19,6 +25,13 @@ from loop.agent_loop.validation import gameplay_docs_check
 
 def self_test() -> dict:
     config = load_config(LOOP_DIR / "config.example.json")
+    if not poki_steps_enabled(config):
+        raise RuntimeError("Poki steps should be enabled by default")
+    disabled_config = {**config, "poki": {**config.get("poki", {}), "enabled": False}}
+    if poki_steps_enabled(disabled_config):
+        raise RuntimeError("Poki steps should be disabled when poki.enabled is false")
+    validate_payload("poki_feedback", skipped_poki_feedback_step()["payload"])
+
     missing = []
     for role in ROLES:
         if not (PROMPTS_DIR / f"{role}.md").exists():

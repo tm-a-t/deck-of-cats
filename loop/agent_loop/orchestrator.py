@@ -150,6 +150,32 @@ def step_payload(step: dict) -> dict:
     return step.get("payload") or {}
 
 
+def poki_steps_enabled(config: dict) -> bool:
+    return bool(config.get("poki", {}).get("enabled", True))
+
+
+def skipped_poki_feedback_step() -> dict:
+    summary = "Poki steps disabled by config"
+    return {
+        "role": "poki_feedback",
+        "ok": True,
+        "returncode": None,
+        "timed_out": False,
+        "duration_seconds": 0,
+        "prompt_path": None,
+        "stdout_path": None,
+        "stderr_path": None,
+        "last_message_path": None,
+        "payload": {
+            "status": "skipped",
+            "summary": summary,
+            "feedback": [],
+            "details": summary,
+        },
+        "error": None,
+    }
+
+
 def run_once(config: dict) -> dict:
     run_id = stamp()
     run_dir = RUNS_DIR / run_id
@@ -181,7 +207,17 @@ def run_once(config: dict) -> dict:
         return step
 
     context = base_context(config, state, run_id)
-    feedback_step = run_role("poki_feedback", context)
+    if poki_steps_enabled(config):
+        feedback_step = run_role("poki_feedback", context)
+    else:
+        feedback_step = add_step(skipped_poki_feedback_step())
+        emit_log(run_dir, "poki_feedback_skipped", "Poki feedback skipped by config")
+        notify_monitor(
+            monitor,
+            run_dir,
+            with_run("Poki steps disabled by config; skipping feedback check.", run_id),
+            "poki_feedback_skipped",
+        )
     feedback_payload = step_payload(feedback_step)
     if feedback_step["ok"] and feedback_payload.get("status") == "ok":
         used_feedback = new_feedback_items(feedback_payload, state)
@@ -332,6 +368,17 @@ def maybe_submit_external(config, state, run_id, run_dir, tester_payload, run_ro
         and tester_payload.get("send_to_external_testing")
     ):
         return submission_payload
+
+    if not poki_steps_enabled(config):
+        summary = "Poki steps disabled by config"
+        emit_log(run_dir, "external_submission_skipped", summary)
+        notify_monitor(
+            monitor,
+            run_dir,
+            with_run(f"Skipped Poki submission. {summary}", run_id),
+            "external_submission_skipped",
+        )
+        return {"status": "skipped", "summary": summary}
 
     revision = git_revision()
     allowed, reason = can_submit_external(state, config, revision)
