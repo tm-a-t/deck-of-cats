@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
         },
     },
     "poki": {
+        "enabled": True,
         "developers_game_url": "",
         "browser_profile": "",
         "test_type": "playtest-recordings",

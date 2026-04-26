@@ -5,9 +5,10 @@ Minimal no-human agentic loop for improving Deck of Cats.
 ## Setup
 
 1. Copy `loop/config.example.json` to `loop/config.json`.
-2. Set `poki.developers_game_url` to the game page in Poki for Developers.
-3. Make sure the configured persistent browser profile is already logged into Poki.
-4. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
+2. If leaving `poki.enabled` as `true`, set `poki.developers_game_url` to the game page in Poki for Developers.
+3. If leaving `poki.enabled` as `true`, make sure the configured persistent browser profile is already logged into Poki.
+4. Set `poki.enabled` to `false` to skip Poki feedback checks and Poki submissions while still running the local tester, designer, and developer.
+5. Optional Telegram monitoring: set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` in the environment before running the loop.
 
 ## Run
 
@@ -35,9 +36,9 @@ Messages are sent for cycle start/finish, role starts/results, selected design i
 
 ## Process
 
-1. `poki_feedback` looks for new Poki playtest feedback.
+1. `poki_feedback` looks for new Poki playtest feedback unless `poki.enabled` is `false`.
 2. If none is found, `tester` plays/checks the current build.
-3. If the tester recommends external testing, `poki_submit` sends the build to Poki.
+3. If the tester recommends external testing and `poki.enabled` is `true`, `poki_submit` sends the build to Poki.
 4. `designer` chooses one focused improvement.
 5. `developer` implements, validates, and fixes before returning.
 6. The orchestrator records the Developer result, updates loop state, and repeats in `forever` mode.
