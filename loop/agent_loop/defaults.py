@@ -35,7 +35,7 @@ DEFAULT_CONFIG = {
         },
         "role_timeouts_seconds": {
             "poki_feedback": 900,
-            "tester": 1200,
+            "tester": 2400,
             "poki_submit": 1800,
             "designer": 1200,
             "developer": 2400,
