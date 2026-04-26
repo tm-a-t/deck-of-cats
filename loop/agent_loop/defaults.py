@@ -13,6 +13,7 @@ DEFAULT_CONFIG = {
         "commit": {
             "enabled": True,
             "policy": "any_changes",
+            "sign": False,
         },
     },
     "codex": {

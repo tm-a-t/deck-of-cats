@@ -9,7 +9,8 @@
     },
     "commit": {
       "enabled": true,
-      "policy": "any_changes"
+      "policy": "any_changes",
+      "sign": false
     }
   },
   "codex": {

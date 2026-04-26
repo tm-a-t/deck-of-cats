@@ -35,6 +35,8 @@ def self_test() -> dict:
         raise RuntimeError("default loop worktree branch changed unexpectedly")
     if config["loop"]["commit"]["policy"] != "any_changes":
         raise RuntimeError("default loop commit policy should commit any changed cycle")
+    if config["loop"]["commit"]["sign"]:
+        raise RuntimeError("loop commits should be unsigned by default")
     if config["codex"]["role_timeouts_seconds"]["tester"] != 1200:
         raise RuntimeError("tester timeout should stay below the outer loop timeout")
     harness_source = playwright_script()
@@ -159,7 +161,12 @@ def run_git(cwd: Path, args: list[str]) -> str:
     return result.stdout
 
 
-def temp_loop_config(worktree_path: str, policy: str = "any_changes", branch: str = "loop-auto") -> dict:
+def temp_loop_config(
+    worktree_path: str,
+    policy: str = "any_changes",
+    branch: str = "loop-auto",
+    sign: bool = False,
+) -> dict:
     return {
         "loop": {
             "worktree": {
@@ -170,6 +177,7 @@ def temp_loop_config(worktree_path: str, policy: str = "any_changes", branch: st
             "commit": {
                 "enabled": True,
                 "policy": policy,
+                "sign": sign,
             },
         }
     }
@@ -201,6 +209,8 @@ def assert_workspace_cases() -> None:
             raise RuntimeError("loop worktree was not created on the configured branch")
         if ensure_workspace_root(config, repo) != workspace:
             raise RuntimeError("existing loop worktree was not reused")
+        run_git(workspace, ["config", "commit.gpgsign", "true"])
+        run_git(workspace, ["config", "gpg.program", "/bin/false"])
 
         (workspace / "feature.txt").write_text("changed by loop\n", encoding="utf-8")
         commit = commit_iteration_changes(config, workspace, "self-test-run", "failed", "failed cycle summary")
