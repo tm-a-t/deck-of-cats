@@ -61,3 +61,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-193832 — rev bb2e45b
 
 - Gameplay: true - Added Dockside Credit: once per regular-run Shop phase, one pirate missing up to `2☠️` can be bought by converting the shortfall into pending Boarding Alert; validated with JS syntax checks, targeted Dockside Credit checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-193832.log`.
+
+## 2026-04-26 — run 20260426-195206 — rev 3fafbec
+
+- Gameplay: true - Ship Wages now pay a baseline `1☠️` on completed regular island rounds, so full sends still reach the shop with a small stake while unused slots remain the only source of Boarding Alert; validated with `node --check js/scene.js`, targeted baseline Ship Wages checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-195206.log`. Local browser harness was attempted but blocked by sandbox HTTP server permissions.

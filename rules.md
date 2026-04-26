@@ -45,10 +45,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
-- Stopping before the send limit pays `Ship Wages` before ship actions resolve: if at least 1 send slot is unused, gain `☠️☠️` for the first unused slot and `☠️` for each additional unused slot.
-- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and nothing when both slots are filled.
-- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or nothing for 0, 1, 2, or 3 sent pirates.
-- Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
+- Ending a regular island round with `End` or `Work on Ship` pays `Ship Wages` before ship actions resolve: gain a baseline `1☠️`, plus `+1☠️` per unused send slot.
+- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and `1☠️` when both slots are filled.
+- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates.
+- Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot; the baseline `1☠️` adds no Alert. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
 - `Ship Wages` are not doubled by island bonuses, do not trigger on `Infirmary Island` or boarding rounds, and stack normally with `Skull Island` and pirate ship actions.
 - Pirates with island conversion cannot be sent unless the input resource is available.
 - `Bosun` cannot go ashore at all.

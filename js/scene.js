@@ -688,10 +688,11 @@ class GameScene extends Phaser.Scene {
   }
 
   shipWagePreview() {
-    const unused = this.unusedSendSlots();
+    const paysWages = !this.isBattleTest() && G.phase === 'sending' && !!G.island && !G.island.healWounded;
+    const unused = paysWages ? this.unusedSendSlots() : 0;
     return {
       unused,
-      wages: unused > 0 ? unused + 1 : 0,
+      wages: paysWages ? unused + 1 : 0,
       alert: unused,
     };
   }
@@ -4047,7 +4048,9 @@ class GameScene extends Phaser.Scene {
     if (G.phase === 'sending') {
       if (G.sent.length >= this.maxSend()) {
         if (this._sendingToIsland.size > 0) return null;
-        return { label: 'Work on Ship', onClick: () => this.endSending(), variant: 'continue' };
+        const preview = this.shipWagePreview();
+        const wageText = preview.wages > 0 ? ` +${preview.wages}☠️` : '';
+        return { label: `Work on Ship${wageText}`, onClick: () => this.endSending(), variant: 'continue' };
       }
       const preview = this.shipWagePreview();
       const wageAlert = this.boardingAlertGuardLabel(this.boardingAlertGuardCount(this.pendingBoardingAlert() + preview.alert));
