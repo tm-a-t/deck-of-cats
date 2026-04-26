@@ -718,8 +718,8 @@ class GameScene extends Phaser.Scene {
   boardingAlertGuardCount(amount = this.pendingBoardingAlert()) {
     const alert = Math.max(0, Math.floor(Number(amount) || 0));
     if (alert <= 0) return 0;
-    if (alert >= 7) return 3;
-    return alert >= 4 ? 2 : 1;
+    if (alert >= 6) return 3;
+    return alert >= 3 ? 2 : 1;
   }
 
   boardingAlertGuardLabel(guardCount) {
@@ -728,10 +728,28 @@ class GameScene extends Phaser.Scene {
     return `+${count} guard${count === 1 ? '' : 's'}`;
   }
 
-  boardingAlertSummary(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount)) {
+  boardingAlertPlunderLabel(guardCount) {
+    const plunder = this.boardingAlertGuardPlunder(guardCount);
+    const items = this.boardingAlertPlunderItems(plunder);
+    if (!items.length) return '';
+    return `win ${items.map((item) => `+${item.count > 1 ? item.count : ''}${item.emoji}`).join(' ')}`;
+  }
+
+  boardingAlertRiskText(guardCount, opts = {}) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    const label = opts.compact && count > 0
+      ? `+${count}g`
+      : this.boardingAlertGuardLabel(count);
+    if (!label) return '';
+    const includePlunder = opts.includePlunder !== false;
+    const plunder = includePlunder ? this.boardingAlertPlunderLabel(guardCount) : '';
+    return [label, plunder].filter(Boolean).join(' · ');
+  }
+
+  boardingAlertSummary(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount), opts = {}) {
     const alert = Math.max(0, Math.floor(Number(amount) || 0));
-    const label = this.boardingAlertGuardLabel(guardCount);
-    return alert > 0 && label ? `Alert ${alert}: ${label}` : null;
+    const label = this.boardingAlertRiskText(guardCount, opts);
+    return alert > 0 && label ? `Alert ${alert} · ${label}` : null;
   }
 
   quietDocksCost() {
@@ -911,7 +929,15 @@ class GameScene extends Phaser.Scene {
     const price = quote.discount > 0
       ? `${quote.cost}->${quote.effectiveCost}☠️`
       : `${quote.effectiveCost}☠️`;
-    const credit = quote.credit && quote.alert > 0 ? `, credit +${quote.alert} Alert` : '';
+    const alertBase = state && state.boardingAlert != null
+      ? Math.max(0, Math.floor(Number(state.boardingAlert) || 0))
+      : this.pendingBoardingAlert();
+    const alertRisk = quote.credit && quote.alert > 0
+      ? this.boardingAlertRiskText(this.boardingAlertGuardCount(alertBase + quote.alert), { compact: true })
+      : '';
+    const credit = quote.credit && quote.alert > 0
+      ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
+      : '';
     return `Shop: ${def.name} ${price}${credit}`;
   }
 
@@ -921,6 +947,7 @@ class GameScene extends Phaser.Scene {
     const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
     const shopState = {
       enthusiasm,
+      boardingAlert: this.pendingBoardingAlert() + Math.max(0, Math.floor(Number(wage.alert) || 0)),
       fullCrewDiscount: discount,
       shopCreditUsed: false,
     };
@@ -5497,9 +5524,9 @@ class GameScene extends Phaser.Scene {
   formatSendingPlanLine(plan) {
     const wage = plan.wage || { wages: 0, alert: 0 };
     const nextAlert = this.pendingBoardingAlert() + Math.max(0, Math.floor(Number(wage.alert) || 0));
-    const guardLabel = this.boardingAlertGuardLabel(this.boardingAlertGuardCount(nextAlert));
+    const alertRisk = this.boardingAlertRiskText(this.boardingAlertGuardCount(nextAlert));
     const alertText = wage.alert > 0
-      ? `Alert +${wage.alert}${guardLabel ? ` (${guardLabel})` : ''}`
+      ? `Alert +${wage.alert}${alertRisk ? ` (${alertRisk})` : ''}`
       : 'Alert +0';
     const commissionText = wage.openingCommission > 0
       ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`

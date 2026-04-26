@@ -373,19 +373,16 @@ class ShopScene extends Phaser.Scene {
     const pendingAlert = typeof game.pendingBoardingAlert === 'function'
       ? game.pendingBoardingAlert()
       : Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
-    const guardCount = typeof game.boardingAlertGuardCount === 'function'
-      ? game.boardingAlertGuardCount(pendingAlert)
-      : 0;
-    const guardLabel = typeof game.boardingAlertGuardLabel === 'function'
-      ? game.boardingAlertGuardLabel(guardCount)
-      : '';
+    const alertSummary = typeof game.boardingAlertSummary === 'function'
+      ? game.boardingAlertSummary(pendingAlert)
+      : null;
     const cost = typeof game.quietDocksCost === 'function'
       ? game.quietDocksCost()
       : Math.max(0, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.cost) || 2) || 0));
     const enabled = typeof game.canUseQuietDocks === 'function' && game.canUseQuietDocks();
     const y = panel.y + panel.h - 42 * L.k;
     const text = pendingAlert > 0
-      ? `Alert ${pendingAlert}${guardLabel ? ` · ${guardLabel}` : ''}`
+      ? (alertSummary || `Alert ${pendingAlert}`)
       : 'Alert 0 · seas quiet';
 
     const label = this.add.text(panel.x + 28 * L.k, y - 31 * L.k, text, {

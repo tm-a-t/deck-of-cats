@@ -116,17 +116,17 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Pending `Boarding Alert` persists through islands, shops, and map choices until the next ship node.
 - When a regular-run boarding starts, the current `Boarding Alert` is snapshotted on that boarding and the pending Alert is cleared.
 - The snapshotted Alert adds visible guard reinforcements after the normal boarding party is generated:
-  - Alert `1–3`: add 1 extra `Cabin Boy`.
-  - Alert `4–6`: add 1 extra `Cabin Boy` and 1 extra `Bilge Rat`.
-  - Alert `7+`: add 2 extra `Cabin Boys` and 1 extra `Bilge Rat`.
+  - Alert `1–2`: add 1 extra `Cabin Boy`.
+  - Alert `3–5`: add 1 extra `Cabin Boy` and 1 extra `Bilge Rat`.
+  - Alert `6+`: add 2 extra `Cabin Boys` and 1 extra `Bilge Rat`.
 - Alert guards use normal enemy stats and normal late-run `Veteran`/`Elite` scaling. Alert no longer gives enemies bonus HP.
-- The applied Alert guard count is shown during the boarding. Battle Test ignores `Boarding Alert`.
+- Alert previews show the resulting guard tier and any guard plunder available on a win. Battle Test ignores `Boarding Alert`.
 - After a regular-run boarding is won, the consumed Alert guards grant plunder once:
   - each Alert `Cabin Boy` grants `+1🪵`;
   - each Alert `Bilge Rat` grants `+1🪨`;
-  - Alert `1–3` therefore pays `+1🪵`;
-  - Alert `4–6` pays `+1🪵 +1🪨`;
-  - Alert `7+` pays `+2🪵 +1🪨`.
+  - Alert `1–2` therefore pays `+1🪵`;
+  - Alert `3–5` pays `+1🪵 +1🪨`;
+  - Alert `6+` pays `+2🪵 +1🪨`.
 - Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved.
 - The old "sum team strength against ship strength" system no longer exists.
 - Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.

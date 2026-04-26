@@ -37,6 +37,7 @@ function parseArgs(argv) {
     policyActions: 1024,
     checkOpeningCommission: false,
     checkPortDrill: false,
+    checkAlertTiers: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -112,6 +113,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-port-drill') {
       out.checkPortDrill = true;
+      continue;
+    }
+    if (a === '--check-alert-tiers') {
+      out.checkAlertTiers = true;
     }
   }
 
@@ -761,8 +766,8 @@ function nextShipTurnsAway(G) {
 function quietDocksProbability(G, buysThisShop) {
   const alert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   let p = 0;
-  if (alert >= 7) p = 0.82;
-  else if (alert >= 4) p = 0.62;
+  if (alert >= 6) p = 0.82;
+  else if (alert >= 3) p = 0.62;
   else if (alert >= 2) p = 0.34;
   else if (alert >= 1) p = 0.16;
 
@@ -935,6 +940,73 @@ function runOpeningCommissionChecks(runtime) {
 
 function assertPortDrillCheck(condition, message) {
   if (!condition) throw new Error(`port drill check failed: ${message}`);
+}
+
+function assertAlertTierCheck(condition, message) {
+  if (!condition) throw new Error(`alert tier check failed: ${message}`);
+}
+
+function runAlertTierChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const expectedCounts = [
+    [0, 0],
+    [1, 1],
+    [2, 1],
+    [3, 2],
+    [5, 2],
+    [6, 3],
+    [10, 3],
+  ];
+  expectedCounts.forEach(([alert, expected]) => {
+    const actual = scene.boardingAlertGuardCount(alert);
+    assertAlertTierCheck(actual === expected, `Alert ${alert} guard count ${actual} !== ${expected}`);
+    results.push({ name: `Alert ${alert} guard count`, ok: true, actual });
+  });
+
+  const rosters = [
+    [1, ['cabinBoy']],
+    [2, ['cabinBoy', 'bilgeRat']],
+    [3, ['cabinBoy', 'bilgeRat', 'cabinBoy']],
+  ];
+  rosters.forEach(([guardCount, expected]) => {
+    const actual = scene.boardingAlertGuardArchetypes(guardCount).map((a) => a.key);
+    assertAlertTierCheck(JSON.stringify(actual) === JSON.stringify(expected), `guard ${guardCount} roster ${actual.join(',')} !== ${expected.join(',')}`);
+    const plunder = scene.boardingAlertGuardPlunder(guardCount);
+    const expectedWood = guardCount === 3 ? 2 : 1;
+    const expectedStone = guardCount >= 2 ? 1 : 0;
+    assertAlertTierCheck(plunder.wood === expectedWood, `guard ${guardCount} wood ${plunder.wood} !== ${expectedWood}`);
+    assertAlertTierCheck(plunder.stone === expectedStone, `guard ${guardCount} stone ${plunder.stone} !== ${expectedStone}`);
+    results.push({ name: `guard ${guardCount} roster and plunder`, ok: true, actual, plunder });
+  });
+
+  api.initState();
+  const G = api.getG();
+  G.mode = 'run';
+  G.round = 2;
+  G.boardingCount = 0;
+  G.phase = 'sending';
+  G.island = scene.buildIslandState(api.ISLANDS[3]);
+  G.sent = [];
+  G.boardingAlert = 0;
+  G.fullCrewDiscount = 0;
+  scene._sendingToIsland.clear();
+
+  const endLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(0));
+  const fillLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(3, { includePortDrill: true }));
+  assertAlertTierCheck(endLine.includes('+4☠️ Wages'), `End now line misses +4 wages: ${endLine}`);
+  assertAlertTierCheck(endLine.includes('Alert +3'), `End now line misses Alert +3: ${endLine}`);
+  assertAlertTierCheck(endLine.includes('+2 guards'), `End now line misses two-guard tier: ${endLine}`);
+  assertAlertTierCheck(endLine.includes('win +🪵 +🪨'), `End now line misses alert plunder: ${endLine}`);
+  assertAlertTierCheck(fillLine.includes('Alert +0'), `Fill crew line misses Alert +0: ${fillLine}`);
+  assertAlertTierCheck(fillLine.includes('Full Crew -1☠️'), `Fill crew line misses Full Crew Discount: ${fillLine}`);
+  assertAlertTierCheck(fillLine.includes('Port Drill +⚡'), `Fill crew line misses Port Drill: ${fillLine}`);
+  assertAlertTierCheck(!fillLine.includes('win +'), `Fill crew line implies alert plunder: ${fillLine}`);
+  results.push({ name: 'round 2 Port plan text', ok: true, endLine, fillLine });
+
+  return { ok: true, checks: results };
 }
 
 function runPortDrillChecks(runtime) {
@@ -1800,6 +1872,11 @@ async function main() {
   }
   if (opts.checkPortDrill) {
     const result = runPortDrillChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkAlertTiers) {
+    const result = runAlertTierChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

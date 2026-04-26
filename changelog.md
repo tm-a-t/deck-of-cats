@@ -81,3 +81,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-204440 — rev abcea30
 
 - Gameplay: true - Added Port Drill: full regular Port Island sends grant `+1⚡` Tempo to the leftmost surviving sent pirate before ship actions, with island and plan preview text; validated with JS syntax checks, `node sim/fast-sim.js --check-port-drill`, `node sim/fast-sim.js --check-opening-commission`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-204440.log`.
+
+## 2026-04-26 — run 20260426-205716 — rev ccac8ab
+
+- Gameplay: true - Moved Boarding Alert guard thresholds to `1-2`, `3-5`, and `6+`, surfaced projected guard plunder in Alert summaries and sending/shop previews, and aligned Quiet Docks sim risk with the new `3/6` breakpoints; validated with JS syntax checks, `node sim/fast-sim.js --check-alert-tiers`, `node sim/fast-sim.js --check-opening-commission`, `node sim/fast-sim.js --check-port-drill`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-205716.log`.
