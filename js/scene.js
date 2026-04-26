@@ -798,6 +798,11 @@ class GameScene extends Phaser.Scene {
     return !!intel && turnsAway >= 1 && turnsAway <= 3;
   }
 
+  preparedCounterGains(type) {
+    const def = TYPES[type];
+    return normalizePersonalGains(def && def.ship && def.ship.personalGains);
+  }
+
   updateFullCrewDiscountForCompletedIsland() {
     G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
     return G.fullCrewDiscount;
@@ -880,8 +885,9 @@ class GameScene extends Phaser.Scene {
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
     const counter = !!(def && this.isScoutedCounterShopType(type));
     const topDeck = !!(def && this.counterRecruitReportsEarly(type));
+    const preparedCounter = !!(topDeck && this.preparedCounterGains(type).length);
     if (!def) {
-      return { canBuy: false, credit: false, counter: false, topDeck: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
+      return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
     const isProjection = !!state;
     const source = state || {};
@@ -893,7 +899,7 @@ class GameScene extends Phaser.Scene {
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     if (enthusiasm >= effectiveCost) {
-      return { canBuy: true, credit: false, counter, topDeck, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
+      return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
     }
     const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
@@ -907,6 +913,7 @@ class GameScene extends Phaser.Scene {
       credit: canCredit,
       counter,
       topDeck,
+      preparedCounter,
       cost,
       effectiveCost,
       discount,
@@ -966,8 +973,9 @@ class GameScene extends Phaser.Scene {
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
     const label = quote.counter ? 'Counter ' : '';
+    const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
-    return `Shop: ${label}${def.name} ${price}${topDeck}${credit}`;
+    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${credit}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -1735,6 +1743,9 @@ class GameScene extends Phaser.Scene {
     const p = mkP(type);
     G.allCrew.push(p);
     const toTopDeck = !!quote.topDeck;
+    const prepared = quote.preparedCounter
+      ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
+      : null;
     if (toTopDeck) G.deck.push(p);
     else G.discard.push(p);
 
@@ -1745,8 +1756,9 @@ class GameScene extends Phaser.Scene {
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? ' Top deck' : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + alertText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

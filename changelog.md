@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-26 — run 20260426-220804 — rev a8ce505
+
+- Gameplay: true - Added Prepared Counter Recruits: regular-run `Top deck` scouted counter purchases now immediately receive their own ship-side personal weapon and/or buffs without paying ship costs, producing ship outputs, or targeting island pirates. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-220804.log`.
+
 ## 2026-04-26 — run 20260426-215611 — rev 908def7
 
 - Gameplay: true - Added Counter Recruits Report Early: regular-run scouted counter pirates bought within 3 map turns of the next ship now go to the top of the draw pile, including Dockside Credit and Full Crew Discount buys, while other purchases still go to discard; eligible shop slots are labeled `Top deck`. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early`, `node sim/fast-sim.js --check-scouted-counter-shop`, `node sim/fast-sim.js --check-alert-tiers`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-215611.log`.

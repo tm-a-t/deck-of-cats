@@ -335,12 +335,18 @@ class ShopScene extends Phaser.Scene {
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
-      const counterText = quote.topDeck ? 'Counter · Top deck · ' : (quote.counter ? 'Counter · ' : '');
-      const priceText = quote.discount > 0
-        ? `${counterText}${def.cost}☠️ -> ${effectiveCost}☠️`
-        : `${counterText}${def.cost}☠️`;
+      const tags = [];
+      if (quote.counter) tags.push('Counter');
+      if (quote.preparedCounter) tags.push('Prepared');
+      if (quote.topDeck) tags.push('Top deck');
+      const priceLine = quote.discount > 0
+        ? `${def.cost}☠️ -> ${effectiveCost}☠️`
+        : `${def.cost}☠️`;
+      const priceText = tags.length ? `${tags.join(' · ')}\n${priceLine}` : priceLine;
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs(quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)),
+        fontSize: L.fs(quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14))),
+        align: 'center',
+        lineSpacing: -2 * L.k,
       }))
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);
@@ -628,8 +634,9 @@ class ShopScene extends Phaser.Scene {
       G.shopAnimating = false;
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + alertText + deckText, '#66bb6a');
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + alertText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });

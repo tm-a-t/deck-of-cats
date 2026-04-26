@@ -1166,26 +1166,84 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
     G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
     G.shopCreditUsed = !!opts.shopCreditUsed;
-    G.hand = [];
+    G.res = Object.assign({ wood: 0, stone: 0, gold: 0 }, opts.res || {});
+    const islandTarget = opts.islandTarget ? G.allCrew[0] : null;
+    if (islandTarget) {
+      islandTarget.weaponKey = null;
+      islandTarget.might = 0;
+      islandTarget.tempo = 0;
+    }
+    G.hand = islandTarget ? [islandTarget] : [];
+    G.sent = islandTarget ? [0] : [];
     G.discard = [];
     const oldTop = G.allCrew[0];
-    G.deck = oldTop ? [oldTop] : [];
+    G.deck = oldTop && !islandTarget ? [oldTop] : [];
     G.shop = [opts.type || 'sawbones'];
-    return { G, oldTop };
+    return { G, oldTop: islandTarget ? null : oldTop, islandTarget };
   };
 
   {
     const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck, `eligible quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `prepared Sawbones weapon was ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'eligible counter also appeared in discard');
     const drawn = api.drawCards(1)[0];
     assertCounterRecruitsReportEarlyCheck(drawn === bought, 'next draw did not return the bought counter');
     assertCounterRecruitsReportEarlyCheck(!oldTop || G.deck[G.deck.length - 1] === oldTop, 'older deck card did not remain below bought counter');
-    results.push({ name: 'eligible nearby scouted counter goes to top of deck and draws first', ok: true });
+    results.push({ name: 'eligible nearby scouted counter is prepared, top-decks, and draws first', ok: true });
+  }
+
+  {
+    const { G, islandTarget } = setupPurchase({
+      type: 'needler',
+      enthusiasm: 3,
+      map: makeScoutedCounterTestMap('deckSniper'),
+      islandTarget: true,
+    });
+    const beforeRes = { ...G.res };
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.weaponKey === 'toxinPistol', `prepared Needler weapon was ${bought && bought.weaponKey}`);
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'prepared Needler was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `prepared Needler granted ship enthusiasm or failed to spend: ${G.enthusiasm}`);
+    assertCounterRecruitsReportEarlyCheck(JSON.stringify(G.res) === JSON.stringify(beforeRes), `prepared Needler changed resources: ${JSON.stringify(G.res)}`);
+    assertCounterRecruitsReportEarlyCheck(islandTarget.weaponKey == null && islandTarget.might === 0 && islandTarget.tempo === 0, 'prepared Needler targeted island pirate');
+    results.push({ name: 'prepared Needler gets Toxin Pistol without ship output, costs, or island targeting', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'drummer', enthusiasm: 2, map: makeScoutedCounterTestMap('netter') });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.tempo === 1, `prepared Drummer tempo was ${bought && bought.tempo}`);
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.wood === 0, 'prepared Drummer paid ship cost or output');
+    results.push({ name: 'prepared Drummer gains +1 Tempo only', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'trainer', enthusiasm: 3, map: makeScoutedCounterTestMap('netter') });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.might === 1, `prepared Trainer might was ${bought && bought.might}`);
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.stone === 0, 'prepared Trainer paid ship cost or output');
+    results.push({ name: 'prepared Trainer gains +1 Might only', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'flagbearer', enthusiasm: 7, map: makeScoutedCounterTestMap('netter') });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.might === 1 && bought.tempo === 1, `prepared Flagbearer buffs were might=${bought && bought.might} tempo=${bought && bought.tempo}`);
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.wood === 0 && G.res.stone === 0, 'prepared Flagbearer paid ship costs or output');
+    results.push({ name: 'prepared multi-gain counter receives every personal gain only', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'plagueCaptain', enthusiasm: 10, map: makeScoutedCounterTestMap('shellback') });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.weaponKey === 'toxinPistol' && bought.might === 1, `prepared Plague Captain gains were weapon=${bought && bought.weaponKey} might=${bought && bought.might}`);
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.gold === 0, 'prepared Plague Captain paid ship cost or output');
+    results.push({ name: 'prepared mixed weapon/buff counter receives all personal gains only', ok: true });
   }
 
   {
@@ -1194,6 +1252,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'trainer', 'non-counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'non-counter did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'non-counter went to deck');
+    assertCounterRecruitsReportEarlyCheck((bought.might || 0) === 0, `non-counter was prepared with might=${bought.might}`);
     results.push({ name: 'non-counter purchases still go to discard', ok: true });
   }
 
@@ -1208,6 +1267,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'distant counter did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'distant counter went to deck');
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `distant counter was prepared with ${bought.weaponKey}`);
     results.push({ name: 'counter purchases more than 3 turns from ship still go to discard', ok: true });
   }
 
@@ -1220,6 +1280,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'no-ship purchase did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'no-ship purchase went to deck');
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-ship purchase was prepared with ${bought.weaponKey}`);
     results.push({ name: 'purchases with no scouted ship still go to discard', ok: true });
   }
 
@@ -1232,6 +1293,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'Battle Test purchase did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'Battle Test purchase went to deck');
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `Battle Test purchase was prepared with ${bought.weaponKey}`);
     results.push({ name: 'Battle Test purchases still go to discard', ok: true });
   }
 
@@ -1245,6 +1307,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.topDeck && quote.alert === 2, `credit quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'credit counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `credit counter was not prepared: ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `credit did not spend all enthusiasm: ${G.enthusiasm}`);
     assertCounterRecruitsReportEarlyCheck(G.boardingAlert === 3, `credit Alert ${G.boardingAlert} !== 3`);
     assertCounterRecruitsReportEarlyCheck(G.shopCreditUsed === true, 'credit flag was not consumed');
@@ -1258,9 +1321,10 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
       fullCrewDiscount: 1,
     });
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.discount === 1 && quote.topDeck, `discount quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.discount === 1 && quote.topDeck && quote.preparedCounter, `discount quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'discount counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `discount counter was not prepared: ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `discount spend left ${G.enthusiasm} enthusiasm`);
     assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'discount was not consumed');
     results.push({ name: 'Full Crew Discount is unchanged for eligible top-deck buys', ok: true });

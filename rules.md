@@ -99,6 +99,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates normally go straight to discard, not to hand.
 - Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
+- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
+- `Prepared` applies to normal purchases, `Full Crew Discount` purchases, and `Dockside Credit` purchases that qualify for `Top deck`.
+- `Prepared` does not pay ship costs, grant ship resource or `☠️` outputs, target the leftmost island pirate, consume a ship action, or apply in `Battle Test`.
+- Prepared weapons and buffs are permanent and use the normal weapon replacement and buff stacking rules.
 - The draw pile top is the next card drawn. If multiple eligible counter pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible counter is drawn first.
 - Non-counter purchases, purchases when no ship is scouted, purchases when the scouted ship is more than `3` turns away, and all `Battle Test` purchases still go to discard.
 - The player may buy any number of pirates as long as enough `☠️` remains.
