@@ -42,6 +42,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Infirmary Island` is a special island: it enters phase `healing` instead of `sending`.
 - By default the player may send up to 2 pirates.
 - `Port Island` adds `+1`, so the maximum becomes 3.
+- On a regular `Port Island`, ending with all 3 send slots filled triggers `Port Drill` before ship actions: the leftmost surviving sent pirate gains `+1 ⚡ Tempo`.
+- `Port Drill` does not trigger on partial Port sends, non-Port islands, `Infirmary Island`/healing rounds, or Battle Test; it adds no `Boarding Alert`, is not doubled by island bonuses, and stacks as normal permanent `Tempo`.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
@@ -162,7 +164,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 | Forest Island 🌲 | Doubles island output of `🪵` |
 | Rocky Island ⛰️ | Doubles island output of `🪨` |
 | Treasure Island 💎 | Doubles island output of `🪙` |
-| Port Island ⚓ | Lets the player send 3 pirates instead of 2 |
+| Port Island ⚓ | Lets the player send 3 pirates instead of 2. Full 3-pirate sends grant `Port Drill`: leftmost surviving sent pirate gains `+1 ⚡ Tempo` before ship actions |
 | Skull Island 💀 | Grants `☠️☠️` immediately when the node is selected |
 | Siren Island 🧜 | Every sent pirate is permanently lost after its island effect |
 | Infirmary Island 🩹 | Heals up to 5 wounded pirates chosen by the player |

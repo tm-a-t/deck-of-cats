@@ -77,3 +77,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-26 — run 20260426-203159 — rev 7e5591d
 
 - Gameplay: true - Added Opening Commission: full sends on the first two regular pre-boarding island rounds add `+1☠️` to Ship Wages without adding Boarding Alert, making the first shop buyable while preserving the End-now Alert tradeoff; validated with JS syntax checks, `node sim/fast-sim.js --check-opening-commission`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-203159.log`.
+
+## 2026-04-26 — run 20260426-204440 — rev abcea30
+
+- Gameplay: true - Added Port Drill: full regular Port Island sends grant `+1⚡` Tempo to the leftmost surviving sent pirate before ship actions, with island and plan preview text; validated with JS syntax checks, `node sim/fast-sim.js --check-port-drill`, `node sim/fast-sim.js --check-opening-commission`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-204440.log`.

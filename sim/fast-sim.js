@@ -36,6 +36,7 @@ function parseArgs(argv) {
     mlEpsilon: 0.0,
     policyActions: 1024,
     checkOpeningCommission: false,
+    checkPortDrill: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -107,6 +108,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-commission') {
       out.checkOpeningCommission = true;
+      continue;
+    }
+    if (a === '--check-port-drill') {
+      out.checkPortDrill = true;
     }
   }
 
@@ -848,6 +853,13 @@ function updateFullCrewDiscountForSim(scene, G) {
   return G.fullCrewDiscount;
 }
 
+function applyPortDrillForSim(scene) {
+  if (scene && typeof scene.applyPortDrill === 'function') {
+    return scene.applyPortDrill({ silent: true });
+  }
+  return null;
+}
+
 function assertOpeningCommissionCheck(condition, message) {
   if (!condition) throw new Error(`opening commission check failed: ${message}`);
 }
@@ -921,6 +933,76 @@ function runOpeningCommissionChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertPortDrillCheck(condition, message) {
+  if (!condition) throw new Error(`port drill check failed: ${message}`);
+}
+
+function runPortDrillChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const setup = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.round = 1;
+    G.boardingCount = 0;
+    G.phase = opts.phase || 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx != null ? opts.islandIdx : 3]);
+    G.sent = [];
+    const sentCount = Math.max(0, Math.floor(Number(opts.sent) || 0));
+    for (let i = 0; i < sentCount; i++) G.sent.push(i);
+    scene._sacrificedIds.clear();
+    if (opts.sacrificeFirst && G.hand[0]) scene._sacrificedIds.add(G.hand[0].id);
+    G.hand.forEach((pirate, index) => {
+      pirate.tempo = index === 0 ? 2 : 0;
+      pirate.might = 0;
+    });
+    return G;
+  };
+
+  const check = (name, opts, expectedTempos) => {
+    const G = setup(opts);
+    const before = G.hand.map(p => p.tempo || 0);
+    const result = applyPortDrillForSim(scene);
+    expectedTempos.forEach((tempo, index) => {
+      assertPortDrillCheck((G.hand[index].tempo || 0) === tempo, `${name} hand ${index} tempo ${G.hand[index].tempo || 0} !== ${tempo}`);
+    });
+    results.push({
+      name,
+      ok: true,
+      applied: !!(result && result.applied),
+      before: before.slice(0, expectedTempos.length),
+      after: G.hand.slice(0, expectedTempos.length).map(p => p.tempo || 0),
+    });
+  };
+
+  check('full regular port stacks leftmost tempo', { islandIdx: 3, sent: 3 }, [3, 0, 0]);
+  check('partial port does not drill', { islandIdx: 3, sent: 2 }, [2, 0, 0]);
+  check('full non-port does not drill', { islandIdx: 0, sent: 2 }, [2, 0, 0]);
+  check('battle test port does not drill', { mode: 'battleTest', islandIdx: 3, sent: 3 }, [2, 0, 0]);
+  check('infirmary does not drill', { islandIdx: 6, sent: 5 }, [2, 0, 0]);
+  check('drill skips removed leftmost sent pirate', { islandIdx: 3, sent: 3, sacrificeFirst: true }, [2, 1, 0]);
+
+  const G = setup({ islandIdx: 3, sent: 2 });
+  const endLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
+  const fillLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(3, { includePortDrill: true }));
+  assertPortDrillCheck(!endLine.includes('Port Drill'), 'partial End now line mentions Port Drill');
+  assertPortDrillCheck(fillLine.includes('Port Drill +⚡'), 'Fill crew line does not mention Port Drill');
+  assertPortDrillCheck(scene.islandDescription().includes('Full crew'), 'island description does not mention full crew drill');
+  results.push({
+    name: 'projection text gates drill reward',
+    ok: true,
+    endLine,
+    fillLine,
+    islandDescription: scene.islandDescription(),
+    sent: G.sent.length,
+  });
+
+  return { ok: true, checks: results };
+}
+
 function prepareNextRoundForSim(api, scene) {
   const G = api.getG();
   if (G.phase !== 'shopping') return;
@@ -967,6 +1049,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
     }
   }
 
+  applyPortDrillForSim(scene);
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
@@ -1059,6 +1142,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
     if (G.sent.length >= scene.maxSend()) break;
   }
 
+  applyPortDrillForSim(scene);
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
 
@@ -1711,6 +1795,11 @@ async function main() {
   const runtime = buildRuntime();
   if (opts.checkOpeningCommission) {
     const result = runOpeningCommissionChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkPortDrill) {
+    const result = runPortDrillChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

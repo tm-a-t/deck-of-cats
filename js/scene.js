@@ -458,6 +458,7 @@ class GameScene extends Phaser.Scene {
       extraSend: src.extraSend || 0,
       maxSend: src.maxSend != null ? src.maxSend : (opts.maxSend != null ? opts.maxSend : null),
       bonusEnthusiasm: src.bonusEnthusiasm || 0,
+      fullSendBuff: normalizePersonalGain(src.fullSendBuff || opts.fullSendBuff),
       sacrifice: !!src.sacrifice,
       healWounded: Math.max(0, Math.floor(Number(src.healWounded || opts.healWounded) || 0)),
     };
@@ -796,6 +797,49 @@ class GameScene extends Phaser.Scene {
       : 0;
   }
 
+  projectPortDrill(sentCount) {
+    const gain = normalizePersonalGain(G.island && G.island.fullSendBuff);
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    if (!gain
+      || this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || max <= 0
+      || sent < max) {
+      return null;
+    }
+    return {
+      gain,
+      text: personalGainText([gain]),
+    };
+  }
+
+  applyPortDrill(opts = {}) {
+    const drill = this.projectPortDrill(Array.isArray(G.sent) ? G.sent.length : 0);
+    if (!drill) return null;
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) return null;
+
+    const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
+    if (!applied.applied) return null;
+
+    if (!opts.silent && this.L) {
+      const point = this.islandPirateEffectPoint(target.sentSlot);
+      const x = point ? point.x : this.L.cx;
+      const y = point ? point.y : this.endActionY() - 54 * this.L.k;
+      this.effectText(x, y, `+${applied.text || drill.text}`, '#66bb6a');
+      this.renderIsland();
+    }
+
+    return {
+      ...applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+    };
+  }
+
   shopPurchaseQuoteForState(type, state = null) {
     const def = TYPES[type];
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
@@ -871,7 +915,7 @@ class GameScene extends Phaser.Scene {
     return `Shop: ${def.name} ${price}${credit}`;
   }
 
-  sendingPlanProjection(sentCount) {
+  sendingPlanProjection(sentCount, opts = {}) {
     const wage = this.shipWageProjection(sentCount);
     const discount = this.projectFullCrewDiscount(sentCount);
     const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
@@ -883,6 +927,7 @@ class GameScene extends Phaser.Scene {
     return {
       wage,
       discount,
+      portDrill: opts.includePortDrill ? this.projectPortDrill(sentCount) : null,
       shopText: this.shopPlanText(shopState),
     };
   }
@@ -1374,6 +1419,7 @@ class GameScene extends Phaser.Scene {
     }
     this._pendingEndSending = false;
     this.closePanels();
+    this.applyPortDrill();
     this.updateFullCrewDiscountForCompletedIsland();
     this.grantShipWages();
     G.phase = 'ship';
@@ -4138,6 +4184,10 @@ class GameScene extends Phaser.Scene {
     if (G.island.bonus === 'wood') return 'Pirates gain twice more wood';
     if (G.island.bonus === 'stone') return 'Pirates gain twice more stone';
     if (G.island.bonus === 'gold') return 'Pirates gain twice more gold';
+    if (G.island.fullSendBuff) {
+      const drillText = personalGainText([G.island.fullSendBuff]);
+      return `Send ${this.maxSend()} pirates. Full crew: leftmost sent gains ${drillText}`;
+    }
     if (G.island.extraSend) return 'You can send one extra pirate';
     if (G.island.maxSend != null) return `Send up to ${G.island.maxSend} pirates`;
     if (G.island.bonusEnthusiasm) return `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
@@ -5455,7 +5505,8 @@ class GameScene extends Phaser.Scene {
       ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
-    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${discountText} · ${plan.shopText}`;
+    const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
+    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, plan.shopText].filter(Boolean).join(' · ')}`;
   }
 
   renderSendingPlanComparison() {
@@ -5465,7 +5516,7 @@ class GameScene extends Phaser.Scene {
     const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
     const rows = [
       { label: 'End now', plan: this.sendingPlanProjection(currentSent) },
-      { label: 'Fill crew', plan: this.sendingPlanProjection(max) },
+      { label: 'Fill crew', plan: this.sendingPlanProjection(max, { includePortDrill: true }) },
     ];
     const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
     const rowH = 54 * L.k;
