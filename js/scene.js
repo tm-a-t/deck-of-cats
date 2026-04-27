@@ -653,7 +653,7 @@ class GameScene extends Phaser.Scene {
     const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
     if (cacheNode && cacheNode.scoutedCache) cacheNode.scoutedCache.claimed = true;
     this.markOpeningRouteCacheClaimedForAlarmRush(drill, cacheNode, pirate);
-    const openingCounterPrep = this.applyOpeningRouteCachePrep(drill, cacheNode);
+    const openingCounterPrep = false;
 
     const drillReward = this.applyScoutedCacheDrill(pirate, {
       ...opts,
@@ -763,9 +763,7 @@ class GameScene extends Phaser.Scene {
       ? ` ${alertPayoffText}, gains +💪, reports next${prepText}${bountyText}`
       : ` gains +💪, reports next${prepText}${bountyText}`;
     const cacheText = this.scoutedCounterCacheRewardText(drill);
-    const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
-    const cachePrepText = this.openingRouteCachePrepAvailable(drill.mainKey, cacheNode) ? ' + Opening Prep' : '';
-    const prefix = cacheText ? `Cache: first sent opens ${cacheText}${cachePrepText}; ` : `Cache: first sent opens${cachePrepText}; `;
+    const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
     if (routeCounterType) {
       const suffix = shopLabel ? ` (or ${shopLabel})` : '';
       return `${prefix}route counter ${routeCounter.starterName}${suffix}${payoff}`;
@@ -774,52 +772,11 @@ class GameScene extends Phaser.Scene {
   }
 
   openingRouteStarterCachePrepAvailable(mainKey) {
-    return this.openingRouteCachePrepAvailable(mainKey);
+    return false;
   }
 
   openingRouteCachePrepAvailable(mainKey, cacheNode = null) {
-    if (this.isBattleTest()
-      || !mainKey
-      || G.phase !== 'sending'
-      || !G.island
-      || G.island.healWounded
-      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
-      || typeof openingRouteShopState !== 'function') {
-      return false;
-    }
-
-    const primary = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
-      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
-      : null;
-    if (!primary || !TYPES[primary]) return false;
-    if (G.openingRouteCounterBoughtMainKey === mainKey) return false;
-
-    const route = openingRouteShopState({
-      map: G.map,
-      mode: G.mode,
-      boardingCount: G.boardingCount,
-    });
-    if (!route || route.mainKey !== mainKey) return false;
-
-    const intel = this.nextShipIntel();
-    const boardingNo = intel && intel.boardingNo != null
-      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
-      : 0;
-    if (!intel || intel.mainKey !== mainKey || boardingNo !== 1) return false;
-
-    const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
-    const currentLayer = G.map && Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
-    if (firstLayer !== 1 || currentLayer !== 0) return false;
-    if (cacheNode && (
-      !cacheNode.scoutedCache
-      || cacheNode.scoutedCache.mainKey !== mainKey
-      || !G.map
-      || cacheNode.id !== G.map.currentNodeId
-    )) {
-      return false;
-    }
-
-    return true;
+    return false;
   }
 
   openingRouteStarterCachePrepEligible(pirate, drill) {
@@ -2345,7 +2302,7 @@ class GameScene extends Phaser.Scene {
       parts.push(prepArmed ? 'Opening Prep active' : 'Opening Prep expired');
     } else if (G.phase === 'sending') {
       parts.push('Full send arms Full Crew -1☠️');
-      parts.push(prepArmed ? 'Opening Prep armed' : 'One-short or cache arms Opening Prep');
+      parts.push(prepArmed ? 'Opening Prep armed' : 'One-short arms Opening Prep');
     } else {
       if (full > 0) parts.push(`Full Crew -${full}☠️`);
       if (prepArmed) parts.push('Opening Prep armed');

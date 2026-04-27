@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-221437 — rev 519b863 — build 0.1.0
+
+- Gameplay: true - Made Opening Prep one-short only: selected Boarding 1 route caches now grant only their visible cache purse/Alert plus Cache Drill rewards, so full-send starter cache lines buy through Full Crew without prep Might or Route Starter Pass-Off while one-short Opening Commission prep can still spend into primary/side offers and pass an active starter Cache Drill bounty mark. Validated with JS syntax checks; targeted opening cache purse, opening deckhand counter, Alarm Rush, Opening Route Muster, route shop, Opening Counter Prep, and Opening Side Prep sim checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-221437.log`; and `git diff --check`.
+
 ## 2026-04-28 — run 20260427-215859 — rev 13225b5 — build 0.1.0
 
 - Gameplay: false - Added an Opening Route Plan summary that exposes each opening route's enemy, starter counter, cache stakes, primary/side shop targets, setup state, shop quote outcomes, and Boarding 1 payoff in the map, sending, and shop views without changing mechanics. Validated with JS syntax checks, an opening-route plan helper smoke, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-215859.log`, and `git diff --check`.

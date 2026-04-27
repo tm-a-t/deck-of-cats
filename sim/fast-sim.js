@@ -3521,24 +3521,24 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const claim = scene.claimScoutedCounterCache(opener, { silent: true });
     assertAlarmRushedRouteCounterCheck(claim && claim.cacheGrant && !claim.drill, `Port non-counter opener claim mismatch: ${JSON.stringify(claim)}`);
     assertAlarmRushedRouteCounterCheck(G.openingRouteCacheClaimedMainKey === route.mainKey, `Port cache claim marker ${G.openingRouteCacheClaimedMainKey} !== ${route.mainKey}`);
-    assertAlarmRushedRouteCounterCheck(claim.openingCounterPrep && G.openingCounterPlan === true, 'non-counter Port cache claim did not grant Opening Counter Prep');
+    assertAlarmRushedRouteCounterCheck(!claim.openingCounterPrep && G.openingCounterPlan === false, 'non-counter Port cache claim granted Opening Counter Prep');
     const wagePreview = finishIslandForShop(G, [openerIndex]);
     assertAlarmRushedRouteCounterCheck(G.enthusiasm >= api.TYPES[route.primary].cost && G.boardingAlert === 5, `Port claimed-cache state mismatch: ${JSON.stringify({ enthusiasm: G.enthusiasm, alert: G.boardingAlert, wagePreview })}`);
-    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port claimed-cache Opening Prep');
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port claimed-cache Alarm Rush');
     assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.counter && quote.openingRoutePrimary && !quote.credit, `Port claimed-cache quote not cash-buyable primary: ${JSON.stringify(quote)}`);
-    assertAlarmRushedRouteCounterCheck(quote.openingCounterPrepMight && quote.topDeck && !quote.alarmRushedRouteCounter, `Port claimed-cache primary did not use Opening Prep before Alarm rush: ${JSON.stringify(quote)}`);
-    assertAlarmRushedRouteCounterCheck(!quote.preparedCounter && quote.fullCrewCoverage === 0, `Port claimed-cache Opening Prep gained excluded setup perks: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(quote.alarmRushedRouteCounter && quote.topDeck && !quote.openingCounterPrepMight, `Port claimed-cache primary did not use Alarm Rush without Opening Prep: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(!quote.preparedCounter && quote.fullCrewCoverage === 0, `Port claimed-cache Alarm Rush gained excluded setup perks: ${JSON.stringify(quote)}`);
     const plan = scene.shopPlanText();
-    assertAlarmRushedRouteCounterCheck(plan.includes('Opening Prep') && plan.includes('top deck') && !plan.includes('Alarm rush'), `Port claimed-cache plan missing Opening Prep/top-deck: ${plan}`);
+    assertAlarmRushedRouteCounterCheck(plan.includes('Alarm rush') && plan.includes('top deck') && !plan.includes('Opening Prep -1☠️'), `Port claimed-cache plan missing Alarm Rush/top-deck: ${plan}`);
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck(bought && bought.type === route.primary, 'Port claimed-cache cash buy failed');
     assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), 'Port claimed-cache cash buy did not top-deck');
     assertAlarmRushedRouteCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Port claimed-cache cash buy missed Counter Watch');
-    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 1 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port claimed-cache Opening Prep buy missed prep Might or gained extras: ${JSON.stringify(bought)}`);
+    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port claimed-cache Alarm Rush buy gained prep stats: ${JSON.stringify(bought)}`);
     assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port claimed-cache cash buy created Cache Drill marks');
     assertAlarmRushedRouteCounterCheck(G.boardingAlert === 4, `Port claimed-cache cash buy did not apply Route Counter Cover: ${G.boardingAlert}`);
     assertAlarmRushedRouteCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, 'Port claimed-cache cash buy did not secure route counter');
-    results.push({ name: 'claimed Port cache non-counter opener buys Needler with cache Opening Prep before Alarm rush', ok: true, quote, plan, wagePreview });
+    results.push({ name: 'claimed Port cache non-counter opener buys Needler through Alarm Rush without Opening Prep', ok: true, quote, plan, wagePreview });
   }
 
   {
@@ -4848,7 +4848,7 @@ function runOpeningCachePurseChecks(runtime) {
     assertOpeningCachePurseCheck(G.boardingAlert === 4, `Rocky cache Alert was not refunded to floor 4, got ${G.boardingAlert}`);
     assertOpeningCachePurseCheck(G.res.stone === 3, `Rocky island plus cache stone ${G.res.stone} !== 3`);
     assertOpeningCachePurseCheck((pirate.might || 0) === 1, `Cache Drill starter Might ${pirate.might || 0} !== 1`);
-    assertOpeningCachePurseCheck(G.openingCounterPlan === true && cacheClaim.drill.openingCounterPrep, 'Route Starter Cache Prep was not armed by same-round cache drill');
+    assertOpeningCachePurseCheck(G.openingCounterPlan === false && !cacheClaim.openingCounterPrep && !cacheClaim.drill.openingCounterPrep, 'same-round cache drill armed Opening Counter Prep');
     results.push({ name: 'generated layer-0 opening cache grants the visible purse and Cache Drill without hidden scout pay', ok: true });
   }
 
@@ -4874,12 +4874,13 @@ function runOpeningCachePurseChecks(runtime) {
     assertOpeningCachePurseCheck(G.enthusiasm === expectedSkulls, `${route.label} full send shop skulls ${G.enthusiasm} !== cache purse plus wages ${expectedSkulls}`);
     assertOpeningCachePurseCheck(G.fullCrewDiscount === 1, `${route.label} full send did not keep Full Crew Discount`);
     assertOpeningCachePurseCheck(G.boardingAlert === Math.max(0, route.cacheAlert - 1), `${route.label} full send cache path Alert ${G.boardingAlert} !== ${Math.max(0, route.cacheAlert - 1)}`);
-    assertOpeningCachePurseCheck(quote.canBuy && !quote.credit && quote.discount === 1 && quote.topDeck, `${route.label} primary quote not buyable/top-decked without credit: ${JSON.stringify(quote)}`);
+    assertOpeningCachePurseCheck(quote.canBuy && !quote.credit && quote.discount === 1 && quote.topDeck && !quote.openingCounterPrepMight, `${route.label} primary quote not Full Crew top-decked without prep/credit: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningCachePurseCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
     assertOpeningCachePurseCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} primary did not top-deck`);
     assertOpeningCachePurseCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} primary did not gain Counter Watch`);
-    results.push({ name: `${route.label} full-send cache purse funds a first-shop top-deck route counter buy`, ok: true });
+    assertOpeningCachePurseCheck((bought.might || 0) === 0 && !(G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id), `${route.label} Full Crew route primary gained prep Might or pass-off mark: ${JSON.stringify({ bought, marks: G.cacheDrillBountyMarks })}`);
+    results.push({ name: `${route.label} full-send cache purse funds a Full Crew route counter buy without Opening Prep`, ok: true });
   });
 
   {
@@ -4890,7 +4891,7 @@ function runOpeningCachePurseChecks(runtime) {
     const claim = scene.claimScoutedCounterCache(pirates[0], { silent: true });
     assertOpeningCachePurseCheck(claim && claim.cacheGrant && !claim.drill, 'nonmatching first opener did not receive normal cache purse without Cache Drill');
     assertOpeningCachePurseCheck(G.enthusiasm === route.cacheEnthusiasm, `nonmatching first opener skulls ${G.enthusiasm} !== cache ${route.cacheEnthusiasm}`);
-    assertOpeningCachePurseCheck(claim.openingCounterPrep && G.openingCounterPlan === true, 'nonmatching first opener did not arm cache-granted Opening Counter Prep');
+    assertOpeningCachePurseCheck(!claim.openingCounterPrep && G.openingCounterPlan === false, 'nonmatching first opener armed Opening Counter Prep from cache');
     G.phase = 'shopping';
     G.busy = false;
     G.shopAnimating = false;
@@ -4899,14 +4900,14 @@ function runOpeningCachePurseChecks(runtime) {
     const sideOffer = route.label === 'Rocky/Powder Bomber' ? 'trainer' : 'drummer';
     G.shop = [route.primary, sideOffer, 'herald', 'survivalist'];
     const quote = scene.shopPurchaseQuote(route.primary);
-    assertOpeningCachePurseCheck(quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && quote.openingCounterPrepDiscount === 1, `nonmatching cache opener did not expose primary Opening Prep: ${JSON.stringify(quote)}`);
+    assertOpeningCachePurseCheck(quote.canBuy && !quote.topDeck && !quote.openingCounterPrepMight && !quote.alarmRushedRouteCounter, `nonmatching cache opener exposed primary setup perks: ${JSON.stringify(quote)}`);
     const sideQuote = scene.shopPurchaseQuote(sideOffer);
-    assertOpeningCachePurseCheck(sideQuote.canBuy && sideQuote.openingSidePrep && sideQuote.topDeck && !sideQuote.counter, `nonmatching cache opener did not expose side Opening Prep: ${JSON.stringify(sideQuote)}`);
+    assertOpeningCachePurseCheck(sideQuote.canBuy && !sideQuote.openingSidePrep && !sideQuote.topDeck && !sideQuote.counter, `nonmatching cache opener exposed side Opening Prep: ${JSON.stringify(sideQuote)}`);
     const side = scene.buyPirate(1, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningCachePurseCheck(side && side.type === sideOffer && G.deck[G.deck.length - 1] === side, 'cache-granted side prep did not top-deck side offer');
-    assertOpeningCachePurseCheck((side.might || 0) + (side.tempo || 0) === 1 && !(G.counterWatchIds || []).includes(side.id), `cache-granted side prep applied wrong support state: ${JSON.stringify(side)}`);
-    assertOpeningCachePurseCheck((G.cacheDrillBountyMarks || []).length === 0, 'nonmatching cache side prep created Cache Drill bounty marks');
-    results.push({ name: 'nonmatching first opener receives the cache purse and arms primary or side Opening Prep without Cache Drill', ok: true, quote, sideQuote });
+    assertOpeningCachePurseCheck(side && side.type === sideOffer && G.discard.includes(side) && !G.deck.includes(side), 'nonmatching cache side offer did not discard normally');
+    assertOpeningCachePurseCheck((side.might || 0) + (side.tempo || 0) === 0 && !(G.counterWatchIds || []).includes(side.id), `nonmatching cache side offer gained setup state: ${JSON.stringify(side)}`);
+    assertOpeningCachePurseCheck((G.cacheDrillBountyMarks || []).length === 0, 'nonmatching cache side buy created Cache Drill bounty marks');
+    results.push({ name: 'nonmatching first opener receives the cache purse without Opening Prep or Cache Drill', ok: true, quote, sideQuote });
   }
 
   {
@@ -4931,7 +4932,7 @@ function runOpeningCachePurseChecks(runtime) {
     assertOpeningCachePurseCheck(G.enthusiasm === beforeSecondStarter, `second-slot starter created hidden skulls ${G.enthusiasm} !== ${beforeSecondStarter}`);
     assertOpeningCachePurseCheck(!secondClaim, 'second-slot starter reopened or drilled an already claimed cache');
     assertOpeningCachePurseCheck((pirates[1].might || 0) === 0 && !pirates[1].weaponKey && (pirates[1].tempo || 0) === 0, 'second-slot starter gained hidden personal rewards');
-    assertOpeningCachePurseCheck(prepAfterFirst && G.openingCounterPlan === true, 'second-slot starter changed the first opener cache prep flag');
+    assertOpeningCachePurseCheck(!prepAfterFirst && G.openingCounterPlan === false, 'second-slot starter changed the first opener no-prep flag');
     assertOpeningCachePurseCheck((G.cacheDrillMusterIds || []).length === 0, 'second-slot starter created Cache Drill early report');
     assertOpeningCachePurseCheck((G.cacheDrillBountyMarks || []).length === 0, 'second-slot starter created Cache Drill bounty mark');
     assertOpeningCachePurseCheck(G.boardingAlert === 5 + route.cacheAlert, `second-slot starter changed Alert ${G.boardingAlert}`);
@@ -5018,8 +5019,8 @@ function runOpeningCachePurseChecks(runtime) {
     const claim = scene.claimScoutedCounterCache(pirates[0], { silent: true });
     assertOpeningCachePurseCheck(claim && claim.cacheGrant && !claim.drill, 'removed first opener did not claim cache without Cache Drill');
     assertOpeningCachePurseCheck(G.enthusiasm === route.cacheEnthusiasm, `removed opener cache skulls ${G.enthusiasm} !== ${route.cacheEnthusiasm}`);
-    assertOpeningCachePurseCheck(claim.openingCounterPrep && G.openingCounterPlan === true, 'removed first opener did not arm cache Opening Prep');
-    results.push({ name: 'removed first openers still claim the visible cache purse and prep but cannot drill', ok: true });
+    assertOpeningCachePurseCheck(!claim.openingCounterPrep && G.openingCounterPlan === false, 'removed first opener armed Opening Prep from cache');
+    results.push({ name: 'removed first openers still claim the visible cache purse but cannot drill or prep', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -5223,11 +5224,11 @@ function runOpeningDeckhandCounterChecks(runtime) {
     } else {
       assertOpeningDeckhandCounterCheck(route.cacheAlert > 0 ? drillDesc.includes('disarms cache Alert') : !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill Alert copy mismatch: ${drillDesc}`);
     }
-    assertOpeningDeckhandCounterCheck(drillDesc.includes('Opening Prep'), `${route.label} Cache Drill did not preview route-starter Opening Prep: ${drillDesc}`);
+    assertOpeningDeckhandCounterCheck(!drillDesc.includes('Opening Prep'), `${route.label} Cache Drill previewed cache-granted Opening Prep: ${drillDesc}`);
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
     assertOpeningDeckhandCounterCheck(reward && reward.applied, `${route.label} starter did not claim Cache Drill`);
-    assertOpeningDeckhandCounterCheck(reward.openingCounterPrep === true, `${route.label} starter Cache Drill did not grant Opening Counter Prep`);
-    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === true, `${route.label} G.openingCounterPlan not set by starter Cache Drill`);
+    assertOpeningDeckhandCounterCheck(!reward.openingCounterPrep, `${route.label} starter Cache Drill granted Opening Counter Prep`);
+    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, `${route.label} G.openingCounterPlan set by starter Cache Drill`);
     assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1, `${route.label} Cache Drill Might ${(pirate.might || 0)} !== 1`);
     assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === cacheDrillAlertRefundCap(route.cacheAlert), `${route.label} Cache Drill refund ${JSON.stringify(reward.alertRefund)}`);
     assertOpeningDeckhandCounterCheck(G.boardingAlert === alertAfterCacheDrill(2, route.cacheAlert), `${route.label} Cache Drill alert ${G.boardingAlert} !== ${alertAfterCacheDrill(2, route.cacheAlert)}`);
@@ -5240,16 +5241,17 @@ function runOpeningDeckhandCounterChecks(runtime) {
     }
     G.sent = Array.from({ length: maxSend }, (_, index) => index);
     updateOpeningCounterPlanForSim(scene, G);
-    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === true, `${route.label} full-send completion overwrote Cache Drill Opening Prep`);
-    results.push({ name: `${route.label} ${starterName(route.starterType)} can claim Boarding 1 Cache Drill and preserve Opening Prep into full-send completion`, ok: true, drillDesc });
+    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, `${route.label} full-send completion armed Opening Prep`);
+    results.push({ name: `${route.label} ${starterName(route.starterType)} can claim Boarding 1 Cache Drill without Opening Prep on full send`, ok: true, drillDesc });
   });
 
   routes.forEach((route) => {
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, `${route.label} setup did not grant starter cache prep`);
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, `${route.label} setup granted starter cache prep`);
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || []).length === 1, `${route.label} setup did not create one Cache Drill bounty mark`);
     assertOpeningDeckhandCounterCheck(G.cacheDrillBountyMarks[0].pirateId === pirate.id && G.cacheDrillBountyMarks[0].mainKey === route.mainKey, `${route.label} starter did not own initial bounty mark`);
+    G.openingCounterPlan = true;
     G.counterWatchIds = [pirate.id];
     G.phase = 'shopping';
     G.busy = false;
@@ -5304,7 +5306,7 @@ function runOpeningDeckhandCounterChecks(runtime) {
     const starterBounty = scene.grantAmbushBounty(combat);
     assertOpeningDeckhandCounterCheck(starterBounty && starterBounty.pirateId === pirate.id && starterBounty.count === 1 && !starterBounty.drilled, `${route.label} starter kept doubled bounty after pass-off: ${JSON.stringify(starterBounty)}`);
     assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 1, `${route.label} starter normal bounty resource wrong: ${JSON.stringify(G.res)}`);
-    results.push({ name: `${route.label} route primary spends starter Cache Drill Opening Prep, takes the bounty mark, defaults front-left, and pays doubled Ambush Bounty`, ok: true });
+    results.push({ name: `${route.label} route primary spends one-short Opening Prep, takes the starter Cache Drill bounty mark, defaults front-left, and pays doubled Ambush Bounty`, ok: true });
   });
 
   const setupSecuredPrimaryBeforeCache = (route) => {
@@ -5421,9 +5423,10 @@ function runOpeningDeckhandCounterChecks(runtime) {
     G.openingRouteCounterBoughtMainKey = null;
     G.openingRouteCounterBoughtPirateId = null;
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'discard-only prior primary blocked starter Cache Prep');
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'discard-only prior primary cache drill granted prep');
     assertOpeningDeckhandCounterCheck(!reward.securedRouteCachePassOff, 'discard-only prior primary received secured pass-off');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'starter did not retain bounty mark after prior discard primary');
+    G.openingCounterPlan = true;
     G.counterWatchIds = [pirate.id];
     G.phase = 'shopping';
     G.busy = false;
@@ -5448,14 +5451,15 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck((bought.might || 0) === 1 && (G.counterWatchIds || []).includes(bought.id), 'prep buy after prior discard primary missed Might or Watch');
     assertOpeningDeckhandCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, 'prep buy after prior discard primary did not secure route');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === bought.id, 'Route Starter Pass-Off did not move mark after prior discard primary');
-    results.push({ name: 'discard-only route-primary investment does not block later Route Starter Cache Prep or Pass-Off', ok: true, quote });
+    results.push({ name: 'discard-only route-primary investment does not block later one-short prep or Route Starter Pass-Off', ok: true, quote });
   }
 
   {
     const route = routes[0];
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'negative setup did not grant starter cache prep');
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'negative setup granted starter cache prep');
+    G.openingCounterPlan = true;
     G.phase = 'shopping';
     G.busy = false;
     G.shopAnimating = false;
@@ -5470,20 +5474,20 @@ function runOpeningDeckhandCounterChecks(runtime) {
     );
     const nonPrimary = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningDeckhandCounterCheck(nonPrimary && nonPrimary.type === 'drummer', 'non-primary buy failed');
-    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, 'side-prep buy did not consume starter Cache Prep');
+    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, 'side-prep buy did not consume one-short prep');
     assertOpeningDeckhandCounterCheck(G.deck[G.deck.length - 1] === nonPrimary && !G.discard.includes(nonPrimary), 'side-prep buy did not top-deck');
     assertOpeningDeckhandCounterCheck((nonPrimary.tempo || 0) === 1 && (nonPrimary.might || 0) === 0, `side-prep Drummer support buff wrong: ${JSON.stringify(nonPrimary)}`);
     assertOpeningDeckhandCounterCheck(!(G.counterWatchIds || []).includes(nonPrimary.id), 'side-prep non-primary gained Counter Watch');
     assertOpeningDeckhandCounterCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'side-prep non-primary secured route');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'non-primary buy transferred the starter bounty mark');
-    results.push({ name: 'Opening Side Prep spends starter Cache Prep without triggering Route Starter Pass-Off', ok: true });
+    results.push({ name: 'Opening Side Prep spends one-short prep without triggering Route Starter Pass-Off', ok: true });
   }
 
   {
     const route = routes[1];
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'Full Crew negative setup did not grant starter cache prep');
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'Full Crew negative setup granted starter cache prep');
     G.phase = 'shopping';
     G.busy = false;
     G.shopAnimating = false;
@@ -5504,8 +5508,9 @@ function runOpeningDeckhandCounterChecks(runtime) {
     const route = routes[2];
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'wrong-main negative setup did not grant starter cache prep');
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'wrong-main negative setup granted starter cache prep');
     G.cacheDrillBountyMarks = [{ pirateId: pirate.id, mainKey: 'shellback' }];
+    G.openingCounterPlan = true;
     G.phase = 'shopping';
     G.busy = false;
     G.shopAnimating = false;
@@ -5523,7 +5528,8 @@ function runOpeningDeckhandCounterChecks(runtime) {
     const route = routes[0];
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'removed-starter negative setup did not grant starter cache prep');
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'removed-starter negative setup granted starter cache prep');
+    G.openingCounterPlan = true;
     removePirateById(G, pirate.id);
     G.phase = 'shopping';
     G.busy = false;
@@ -5607,7 +5613,7 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(G.island.scoutedCacheDrill.cacheClaimed === true && G.island.scoutedCacheDrill.granted === false, 'nonmatching starter did not open cache without drill');
     assertOpeningDeckhandCounterCheck(G.boardingAlert === 2 + route.cacheAlert, 'nonmatching starter refunded cache Alert');
     assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 1, `nonmatching starter did not receive cache payload ${JSON.stringify(G.res)}`);
-    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === true, 'nonmatching starter did not arm cache Opening Prep');
+    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, 'nonmatching starter armed Opening Prep from cache');
     assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).length === 0, 'nonmatching starter created Cache Drill early report');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'nonmatching starter created Cache Drill bounty mark');
     G.phase = 'shopping';
@@ -5619,10 +5625,10 @@ function runOpeningDeckhandCounterChecks(runtime) {
     G.shop = [route.primary, 'drummer', 'herald', 'trainer'];
     const quote = scene.shopPurchaseQuote(route.primary);
     assertOpeningDeckhandCounterCheck(
-      quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && quote.openingCounterPrepDiscount === 1,
-      `nonmatching cache opener did not expose route primary Opening Prep: ${JSON.stringify(quote)}`
+      quote.canBuy && !quote.topDeck && !quote.openingCounterPrepMight && !quote.alarmRushedRouteCounter,
+      `nonmatching cache opener exposed route primary setup perks: ${JSON.stringify(quote)}`
     );
-    results.push({ name: 'nonmatching first starter opens Boarding 1 cache and arms Opening Prep without Cache Drill', ok: true, quote });
+    results.push({ name: 'nonmatching first starter opens Boarding 1 cache without Opening Prep or Cache Drill', ok: true, quote });
   }
 
   {
@@ -5641,9 +5647,9 @@ function runOpeningDeckhandCounterChecks(runtime) {
     const { G, pirate } = setupCache(route, route.primary, { round: 2 });
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
     assertOpeningDeckhandCounterCheck(reward && reward.applied, 'shop counter opener did not claim normal Cache Drill');
-    assertOpeningDeckhandCounterCheck(reward.openingCounterPrep && G.openingCounterPlan === true, 'shop counter opener did not receive cache-granted Opening Prep');
+    assertOpeningDeckhandCounterCheck(!reward.openingCounterPrep && G.openingCounterPlan === false, 'shop counter opener received cache-granted Opening Prep');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'shop counter opener lost its own Cache Drill bounty mark');
-    results.push({ name: 'bought shop-counter cache openers keep normal Cache Drill and receive non-stacking cache Opening Prep', ok: true });
+    results.push({ name: 'bought shop-counter cache openers keep normal Cache Drill without Opening Prep', ok: true });
   }
 
   {
@@ -5660,9 +5666,9 @@ function runOpeningDeckhandCounterChecks(runtime) {
     removePirateById(G, pirate.id);
     scene._sacrificedIds.add(pirate.id);
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
-    assertOpeningDeckhandCounterCheck(!reward && G.openingCounterPlan === true, 'removed starter opener did not keep cache prep without Cache Drill');
+    assertOpeningDeckhandCounterCheck(!reward && G.openingCounterPlan === false, 'removed starter opener gained cache prep without Cache Drill');
     assertOpeningDeckhandCounterCheck(G.island.scoutedCacheDrill.cacheClaimed === true && G.island.scoutedCacheDrill.granted === false, 'removed starter did not merely open the cache');
-    results.push({ name: 'removed route starter openers claim cache Opening Prep without Cache Drill', ok: true });
+    results.push({ name: 'removed route starter openers claim cache without Opening Prep or Cache Drill', ok: true });
   }
 
   {
@@ -5985,17 +5991,17 @@ function runOpeningRouteMusterChecks(runtime) {
     );
     const quote = scene.shopPurchaseQuote(route.primary);
     assertOpeningRouteMusterCheck(G.fullCrewDiscount === 1, `${route.label} full-send did not earn Full Crew Discount`);
-    assertOpeningRouteMusterCheck(G.openingCounterPlan === true, `${route.label} starter Cache Drill did not arm Opening Counter Prep`);
-    assertOpeningRouteMusterCheck(quote.canBuy && !quote.credit && quote.topDeck && quote.openingCounterPrepMight, `${route.label} route primary not affordable as prepped top-deck counter: ${JSON.stringify(quote)}`);
+    assertOpeningRouteMusterCheck(G.openingCounterPlan === false, `${route.label} full-send starter Cache Drill armed Opening Counter Prep`);
+    assertOpeningRouteMusterCheck(quote.canBuy && !quote.credit && quote.topDeck && !quote.openingCounterPrepMight, `${route.label} route primary not affordable as Full Crew top-deck counter without prep: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRouteMusterCheck(bought && bought.type === route.primary, `${route.label} route primary buy failed`);
     assertOpeningRouteMusterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} route primary did not top-deck`);
     assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} route primary did not gain Counter Watch`);
-    assertOpeningRouteMusterCheck((bought.might || 0) === 1, `${route.label} prepped route primary missed +Might`);
+    assertOpeningRouteMusterCheck((bought.might || 0) === 0 && !(G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id), `${route.label} Full Crew route primary gained prep Might or pass-off mark`);
     [starter, bought].forEach((pirate) => {
       assertOpeningRouteMusterCheck(zoneCount(G, pirate) === 1, `${route.label} full-send line duplicated ${pirate.id}: ${zoneCount(G, pirate)}`);
     });
-    results.push({ name: `${route.label} mustered-starter full-send affords a prepped watched route-primary counter`, ok: true, quote });
+    results.push({ name: `${route.label} mustered-starter full-send affords a watched route-primary counter without Opening Prep`, ok: true, quote });
   });
 
   {
