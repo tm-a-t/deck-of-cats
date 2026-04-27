@@ -48,6 +48,7 @@ function parseArgs(argv) {
     checkOpeningRouteMuster: false,
     checkOpeningRouteContract: false,
     checkOpeningAmbusherReport: false,
+    checkDrilledAmbusherBounty: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -187,6 +188,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-ambusher-report') {
       out.checkOpeningAmbusherReport = true;
+      continue;
+    }
+    if (a === '--check-drilled-ambusher-bounty') {
+      out.checkDrilledAmbusherBounty = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -5333,6 +5338,229 @@ function runCounterAmbushChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertDrilledAmbusherBountyCheck(condition, message) {
+  if (!condition) throw new Error(`drilled ambusher bounty check failed: ${message}`);
+}
+
+function runDrilledAmbusherBountyChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const enemyFor = (key, row, rowOrder, idSuffix = 0) => {
+    const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
+    assertDrilledAmbusherBountyCheck(!!archetype, `missing archetype ${key}`);
+    const member = scene.buildCombatEnemyMember(archetype, `${key}_drilled_bounty_${idSuffix}`);
+    return scene.buildEnemyCombatFighter(member, row, rowOrder);
+  };
+
+  const fighterFor = (pirate, row, rowOrder, combat) =>
+    scene.buildPlayerCombatFighter(pirate, row, rowOrder, combat);
+
+  const setupBoarding = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    const mainKey = opts.mainKey || 'deckSniper';
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.boardingCount = Math.max(1, Math.floor(Number(opts.boardingCount) || 1));
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: G.boardingCount,
+      encounter: { mainKey, supportKeys: [], totalCount: 1 },
+    };
+
+    const pirates = G.allCrew.slice(0, 5);
+    const types = opts.types || ['needler', 'sawbones', 'trainer', 'lumberjack', 'miner'];
+    pirates.forEach((pirate, index) => {
+      pirate.type = types[index] || pirate.type;
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, opts.handCount || 3);
+    G.deck = [];
+    G.discard = [];
+    G.sent = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.cacheDrillBountyMarks = (Array.isArray(opts.markers) ? opts.markers : [])
+      .map((marker) => {
+        const pirate = pirates[Math.max(0, Math.floor(Number(marker.pirateIndex) || 0))];
+        return pirate && marker.mainKey ? { pirateId: pirate.id, mainKey: marker.mainKey } : null;
+      })
+      .filter(Boolean);
+    if (opts.activateMarks) scene.activateCacheDrillBountyMarksForBoarding({ encounter: { mainKey } });
+    G.enemyShip.cacheDrillBountyMarks = Array.isArray(G.cacheDrillBountyMarks)
+      ? [...G.cacheDrillBountyMarks]
+      : [];
+
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: mainKey,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+    };
+    G.combat.playerFighters = (opts.playerRows || [[0, 0, 0], [1, 1, 0]])
+      .map(([pirateIdx, row, rowOrder]) => {
+        const pirate = pirates[pirateIdx];
+        return pirate ? fighterFor(pirate, row, rowOrder, G.combat) : null;
+      })
+      .filter(Boolean);
+    G.combat.enemyFighters = (opts.enemies || [[mainKey, 0, 0]])
+      .map(([key, row, rowOrder], idx) => enemyFor(key, row, rowOrder, idx));
+    return { G, pirates, combat: G.combat };
+  };
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.phase = 'sending';
+    G.boardingCount = 0;
+    G.island = scene.buildIslandState(api.ISLANDS[0]);
+    G.island.scoutedCacheDrill = {
+      mainKey: 'deckSniper',
+      granted: false,
+      alertRefundAmount: 0,
+      alertFloorBeforeCache: 0,
+      alertRefunded: false,
+    };
+    const pirate = G.allCrew[0];
+    pirate.type = 'needler';
+    pirate.might = 0;
+    G.hand = [pirate];
+    G.deck = [];
+    G.discard = [];
+    G.cacheDrillBountyMarks = [];
+    const reward = scene.applyScoutedCacheDrill(pirate, { silent: true });
+    assertDrilledAmbusherBountyCheck(reward && reward.applied, 'Cache Drill setup did not reward matching Needler');
+    assertDrilledAmbusherBountyCheck((G.cacheDrillBountyMarks || []).length === 1, `Cache Drill marker count ${JSON.stringify(G.cacheDrillBountyMarks)}`);
+    assertDrilledAmbusherBountyCheck(G.cacheDrillBountyMarks[0].pirateId === pirate.id && G.cacheDrillBountyMarks[0].mainKey === 'deckSniper', 'Cache Drill marker did not store pirate/main key');
+    results.push({ name: 'Cache Drill marks its pirate for the next matching boarding bounty', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: true,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertDrilledAmbusherBountyCheck(result && result.pirateId === pirates[0].id, 'marked Needler did not Counter Ambush');
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 2, `drilled Ambush Bounty gold ${G.res.gold} !== 2`);
+    assertDrilledAmbusherBountyCheck(combat.ambushBounty && combat.ambushBounty.count === 2 && combat.ambushBounty.drilled, `drilled bounty payload ${JSON.stringify(combat.ambushBounty)}`);
+    assertDrilledAmbusherBountyCheck((G.cacheDrillBountyMarks || []).length === 0, 'drilled bounty marker survived resolved boarding');
+    results.push({ name: 'matching drilled ambusher wins doubled Ambush Bounty and consumes the marker', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, pirates, combat } = setupBoarding({ mainKey: 'deckSniper' });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertDrilledAmbusherBountyCheck(result && result.pirateId === pirates[0].id, 'unmarked Needler did not Counter Ambush');
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 1, `normal Ambush Bounty gold ${G.res.gold} !== 1`);
+    assertDrilledAmbusherBountyCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.drilled, `normal bounty payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'unmarked surviving ambusher still wins normal +1 Ambush Bounty', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'shellback' }],
+      activateMarks: true,
+    });
+    assertDrilledAmbusherBountyCheck((G.cacheDrillBountyMarks || []).length === 0, 'wrong-main marker did not expire at boarding start');
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 1, `wrong-main marker doubled bounty: ${JSON.stringify(G.res)}`);
+    assertDrilledAmbusherBountyCheck(combat.ambushBounty && combat.ambushBounty.count === 1, 'wrong-main marker changed bounty count');
+    results.push({ name: 'wrong-main Cache Drill marker expires before the next boarding payout', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: true,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertDrilledAmbusherBountyCheck(!result, 'non-counter triggered Counter Ambush');
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 0 && !combat.ambushBounty, `missing ambush granted bounty ${JSON.stringify(G.res)}`);
+    results.push({ name: 'drilled marker alone grants no bounty without Counter Ambush', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: true,
+    });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('loss');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 0 && !combat.ambushBounty, `loss granted drilled bounty ${JSON.stringify(G.res)}`);
+    assertDrilledAmbusherBountyCheck((G.cacheDrillBountyMarks || []).length === 0, 'loss did not clear drilled marker');
+    results.push({ name: 'losses clear drilled markers and grant no Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: true,
+    });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.defeatCombatFighter(combat.playerFighters[0], []);
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 0 && !combat.ambushBounty, `defeated ambusher granted drilled bounty ${JSON.stringify(G.res)}`);
+    results.push({ name: 'defeated drilled ambushers grant no bounty', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupBoarding({
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: true,
+    });
+    scene.applyCounterAmbush(combat, { silent: true });
+    G.hand = [pirates[1]];
+    combat.playerFighters = [fighterFor(pirates[1], 0, 0, combat)];
+    combat.reinforcementCount = 1;
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 0 && !combat.ambushBounty, `reinforcement win granted drilled bounty ${JSON.stringify(G.res)}`);
+    results.push({ name: 'reinforcement-hand wins never pay drilled Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupBoarding({
+      mode: 'battleTest',
+      mainKey: 'deckSniper',
+      markers: [{ pirateIndex: 0, mainKey: 'deckSniper' }],
+      activateMarks: false,
+    });
+    combat.counterAmbush = {
+      applied: true,
+      pirateId: pirates[0].id,
+      type: pirates[0].type,
+      mainKey: 'deckSniper',
+    };
+    scene.finishBoardingCombat('win');
+    assertDrilledAmbusherBountyCheck(G.res.gold === 0 && !combat.ambushBounty, `Battle Test granted drilled bounty ${JSON.stringify(G.res)}`);
+    results.push({ name: 'Battle Test excludes drilled Ambush Bounty even with defensive marker state', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function assertOpeningAmbusherReportCheck(condition, message) {
   if (!condition) throw new Error(`opening ambusher report check failed: ${message}`);
 }
@@ -6834,6 +7062,11 @@ async function main() {
   }
   if (opts.checkOpeningAmbusherReport) {
     const result = runOpeningAmbusherReportChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkDrilledAmbusherBounty) {
+    const result = runDrilledAmbusherBountyChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

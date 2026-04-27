@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-102218 — rev 1b6ae88
+
+- Gameplay: true - Added Drilled Ambusher Bounty: the pirate that claims Cache Drill is now marked for the immediately following matching scouted boarding, and if that same pirate triggers Counter Ambush, survives the winning opening combat hand, and normal Ambush Bounty applies, the bounty pays `+2` of the mapped cache resource instead of `+1`; wrong-main, later-ship, loss, defeated-ambusher, reinforcement, missing-ambush, and Battle Test cases still pay no doubled bounty. Validated with JS syntax checks, `node sim/fast-sim.js --check-drilled-ambusher-bounty --json`, related counter/cache/opening-route checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-102218.log`.
+
 ## 2026-04-27 — run 20260427-094326 — rev c55c1c0
 
 - Gameplay: true - Added Opening Route Contract: buying the selected route's primary counter before claiming its matching Boarding 1 Scouted Counter Cache now grants a distinct one-time `+1☠️` cache bonus with no extra Alert, no island doubling, no Cache Drill refund interaction, and no Battle Test, post-Boarding-1, wrong-counter, or late-purchase payout. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-contract --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-opening-counter-prep --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-094326.log`.

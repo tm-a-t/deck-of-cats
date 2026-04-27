@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, `Counter Watch`, the opening route counter purchase marker and bought-pirate marker, and `Opening Route Muster`: `0`/empty.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, `Counter Watch`, the opening route counter purchase marker and bought-pirate marker, `Opening Route Muster`, and Cache Drill bounty marks: `0`/empty.
 - Starting hand: up to 5 pirates.
 - Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -51,6 +51,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Selecting a marked cache island immediately grants that cache's stored resource amount, stored `☠️`, and stored `Boarding Alert` before island actions resolve, then marks that cache claimed.
 - Boarding 2+ `Scouted Counter Cache` islands use the normal stakes: `+1` mapped cache resource, `+1☠️`, and `+1 Boarding Alert`.
 - The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's stored `Boarding Alert` amount, and is marked to report early.
+- That same `Cache Drill` also marks the drilled pirate for the immediately following scouted boarding. If that exact pirate triggers `Counter Ambush` against that boarding's matching main scouted enemy, survives the final winning opening combat hand, and `Ambush Bounty` would already be granted, that Ambush Bounty pays `+2` of the mapped cache resource instead of `+1`.
+- Cache Drill bounty marks expire after that immediately following boarding, are cleared if the next boarding's main enemy does not match, never carry to later ships, and never apply in `Battle Test`, losses, defeated ambushers, wrong-main encounters, missing `Counter Ambush`, reinforcement-hand wins, or any case where normal `Ambush Bounty` would not be granted.
 - The cache `☠️`, if present, is normal round shop currency, is granted only once, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a `Top deck` counter in that round's Shop.
 - During regular runs before Boarding 1, buying the selected route's primary opening counter marks that specific bought pirate for `Opening Route Contract` until Boarding 1 starts.
 - Selecting that route's matching Boarding 1 `Scouted Counter Cache` does not grant `Opening Route Contract` immediately. If the recorded bought primary pirate is the first pirate to claim `Cache Drill` on that matching cache, that same Cache Drill also grants `+1☠️ Opening Route Contract`.
@@ -253,9 +255,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - A support routed by `Opening Counter Break` is not an Alert guard, grants no Alert guard plunder, and does not trigger in `Battle Test`, reinforcement hands, or Boarding 2+.
 - If that Boarding 1 is won, the support routed by `Opening Counter Break` grants separate `Opening plunder` once: `Cabin Boy` grants `+1🪵`, and `Bilge Rat` grants `+1🪨`.
 - `Opening plunder` is not Alert guard plunder, does not change Alert guard plunder totals, never triggers on losses, and never triggers in `Battle Test`, reinforcement hands, Boarding 2+, unarmed `Counter Ambush`, or `Armed Counter Ambush` that removes Alert guards instead of routing support.
-- After a regular-run boarding is won, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, grant `Ambush Bounty`: `+1` of that main enemy's Scouted Counter Cache resource.
+- After a regular-run boarding is won, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, grant `Ambush Bounty`: normally `+1` of that main enemy's Scouted Counter Cache resource.
+- If that surviving ambusher has a matching active Cache Drill bounty mark from the immediately preceding cache, `Ambush Bounty` pays `+2` of that resource instead of `+1`; the mark is then gone with the resolved boarding.
 - `Ambush Bounty` uses the cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
-- `Ambush Bounty` is granted once per boarding, never on losses, never in `Battle Test`, never if the ambusher was defeated, and never if the win comes from a reinforcement hand.
+- `Ambush Bounty` is granted once per boarding, never on losses, never in `Battle Test`, never if the ambusher was defeated, and never if the win comes from a reinforcement hand; those exclusions also prevent the doubled Cache Drill bounty.
 - `Ambush Bounty` is separate from Alert guard plunder, Opening plunder, `Boarding Trophy`, and `Counter Trophy`.
 - After winning regular-run Boarding 1, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, that pirate `reports next`: on post-boarding `Continue`, it is separated from normal hand discard and placed on top of the draw pile before the next hand is drawn.
 - Opening Ambusher Report applies to either a bought route counter or the `Opening Deckhand Counter` starter, preserves any weapon, `Might`, `Tempo`, `Boarding Trophy`, `Counter Trophy`, Cache Drill, Opening Prep, or other personal upgrades already on that pirate, and cannot duplicate the pirate.
