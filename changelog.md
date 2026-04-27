@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-232301 — rev 856a3ed — build 0.1.0
+
+- Gameplay: true - Added Opening Route Primary Commitment: pre-Boarding-1 route shops now pin the unsecured primary counter in slot 0, and the first pirate purchase can commit to that primary for top-deck, Counter Watch, and route security without prep while preserving Full Crew, Opening Prep, side-prep, pass-off, Cover, Battle Test, and Boarding 2+ gates. Validated with JS syntax checks; targeted opening route shop, no-alarm/commitment, route cover, side prep, Opening Counter Prep, Opening Deckhand Counter, Opening Route Muster, and counter recruit report checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-232301-final.log`; and `git diff --check`.
+
 ## 2026-04-28 — run 20260427-231050 — rev abe9e90 — build 0.1.0
 
 - Gameplay: true - Changed Opening Route Victory Cache to scale from the Boarding 1 consumed Alert snapshot: clean wins now pay `+1` route resource while Alerted wins pay `+3`, and opening route plan text previews the clean-vs-Alert payout. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-victory-cache --json`, related opening route/cache targeted checks, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-231050.log`, and `git diff --check`.

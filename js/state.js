@@ -297,16 +297,7 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
     return slots.map(type => type || nonOpeningFallback || primary);
   }
 
-  const primaryCurrentIndex = out.findIndex(type => type === primary);
-  const firstOpeningIndex = out.findIndex(type => openingCandidates.has(type));
-  const rawPrimaryIndex = Number.isFinite(opts.primarySlotIndex)
-    ? Math.floor(opts.primarySlotIndex)
-    : (primaryCurrentIndex >= 0
-      ? primaryCurrentIndex
-      : (Number.isFinite(opts.newSlotIndex)
-        ? Math.floor(opts.newSlotIndex)
-        : (firstOpeningIndex >= 0 ? firstOpeningIndex : 0)));
-  const primaryIndex = Phaser.Math.Clamp(rawPrimaryIndex, 0, n - 1);
+  const primaryIndex = 0;
   const sideOfferEligible = !!(
     n > 1
     && sideOffer
@@ -586,6 +577,8 @@ function initState() {
     openingCounterPlan: false,
     openingRouteCounterBoughtMainKey: null,
     openingRouteCounterBoughtPirateId: null,
+    openingRouteCounterBoughtSetup: false,
+    openingRoutePrimaryCommitmentMainKey: null,
     openingRouteSidekick: null,
     openingRouteMuster: null,
     openingRouteMusterUsed: false,
@@ -651,6 +644,8 @@ function initBattleTestState(repeatState = null) {
     openingCounterPlan: false,
     openingRouteCounterBoughtMainKey: null,
     openingRouteCounterBoughtPirateId: null,
+    openingRouteCounterBoughtSetup: false,
+    openingRoutePrimaryCommitmentMainKey: null,
     openingRouteSidekick: null,
     openingRouteMuster: null,
     openingRouteMusterUsed: false,

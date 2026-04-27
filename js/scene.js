@@ -790,7 +790,10 @@ class GameScene extends Phaser.Scene {
     if (!G) return false;
     if (pirateId != null) {
       const hadBoughtPirate = G.openingRouteCounterBoughtPirateId === pirateId;
-      if (hadBoughtPirate) G.openingRouteCounterBoughtPirateId = null;
+      if (hadBoughtPirate) {
+        G.openingRouteCounterBoughtPirateId = null;
+        G.openingRouteCounterBoughtSetup = false;
+      }
       return hadBoughtPirate;
     }
 
@@ -798,6 +801,7 @@ class GameScene extends Phaser.Scene {
       || G.openingRouteCounterBoughtPirateId != null;
     G.openingRouteCounterBoughtMainKey = null;
     G.openingRouteCounterBoughtPirateId = null;
+    G.openingRouteCounterBoughtSetup = false;
     return hadMarker;
   }
 
@@ -867,6 +871,7 @@ class GameScene extends Phaser.Scene {
       || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
       || G.openingRouteCounterBoughtMainKey !== mainKey
       || G.openingRouteCounterBoughtPirateId == null
+      || !G.openingRouteCounterBoughtSetup
       || typeof OPENING_ROUTE_PRIMARY_COUNTERS === 'undefined') {
       return null;
     }
@@ -2296,6 +2301,7 @@ class GameScene extends Phaser.Scene {
       return `${def.name} ${price}: need ${missing}☠️`;
     }
     const tags = [];
+    if (quote.openingRoutePrimaryCommitment && quote.topDeck) tags.push('Commit top+Watch');
     if (quote.fullCrewCoverage > 0) tags.push(`covered ${quote.fullCrewCoverage}☠️`);
     if (quote.openingCounterPrepMight) tags.push('+💪');
     if (quote.openingSidePrep) {
@@ -2577,6 +2583,7 @@ class GameScene extends Phaser.Scene {
         openingSidekickBountyRes: null,
         openingSidekickBountyEmoji: '',
         openingRoutePrimary: false,
+        openingRoutePrimaryCommitment: false,
         routeCounterCover: 0,
         consumesOpeningCounterPlan: false,
         consumesOpeningCounterPrep: false,
@@ -2630,6 +2637,15 @@ class GameScene extends Phaser.Scene {
     const openingRouteCounterBoughtMainKey = source.openingRouteCounterBoughtMainKey != null
       ? source.openingRouteCounterBoughtMainKey
       : (G.openingRouteCounterBoughtMainKey || null);
+    const openingRoutePrimaryCommitmentMainKey = source.openingRoutePrimaryCommitmentMainKey != null
+      ? source.openingRoutePrimaryCommitmentMainKey
+      : (G.openingRoutePrimaryCommitmentMainKey || null);
+    const openingRoutePrimaryCommitment = !!(openingRoutePrimary
+      && routeShopState
+      && routeShopState.mainKey
+      && openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      && openingRoutePrimaryCommitmentMainKey === routeShopState.mainKey
+      && (isProjection || phase === 'shopping'));
     const openingRouteSideOffer = routeShopState && routeShopState.mainKey && typeof OPENING_ROUTE_SIDE_OFFERS !== 'undefined'
       ? OPENING_ROUTE_SIDE_OFFERS[routeShopState.mainKey] || null
       : null;
@@ -2661,8 +2677,9 @@ class GameScene extends Phaser.Scene {
     const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
     const consumesOpeningCounterPlan = !!(openingCounterPrepMight || openingSidePrep);
     const setupTopDeck = !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight));
+    const commitmentTopDeck = !!(scoutedCounterTopDeck && openingRoutePrimaryCommitment);
     const topDeck = openingRoutePrimary
-      ? setupTopDeck
+      ? (setupTopDeck || commitmentTopDeck)
       : (openingSidePrep
         ? true
         : !!scoutedCounterTopDeck);
@@ -2682,6 +2699,7 @@ class GameScene extends Phaser.Scene {
       openingSidekickBountyRes,
       openingSidekickBountyEmoji: openingSidekickBountyRes ? (RES_EMOJI[openingSidekickBountyRes] || '') : '',
       openingRoutePrimary,
+      openingRoutePrimaryCommitment,
       openingCommissionReport,
       openingFullCrewReport,
       consumesOpeningCounterPlan,
@@ -2824,13 +2842,14 @@ class GameScene extends Phaser.Scene {
     const sidePrep = quote.openingSidePrep
       ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? `, ${sidePrepSupportText}` : ''}${sidekickBountyText ? `, ${sidekickBountyText}` : ''}`
       : '';
+    const commitment = quote.openingRoutePrimaryCommitment ? ', route commitment' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
     const cover = quote.routeCounterCover > 0 ? `, Cover -${quote.routeCounterCover} Alert` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${prepared}${topDeck}${covered}${credit}${cover}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${commitment}${prepared}${topDeck}${covered}${credit}${cover}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -2849,11 +2868,20 @@ class GameScene extends Phaser.Scene {
     if (refund) refund.projectedAmount = projectedRefund;
     const boardingAlert = Math.max(baseBoardingAlert, alertBeforeRefund - projectedRefund);
     const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
+    const openingRoutePrimaryCommitmentMainKey = routeShopState
+      && routeShopState.mainKey
+      && G.openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      ? routeShopState.mainKey
+      : null;
     const shopState = {
       enthusiasm,
       boardingAlert,
       fullCrewDiscount: discount,
       openingCounterPlan: this.projectOpeningCounterPlan(sentCount),
+      openingRoutePrimaryCommitmentMainKey,
       shopCreditUsed: false,
     };
     return {
@@ -2899,6 +2927,14 @@ class GameScene extends Phaser.Scene {
     G.shopCreditUsed = false;
     G.fullCrewDiscount = this.isBattleTest() ? 0 : this.pendingFullCrewDiscount();
     if (this.isBattleTest()) G.openingCounterPlan = false;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
+    G.openingRoutePrimaryCommitmentMainKey = routeShopState
+      && routeShopState.mainKey
+      && G.openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      ? routeShopState.mainKey
+      : null;
     if (typeof normalizeOpeningRouteShop === 'function') {
       G.shop = normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
     }
@@ -3664,7 +3700,7 @@ class GameScene extends Phaser.Scene {
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
     const routePassOff = this.transferRouteStarterCacheDrillBountyToBoughtCounter(p, type, quote, routeShopState);
-    const securesOpeningRouteCounter = !!(routeShopState
+    const setupSecuresOpeningRouteCounter = !!(routeShopState
       && type === routeShopState.primaryCounterType
       && routeShopState.mainKey
       && quote.openingRoutePrimary
@@ -3673,13 +3709,23 @@ class GameScene extends Phaser.Scene {
       && (quote.discount > 0
         || quote.fullCrewCoverage > 0
         || quote.openingCounterPrepMight));
+    const commitmentSecuresOpeningRouteCounter = !!(routeShopState
+      && type === routeShopState.primaryCounterType
+      && routeShopState.mainKey
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && quote.openingRoutePrimaryCommitment);
+    const securesOpeningRouteCounter = setupSecuresOpeningRouteCounter || commitmentSecuresOpeningRouteCounter;
     if (securesOpeningRouteCounter) {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
       G.openingRouteCounterBoughtPirateId = p.id;
+      G.openingRouteCounterBoughtSetup = !!setupSecuresOpeningRouteCounter;
     }
-    const routeCounterCover = securesOpeningRouteCounter
+    const routeCounterCover = setupSecuresOpeningRouteCounter
       ? this.applyRouteCounterCover(type, quote, routeShopState)
       : { amount: 0 };
+    G.openingRoutePrimaryCommitmentMainKey = null;
     if (toTopDeck) {
       G.deck.push(p);
       if (watchCounter) this.markCounterWatch(p);
@@ -3779,6 +3825,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm = 0;
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
+    G.openingRoutePrimaryCommitmentMainKey = null;
     this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
