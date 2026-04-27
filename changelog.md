@@ -165,3 +165,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-020634 — rev 67558ba
 
 - Gameplay: true - Counter Ambush now preserves the removed Alert guard's win plunder: removed guards still do not fight, but Alert 1/3/6 boarding wins pay the full guard plunder tier. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-020634.log`.
+
+## 2026-04-27 — run 20260427-021604 — rev 427cd6a
+
+- Gameplay: true - Short Crew Drill pirates now report early when drilled within 3 map turns of the next ship, drawing above shop `Top deck` buys but below Cache Drill reports without duplicating removed or stale cards. Validated with JS syntax checks, `node sim/fast-sim.js --check-short-crew-drill --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-port-drill --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-021604.log`.

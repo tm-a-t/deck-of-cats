@@ -59,6 +59,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - In regular runs, ending a non-`Infirmary Island` round exactly 1 send slot short with at least 1 surviving sent pirate triggers `Short Crew Drill` before ship actions: the leftmost surviving sent pirate gains `+1 💪 Might`.
 - `Short Crew Drill` does not trigger on full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, Battle Test, or if every sent pirate was removed by `Siren Island` or another island effect.
 - `Short Crew Drill` adds no `Boarding Alert` beyond normal `Ship Wages`, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
+- In regular runs only, if `Short Crew Drill` triggers while the next unreached ship is `1` to `3` map turns away, that same pirate is marked to report early.
+- A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
+- Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
+- If Cache Drill early report, Short Crew early report, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, and Shop `Top deck` purchases are drawn after both report groups.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
@@ -139,7 +143,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Battle Test has no `Quiet Docks` service because it ignores `Boarding Alert`.
 - On `Continue`:
   - the current hand goes to discard only for pirates still present in `allCrew`;
-  - any still-owned Cache Drill early-report pirate is separated from that discard step and placed on top of the draw pile;
+  - any still-owned Cache Drill or Short Crew early-report pirate is separated from that discard step and placed on top of the draw pile, with Cache Drill reports above Short Crew reports;
   - exiled and `get lost` pirates do not return;
   - `☠️` resets to `0`;
   - a new hand is drawn up to 5;

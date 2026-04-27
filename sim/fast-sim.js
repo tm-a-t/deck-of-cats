@@ -2779,6 +2779,9 @@ function runShortCrewDrillChecks(runtime) {
     api.initState();
     const G = api.getG();
     G.mode = opts.mode || 'run';
+    G.map = Object.prototype.hasOwnProperty.call(opts, 'map')
+      ? opts.map
+      : makeScoutedCounterTestMap('powderBomber');
     G.round = Math.max(1, Math.floor(Number(opts.round) || 3));
     G.boardingCount = 0;
     G.phase = opts.phase || 'sending';
@@ -2789,6 +2792,7 @@ function runShortCrewDrillChecks(runtime) {
     G.enthusiasm = 0;
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.alert) || 0));
     G.fullCrewDiscount = 0;
+    G.shortCrewReportIds = [];
     scene._sendingToIsland.clear();
     scene._sacrificedIds.clear();
     G.hand.forEach((pirate, index) => {
@@ -2811,6 +2815,10 @@ function runShortCrewDrillChecks(runtime) {
     const before = G.hand.map(p => p.might || 0);
     const result = applyShortCrewDrillForSim(scene);
     assertShortCrewDrillCheck(!!(result && result.applied) === expectedApplied, `${name} applied ${!!(result && result.applied)} !== ${expectedApplied}`);
+    const expectedReport = opts.expectedReport != null ? !!opts.expectedReport : !!(expectedApplied && scene.shortCrewReportsEarly && scene.shortCrewReportsEarly());
+    assertShortCrewDrillCheck(!!(result && result.reportEarly) === expectedReport, `${name} reportEarly ${!!(result && result.reportEarly)} !== ${expectedReport}`);
+    const reportIds = Array.isArray(G.shortCrewReportIds) ? G.shortCrewReportIds : [];
+    assertShortCrewDrillCheck(reportIds.length === (expectedReport ? 1 : 0), `${name} report ids ${reportIds.length} !== ${expectedReport ? 1 : 0}`);
     expectedMights.forEach((might, index) => {
       assertShortCrewDrillCheck((G.hand[index].might || 0) === might, `${name} hand ${index} might ${G.hand[index].might || 0} !== ${might}`);
     });
@@ -2818,6 +2826,7 @@ function runShortCrewDrillChecks(runtime) {
       name,
       ok: true,
       applied: !!(result && result.applied),
+      reportEarly: !!(result && result.reportEarly),
       before: before.slice(0, expectedMights.length),
       after: G.hand.slice(0, expectedMights.length).map(p => p.might || 0),
     });
@@ -2826,15 +2835,30 @@ function runShortCrewDrillChecks(runtime) {
 
   {
     const { G } = checkMight('normal 1-of-2 grants leftmost Might', { islandIdx: 0, sent: 1 }, [3, 0], true);
+    const drilled = G.hand[0];
     applyShipWagesForSim(scene, G);
     assertShortCrewDrillCheck(G.enthusiasm === 2, `normal 1-of-2 wages ${G.enthusiasm} !== 2`);
     assertShortCrewDrillCheck(G.boardingAlert === 1, `normal 1-of-2 alert ${G.boardingAlert} !== 1`);
     results.push({ name: 'normal 1-of-2 still pays normal Ship Wages and Alert', ok: true, enthusiasm: G.enthusiasm, boardingAlert: G.boardingAlert });
+    const shopTop = { id: 9100, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew.push(shopTop);
+    G.deck = [shopTop];
+    G.discard = [];
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertShortCrewDrillCheck(G.hand[0] === drilled, 'nearby Short Crew drilled pirate was not drawn first after Shop Continue');
+    assertShortCrewDrillCheck(G.hand[1] === shopTop, 'nearby Short Crew report did not stay above existing top-deck shop purchase');
+    assertShortCrewDrillCheck((G.shortCrewReportIds || []).length === 0, 'Short Crew report marker was not cleared on Continue');
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === drilled.id);
+    assertShortCrewDrillCheck(zones.length === 1, `Short Crew drilled pirate duplicated across zones ${zones.length} times`);
+    results.push({ name: 'nearby Short Crew report places the drilled pirate above shop top-deck cards without duplication', ok: true });
   }
 
   checkMight('port 2-of-3 grants Short Crew Might', { islandIdx: 3, sent: 2 }, [3, 0, 0], true);
+  checkMight('distant 1-of-2 grants Might without report', { islandIdx: 0, sent: 1, map: makeDistantScoutedCounterTestMap('powderBomber'), expectedReport: false }, [3, 0], true);
   checkMight('full normal send does not drill', { islandIdx: 0, sent: 2 }, [2, 0], false);
   checkMight('empty normal send does not drill', { islandIdx: 0, sent: 0 }, [2, 0], false);
+  checkMight('port 1-of-3 leaves two unused slots and does not drill', { islandIdx: 3, sent: 1 }, [2, 0, 0], false);
   checkMight('battle test partial send does not drill', { mode: 'battleTest', islandIdx: 0, sent: 1 }, [2, 0], false);
   checkMight('infirmary sending state does not drill', { islandIdx: 6, sent: 4 }, [2, 0], false);
   checkMight('healing phase does not drill', { phase: 'healing', islandIdx: 6, sent: 4 }, [2, 0], false);
@@ -2855,12 +2879,50 @@ function runShortCrewDrillChecks(runtime) {
     setup({ islandIdx: 0, sent: 1 });
     const line = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     assertShortCrewDrillCheck(line.includes('Short Crew +💪'), 'partial plan line does not expose Short Crew Might');
+    assertShortCrewDrillCheck(line.includes('reports next'), `nearby partial plan line does not expose Short Crew report: ${line}`);
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
     assertShortCrewDrillCheck(!fullLine.includes('Short Crew'), 'full-send line mentions Short Crew');
     setup({ islandIdx: 3, sent: 2 });
     const portLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
-    assertShortCrewDrillCheck(portLine.includes('Short Crew +💪'), 'Port partial plan line does not expose Short Crew Might');
-    results.push({ name: 'projection text exposes Short Crew only for one-slot-short sends', ok: true, line, fullLine, portLine });
+    assertShortCrewDrillCheck(portLine.includes('Short Crew +💪') && portLine.includes('reports next'), 'Port partial plan line does not expose Short Crew report');
+    setup({ islandIdx: 0, sent: 1, map: makeDistantScoutedCounterTestMap('powderBomber') });
+    const distantLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+    assertShortCrewDrillCheck(distantLine.includes('Short Crew +💪') && !distantLine.includes('reports next'), `distant partial plan line should not report next: ${distantLine}`);
+    results.push({ name: 'projection text exposes Short Crew report only for one-slot-short sends near a ship', ok: true, line, fullLine, portLine, distantLine });
+  }
+
+  {
+    const G = setup({ islandIdx: 3, sent: 2, map: makeScoutedCounterTestMap('shellback') });
+    const shortPirate = G.hand[0];
+    const cachePirate = G.hand[1];
+    shortPirate.type = 'lumberjack';
+    cachePirate.type = 'poisoner';
+    shortPirate.might = 0;
+    cachePirate.might = 0;
+    G.island.scoutedCacheDrill = {
+      mainKey: 'shellback',
+      granted: false,
+      alertRefunded: false,
+      alertRefundAmount: 0,
+      alertFloorBeforeCache: 0,
+    };
+    const cacheReward = applyScoutedCacheDrillForSim(scene, cachePirate);
+    const shortReward = applyShortCrewDrillForSim(scene);
+    assertShortCrewDrillCheck(cacheReward && cacheReward.applied, 'coexisting Cache Drill setup did not mark cache pirate');
+    assertShortCrewDrillCheck(shortReward && shortReward.applied && shortReward.reportEarly, 'coexisting Short Crew setup did not mark short pirate');
+    const shopTop = { id: 9101, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew.push(shopTop);
+    G.deck = [shopTop];
+    G.discard = [];
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertShortCrewDrillCheck(G.hand[0] === cachePirate, 'Cache Drill report was not drawn before Short Crew report');
+    assertShortCrewDrillCheck(G.hand[1] === shortPirate, 'Short Crew report was not drawn after Cache Drill report');
+    assertShortCrewDrillCheck(G.hand[2] === shopTop, 'shop top-deck card was not drawn after both report cards');
+    const cacheZones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === cachePirate.id);
+    const shortZones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === shortPirate.id);
+    assertShortCrewDrillCheck(cacheZones.length === 1 && shortZones.length === 1, `coexisting reports duplicated cards cache=${cacheZones.length} short=${shortZones.length}`);
+    results.push({ name: 'Cache Drill reports draw before Short Crew reports and both stay above shop top-deck cards', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -2871,17 +2933,34 @@ function prepareNextRoundForSim(api, scene) {
   if (G.phase !== 'shopping') return;
 
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
-  const mustered = scene && typeof scene.consumeCacheDrillMusterPirates === 'function'
-    ? scene.consumeCacheDrillMusterPirates()
-    : [];
-  const musteredIds = new Set(mustered.map(p => p.id));
-  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !musteredIds.has(p.id)));
+  const reports = scene && typeof scene.consumeEarlyReportPirates === 'function'
+    ? scene.consumeEarlyReportPirates()
+    : {
+      cache: scene && typeof scene.consumeCacheDrillMusterPirates === 'function'
+        ? scene.consumeCacheDrillMusterPirates()
+        : [],
+      shortCrew: [],
+      ids: new Set(),
+    };
+  if (!reports.ids || typeof reports.ids.has !== 'function') {
+    reports.ids = new Set([...(reports.cache || []), ...(reports.shortCrew || [])].map(p => p && p.id));
+  }
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !reports.ids.has(p.id)));
+  if (scene && typeof scene.placeShortCrewReportPiratesOnDeck === 'function') {
+    scene.placeShortCrewReportPiratesOnDeck(reports.shortCrew || []);
+  } else if (reports.shortCrew && reports.shortCrew.length) {
+    const shortCrewIds = new Set(reports.shortCrew.map(p => p.id));
+    G.deck = (G.deck || []).filter(p => p && !shortCrewIds.has(p.id));
+    G.discard = (G.discard || []).filter(p => p && !shortCrewIds.has(p.id));
+    reports.shortCrew.forEach(p => G.deck.push(p));
+  }
   if (scene && typeof scene.placeCacheDrillMusterPiratesOnDeck === 'function') {
-    scene.placeCacheDrillMusterPiratesOnDeck(mustered);
-  } else if (mustered.length) {
-    G.deck = (G.deck || []).filter(p => p && !musteredIds.has(p.id));
-    G.discard = (G.discard || []).filter(p => p && !musteredIds.has(p.id));
-    mustered.forEach(p => G.deck.push(p));
+    scene.placeCacheDrillMusterPiratesOnDeck(reports.cache || []);
+  } else if (reports.cache && reports.cache.length) {
+    const cacheIds = new Set(reports.cache.map(p => p.id));
+    G.deck = (G.deck || []).filter(p => p && !cacheIds.has(p.id));
+    G.discard = (G.discard || []).filter(p => p && !cacheIds.has(p.id));
+    reports.cache.forEach(p => G.deck.push(p));
   }
   G.hand = [];
   G.sent = [];

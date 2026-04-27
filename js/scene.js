@@ -582,6 +582,14 @@ class GameScene extends Phaser.Scene {
   }
 
   placeCacheDrillMusterPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  placeShortCrewReportPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  placePiratesOnDeckTop(pirates) {
     const mustered = Array.isArray(pirates) ? pirates.filter(Boolean) : [];
     if (!mustered.length) return { pirates: [], ids: new Set() };
     const ids = new Set(mustered.map(pirate => pirate.id));
@@ -619,6 +627,54 @@ class GameScene extends Phaser.Scene {
     };
     if (!opts.silent) this.showScoutedCacheDrillResult(reward);
     return reward;
+  }
+
+  shortCrewReportIds() {
+    if (!Array.isArray(G.shortCrewReportIds)) G.shortCrewReportIds = [];
+    return G.shortCrewReportIds;
+  }
+
+  shortCrewReportsEarly() {
+    if (this.isBattleTest()) return false;
+    const intel = this.nextShipIntel();
+    const turnsAway = intel ? Math.max(0, Math.floor(Number(intel.turnsAway) || 0)) : 0;
+    return !!intel && turnsAway >= 1 && turnsAway <= 3;
+  }
+
+  markShortCrewReport(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    if (!this.shortCrewReportsEarly()) return false;
+    const ids = this.shortCrewReportIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  consumeShortCrewReportPirates(skipIds = new Set()) {
+    const ids = Array.isArray(G.shortCrewReportIds) ? [...G.shortCrewReportIds] : [];
+    G.shortCrewReportIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const seen = new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirates = [];
+    ids.forEach((id) => {
+      if (seen.has(id) || (skipIds && skipIds.has(id))) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (pirate) pirates.push(pirate);
+    });
+    return pirates;
+  }
+
+  consumeEarlyReportPirates() {
+    const cache = this.consumeCacheDrillMusterPirates();
+    const cacheIds = new Set(cache.map(pirate => pirate.id));
+    const shortCrew = this.consumeShortCrewReportPirates(cacheIds);
+    const ids = new Set(cacheIds);
+    shortCrew.forEach(pirate => ids.add(pirate.id));
+    return { cache, shortCrew, ids };
   }
 
   applyScoutedCacheAlertRefund(drill) {
@@ -1076,6 +1132,7 @@ class GameScene extends Phaser.Scene {
     return {
       gain,
       text: personalGainText([gain]),
+      reportsEarly: this.shortCrewReportsEarly(),
     };
   }
 
@@ -1112,12 +1169,14 @@ class GameScene extends Phaser.Scene {
 
     const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
     if (!applied.applied) return null;
+    const reportEarly = this.markShortCrewReport(target.pirate);
 
     if (!opts.silent && this.L) {
       const point = this.islandPirateEffectPoint(target.sentSlot);
       const x = point ? point.x : this.L.cx;
       const y = point ? point.y : this.endActionY() - 54 * this.L.k;
-      this.effectText(x, y, `Short Crew +${applied.text || drill.text}`, '#ffca28');
+      const reportText = reportEarly ? ' Reports next' : '';
+      this.effectText(x, y, `Short Crew +${applied.text || drill.text}${reportText}`, '#ffca28');
       this.renderIsland();
     }
 
@@ -1125,6 +1184,7 @@ class GameScene extends Phaser.Scene {
       ...applied,
       handIdx: target.handIdx,
       sentSlot: target.sentSlot,
+      reportEarly,
     };
   }
 
@@ -2037,14 +2097,15 @@ class GameScene extends Phaser.Scene {
     if (G.phase !== 'shopping') return;
     G.busy = true;
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
-    const mustered = this.consumeCacheDrillMusterPirates();
-    const musteredIds = new Set(mustered.map(p => p.id));
+    const reports = this.consumeEarlyReportPirates();
+    const reportIds = reports.ids;
     const handCards = this.snapshotHandCardsForDiscard();
-    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !musteredIds.has(card.id)));
-    const musterAnimEnd = this.animateCardsToDraw(handCards.filter(card => musteredIds.has(card.id)));
-    const nextTurnDelay = Math.max(discardAnimEnd, musterAnimEnd) + CARD_MOTION.betweenTurnsDelay;
-    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !musteredIds.has(p.id)));
-    this.placeCacheDrillMusterPiratesOnDeck(mustered);
+    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !reportIds.has(card.id)));
+    const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => reportIds.has(card.id)));
+    const nextTurnDelay = Math.max(discardAnimEnd, reportAnimEnd) + CARD_MOTION.betweenTurnsDelay;
+    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !reportIds.has(p.id)));
+    this.placeShortCrewReportPiratesOnDeck(reports.shortCrew);
+    this.placeCacheDrillMusterPiratesOnDeck(reports.cache);
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
@@ -6282,7 +6343,9 @@ class GameScene extends Phaser.Scene {
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
     const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
-    const shortCrewText = plan.shortCrewDrill && plan.shortCrewDrill.text ? `Short Crew +${plan.shortCrewDrill.text}` : null;
+    const shortCrewText = plan.shortCrewDrill && plan.shortCrewDrill.text
+      ? `Short Crew +${plan.shortCrewDrill.text}${plan.shortCrewDrill.reportsEarly ? ', reports next' : ''}`
+      : null;
     return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
   }
 
