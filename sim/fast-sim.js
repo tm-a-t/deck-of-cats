@@ -2374,6 +2374,90 @@ function runOpeningRoutePrizeChecks(runtime) {
     return { G, pirate, combat: G.combat };
   };
 
+  const setupPrizeDefaultBoarding = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    const mainKey = opts.mainKey || 'deckSniper';
+    const prize = makePirate(8900, opts.prizeType || 'needler', {
+      might: Object.prototype.hasOwnProperty.call(opts, 'prizeMight') ? opts.prizeMight : 1,
+      wounded: !!opts.prizeWounded,
+    });
+    const starter = makePirate(8901, opts.starterType || 'armsman');
+    const filler = makePirate(8902, opts.fillerType || 'lumberjack');
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.boardingCount = Math.max(1, Math.floor(Number(opts.boardingCount) || 1));
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: G.boardingCount,
+      encounter: { mainKey, supportKeys: [], totalCount: 1 },
+    };
+    G.hand = opts.includePrizeInHand === false ? [starter, filler] : [starter, prize, filler];
+    G.allCrew = opts.ownPrize === false ? [starter, filler] : [starter, prize, filler];
+    G.deck = [];
+    G.discard = [];
+    G.sent = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    const prizeMainKey = Object.prototype.hasOwnProperty.call(opts, 'prizeMainKey')
+      ? opts.prizeMainKey
+      : mainKey;
+    const prizePirateId = Object.prototype.hasOwnProperty.call(opts, 'prizePirateId')
+      ? opts.prizePirateId
+      : prize.id;
+    G.openingRouteCounterBoughtMainKey = prizeMainKey;
+    G.openingRouteCounterBoughtPirateId = prizePirateId;
+    G.openingRouteCounterPrizeMainKey = prizeMainKey;
+    G.openingRouteCounterPrizePirateId = prizePirateId;
+    G.cacheDrillBountyMarks = [];
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: mainKey,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [enemyFor(mainKey, 0, 0)],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+      cacheDrillBountyMarks: [],
+    };
+    G.combat.playerSetupRows = scene.combatDefaultPlayerSetupRows(G.combat);
+    G.combat.playerFighters = scene.buildPlayerCombatFighters(G.combat.playerSetupRows, G.combat);
+    return { G, prize, starter, filler, combat: G.combat };
+  };
+
+  {
+    const { G, prize, starter, combat } = setupPrizeDefaultBoarding();
+    assertOpeningRoutePrizeCheck(combat.playerSetupRows[0][0] === prize.id, `Opening Route Prize default did not lead front-left: ${JSON.stringify(combat.playerSetupRows)}`);
+    assertOpeningRoutePrizeCheck(combat.playerSetupRows[0][1] === starter.id, `starter did not remain behind prize counter: ${JSON.stringify(combat.playerSetupRows)}`);
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningRoutePrizeCheck(result && result.pirateId === prize.id, `Opening Route Prize default ambusher ${result && result.pirateId} !== ${prize.id}`);
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 2, `defaulted Opening Route Prize ambusher gold ${G.res.gold} !== 2`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.openingRoutePrize && combat.ambushBounty.count === 2, `defaulted Opening Route Prize bounty payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'Opening Route Prize counter leads Boarding 1 default setup and claims +2 Ambush Bounty', ok: true });
+  }
+
+  [
+    { name: 'absent prize pirate', opts: { includePrizeInHand: false } },
+    { name: 'wounded prize pirate', opts: { prizeWounded: true } },
+    { name: 'removed prize pirate', opts: { ownPrize: false } },
+    { name: 'wrong-main prize marker', opts: { prizeMainKey: 'shellback' } },
+    { name: 'cleared prize marker', opts: { prizeMainKey: null, prizePirateId: null } },
+    { name: 'Battle Test prize marker', opts: { mode: 'battleTest' } },
+  ].forEach(({ name, opts }) => {
+    const { starter, combat } = setupPrizeDefaultBoarding(opts);
+    assertOpeningRoutePrizeCheck(combat.playerSetupRows[0][0] === starter.id, `${name} did not fall back to starter counter: ${JSON.stringify(combat.playerSetupRows)}`);
+    results.push({ name: `${name} keeps existing Boarding 1 default counter fallback`, ok: true });
+  });
+
+  {
+    const { prize, combat } = setupPrizeDefaultBoarding({ boardingCount: 2 });
+    assertOpeningRoutePrizeCheck(combat.playerSetupRows[0][0] === prize.id, `Boarding 2 did not keep ordinary scouted-counter fallback: ${JSON.stringify(combat.playerSetupRows)}`);
+    results.push({ name: 'Boarding 2 ignores Opening Route Prize priority and keeps ordinary counter fallback', ok: true });
+  }
+
   routeCases.forEach((route, routeIndex) => {
     runtime.setSeed((0x61c05700 + routeIndex * 8191) >>> 0);
     api.initState();

@@ -243,6 +243,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Wounded pirates in hand sit out and do not become combat fighters.
 - Default player setup puts armed ranged pirates in the deepest occupied row behind any melee front and everyone else in the front row.
 - In regular-run boarding with a scouted main enemy, the first ready pirate in hand whose type counters that main enemy is placed at the front of the front row by default, even if that pirate has a ranged weapon.
+- During regular-run Boarding 1 only, an active `Opening Route Prize` pirate takes priority for that default front-left counter slot if that exact pirate is still owned, in the current hand, not `🩹 Wounded`, and counters the selected route's main enemy. This priority puts the prep-qualified route primary ahead of the `Opening Deckhand Counter` starter and all other counters, but does not apply in `Battle Test`, Boarding 2+, wrong-main encounters, absent/wounded/removed prize pirates, or after the prize marker has cleared.
 - The player may still move that defaulted counter before `Fight!`; `Counter Ambush` only triggers if a matching counter is still in the compacted front row when the fight starts.
 - Occupied player setup rows compact toward the front whenever the formation is normalized; no ready pirate remains behind an empty row at fight start.
 - Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.

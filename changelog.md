@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-111422 — rev 8eaf07f — build 0.1.0
+
+- Gameplay: true - Opening Route Prize counters now lead the default Boarding 1 formation when the prep-qualified route primary is ready in hand, so pressing `Fight!` shows that bought counter, not the mustered starter, deliver the Counter Ambush and existing `+2` Ambush Bounty payoff; absent, wounded, removed, wrong-main, Battle Test, and Boarding 2+ cases keep the prior fallback. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-prize --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-111422.log`.
+
 ## 2026-04-27 — run 20260427-105436 — rev 6d8a959
 
 - Gameplay: true - Added setup-gated opening route-primary buys: pre-Boarding-1 route primaries now top-deck and gain Counter Watch only when bought through Full Crew Discount/coverage or Opening Counter Prep, cash/credit-only primary buys secure the route but go to discard without Watch or prize, and Opening Route Prize is now recorded only for prep-qualified primary buys. Validated with JS syntax checks, targeted opening route prize/shop/prep/full-crew/counter/cache/ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-105436.log`.

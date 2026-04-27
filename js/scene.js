@@ -3267,10 +3267,39 @@ class GameScene extends Phaser.Scene {
   combatDefaultFrontCounterPirateId(combat = G.combat) {
     const counterSet = new Set(this.counterAmbushTypes(combat));
     if (!counterSet.size) return null;
+
+    const prizePirate = this.combatDefaultOpeningRoutePrizePirate(combat, counterSet);
+    if (prizePirate) return prizePirate.id;
+
     const pirate = (G.hand || []).find((entry) =>
       entry && !this.pirateWounded(entry) && counterSet.has(entry.type)
     );
     return pirate ? pirate.id : null;
+  }
+
+  combatDefaultOpeningRoutePrizePirate(combat = G.combat, counterSet = null) {
+    if (this.isBattleTest()
+      || G.phase !== 'boarding'
+      || this.currentBoardingNumber() !== 1) {
+      return null;
+    }
+
+    const mainKey = this.counterAmbushMainKey(combat);
+    if (!mainKey
+      || G.openingRouteCounterPrizeMainKey !== mainKey
+      || G.openingRouteCounterPrizePirateId == null) {
+      return null;
+    }
+
+    const counters = counterSet || new Set(this.counterAmbushTypes(combat));
+    if (!counters.size) return null;
+
+    const prize = this.openingRouteBoughtPrimaryPrize(mainKey, G.openingRouteCounterPrizePirateId);
+    if (!prize) return null;
+
+    const pirate = (G.hand || []).find(entry => entry && entry.id === prize.pirateId) || null;
+    if (!pirate || this.pirateWounded(pirate) || !this.pirateStillInCrew(pirate)) return null;
+    return counters.has(pirate.type) ? pirate : null;
   }
 
   combatCompactSetupRows(rows) {
