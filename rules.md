@@ -70,10 +70,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
 - Ending a regular island round with `End` or `Work on Ship` pays `Ship Wages` before ship actions resolve: gain a baseline `1☠️`, plus `+1☠️` per unused send slot.
-- During only rounds `1` and `2` before any boarding has happened, ending a regular non-`Infirmary Island` round with every available send slot filled adds `+1☠️ Opening Commission` to `Ship Wages`.
-- `Opening Commission` does not apply in Battle Test, does not apply to partial or empty sends, does not apply after round `2`, does not apply after the first boarding, and never adds Boarding Alert.
-- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and `1☠️` when both slots are filled; during eligible Opening Commission rounds, the full-send payout is `2☠️` instead.
-- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates; during eligible Opening Commission rounds, the full-send payout is `2☠️` instead.
+- During only rounds `1` and `2` before any boarding has happened, ending a regular non-`Infirmary Island` round exactly 1 send slot short with at least 1 sent pirate adds `+1☠️ Opening Commission` to `Ship Wages`.
+- `Opening Commission` does not apply in Battle Test, does not apply to full sends, empty sends, or sends with 2 or more unused slots, does not apply after round `2`, does not apply after the first boarding, and never adds Boarding Alert.
+- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and `1☠️` when both slots are filled; during eligible Opening Commission rounds, the 1-sent one-short payout is `3☠️` instead.
+- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates; during eligible Opening Commission rounds, the 2-sent one-short payout is `3☠️` instead.
 - Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot; the baseline `1☠️` adds no Alert. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
 - `Ship Wages` are not doubled by island bonuses, do not trigger on `Infirmary Island` or boarding rounds, and stack normally with `Skull Island` and pirate ship actions.
 - Ending a regular non-`Infirmary Island` round with every available send slot filled grants `Full Crew Discount` for the next Shop phase.

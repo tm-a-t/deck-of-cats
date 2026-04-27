@@ -992,17 +992,21 @@ function runOpeningCommissionChecks(runtime) {
     return { G, preview, discount };
   };
 
-  checkProjection('normal round 1 full send', { round: 1, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
-  checkProjection('normal round 2 full send', { round: 2, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
-  checkProjection('port round 1 full send', { round: 1, islandIdx: 3, sent: 3 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  checkProjection('normal round 1 full send no commission', { round: 1, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+  checkProjection('normal round 2 full send no commission', { round: 2, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+  checkProjection('port round 1 full send no commission', { round: 1, islandIdx: 3, sent: 3 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
   checkProjection('normal round 1 empty send', { round: 1, islandIdx: 0, sent: 0 }, { wages: 3, alert: 2, commission: 0, discount: 0 });
-  checkProjection('normal round 1 partial send', { round: 1, islandIdx: 0, sent: 1 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
-  checkProjection('port round 1 partial send', { round: 1, islandIdx: 3, sent: 2 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
+  checkProjection('normal round 1 one-short send', { round: 1, islandIdx: 0, sent: 1 }, { wages: 3, alert: 1, commission: 1, discount: 0 });
+  checkProjection('port round 1 one-short send', { round: 1, islandIdx: 3, sent: 2 }, { wages: 3, alert: 1, commission: 1, discount: 0 });
+  checkProjection('port round 1 two-short send', { round: 1, islandIdx: 3, sent: 1 }, { wages: 3, alert: 2, commission: 0, discount: 0 });
   checkProjection('normal round 3 full send', { round: 3, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+  checkProjection('normal round 3 one-short no commission', { round: 3, islandIdx: 0, sent: 1 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
   checkProjection('battle test no commission', { mode: 'battleTest', round: 1, islandIdx: 0, sent: 2 }, { wages: 0, alert: 0, commission: 0, discount: 0 });
   checkProjection('after boarding no commission', { round: 2, boardingCount: 1, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
+  checkProjection('after boarding one-short no commission', { round: 2, boardingCount: 1, islandIdx: 0, sent: 1 }, { wages: 2, alert: 1, commission: 0, discount: 0 });
+  checkProjection('infirmary no commission', { round: 1, islandIdx: 6, sent: 1 }, { wages: 0, alert: 0, commission: 0, discount: 0 });
 
-  const shopCase = checkProjection('opening shop buyable cost 2', { round: 1, islandIdx: 0, sent: 2 }, { wages: 2, alert: 0, commission: 1, discount: 1 });
+  const shopCase = checkProjection('opening full-send discount still buys cost 2', { round: 1, islandIdx: 0, sent: 2 }, { wages: 1, alert: 0, commission: 0, discount: 1 });
   shopCase.G.phase = 'shopping';
   const costTwoType = shopCase.G.shop.find(type => api.TYPES[type] && api.TYPES[type].cost === 2);
   assertOpeningCommissionCheck(!!costTwoType, 'starter shop has no cost-2 pirate');
@@ -1010,12 +1014,14 @@ function runOpeningCommissionChecks(runtime) {
   assertOpeningCommissionCheck(quote.canBuy && !quote.credit, `cost-2 ${costTwoType} was not buyable without credit`);
   results.push({ name: 'starter cost-2 buyable without credit', ok: true, type: costTwoType, quote });
 
-  const uiCase = setup({ round: 1, islandIdx: 0, sent: 2 });
-  const planLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
+  const uiCase = setup({ round: 1, islandIdx: 0, sent: 1 });
+  const planLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+  const fillLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
   const action = scene.currentIslandAction();
-  assertOpeningCommissionCheck(planLine.includes('+2☠️ Wages') && planLine.includes('Opening'), 'plan line does not expose opening commission total');
-  assertOpeningCommissionCheck(action && action.label.includes('+2☠️'), `work button label mismatch: ${action && action.label}`);
-  results.push({ name: 'projection UI totals agree', ok: true, planLine, actionLabel: action.label, sent: uiCase.sent.length });
+  assertOpeningCommissionCheck(planLine.includes('+3☠️ Wages') && planLine.includes('Opening'), 'one-short plan line does not expose opening commission total');
+  assertOpeningCommissionCheck(!fillLine.includes('Opening') && fillLine.includes('+1☠️ Wages') && fillLine.includes('Full Crew'), `fill crew line incorrectly exposes commission: ${fillLine}`);
+  assertOpeningCommissionCheck(action && action.label.includes('+3☠️'), `end button label mismatch: ${action && action.label}`);
+  results.push({ name: 'projection UI puts Opening Commission on one-short, not fill crew', ok: true, planLine, fillLine, actionLabel: action.label, sent: uiCase.sent.length });
 
   return { ok: true, checks: results };
 }

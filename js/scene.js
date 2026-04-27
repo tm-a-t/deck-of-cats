@@ -1159,6 +1159,7 @@ class GameScene extends Phaser.Scene {
   projectOpeningCommission(sentCount) {
     const max = this.maxSend();
     const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const unused = Math.max(0, max - sent);
     const round = Math.max(0, Math.floor(Number(G.round) || 0));
     const boardingCount = Math.max(0, Math.floor(Number(G.boardingCount) || 0));
     return !this.isBattleTest()
@@ -1169,7 +1170,8 @@ class GameScene extends Phaser.Scene {
       && round >= 1
       && round <= 2
       && max > 0
-      && sent >= max
+      && sent > 0
+      && unused === 1
       ? 1
       : 0;
   }

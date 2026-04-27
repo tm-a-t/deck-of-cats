@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-033639 — rev 12766f8
+
+- Gameplay: true - Moved Opening Commission from full sends to exactly-one-short early island sends: normal 1-of-2 and Port 2-of-3 sends now get the `+1☠️` commission, while full sends keep `Full Crew Discount` without the extra wage. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-commission --json`, counter recruit/cache/Short Crew targeted checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-033639.log`.
+
 ## 2026-04-27 — run 20260427-032628 — rev 92e0257
 
 - Gameplay: true - Added Ambush Bounty: winning a regular boarding with a surviving opening `Counter Ambush` pirate now grants `+1` of the scouted enemy's cache resource, while defeated ambushers, reinforcement wins/losses, losses, and Battle Test grant none; it stacks with Alert guard plunder, Opening plunder, Boarding Trophy, and Counter Trophy. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `node sim/fast-sim.js --check-boarding-trophy --json`, `node sim/fast-sim.js --check-counter-trophy --json`, `node sim/fast-sim.js --check-counter-edge --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-032628.log`.
