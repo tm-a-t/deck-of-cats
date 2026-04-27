@@ -707,6 +707,19 @@ class GameScene extends Phaser.Scene {
     return !!intel && turnsAway >= 1 && turnsAway <= 3;
   }
 
+  shortCrewCounterAlertRefundState(pirate = null) {
+    const counters = this.shortCrewReportsEarly() ? this.scoutedCounterTypes() : [];
+    const possible = !this.isBattleTest() && counters.length > 0;
+    const eligible = !!(possible && pirate && counters.includes(pirate.type));
+    return {
+      possible,
+      eligible,
+      amount: eligible ? 1 : 0,
+      counters,
+      targetType: pirate && pirate.type ? pirate.type : null,
+    };
+  }
+
   markShortCrewReport(pirate) {
     if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
     if (!this.shortCrewReportsEarly()) return false;
@@ -1194,12 +1207,16 @@ class GameScene extends Phaser.Scene {
     }
 
     const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
-    if (sent === currentSent && !this.leftmostIslandPirateEntry()) return null;
+    const target = this.leftmostIslandPirateEntry();
+    if (sent === currentSent && !target) return null;
     const gain = { buff: 'might', count: 1 };
     return {
       gain,
       text: personalGainText([gain]),
       reportsEarly: this.shortCrewReportsEarly(),
+      targetKnown: !!target,
+      targetType: target && target.pirate ? target.pirate.type : null,
+      counterAlertRefund: this.shortCrewCounterAlertRefundState(target && target.pirate ? target.pirate : null),
     };
   }
 
@@ -1237,6 +1254,7 @@ class GameScene extends Phaser.Scene {
     const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
     if (!applied.applied) return null;
     const reportEarly = this.markShortCrewReport(target.pirate);
+    const counterAlertRefund = this.shortCrewCounterAlertRefundState(target.pirate);
 
     if (!opts.silent && this.L) {
       const point = this.islandPirateEffectPoint(target.sentSlot);
@@ -1252,7 +1270,39 @@ class GameScene extends Phaser.Scene {
       handIdx: target.handIdx,
       sentSlot: target.sentSlot,
       reportEarly,
+      counterAlertRefund,
     };
+  }
+
+  applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages, opts = {}) {
+    const refund = shortCrewResult && shortCrewResult.counterAlertRefund;
+    if (!refund || !refund.eligible) return { amount: 0 };
+    const refundAmount = Math.max(0, Math.floor(Number(refund.amount) || 0));
+    if (refundAmount <= 0) return { amount: 0 };
+
+    const floor = Math.max(0, Math.floor(Number(alertFloorBeforeWages) || 0));
+    const before = this.pendingBoardingAlert();
+    const after = before > floor ? Math.max(floor, before - refundAmount) : before;
+    const amount = Math.max(0, before - after);
+    const result = { amount, before, after, floor };
+    refund.applied = result;
+    if (amount <= 0) return result;
+
+    G.boardingAlert = after;
+    if (!opts.silent) this.showShortCrewCounterAlertRefund(shortCrewResult, result);
+    return result;
+  }
+
+  showShortCrewCounterAlertRefund(shortCrewResult, refund) {
+    if (!shortCrewResult || !refund || !this.L) return;
+    const point = shortCrewResult.sentSlot != null && shortCrewResult.sentSlot >= 0
+      ? this.islandPirateEffectPoint(shortCrewResult.sentSlot)
+      : null;
+    const x = point ? point.x : this.L.cx;
+    const y = point ? point.y + 30 * this.L.k : this.endActionY() - 16 * this.L.k;
+    const amount = Math.max(0, Math.floor(Number(refund.amount) || 0));
+    const text = amount > 1 ? `Counter Short -${amount} Alert` : 'Counter Short -Alert';
+    this.effectText(x, y, text, '#ffca28', 760);
   }
 
   shopPurchaseQuoteForState(type, state = null) {
@@ -1356,18 +1406,30 @@ class GameScene extends Phaser.Scene {
   sendingPlanProjection(sentCount, opts = {}) {
     const wage = this.shipWageProjection(sentCount);
     const discount = this.projectFullCrewDiscount(sentCount);
+    const baseBoardingAlert = this.pendingBoardingAlert();
+    const shortCrewDrill = this.projectShortCrewDrill(sentCount);
+    const refund = shortCrewDrill && shortCrewDrill.counterAlertRefund;
+    const alertBeforeRefund = baseBoardingAlert + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const projectedRefund = refund && refund.eligible
+      ? Math.max(0, alertBeforeRefund - Math.max(baseBoardingAlert, alertBeforeRefund - Math.max(0, Math.floor(Number(refund.amount) || 0))))
+      : 0;
+    if (refund) refund.projectedAmount = projectedRefund;
+    const boardingAlert = Math.max(baseBoardingAlert, alertBeforeRefund - projectedRefund);
     const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
     const shopState = {
       enthusiasm,
-      boardingAlert: this.pendingBoardingAlert() + Math.max(0, Math.floor(Number(wage.alert) || 0)),
+      boardingAlert,
       fullCrewDiscount: discount,
       shopCreditUsed: false,
     };
     return {
       wage,
       discount,
+      baseBoardingAlert,
+      alertBeforeRefund,
+      boardingAlert,
       portDrill: opts.includePortDrill ? this.projectPortDrill(sentCount) : null,
-      shortCrewDrill: this.projectShortCrewDrill(sentCount),
+      shortCrewDrill,
       shopText: this.shopPlanText(shopState),
     };
   }
@@ -1865,9 +1927,11 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this.closePanels();
     this.applyPortDrill();
-    this.applyShortCrewDrill();
+    const shortCrewResult = this.applyShortCrewDrill();
+    const alertFloorBeforeWages = this.pendingBoardingAlert();
     this.updateFullCrewDiscountForCompletedIsland();
     this.grantShipWages();
+    this.applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages);
     G.phase = 'ship';
     G.busy = true;
 
@@ -6421,31 +6485,60 @@ class GameScene extends Phaser.Scene {
 
   formatSendingPlanLine(plan) {
     const wage = plan.wage || { wages: 0, alert: 0 };
-    const nextAlert = this.pendingBoardingAlert() + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const baseAlert = plan.baseBoardingAlert != null
+      ? Math.max(0, Math.floor(Number(plan.baseBoardingAlert) || 0))
+      : this.pendingBoardingAlert();
+    const nextAlert = plan.boardingAlert != null
+      ? Math.max(0, Math.floor(Number(plan.boardingAlert) || 0))
+      : baseAlert + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const netAlert = Math.max(0, nextAlert - baseAlert);
     const alertRisk = this.boardingAlertRiskText(this.boardingAlertGuardCount(nextAlert));
-    const alertText = wage.alert > 0
-      ? `Alert +${wage.alert}${alertRisk ? ` (${alertRisk})` : ''}`
-      : 'Alert +0';
+    const projectedRefund = Math.max(0, Math.floor(Number(
+      plan.shortCrewDrill
+        && plan.shortCrewDrill.counterAlertRefund
+        && plan.shortCrewDrill.counterAlertRefund.projectedAmount
+    ) || 0));
+    let alertText = 'Alert +0';
+    if (wage.alert > 0 && projectedRefund > 0) {
+      alertText = `Alert +${wage.alert}->+${netAlert}${alertRisk ? ` (${alertRisk})` : ''}`;
+    } else if (wage.alert > 0) {
+      alertText = `Alert +${wage.alert}${alertRisk ? ` (${alertRisk})` : ''}`;
+    }
     const commissionText = wage.openingCommission > 0
       ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
     const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
-    const shortCrewText = plan.shortCrewDrill && plan.shortCrewDrill.text
-      ? `Short Crew +${plan.shortCrewDrill.text}${plan.shortCrewDrill.reportsEarly ? ', reports next' : ''}`
-      : null;
+    const shortCrew = plan.shortCrewDrill;
+    let shortCrewText = null;
+    if (shortCrew && shortCrew.text) {
+      const refund = shortCrew.counterAlertRefund || {};
+      let refundText = '';
+      if (refund.eligible) refundText = ', counter refunds Alert';
+      else if (refund.possible && !shortCrew.targetKnown) refundText = ', counter refunds Alert';
+      else if (refund.possible) refundText = ', leftmost counter refunds Alert';
+      shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${refundText}`;
+    }
     return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
+  }
+
+  sendingPlanRows() {
+    const max = this.maxSend();
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    const rows = [
+      { label: 'End now', plan: this.sendingPlanProjection(currentSent) },
+    ];
+    if (max > 1 && currentSent < max - 1) {
+      rows.push({ label: 'One short', plan: this.sendingPlanProjection(max - 1) });
+    }
+    rows.push({ label: 'Fill crew', plan: this.sendingPlanProjection(max, { includePortDrill: true }) });
+    return rows;
   }
 
   renderSendingPlanComparison() {
     if (!this.shouldShowSendingPlanComparison()) return;
     const L = this.L;
-    const max = this.maxSend();
-    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
-    const rows = [
-      { label: 'End now', plan: this.sendingPlanProjection(currentSent) },
-      { label: 'Fill crew', plan: this.sendingPlanProjection(max, { includePortDrill: true }) },
-    ];
+    const rows = this.sendingPlanRows();
     const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
     const rowH = 54 * L.k;
     const pad = 8 * L.k;
@@ -6468,7 +6561,10 @@ class GameScene extends Phaser.Scene {
     bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.9);
     bg.strokeRoundedRect(left, top, w, h, 8 * L.k);
     bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.65);
-    bg.lineBetween(left + pad, top + pad + rowH, left + w - pad, top + pad + rowH);
+    for (let i = 1; i < rows.length; i++) {
+      const y = top + pad + rowH * i;
+      bg.lineBetween(left + pad, y, left + w - pad, y);
+    }
     this.addTo('phase', bg);
 
     rows.forEach((row, index) => {

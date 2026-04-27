@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-025208 — rev c9b5dba
+
+- Gameplay: true - Counter Short Crew now refunds the one unused-slot `Boarding Alert` when the drilled pirate counters the next scouted ship, with a three-row sending planner showing `End now`, `One short`, and `Fill crew` plus the conditional refund. Validated with local syntax checks, targeted Short Crew/scouted counter checks, `git diff --check`, and the 10-run fast sim smoke.
+
 ## 2026-04-27 — run 20260427-014704 — rev 5b11c2f
 
 - Gameplay: true - Scouted Counter Cache islands now pay a `+1☠️` counter bounty in addition to their mapped resource and `+1 Boarding Alert`, with map/floating labels showing the bounty; Cache Drill still only refunds the cache Alert and leaves the bounty available for prepared top-deck counter buys. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-map-schedule --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-014704.log`.

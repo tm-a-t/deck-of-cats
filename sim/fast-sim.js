@@ -933,6 +933,13 @@ function applyShortCrewDrillForSim(scene) {
   return null;
 }
 
+function applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFloorBeforeWages) {
+  if (scene && typeof scene.applyShortCrewCounterAlertRefund === 'function') {
+    return scene.applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages, { silent: true });
+  }
+  return { amount: 0 };
+}
+
 function applyScoutedCacheDrillForSim(scene, pirate) {
   if (scene && typeof scene.applyScoutedCacheDrill === 'function') {
     return scene.applyScoutedCacheDrill(pirate, { silent: true });
@@ -3019,13 +3026,20 @@ function runShortCrewDrillChecks(runtime) {
     return { G, result };
   };
 
-  {
-    const { G } = checkMight('normal 1-of-2 grants leftmost Might', { islandIdx: 0, sent: 1 }, [3, 0], true);
-    const drilled = G.hand[0];
+  const settleShipWagesWithShortCrewRefund = (G, result) => {
+    const alertFloorBeforeWages = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
     applyShipWagesForSim(scene, G);
+    return applyShortCrewCounterAlertRefundForSim(scene, result, alertFloorBeforeWages);
+  };
+
+  {
+    const { G, result } = checkMight('normal 1-of-2 grants leftmost Might', { islandIdx: 0, sent: 1 }, [3, 0], true);
+    const drilled = G.hand[0];
+    const refund = settleShipWagesWithShortCrewRefund(G, result);
     assertShortCrewDrillCheck(G.enthusiasm === 2, `normal 1-of-2 wages ${G.enthusiasm} !== 2`);
     assertShortCrewDrillCheck(G.boardingAlert === 1, `normal 1-of-2 alert ${G.boardingAlert} !== 1`);
-    results.push({ name: 'normal 1-of-2 still pays normal Ship Wages and Alert', ok: true, enthusiasm: G.enthusiasm, boardingAlert: G.boardingAlert });
+    assertShortCrewDrillCheck(!refund || refund.amount === 0, `normal non-counter refunded alert ${refund && refund.amount}`);
+    results.push({ name: 'normal 1-of-2 non-counter still pays normal Ship Wages and Alert', ok: true, enthusiasm: G.enthusiasm, boardingAlert: G.boardingAlert });
     const shopTop = { id: 9100, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
     G.allCrew.push(shopTop);
     G.deck = [shopTop];
@@ -3040,7 +3054,38 @@ function runShortCrewDrillChecks(runtime) {
     results.push({ name: 'nearby Short Crew report places the drilled pirate above shop top-deck cards without duplication', ok: true });
   }
 
+  {
+    const G = setup({ islandIdx: 0, sent: 1, alert: 2 });
+    G.hand[0].type = 'sawbones';
+    G.hand[0].might = 2;
+    G.shortCrewReportIds = [];
+    const result = applyShortCrewDrillForSim(scene);
+    assertShortCrewDrillCheck(result && result.applied && result.reportEarly, 'counter 1-of-2 did not gain Might and report early');
+    assertShortCrewDrillCheck((G.hand[0].might || 0) === 3, `counter 1-of-2 might ${G.hand[0].might || 0} !== 3`);
+    assertShortCrewDrillCheck(result.counterAlertRefund && result.counterAlertRefund.eligible, 'counter 1-of-2 did not qualify for Alert refund');
+    const refund = settleShipWagesWithShortCrewRefund(G, result);
+    assertShortCrewDrillCheck(G.enthusiasm === 2, `counter 1-of-2 wages ${G.enthusiasm} !== 2`);
+    assertShortCrewDrillCheck(G.boardingAlert === 2, `counter 1-of-2 alert ${G.boardingAlert} did not return to pre-wage floor 2`);
+    assertShortCrewDrillCheck(refund && refund.amount === 1 && refund.floor === 2, `counter 1-of-2 refund ${JSON.stringify(refund)}`);
+    assertShortCrewDrillCheck((G.shortCrewReportIds || []).includes(G.hand[0].id), 'counter 1-of-2 did not keep report marker');
+    results.push({ name: 'counter 1-of-2 refunds only the Ship Wages slot Alert after wages', ok: true, refund, boardingAlert: G.boardingAlert });
+  }
+
   checkMight('port 2-of-3 grants Short Crew Might', { islandIdx: 3, sent: 2 }, [3, 0, 0], true);
+  {
+    const G = setup({ islandIdx: 3, sent: 2, alert: 4, map: makeScoutedCounterTestMap('shellback') });
+    G.hand[0].type = 'poisoner';
+    G.hand[0].might = 0;
+    G.hand[1].type = 'rigger';
+    const result = applyShortCrewDrillForSim(scene);
+    assertShortCrewDrillCheck(result && result.applied, 'counter Port 2-of-3 did not trigger Short Crew Drill');
+    assertShortCrewDrillCheck((G.hand[0].might || 0) === 1, `counter Port 2-of-3 might ${G.hand[0].might || 0} !== 1`);
+    const refund = settleShipWagesWithShortCrewRefund(G, result);
+    assertShortCrewDrillCheck(G.enthusiasm === 2, `counter Port 2-of-3 wages ${G.enthusiasm} !== 2`);
+    assertShortCrewDrillCheck(G.boardingAlert === 4, `counter Port 2-of-3 alert ${G.boardingAlert} did not return to pre-wage floor 4`);
+    assertShortCrewDrillCheck(refund && refund.amount === 1, `counter Port 2-of-3 refund ${JSON.stringify(refund)}`);
+    results.push({ name: 'counter Port 2-of-3 refunds exactly one Ship Wages Alert', ok: true, refund, boardingAlert: G.boardingAlert });
+  }
   checkMight('distant 1-of-2 grants Might without report', { islandIdx: 0, sent: 1, map: makeDistantScoutedCounterTestMap('powderBomber'), expectedReport: false }, [3, 0], true);
   checkMight('full normal send does not drill', { islandIdx: 0, sent: 2 }, [2, 0], false);
   checkMight('empty normal send does not drill', { islandIdx: 0, sent: 0 }, [2, 0], false);
@@ -3062,10 +3107,23 @@ function runShortCrewDrillChecks(runtime) {
   }
 
   {
-    setup({ islandIdx: 0, sent: 1 });
+    setup({ islandIdx: 0, sent: 0 });
+    const rows = scene.sendingPlanRows();
+    const labels = rows.map(row => row.label).join('|');
+    assertShortCrewDrillCheck(labels === 'End now|One short|Fill crew', `initial plan labels ${labels}`);
+    const oneShortLine = scene.formatSendingPlanLine(rows[1].plan);
+    assertShortCrewDrillCheck(oneShortLine.includes('Short Crew +💪'), 'initial One short row does not expose Short Crew Might');
+    assertShortCrewDrillCheck(oneShortLine.includes('counter refunds Alert'), `initial One short row does not explain counter refund: ${oneShortLine}`);
+
+    const G = setup({ islandIdx: 0, sent: 1 });
     const line = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     assertShortCrewDrillCheck(line.includes('Short Crew +💪'), 'partial plan line does not expose Short Crew Might');
     assertShortCrewDrillCheck(line.includes('reports next'), `nearby partial plan line does not expose Short Crew report: ${line}`);
+    assertShortCrewDrillCheck(line.includes('leftmost counter refunds Alert'), `nearby partial plan line does not explain counter refund condition: ${line}`);
+    G.hand[0].type = 'sawbones';
+    const counterLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+    assertShortCrewDrillCheck(counterLine.includes('Alert +1->+0'), `counter partial line does not show net Alert refund: ${counterLine}`);
+    assertShortCrewDrillCheck(counterLine.includes('counter refunds Alert'), `counter partial line does not show active counter refund: ${counterLine}`);
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
     assertShortCrewDrillCheck(!fullLine.includes('Short Crew'), 'full-send line mentions Short Crew');
     setup({ islandIdx: 3, sent: 2 });
@@ -3074,7 +3132,7 @@ function runShortCrewDrillChecks(runtime) {
     setup({ islandIdx: 0, sent: 1, map: makeDistantScoutedCounterTestMap('powderBomber') });
     const distantLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     assertShortCrewDrillCheck(distantLine.includes('Short Crew +💪') && !distantLine.includes('reports next'), `distant partial plan line should not report next: ${distantLine}`);
-    results.push({ name: 'projection text exposes Short Crew report only for one-slot-short sends near a ship', ok: true, line, fullLine, portLine, distantLine });
+    results.push({ name: 'projection text exposes initial One short row, Short Crew report, and counter Alert refund', ok: true, oneShortLine, line, counterLine, fullLine, portLine, distantLine });
   }
 
   {
@@ -3205,9 +3263,11 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
   }
 
   applyPortDrillForSim(scene);
-  applyShortCrewDrillForSim(scene);
+  const shortCrewResult = applyShortCrewDrillForSim(scene);
+  const alertFloorBeforeWages = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
+  applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFloorBeforeWages);
 
   const queue = [];
   for (let i = 0; i < G.hand.length; i++) {
@@ -3300,9 +3360,11 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
   }
 
   applyPortDrillForSim(scene);
-  applyShortCrewDrillForSim(scene);
+  const shortCrewResult = applyShortCrewDrillForSim(scene);
+  const alertFloorBeforeWages = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
+  applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFloorBeforeWages);
 
   const queue = [];
   for (let i = 0; i < G.hand.length; i++) {

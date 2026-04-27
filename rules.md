@@ -58,8 +58,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Port Drill` does not trigger on partial Port sends, non-Port islands, `Infirmary Island`/healing rounds, or Battle Test; it adds no `Boarding Alert`, is not doubled by island bonuses, and stacks as normal permanent `Tempo`.
 - In regular runs, ending a non-`Infirmary Island` round exactly 1 send slot short with at least 1 surviving sent pirate triggers `Short Crew Drill` before ship actions: the leftmost surviving sent pirate gains `+1 💪 Might`.
 - `Short Crew Drill` does not trigger on full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, Battle Test, or if every sent pirate was removed by `Siren Island` or another island effect.
-- `Short Crew Drill` adds no `Boarding Alert` beyond normal `Ship Wages`, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
+- `Short Crew Drill` adds no `Boarding Alert` by itself, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
 - In regular runs only, if `Short Crew Drill` triggers while the next unreached ship is `1` to `3` map turns away, that same pirate is marked to report early.
+- In regular runs only, if that drilled pirate's type counters the next scouted ship's main enemy, `Short Crew Drill` refunds `1 Boarding Alert` after `Ship Wages` are paid.
+- The `Short Crew Drill` counter refund is clamped to the pending `Boarding Alert` present immediately before that `End`/`Work on Ship` action paid `Ship Wages`, so it refunds only the Alert from the one unused send slot and cannot remove cache Alert, `Dockside Credit` Alert, earlier pending Alert, or Alert already snapshotted onto boarding.
+- The `Short Crew Drill` counter refund never applies in `Battle Test`.
 - A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
 - If Cache Drill early report, Short Crew early report, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, watched counters are drawn third, and ordinary Shop `Top deck` purchases are drawn after all returning pirates.
