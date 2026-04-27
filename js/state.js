@@ -144,26 +144,16 @@ function randomShopType(round, excludeTypes = [], opts = {}) {
   return maybeScoutedCounterShopType(round, picked, excludeTypes, opts);
 }
 
-function openingStarterShopMainKey(opts = {}) {
-  const info = nextScoutedShipNodeForMap(shopMapForGeneration(opts), opts);
-  return info && info.node && info.node.encounter && info.node.encounter.mainKey;
-}
-
 function starterShopTypeFromLane(lane, opts = {}) {
   const pool = lane.filter(t => SHOP_POOL.includes(t) && TYPES[t] && TYPES[t].cost <= 3);
-  if (
-    opts.mode !== 'battleTest'
-    && lane.includes('poisoner')
-    && lane.includes('drummer')
-    && pool.includes('poisoner')
-    && openingStarterShopMainKey(opts) === 'shellback'
-  ) {
-    return 'poisoner';
-  }
   return Phaser.Utils.Array.GetRandom(pool);
 }
 
 function starterShop(opts = {}) {
+  if (opts.mode !== 'battleTest') {
+    const economy = starterShopTypeFromLane(['herald', 'survivalist'], opts);
+    return Phaser.Utils.Array.Shuffle(['poisoner', 'sawbones', 'needler', economy].filter(Boolean));
+  }
   const picks = STARTER_SHOP_LANES.map(lane => starterShopTypeFromLane(lane, opts)).filter(Boolean);
   return Phaser.Utils.Array.Shuffle(picks);
 }

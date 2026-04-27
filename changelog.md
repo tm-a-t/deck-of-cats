@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-070200 — rev ef627f3
+
+- Gameplay: true - Added Opening Route Captains: the three Boarding 1 cache lanes now plan different first-ship enemies (`Forest` → Shellback, `Rocky` → Powder Bomber, `Port` → Deck Sniper), selecting an opening route rewrites Boarding 1 to that main enemy plus one Bilge Rat and one Cabin Boy, and the regular starter shop now always shows Poisoner, Sawbones, Needler, and one economy pirate so every route has an immediate counter candidate. Validated with JS syntax checks, targeted opening-route-captain/opening-route-shop/scouted-cache/map/shop/prep/full-crew/counter-recruit/ambush/Short-Crew/opening-commission/Alert checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-070200.log`.
+
 ## 2026-04-27 — run 20260427-065333 — rev ee8de63
 
 - Gameplay: true - Boarding 1 Shellback Scouted Counter Cache lanes now pay route-specific prep resources: Forest grants `+1🪵`, Rocky grants `+1🪨`, and Port grants `+1🪙`, while all three still keep Shellback as the cache enemy for counter-shop, Cache Drill, Alert refund, and Counter Watch behavior; Boarding 2+ cache resources and Ambush Bounty still use the normal scouted enemy resource map. Validated with JS syntax checks, targeted scouted-cache/first-Shellback/map-schedule/opening-Shellback checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-065333.log`.

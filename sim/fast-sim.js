@@ -50,6 +50,7 @@ function parseArgs(argv) {
     checkCounterTrophy: false,
     checkCounterEdge: false,
     checkCounterAmbush: false,
+    checkOpeningRouteCaptains: false,
     checkFirstShellback: false,
   };
 
@@ -164,6 +165,10 @@ function parseArgs(argv) {
       out.checkOpeningShellbackCounter = true;
       continue;
     }
+    if (a === '--check-opening-route-counter-shop') {
+      out.checkOpeningShellbackCounter = true;
+      continue;
+    }
     if (a === '--check-counter-recruits-report-early') {
       out.checkCounterRecruitsReportEarly = true;
       continue;
@@ -190,6 +195,11 @@ function parseArgs(argv) {
     }
     if (a === '--check-first-shellback') {
       out.checkFirstShellback = true;
+      out.checkOpeningRouteCaptains = true;
+      continue;
+    }
+    if (a === '--check-opening-route-captains') {
+      out.checkOpeningRouteCaptains = true;
     }
   }
 
@@ -289,6 +299,10 @@ function buildRuntime() {
       applyScoutedCounterToShop,
       scoutedCounterTypesForMap,
       isScoutedCounterShopType,
+      firstBoardingEncounterBlueprint,
+      firstShipLayerIndex,
+      openingRouteCacheNodeForSelection,
+      applyOpeningRouteToFirstShip,
       drawCards,
       getAvailableNodes,
       mapNodeById,
@@ -1190,8 +1204,8 @@ function assertOpeningCounterPlanCheck(condition, message) {
   if (!condition) throw new Error(`opening counter prep check failed: ${message}`);
 }
 
-function assertOpeningShellbackCounterCheck(condition, message) {
-  if (!condition) throw new Error(`opening Shellback counter check failed: ${message}`);
+function assertOpeningRouteCounterShopCheck(condition, message) {
+  if (!condition) throw new Error(`opening route counter shop check failed: ${message}`);
 }
 
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
@@ -1202,52 +1216,59 @@ function assertMapScheduleCheck(condition, message) {
   if (!condition) throw new Error(`map schedule check failed: ${message}`);
 }
 
-function assertFirstShellbackCheck(condition, message) {
-  if (!condition) throw new Error(`first Shellback check failed: ${message}`);
+function assertOpeningRouteCaptainsCheck(condition, message) {
+  if (!condition) throw new Error(`opening route captains check failed: ${message}`);
 }
 
-function runFirstShellbackChecks(runtime) {
+function runOpeningRouteCaptainsChecks(runtime) {
   const api = runtime.api;
+  const scene = makeSimScene(api);
   const results = [];
   const samples = 24;
-  const shellback = api.COMBAT.enemyArchetypes.find(a => a.key === 'shellback');
-  assertFirstShellbackCheck(shellback, 'Shellback archetype is missing');
+  const routeCases = [
+    { islandIdx: 0, mainKey: 'shellback', res: 'wood', counter: 'poisoner', label: 'Forest' },
+    { islandIdx: 1, mainKey: 'powderBomber', res: 'stone', counter: 'sawbones', label: 'Rocky' },
+    { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', counter: 'needler', label: 'Port' },
+  ];
+  const routeByIslandIdx = new Map(routeCases.map(route => [route.islandIdx, route]));
+  routeCases.forEach((route) => {
+    const enemy = api.COMBAT.enemyArchetypes.find(a => a.key === route.mainKey);
+    assertOpeningRouteCaptainsCheck(enemy, `${route.mainKey} archetype is missing`);
+  });
 
   for (let sample = 0; sample < samples; sample++) {
     runtime.setSeed((0x5eed5e11 + sample * 6151) >>> 0);
     api.initState();
-    const map = api.getG().map;
-    assertFirstShellbackCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
+    const G = api.getG();
+    const map = G.map;
+    assertOpeningRouteCaptainsCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-    assertFirstShellbackCheck(firstShipLayer === 2, `sample ${sample} first ship layer ${firstShipLayer} !== 2`);
+    assertOpeningRouteCaptainsCheck(firstShipLayer === 2, `sample ${sample} first ship layer ${firstShipLayer} !== 2`);
 
     const ship = map.layers[firstShipLayer][0];
     const encounter = ship && ship.encounter;
-    assertFirstShellbackCheck(encounter && encounter.mainKey === 'shellback', `sample ${sample} first main ${encounter && encounter.mainKey}`);
-    assertFirstShellbackCheck(encounter.totalCount === 3, `sample ${sample} first total ${encounter.totalCount} !== 3`);
-    assertFirstShellbackCheck(
+    assertOpeningRouteCaptainsCheck(encounter && encounter.totalCount === 3, `sample ${sample} first total ${encounter && encounter.totalCount} !== 3`);
+    assertOpeningRouteCaptainsCheck(
       JSON.stringify(encounter.supportKeys) === JSON.stringify(['bilgeRat', 'cabinBoy']),
       `sample ${sample} first support ${JSON.stringify(encounter.supportKeys)}`
-    );
-    assertFirstShellbackCheck(
-      encounter.encounterDesc === (shellback.encounterDesc || shellback.summary),
-      `sample ${sample} first desc ${encounter.encounterDesc}`
     );
 
     const firstEligibleCacheNodes = eligibleScoutedCounterCacheNodes(api, map.layers[firstShipLayer - 1]);
     const firstCacheNodes = map.layers[firstShipLayer - 1].filter(node => node && node.scoutedCache);
-    assertFirstShellbackCheck(firstEligibleCacheNodes.length > 1, `sample ${sample} first pre-ship layer has ${firstEligibleCacheNodes.length} eligible lanes`);
-    assertFirstShellbackCheck(
+    assertOpeningRouteCaptainsCheck(firstEligibleCacheNodes.length === routeCases.length, `sample ${sample} first pre-ship layer has ${firstEligibleCacheNodes.length} eligible lanes`);
+    assertOpeningRouteCaptainsCheck(
       firstCacheNodes.length === firstEligibleCacheNodes.length,
       `sample ${sample} first cache nodes ${firstCacheNodes.length} !== eligible lanes ${firstEligibleCacheNodes.length}`
     );
     firstEligibleCacheNodes.forEach((node) => {
       const cache = node && node.scoutedCache;
-      const expectedRes = expectedOpeningScoutedCounterCacheResource(api, node, 'shellback');
-      assertFirstShellbackCheck(cache && cache.mainKey === 'shellback', `sample ${sample} first cache main ${cache && cache.mainKey}`);
-      assertFirstShellbackCheck(cache.res === expectedRes, `sample ${sample} first cache res ${cache.res} !== ${expectedRes}`);
-      assertFirstShellbackCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
-      assertFirstShellbackCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
+      const route = routeByIslandIdx.get(node.islandIdx);
+      assertOpeningRouteCaptainsCheck(route, `sample ${sample} first cache has unexpected island ${node.islandIdx}`);
+      const expectedRes = expectedOpeningScoutedCounterCacheResource(api, node, route.mainKey);
+      assertOpeningRouteCaptainsCheck(cache && cache.mainKey === route.mainKey, `sample ${sample} first cache main ${cache && cache.mainKey} !== ${route.mainKey}`);
+      assertOpeningRouteCaptainsCheck(cache.res === expectedRes && cache.res === route.res, `sample ${sample} ${route.label} cache res ${cache.res} !== ${route.res}`);
+      assertOpeningRouteCaptainsCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
+      assertOpeningRouteCaptainsCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
     });
 
     const laterMainKeys = [];
@@ -1257,15 +1278,61 @@ function runFirstShellbackChecks(runtime) {
         laterMainKeys.push(layer[0].encounter && layer[0].encounter.mainKey);
       }
     }
-    assertFirstShellbackCheck(laterMainKeys.length === 7, `sample ${sample} later ship count ${laterMainKeys.length}`);
+    assertOpeningRouteCaptainsCheck(laterMainKeys.length === 7, `sample ${sample} later ship count ${laterMainKeys.length}`);
   }
 
   results.push({
-    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and lane-specific caches',
+    name: 'generated regular maps mark Forest/Rocky/Port Boarding 1 caches with distinct route enemies',
     ok: true,
     samples,
   });
+
+  runtime.setSeed(0x2cadcafe);
+  api.initState();
+  const pendingIntel = scene.nextShipIntel();
+  assertOpeningRouteCaptainsCheck(
+    pendingIntel && pendingIntel.mainKey === null && pendingIntel.mainLabel === 'Route decides',
+    `opening pre-route intel was ${JSON.stringify(pendingIntel)}`
+  );
+  results.push({ name: 'pre-route Boarding 1 intel waits for the route choice', ok: true });
+
+  for (const route of routeCases) {
+    runtime.setSeed(0x2cadcafe);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const ship = map.layers[firstShipLayer][0];
+    const cacheNode = map.layers[firstShipLayer - 1].find(node => node && node.islandIdx === route.islandIdx);
+    const startNode = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(cacheNode.id));
+    assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
+    assertOpeningRouteCaptainsCheck(startNode, `${route.label} start route missing`);
+
+    assertOpeningRouteCaptainsCheck(scene.applyMapNodeSelection(startNode.id), `${route.label} start selection failed`);
+    assertOpeningRouteCaptainsCheck(ship.encounter && ship.encounter.mainKey === route.mainKey, `${route.label} route selected ${ship.encounter && ship.encounter.mainKey}`);
+    assertOpeningRouteCaptainsCheck(ship.encounter.totalCount === 3, `${route.label} route total ${ship.encounter.totalCount}`);
+    assertOpeningRouteCaptainsCheck(
+      JSON.stringify(ship.encounter.supportKeys) === JSON.stringify(['bilgeRat', 'cabinBoy']),
+      `${route.label} route support ${JSON.stringify(ship.encounter.supportKeys)}`
+    );
+    const enemy = api.COMBAT.enemyArchetypes.find(a => a.key === route.mainKey);
+    assertOpeningRouteCaptainsCheck(
+      ship.encounter.encounterDesc === (enemy.encounterDesc || enemy.summary),
+      `${route.label} route desc ${ship.encounter.encounterDesc}`
+    );
+
+    G.phase = 'shopping';
+    G.enthusiasm = 9;
+    const quote = scene.shopPurchaseQuote(route.counter);
+    assertOpeningRouteCaptainsCheck(quote.counter && quote.topDeck, `${route.label} ${route.counter} quote missed counter top-deck: ${JSON.stringify(quote)}`);
+    results.push({ name: `${route.label} route commits Boarding 1 to ${route.mainKey} and top-decks ${route.counter}`, ok: true, quote });
+  }
+
   return { ok: true, checks: results };
+}
+
+function runFirstShellbackChecks(runtime) {
+  return runOpeningRouteCaptainsChecks(runtime);
 }
 
 function runMapScheduleChecks(runtime) {
@@ -1460,6 +1527,11 @@ function runScoutedCounterCacheChecks(runtime) {
   const scene = makeSimScene(api);
   const results = [];
   let generatedCacheCount = 0;
+  const openingRouteByIslandIdx = new Map([
+    [0, { islandIdx: 0, mainKey: 'shellback', res: 'wood', label: 'Forest' }],
+    [1, { islandIdx: 1, mainKey: 'powderBomber', res: 'stone', label: 'Rocky' }],
+    [3, { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', label: 'Port' }],
+  ]);
 
   for (let sample = 0; sample < 12; sample++) {
     runtime.setSeed((0x8f53a31d + sample * 7919) >>> 0);
@@ -1500,10 +1572,13 @@ function runScoutedCounterCacheChecks(runtime) {
 
       for (const cacheNode of cacheNodes) {
         const cache = cacheNode.scoutedCache;
+        const expectedMain = shipNo === 1
+          ? (openingRouteByIslandIdx.get(cacheNode.islandIdx) || {}).mainKey
+          : mainKey;
         const expectedRes = shipNo === 1
-          ? expectedOpeningScoutedCounterCacheResource(api, cacheNode, mainKey)
+          ? expectedOpeningScoutedCounterCacheResource(api, cacheNode, expectedMain)
           : res;
-        assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
+        assertScoutedCounterCacheCheck(cache.mainKey === expectedMain, `sample ${sample} cache main ${cache.mainKey} !== ${expectedMain}`);
         assertScoutedCounterCacheCheck(cache.res === expectedRes, `sample ${sample} cache res ${cache.res} !== ${expectedRes}`);
         assertScoutedCounterCacheCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} cache amount/enthusiasm/alert ${cache.amount}/${cache.enthusiasm}/${cache.alert}`);
         assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
@@ -1527,16 +1602,13 @@ function runScoutedCounterCacheChecks(runtime) {
   }
   results.push({ name: 'generated regular maps mark every Boarding 1 lane and one preferred cache before later ships', ok: true, samples: 12, generatedCacheCount });
 
-  for (const cacheCase of [
-    { islandIdx: 0, res: 'wood', label: 'Forest' },
-    { islandIdx: 1, res: 'stone', label: 'Rocky' },
-    { islandIdx: 3, res: 'gold', label: 'Port' },
-  ]) {
+  for (const cacheCase of openingRouteByIslandIdx.values()) {
     runtime.setSeed(0x5c0a7e11);
     api.initState();
     const G = api.getG();
     const map = G.map;
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const firstShip = map.layers[firstShipLayer][0];
     const cacheNodes = map.layers[firstShipLayer - 1].filter((node) => node && node.scoutedCache);
     assertScoutedCounterCacheCheck(cacheNodes.length > 1, `first cache selection sample has only ${cacheNodes.length} cache lane`);
     const chosen = cacheNodes.find((node) => node && node.islandIdx === cacheCase.islandIdx);
@@ -1544,13 +1616,14 @@ function runScoutedCounterCacheChecks(runtime) {
     const untouched = cacheNodes.filter((node) => node !== chosen);
     const cache = chosen.scoutedCache;
     assertScoutedCounterCacheCheck(cache.res === cacheCase.res, `${cacheCase.label} cache res ${cache.res} !== ${cacheCase.res}`);
-    assertScoutedCounterCacheCheck(cache.mainKey === 'shellback', `${cacheCase.label} cache main ${cache.mainKey} !== shellback`);
+    assertScoutedCounterCacheCheck(cache.mainKey === cacheCase.mainKey, `${cacheCase.label} cache main ${cache.mainKey} !== ${cacheCase.mainKey}`);
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.enthusiasm = 0;
     G.boardingAlert = 2;
     G.phase = 'map';
     const handled = scene.applyMapNodeSelection(chosen.id);
     assertScoutedCounterCacheCheck(handled, 'generated first cache island selection failed');
+    assertScoutedCounterCacheCheck(firstShip.encounter && firstShip.encounter.mainKey === cacheCase.mainKey, `${cacheCase.label} selection did not route first ship to ${cacheCase.mainKey}`);
     assertScoutedCounterCacheCheck(chosen.scoutedCache.claimed === true, 'selected first cache was not claimed');
     assertScoutedCounterCacheCheck(untouched.every(node => node.scoutedCache && node.scoutedCache.claimed === false), 'unselected first cache lane was claimed');
     assertScoutedCounterCacheCheck(G.res[cache.res] === 1, `generated first cache granted ${cache.res} ${G.res[cache.res]}`);
@@ -1561,7 +1634,7 @@ function runScoutedCounterCacheChecks(runtime) {
       Object.keys(G.res).every((res) => (res === cacheCase.res ? G.res[res] === 1 : G.res[res] === 0)),
       `${cacheCase.label} cache changed wrong resources ${JSON.stringify(G.res)}`
     );
-    results.push({ name: `${cacheCase.label} Boarding 1 cache grants ${cacheCase.res}, enthusiasm, Alert, and Shellback Cache Drill`, ok: true });
+    results.push({ name: `${cacheCase.label} Boarding 1 cache grants ${cacheCase.res}, enthusiasm, Alert, and ${cacheCase.mainKey} Cache Drill`, ok: true });
   }
 
   {
@@ -2215,12 +2288,14 @@ function runOpeningCounterPlanChecks(runtime) {
   return { ok: true, checks: results };
 }
 
-function runOpeningShellbackCounterChecks(runtime) {
+function runOpeningRouteCounterShopChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
   const results = [];
   const samples = 24;
   const starters = new Set(['lumberjack', 'miner', 'armsman']);
+  const requiredCounters = ['poisoner', 'sawbones', 'needler'];
+  const economyTypes = ['herald', 'survivalist'];
 
   for (let sample = 0; sample < samples; sample++) {
     runtime.setSeed((0x51e11bac + sample * 3571) >>> 0);
@@ -2233,29 +2308,34 @@ function runOpeningShellbackCounterChecks(runtime) {
       : -1;
     const firstShip = firstShipLayer >= 0 ? map.layers[firstShipLayer][0] : null;
 
-    assertOpeningShellbackCounterCheck(firstShip && firstShip.encounter && firstShip.encounter.mainKey === 'shellback', `sample ${sample} first ship is ${firstShip && firstShip.encounter && firstShip.encounter.mainKey}`);
-    assertOpeningShellbackCounterCheck(shop.length === 4, `sample ${sample} shop length ${shop.length}`);
-    assertOpeningShellbackCounterCheck(new Set(shop).size === shop.length, `sample ${sample} duplicate shop ${shop.join(',')}`);
-    assertOpeningShellbackCounterCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `sample ${sample} shop has starter or unknown ${shop.join(',')}`);
-    assertOpeningShellbackCounterCheck(shop.includes('poisoner'), `sample ${sample} opening Shellback shop lacks Poisoner: ${shop.join(',')}`);
-    assertOpeningShellbackCounterCheck(shop.includes('needler'), `sample ${sample} opening Shellback shop lacks Needler: ${shop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(firstShip && firstShip.encounter, `sample ${sample} first ship is missing`);
+    assertOpeningRouteCounterShopCheck(shop.length === 4, `sample ${sample} shop length ${shop.length}`);
+    assertOpeningRouteCounterShopCheck(new Set(shop).size === shop.length, `sample ${sample} duplicate shop ${shop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `sample ${sample} shop has starter or unknown ${shop.join(',')}`);
+    requiredCounters.forEach((type) => {
+      assertOpeningRouteCounterShopCheck(shop.includes(type), `sample ${sample} opening shop lacks ${type}: ${shop.join(',')}`);
+    });
+    assertOpeningRouteCounterShopCheck(
+      shop.filter(type => economyTypes.includes(type)).length === 1,
+      `sample ${sample} opening shop lacks exactly one economy slot: ${shop.join(',')}`
+    );
   }
-  results.push({ name: 'regular opening Shellback shops always show Poisoner and Needler in 4 unique non-starter slots', ok: true, samples });
+  results.push({ name: 'regular opening shops always show Poisoner, Sawbones, Needler, and one economy pirate', ok: true, samples });
 
   const getRandom = runtime.context.Phaser.Utils.Array.GetRandom;
   runtime.context.Phaser.Utils.Array.GetRandom = (arr) => (arr && arr.length ? arr[arr.length - 1] : undefined);
   try {
     const shellbackBattleShop = api.initialShop(4, 0, { map: makeScoutedCounterTestMap('shellback'), mode: 'battleTest' });
-    assertOpeningShellbackCounterCheck(shellbackBattleShop.includes('drummer'), `Battle Test Shellback shop was forced off Drummer: ${shellbackBattleShop.join(',')}`);
-    assertOpeningShellbackCounterCheck(!shellbackBattleShop.includes('poisoner'), `Battle Test Shellback shop unexpectedly forced Poisoner: ${shellbackBattleShop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(shellbackBattleShop.includes('drummer'), `Battle Test starter shop was forced off Drummer: ${shellbackBattleShop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(!shellbackBattleShop.includes('poisoner'), `Battle Test starter shop unexpectedly forced Poisoner: ${shellbackBattleShop.join(',')}`);
 
     const powderShop = api.initialShop(4, 0, { map: makeScoutedCounterTestMap('powderBomber'), mode: 'run' });
-    assertOpeningShellbackCounterCheck(powderShop.includes('drummer'), `non-Shellback starter lane was forced off Drummer: ${powderShop.join(',')}`);
-    assertOpeningShellbackCounterCheck(!powderShop.includes('poisoner'), `non-Shellback starter lane unexpectedly forced Poisoner: ${powderShop.join(',')}`);
-    assertOpeningShellbackCounterCheck(powderShop.includes('sawbones'), `non-Shellback scouted-counter fallback failed: ${powderShop.join(',')}`);
-    assertOpeningShellbackCounterCheck(powderShop.includes('needler'), `non-Shellback starter shop lost Needler: ${powderShop.join(',')}`);
-    assertOpeningShellbackCounterCheck(new Set(powderShop).size === powderShop.length, `non-Shellback shop has duplicate: ${powderShop.join(',')}`);
-    results.push({ name: 'Battle Test and non-Shellback starter lanes keep prior random lane behavior and counter fallback', ok: true, shellbackBattleShop, powderShop });
+    requiredCounters.forEach((type) => {
+      assertOpeningRouteCounterShopCheck(powderShop.includes(type), `regular route starter shop lacks ${type}: ${powderShop.join(',')}`);
+    });
+    assertOpeningRouteCounterShopCheck(powderShop.includes('survivalist'), `regular route starter shop did not use sampled economy slot: ${powderShop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(new Set(powderShop).size === powderShop.length, `non-Shellback shop has duplicate: ${powderShop.join(',')}`);
+    results.push({ name: 'Battle Test keeps old lane sampling while regular route shops pin all three counters', ok: true, shellbackBattleShop, powderShop });
   } finally {
     runtime.context.Phaser.Utils.Array.GetRandom = getRandom;
   }
@@ -2263,47 +2343,46 @@ function runOpeningShellbackCounterChecks(runtime) {
   runtime.setSeed(0x704501a1);
   api.initState();
   const G = api.getG();
-  const firstLayer = G.map && G.map.layers && G.map.layers[0];
-  const firstIsland = Array.isArray(firstLayer)
-    ? firstLayer.find(node => {
-      const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
-      return island && !island.extraSend && !island.healWounded;
-    })
-    : null;
-  assertOpeningShellbackCounterCheck(firstIsland && firstIsland.type === 'island', 'missing first island setup');
-  assertOpeningShellbackCounterCheck(scene.applyMapNodeSelection(firstIsland.id), 'first island selection failed');
-  assertOpeningShellbackCounterCheck(G.phase === 'sending' && G.round === 1 && G.map.currentLayer === 0, `first round setup phase=${G.phase} round=${G.round} layer=${G.map.currentLayer}`);
-  assertOpeningShellbackCounterCheck(G.shop.includes('poisoner'), `round-1 shop lacks Poisoner before full-send buy: ${G.shop.join(',')}`);
+  const map = G.map;
+  const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+  const forestCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === 'shellback');
+  assertOpeningRouteCounterShopCheck(forestCache, 'missing Forest Shellback cache');
+  const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(forestCache.id));
+  assertOpeningRouteCounterShopCheck(firstIsland && firstIsland.type === 'island', 'missing first island setup');
+  assertOpeningRouteCounterShopCheck(scene.applyMapNodeSelection(firstIsland.id), 'first island selection failed');
+  assertOpeningRouteCounterShopCheck(G.phase === 'sending' && G.round === 1 && G.map.currentLayer === 0, `first round setup phase=${G.phase} round=${G.round} layer=${G.map.currentLayer}`);
+  assertOpeningRouteCounterShopCheck(map.layers[firstShipLayer][0].encounter.mainKey === 'shellback', 'Forest route did not scout Shellback');
+  assertOpeningRouteCounterShopCheck(G.shop.includes('poisoner'), `round-1 shop lacks Poisoner before full-send buy: ${G.shop.join(',')}`);
 
-  G.sent = [0, 1];
+  G.sent = Array.from({ length: scene.maxSend() }, (_, index) => index);
   updateFullCrewDiscountForSim(scene, G);
   applyShipWagesForSim(scene, G);
   G.phase = 'shopping';
   G.shopCreditUsed = false;
-  assertOpeningShellbackCounterCheck(G.enthusiasm === 1, `full send wages left ${G.enthusiasm} enthusiasm`);
-  assertOpeningShellbackCounterCheck(G.fullCrewDiscount === 1, `full send discount ${G.fullCrewDiscount}`);
-  assertOpeningShellbackCounterCheck(G.boardingAlert === 0, `full send added Alert ${G.boardingAlert}`);
+  assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `full send wages left ${G.enthusiasm} enthusiasm`);
+  assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 1, `full send discount ${G.fullCrewDiscount}`);
+  assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `full send added Alert ${G.boardingAlert}`);
 
   const poisonerIndex = G.shop.indexOf('poisoner');
   const quote = scene.shopPurchaseQuote('poisoner');
   const directQuote = shopPurchaseQuote(api, G, 'poisoner');
-  assertOpeningShellbackCounterCheck(poisonerIndex >= 0, 'Poisoner not found in shop for buy');
-  assertOpeningShellbackCounterCheck(quote.canBuy && !quote.credit, `Poisoner quote was not affordable without credit: ${JSON.stringify(quote)}`);
-  assertOpeningShellbackCounterCheck(quote.counter && quote.topDeck && !quote.preparedCounter, `Poisoner should be a watched top-deck counter without pre-boarding discount preparation: ${JSON.stringify(quote)}`);
-  assertOpeningShellbackCounterCheck(quote.cost === 2 && quote.discount === 1 && quote.effectiveCost === 1 && quote.spend === 1 && quote.missing === 0, `Poisoner economics mismatch: ${JSON.stringify(quote)}`);
-  assertOpeningShellbackCounterCheck(quote.fullCrewCoverage === 0 && !quote.credit && quote.alert === 0, `Poisoner used coverage/credit/Alert: ${JSON.stringify(quote)}`);
-  assertOpeningShellbackCounterCheck(directQuote.canBuy && !directQuote.credit && directQuote.fullCrewCoverage === 0 && !directQuote.preparedCounter, `sim policy quote mismatch: ${JSON.stringify(directQuote)}`);
+  assertOpeningRouteCounterShopCheck(poisonerIndex >= 0, 'Poisoner not found in shop for buy');
+  assertOpeningRouteCounterShopCheck(quote.canBuy && !quote.credit, `Poisoner quote was not affordable without credit: ${JSON.stringify(quote)}`);
+  assertOpeningRouteCounterShopCheck(quote.counter && quote.topDeck && !quote.preparedCounter, `Poisoner should be a watched top-deck counter without pre-boarding discount preparation: ${JSON.stringify(quote)}`);
+  assertOpeningRouteCounterShopCheck(quote.cost === 2 && quote.discount === 1 && quote.effectiveCost === 1 && quote.spend === 1 && quote.missing === 0, `Poisoner economics mismatch: ${JSON.stringify(quote)}`);
+  assertOpeningRouteCounterShopCheck(quote.fullCrewCoverage === 0 && !quote.credit && quote.alert === 0, `Poisoner used coverage/credit/Alert: ${JSON.stringify(quote)}`);
+  assertOpeningRouteCounterShopCheck(directQuote.canBuy && !directQuote.credit && directQuote.fullCrewCoverage === 0 && !directQuote.preparedCounter, `sim policy quote mismatch: ${JSON.stringify(directQuote)}`);
 
   const bought = scene.buyPirate(poisonerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-  assertOpeningShellbackCounterCheck(bought && bought.type === 'poisoner', 'Poisoner buy failed');
-  assertOpeningShellbackCounterCheck(G.enthusiasm === 0, `Poisoner buy left enthusiasm ${G.enthusiasm}`);
-  assertOpeningShellbackCounterCheck(G.boardingAlert === 0, `Poisoner buy added Alert ${G.boardingAlert}`);
-  assertOpeningShellbackCounterCheck(G.shopCreditUsed === false, 'Poisoner buy used Dockside Credit');
-  assertOpeningShellbackCounterCheck(G.fullCrewDiscount === 0, 'Poisoner buy did not consume Full Crew Discount');
-  assertOpeningShellbackCounterCheck(G.deck[G.deck.length - 1] === bought, 'Poisoner did not go to top of deck');
-  assertOpeningShellbackCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Poisoner did not gain Counter Watch');
-  assertOpeningShellbackCounterCheck(!bought.weaponKey, `pre-boarding full-send Poisoner was Prepared with ${bought.weaponKey}`);
-  assertOpeningShellbackCounterCheck(!G.discard.includes(bought), 'Poisoner also went to discard');
+  assertOpeningRouteCounterShopCheck(bought && bought.type === 'poisoner', 'Poisoner buy failed');
+  assertOpeningRouteCounterShopCheck(G.enthusiasm === 0, `Poisoner buy left enthusiasm ${G.enthusiasm}`);
+  assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `Poisoner buy added Alert ${G.boardingAlert}`);
+  assertOpeningRouteCounterShopCheck(G.shopCreditUsed === false, 'Poisoner buy used Dockside Credit');
+  assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 0, 'Poisoner buy did not consume Full Crew Discount');
+  assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought, 'Poisoner did not go to top of deck');
+  assertOpeningRouteCounterShopCheck((G.counterWatchIds || []).includes(bought.id), 'Poisoner did not gain Counter Watch');
+  assertOpeningRouteCounterShopCheck(!bought.weaponKey, `pre-boarding full-send Poisoner was Prepared with ${bought.weaponKey}`);
+  assertOpeningRouteCounterShopCheck(!G.discard.includes(bought), 'Poisoner also went to discard');
   results.push({ name: 'round-1 full-send buys watched top-deck Poisoner for 1 without pre-boarding discount preparation', ok: true, quote });
 
   return { ok: true, checks: results };
@@ -5337,7 +5416,7 @@ async function main() {
     return;
   }
   if (opts.checkOpeningShellbackCounter) {
-    const result = runOpeningShellbackCounterChecks(runtime);
+    const result = runOpeningRouteCounterShopChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
@@ -5368,6 +5447,11 @@ async function main() {
   }
   if (opts.checkCounterAmbush) {
     const result = runCounterAmbushChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningRouteCaptains) {
+    const result = runOpeningRouteCaptainsChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

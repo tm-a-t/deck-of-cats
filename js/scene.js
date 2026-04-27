@@ -847,6 +847,12 @@ class GameScene extends Phaser.Scene {
     }
     if (layerIdx < 0) return false;
 
+    if (!this.isBattleTest()
+      && G.boardingCount === 0
+      && typeof applyOpeningRouteToFirstShip === 'function') {
+      applyOpeningRouteToFirstShip(map, node, layerIdx);
+    }
+
     map.currentNodeId = nodeId;
     map.currentLayer = layerIdx;
     map.visited.push(nodeId);
@@ -5412,6 +5418,18 @@ class GameScene extends Phaser.Scene {
       if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
       const node = layer[0];
       const boardingNo = this.mapBoardingNumberForLayer(li);
+      if (boardingNo === 1 && !node.openingRouteMainKey) {
+        return {
+          nodeId: node.id,
+          layerIdx: li,
+          turnsAway: li - currentLayer,
+          boardingNo,
+          mainKey: null,
+          encounterDesc: 'Choose an opening route',
+          rosterLabels: ['Route decides'],
+          mainLabel: 'Route decides',
+        };
+      }
       const roster = this.combatEncounterPreviewArchetypes(node.encounter);
       const rosterLabels = roster
         .map((archetype) => this.enemyRosterMemberLabel(archetype, boardingNo))

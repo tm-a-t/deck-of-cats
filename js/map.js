@@ -53,6 +53,32 @@ function scoutedCounterCacheResource(mainKey) {
   return (SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey]) || null;
 }
 
+function combatArchetypeForMap(key) {
+  return COMBAT.enemyArchetypes.find(a => a && a.key === key) || null;
+}
+
+function openingRouteMainKeyForIslandIdx(islandIdx) {
+  const island = ISLANDS[islandIdx];
+  if (!island) return null;
+  if (island.bonus === 'wood') return 'shellback';
+  if (island.bonus === 'stone') return 'powderBomber';
+  if (island.extraSend) return 'deckSniper';
+  return null;
+}
+
+function firstBoardingEncounterBlueprint(mainKey = 'shellback') {
+  const fallback = combatArchetypeForMap('shellback')
+    || COMBAT.enemyArchetypes.find(a => a && a.tier === 'strong')
+    || COMBAT.enemyArchetypes[0];
+  const mainArch = combatArchetypeForMap(mainKey) || fallback;
+  return {
+    mainKey: mainArch.key,
+    supportKeys: ['bilgeRat', 'cabinBoy'],
+    totalCount: 3,
+    encounterDesc: mainArch.encounterDesc || mainArch.summary || null,
+  };
+}
+
 function openingScoutedCounterCacheResource(node, mainKey) {
   const island = node && node.type === 'island' ? ISLANDS[node.islandIdx] : null;
   if (!island) return scoutedCounterCacheResource(mainKey);
@@ -112,7 +138,8 @@ function markScoutedCounterCaches(layers) {
 
     if (shipNo === 1) {
       scoutedCounterCacheEligibleNodes(layers[li - 1]).forEach((node) => {
-        assignScoutedCounterCache(node, mainKey, openingScoutedCounterCacheResource(node, mainKey));
+        const routeMainKey = openingRouteMainKeyForIslandIdx(node.islandIdx) || mainKey;
+        assignScoutedCounterCache(node, routeMainKey, openingScoutedCounterCacheResource(node, routeMainKey));
       });
       continue;
     }
@@ -121,6 +148,56 @@ function markScoutedCounterCaches(layers) {
     if (!node) continue;
     assignScoutedCounterCache(node, mainKey, res);
   }
+}
+
+function firstShipLayerIndex(map) {
+  if (!map || !Array.isArray(map.layers)) return -1;
+  return map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+}
+
+function openingRouteCacheNodeForSelection(map, node, layerIdx) {
+  if (!map || !Array.isArray(map.layers) || !node || node.type !== 'island') return null;
+  const firstShipLayer = firstShipLayerIndex(map);
+  const cacheLayerIdx = firstShipLayer - 1;
+  if (firstShipLayer <= 0 || layerIdx < 0 || layerIdx >= firstShipLayer) return null;
+
+  if (layerIdx === cacheLayerIdx) {
+    return node.scoutedCache ? node : null;
+  }
+
+  let reachableIds = new Set([node.id]);
+  for (let li = layerIdx; li < cacheLayerIdx; li++) {
+    const currentLayer = map.layers[li] || [];
+    const nextLayer = map.layers[li + 1] || [];
+    const nextIds = new Set();
+    currentLayer.forEach((candidate) => {
+      if (!candidate || !reachableIds.has(candidate.id) || !Array.isArray(candidate.conns)) return;
+      candidate.conns.forEach(id => nextIds.add(id));
+    });
+    reachableIds = new Set(nextLayer
+      .filter(candidate => candidate && nextIds.has(candidate.id))
+      .map(candidate => candidate.id));
+    if (!reachableIds.size) return null;
+  }
+
+  const cacheLayer = map.layers[cacheLayerIdx] || [];
+  return cacheLayer.find(candidate =>
+    candidate && reachableIds.has(candidate.id) && candidate.scoutedCache
+  ) || null;
+}
+
+function applyOpeningRouteToFirstShip(map, node, layerIdx) {
+  const cacheNode = openingRouteCacheNodeForSelection(map, node, layerIdx);
+  const mainKey = cacheNode && cacheNode.scoutedCache && cacheNode.scoutedCache.mainKey;
+  const firstShipLayer = firstShipLayerIndex(map);
+  const firstShip = firstShipLayer >= 0 && map.layers[firstShipLayer]
+    ? map.layers[firstShipLayer][0]
+    : null;
+  if (!mainKey || !firstShip || firstShip.type !== 'ship') return null;
+
+  firstShip.encounter = firstBoardingEncounterBlueprint(mainKey);
+  firstShip.openingRouteMainKey = mainKey;
+  return { ship: firstShip, cacheNode, mainKey };
 }
 
 function shipStrength(shipNumber) {
@@ -139,13 +216,7 @@ function generateEncounterBlueprint(boardingNo) {
   let mainKey, supportKeys, totalCount, desc;
 
   if (boardingNo === 1) {
-    totalCount = 3;
-    const mainArch = strong.find(a => a.key === 'shellback')
-      || eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
-      || weak[Math.floor(Math.random() * weak.length)];
-    mainKey = mainArch.key;
-    desc = mainArch.encounterDesc || mainArch.summary;
-    supportKeys = ['bilgeRat', 'cabinBoy'];
+    return firstBoardingEncounterBlueprint('shellback');
   } else if (boardingNo <= 2) {
     totalCount = 3;
     const strongCount = Math.min(boardingNo, 2);

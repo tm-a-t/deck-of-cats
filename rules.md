@@ -17,7 +17,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Starting deck: 10 pirates.
 - Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, and `Opening Counter Prep`: `0`.
 - Starting hand: up to 5 pirates.
-- Starting shop: 4 unique pirates from starter shop lanes, shuffled: by default 1 of `Poisoner`/`Drummer`, 1 of `Sawbones`/`Trainer`, always `Needler`, and 1 of `Herald`/`Survivalist`. If the first scouted regular ship's main enemy is `Shellback`, the `Poisoner`/`Drummer` lane is locked to `Poisoner` before shuffling, while `Needler` remains guaranteed. The regular-run scouted counter shop rule can replace one newly generated starter-shop slot if the first scouted ship would otherwise have no visible counter.
+- Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
 
 | Pirate | Count | Island | Ship |
@@ -35,8 +35,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If 2+ nodes are available, the player chooses on the map.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
-- In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a `Scouted Counter Cache` tied to that ship's main scouted enemy.
-- Boarding 1 cache resources are lane-specific while still using that ship's main scouted enemy for counter and `Cache Drill` rules: `Forest Island` grants `+1🪵`, `Rocky Island` grants `+1🪨`, and `Port Island` grants `+1🪙`. If an unexpected eligible opening island appears, it uses the normal cache resource map.
+- In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a route-defined `Scouted Counter Cache`.
+- The three normal Boarding 1 cache routes define the first ship's main enemy and cache resource: `Forest Island` → `Shellback` and `+1🪵`, `Rocky Island` → `Powder Bomber` and `+1🪨`, `Port Island` → `Deck Sniper` and `+1🪙`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal cache resource map.
+- Selecting an opening path before Boarding 1 updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
+- Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island immediately grants `+1` of the cache resource, `+1☠️`, and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
 - The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's own `+1 Boarding Alert`, and is marked to report early.
@@ -113,7 +115,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The shop appears only after island rounds. There is no shop after boarding.
 - The shop always has 4 slots. Starters (`Rigger`, `Ballaster`, `Armsman`) are never sold there.
 - `randomShopType(round, excludeTypes = [])` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`, first avoiding any excluded visible shop types when the eligible pool has an unused type.
-- The initial display is created as `initialShop(4, 0)`, which uses the curated starter shop lanes instead of full random selection. In regular runs whose first scouted ship is `Shellback`, that starter display always includes both `Poisoner` and `Needler`.
+- The initial display is created as `initialShop(4, 0)`, which in regular runs always includes `Poisoner`, `Sawbones`, `Needler`, and 1 economy pirate from `Herald`/`Survivalist`, shuffled.
 - Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
 - In regular runs, while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
 - The scouted counter rule checks the 4 visible slots after the new slot is generated. If no visible pirate counters the main scouted enemy and the current cost-gated shop pool contains an eligible non-duplicate counter, only the newly generated slot is replaced by one counter.
@@ -379,7 +381,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ### Encounter Scaling
 
 - Counts below describe the normal generated party before any `Boarding Alert` guard reinforcements are added.
-- `Boarding 1`: exactly 3 enemies before Alert guards: always 1 `Shellback`, exactly 1 `Bilge Rat`, and exactly 1 `Cabin Boy`.
+- `Boarding 1`: exactly 3 enemies before Alert guards: the selected opening route's main enemy (`Shellback`, `Powder Bomber`, or `Deck Sniper`), exactly 1 `Bilge Rat`, and exactly 1 `Cabin Boy`.
 - `Boarding 2`: exactly 3 enemies, 2 strong and 1 weak.
 - `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
 - `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
@@ -399,6 +401,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - `layers 3–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
 - Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
+- The three islands on `layer 1` are the Boarding 1 route caches: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
 - `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
 - From `layer 10` onward, normal non-infirmary island layers contain `2–3` nodes.

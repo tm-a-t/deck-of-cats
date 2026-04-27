@@ -528,12 +528,14 @@ class MapScene extends Phaser.Scene {
     if (!cache || cache.claimed) return '';
     const emoji = RES_EMOJI[cache.res];
     if (!emoji) return '';
+    const enemy = COMBAT.enemyArchetypes.find(archetype => archetype && archetype.key === cache.mainKey);
     const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
     const enthusiasm = cache.enthusiasm == null
       ? 1
       : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
     const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
     const parts = [];
+    if (enemy && enemy.emoji) parts.push(enemy.emoji);
     if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
     if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
     if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
