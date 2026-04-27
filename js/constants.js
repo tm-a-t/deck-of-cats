@@ -59,7 +59,7 @@ const SHOP_CREDIT = {
   alertPerMissing: 1,
 };
 
-const ALARM_RUSHED_ROUTE_COUNTER_ALERT = 3;
+const ALARM_RUSHED_ROUTE_COUNTER_ALERT = 4;
 
 const COMBAT = {
   pirateHp: BASE_PIRATE_HP,

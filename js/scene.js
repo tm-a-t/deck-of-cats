@@ -2134,8 +2134,8 @@ class GameScene extends Phaser.Scene {
     const alertSource = source.boardingAlert != null ? source.boardingAlert : this.pendingBoardingAlert();
     const pendingAlert = Math.max(0, Math.floor(Number(alertSource) || 0));
     const alarmThreshold = Math.max(1, Math.floor(Number(
-      (typeof ALARM_RUSHED_ROUTE_COUNTER_ALERT !== 'undefined' && ALARM_RUSHED_ROUTE_COUNTER_ALERT) || 3
-    ) || 3));
+      (typeof ALARM_RUSHED_ROUTE_COUNTER_ALERT !== 'undefined' && ALARM_RUSHED_ROUTE_COUNTER_ALERT) || 4
+    ) || 4));
     const canAlarmRush = !!(openingRoutePrimary && scoutedCounterTopDeck && !setupTopDeck);
     const alarmRushesWithAlert = (extraAlert = 0) => canAlarmRush
       && pendingAlert + Math.max(0, Math.floor(Number(extraAlert) || 0)) >= alarmThreshold;

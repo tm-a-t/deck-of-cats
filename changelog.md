@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-131838 — rev 17c423f — build 0.1.0
+
+- Gameplay: true - Raised `Alarm-Rushed Route Counter` from 3+ to 4+ projected pending Boarding Alert, so the round-1 zero-send Port Needler line now buys to discard without Counter Watch while 4+ Alert cash/credit route-primary buys still top-deck and Watch without prep, Prepared, Full Crew coverage, Route Starter Pass-Off, Cache Drill marks, Alert refunds, or doubled bounty. Validated with JS syntax checks, targeted alarm-rushed route counter, opening route shop, Opening Counter Prep, route starter pass-off/opening deckhand, counter recruit, drilled Ambush Bounty, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-131838.log`.
+
 ## 2026-04-27 — run 20260427-130306 — rev 0a4c19b — build 0.1.0
 
 - Gameplay: true - Added Alarm-Rushed Route Counter: before Boarding 1, a selected route-primary counter bought at 3+ projected pending Alert now top-decks and gains Counter Watch without Opening Prep discounts/Might, Prepared gains, Route Starter Pass-Off, Cache Drill marks, Alert refunds, Full Crew coverage, or doubled Ambush Bounty. Validated with JS syntax checks, targeted alarm-rushed route counter, opening route shop, Opening Counter Prep, route starter pass-off, counter recruit, opening route prize, drilled Ambush Bounty, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-130306.log`.
