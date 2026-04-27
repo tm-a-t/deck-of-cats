@@ -35,10 +35,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If 2+ nodes are available, the player chooses on the map.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
-- In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a route-defined `Scouted Counter Cache`.
-- Before Boarding 1, the first two island layers share one shuffled Forest/Rocky/Port lane order, so the layer-0 route choice visibly commits to the matching layer-1 `Scouted Counter Cache`.
+- In regular runs, layer `0` has three parallel route choices, one each of `Forest Island`, `Rocky Island`, and `Port Island`; all three are route-defined Boarding 1 `Scouted Counter Cache` islands.
 - The three normal Boarding 1 cache routes define the first ship's main enemy and route-specific cache stakes: `Forest Island` → `Shellback`, `+1🪵`, `+0☠️`, and `+0 Boarding Alert`; `Rocky Island` → `Powder Bomber`, `+1🪨`, `+1☠️`, and `+1 Boarding Alert`; `Port Island` → `Deck Sniper`, `+1🪙`, `+2☠️`, and `+2 Boarding Alert`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal `+1` cache resource, `+1☠️`, and `+1 Boarding Alert` stakes.
-- Selecting an opening path before Boarding 1 updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
+- Selecting a layer-0 opening route before Boarding 1 immediately updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support and arms that same selected island's cache. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
 - During regular-run Boarding 1 only, the selected opening route also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
 - The first selected opening route before Boarding 1 also creates `Opening Route Muster`: one still-owned matching `Opening Deckhand Counter` starter is marked to report on the next Shop `Continue` and gains `Counter Watch` until Boarding 1, preferring a matching pirate currently in hand, then the draw pile, then discard.
 - `Opening Route Muster` happens once per regular run, never duplicates a pirate, grants no weapon, `Might`, `Tempo`, Alert refund, shop discount, or reward other than that starter's `Counter Watch`, never applies in `Battle Test`, and clears when Boarding 1 starts.
@@ -48,7 +47,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
 - `Opening Deckhand Scout Pay` happens once per regular run: on round `1`, on the layer-0 selected opening island, before Boarding 1, if the first sent pirate is the selected route's matching `Opening Deckhand Counter` starter and is still in the crew after its island action and any island removal, gain `+1☠️`.
 - `Opening Deckhand Scout Pay` is normal Shop currency only. It adds no `Boarding Alert`, grants no weapon, `Might`, `Tempo`, `Counter Watch`, `Opening Counter Prep`, `Prepared` gains, `Full Crew Discount`, route-secured marker, Cache Drill reward, Cache Drill bounty mark, Route Starter Pass-Off, or cache claim.
-- `Opening Deckhand Scout Pay` never applies in `Battle Test`, on layer-1 cache islands, after Boarding 1, after round `1`, to nonmatching starters, to matching starters sent second or later, to zero-send openings, or to starters removed by the island before the pay check.
+- `Opening Deckhand Scout Pay` never applies in `Battle Test`, outside the layer-0 opening route island, after Boarding 1, after round `1`, to nonmatching starters, to matching starters sent second or later, to zero-send openings, or to starters removed by the island before the pay check.
 - Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island does not immediately grant that cache's stored resource, stored `☠️`, or stored `Boarding Alert`.
@@ -447,13 +446,12 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 - A run has `40` layers total and `8` ship nodes.
 - Early block:
-  - `layers 0–1`: three parallel non-crossing island paths
-  - `layer 2`: first ship node
-  - `layers 3–8`: three parallel non-crossing island paths
+  - `layer 0`: three parallel `Forest Island`/`Rocky Island`/`Port Island` route cache islands
+  - `layer 1`: first ship node
+  - `layers 2–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
 - Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
-- During the opening block before `Boarding 1`, `layers 0–1` reuse the same shuffled `Forest Island`/`Rocky Island`/`Port Island` lane order, so each straight opening path keeps its island identity from the first visible island into the `layer 1` cache.
-- The three islands on `layer 1` are the Boarding 1 route caches: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
+- The three islands on `layer 0` are the Boarding 1 route caches: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
 - `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
 - From `layer 10` onward, normal non-infirmary island layers contain `2–3` nodes.

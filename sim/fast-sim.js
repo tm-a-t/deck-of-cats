@@ -1398,7 +1398,7 @@ function runOpeningRouteCaptainsChecks(runtime) {
     const map = G.map;
     assertOpeningRouteCaptainsCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-    assertOpeningRouteCaptainsCheck(firstShipLayer === 2, `sample ${sample} first ship layer ${firstShipLayer} !== 2`);
+    assertOpeningRouteCaptainsCheck(firstShipLayer === 1, `sample ${sample} first ship layer ${firstShipLayer} !== 1`);
 
     const ship = map.layers[firstShipLayer][0];
     const encounter = ship && ship.encounter;
@@ -1464,7 +1464,9 @@ function runOpeningRouteCaptainsChecks(runtime) {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const ship = map.layers[firstShipLayer][0];
     const cacheNode = map.layers[firstShipLayer - 1].find(node => node && node.islandIdx === route.islandIdx);
-    const startNode = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(cacheNode.id));
+    const startNode = cacheNode && map.layers[0].includes(cacheNode)
+      ? cacheNode
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && cacheNode && node.conns.includes(cacheNode.id));
     assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
     assertOpeningRouteCaptainsCheck(startNode, `${route.label} start route missing`);
     assertOpeningRouteCaptainsCheck(
@@ -1502,12 +1504,12 @@ function runFirstShellbackChecks(runtime) {
 function runMapScheduleChecks(runtime) {
   const api = runtime.api;
   const results = [];
-  const expectedShipLayers = [2, 9, 14, 19, 24, 29, 34, 39];
-  const earlyIslandLayers = [0, 1, 3, 4, 5, 6, 7, 8];
+  const expectedShipLayers = [1, 9, 14, 19, 24, 29, 34, 39];
+  const earlyIslandLayers = [0, 2, 3, 4, 5, 6, 7, 8];
   const expectedEarlyIslandIdx = [0, 1, 3];
   const earlySegments = [
-    { base: 0, length: 2 },
-    { base: 3, length: 6 },
+    { base: 0, length: 1 },
+    { base: 2, length: 7 },
   ];
 
   for (let sample = 0; sample < 12; sample++) {
@@ -1539,15 +1541,10 @@ function runMapScheduleChecks(runtime) {
     }
 
     for (let pi = 0; pi < 3; pi++) {
-      const startNode = map.layers[0][pi];
-      const cacheNode = map.layers[1][pi];
-      assertMapScheduleCheck(
-        startNode.islandIdx === cacheNode.islandIdx,
-        `sample ${sample} opening path ${pi} changed island identity ${startNode.islandIdx} -> ${cacheNode.islandIdx}`
-      );
+      const cacheNode = map.layers[0][pi];
       assertMapScheduleCheck(
         cacheNode.scoutedCache,
-        `sample ${sample} opening path ${pi} layer-1 cache is missing`
+        `sample ${sample} opening path ${pi} layer-0 cache is missing`
       );
     }
 
@@ -1575,7 +1572,7 @@ function runMapScheduleChecks(runtime) {
   }
 
   results.push({
-    name: '40-layer map schedule with early 2/6 islands and straight early paths',
+    name: '40-layer map schedule with early 1/7 islands and straight early paths',
     ok: true,
     samples: 12,
     shipLayers: expectedShipLayers,
@@ -2186,7 +2183,9 @@ function runOpeningRouteContractChecks(runtime) {
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
-    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const firstIsland = routeCache && map.layers[0].includes(routeCache)
+      ? routeCache
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
 
@@ -2453,7 +2452,9 @@ function runOpeningRoutePrizeChecks(runtime) {
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
-    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const firstIsland = routeCache && map.layers[0].includes(routeCache)
+      ? routeCache
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     const ship = map.layers[firstShipLayer][0];
     return { firstShipLayer, routeCache, firstIsland, ship };
   };
@@ -2907,7 +2908,9 @@ function runAlarmRushedRouteCounterChecks(runtime) {
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
-    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const firstIsland = routeCache && map.layers[0].includes(routeCache)
+      ? routeCache
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
   const setupRouteShop = (route, opts = {}) => {
@@ -3539,7 +3542,9 @@ function runOpeningRouteCounterShopChecks(runtime) {
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
-    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const firstIsland = routeCache && map.layers[0].includes(routeCache)
+      ? routeCache
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
 
@@ -3840,6 +3845,39 @@ function runOpeningDeckhandScoutPayChecks(runtime) {
     results.push({ name: `${route.label} matching starter sent first gains exactly +1 skull once`, ok: true });
   });
 
+  {
+    const route = routes[1];
+    runtime.setSeed(0x5cadc0de);
+    api.initState();
+    const G = api.getG();
+    const cacheNode = G.map.layers[0].find(node =>
+      node && node.scoutedCache && node.scoutedCache.mainKey === route.mainKey
+    );
+    assertOpeningDeckhandScoutPayCheck(cacheNode, 'generated Rocky layer-0 cache route missing');
+    assertOpeningDeckhandScoutPayCheck(scene.applyMapNodeSelection(cacheNode.id), 'generated Rocky route selection failed');
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = 0;
+    G.boardingAlert = 4;
+    const pirate = G.hand[0];
+    pirate.type = route.starterType;
+    pirate.weaponKey = null;
+    pirate.might = 0;
+    pirate.tempo = 0;
+    pirate.wounded = false;
+    G.sent = [0];
+    scene.resolveIsland(pirate);
+    const scoutPay = scene.applyOpeningDeckhandScoutPay(pirate, { sentSlot: 0, silent: true });
+    const cacheClaim = scene.claimScoutedCounterCache(pirate, { silent: true });
+    assertOpeningDeckhandScoutPayCheck(scoutPay && scoutPay.applied, 'layer-0 cache opener did not receive scout pay');
+    assertOpeningDeckhandScoutPayCheck(cacheClaim && cacheClaim.cacheGrant && cacheClaim.drill && cacheClaim.drill.applied, 'layer-0 starter opener did not open and drill cache');
+    assertOpeningDeckhandScoutPayCheck(G.enthusiasm === 2, `scout plus Rocky cache skulls ${G.enthusiasm} !== 2`);
+    assertOpeningDeckhandScoutPayCheck(G.boardingAlert === 4, `Rocky cache Alert was not refunded to floor 4, got ${G.boardingAlert}`);
+    assertOpeningDeckhandScoutPayCheck(G.res.stone === 3, `Rocky island plus cache stone ${G.res.stone} !== 3`);
+    assertOpeningDeckhandScoutPayCheck((pirate.might || 0) === 1, `Cache Drill starter Might ${pirate.might || 0} !== 1`);
+    assertOpeningDeckhandScoutPayCheck(G.openingCounterPlan === true && cacheClaim.drill.openingCounterPrep, 'Route Starter Cache Prep was not armed by same-round cache drill');
+    results.push({ name: 'layer-0 opening cache lets the matching starter receive Scout Pay and Cache Drill in the same round', ok: true });
+  }
+
   ['Rocky/Powder Bomber', 'Port/Deck Sniper'].forEach((label) => {
     const route = routes.find(entry => entry.label === label);
     const { G, pirates } = setupOpening(route);
@@ -3933,8 +3971,8 @@ function runOpeningDeckhandScoutPayChecks(runtime) {
     G.sent.push(0);
     scene.resolveIsland(pirates[0]);
     const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
-    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'layer-1 cache island received scout pay');
-    results.push({ name: 'layer-1 cache islands get no opening scout pay', ok: true });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'non-opening layer-1 island received scout pay');
+    results.push({ name: 'non-opening layer-1 islands get no opening scout pay', ok: true });
   }
 
   {
@@ -4876,7 +4914,7 @@ function runOpeningRouteMusterChecks(runtime) {
     assertOpeningRouteMusterCheck(G.openingRouteMusterUsed === true, 'Opening Route Muster did not remember it was used');
     assertOpeningRouteMusterCheck(scene.applyMapNodeSelection(cacheNode.id), 'second pre-boarding island selection failed');
     assertOpeningRouteMusterCheck(!G.openingRouteMuster, 'Opening Route Muster marked a second time before Boarding 1');
-    results.push({ name: 'Opening Route Muster happens once even across two pre-Boarding-1 island layers', ok: true });
+    results.push({ name: 'Opening Route Muster happens once even if another pre-Boarding-1 island is selected', ok: true });
   }
 
   {
