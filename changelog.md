@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-050754 — rev 3691074
+
+- Gameplay: true - Before Boarding 1, `Full Crew Discount` and `Opening Counter Subsidy` no longer make `Top deck` scouted-counter buys `Prepared`; they still apply discount/subsidy affordability, top-deck placement, and `Counter Watch`, while `Opening Counter Plan` remains the pre-Boarding-1 `Prepared` route and post-boarding `Full Crew Discount` preparation is unchanged. Validated with JS syntax checks, opening counter subsidy/plan/Shellback targeted checks, scouted counter recruit/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-050754.log`.
+
 ## 2026-04-27 — run 20260427-045829 — rev 0381b5d
 
 - Gameplay: true - Opening regular shops for the guaranteed Boarding 1 `Shellback` now lock the `Poisoner`/`Drummer` starter lane to `Poisoner`, keeping the guaranteed `Needler` lane and preserving non-Shellback/Battle Test starter behavior; a round-1 full-send can now buy prepared `Poisoner` for `1☠️` with `Full Crew Discount` and no Dockside Credit, Opening Counter Subsidy, or Alert. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-shellback-counter --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-first-shellback --json`, `node sim/fast-sim.js --check-opening-counter-subsidy --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-045829.log`.

@@ -1458,14 +1458,6 @@ class GameScene extends Phaser.Scene {
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     const openingCounterPlan = this.openingCounterPlanActiveForState(source, isProjection);
-    const hasPreparedGains = this.preparedCounterGains(type).length > 0;
-    const preparedCounter = !!(topDeck && hasPreparedGains && (discount > 0 || openingCounterPlan));
-    const preparedByOpeningCounterPlan = !!(preparedCounter && openingCounterPlan && discount <= 0);
-    const consumesOpeningCounterPlan = !!openingCounterPlan;
-    if (enthusiasm >= effectiveCost) {
-      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0, openingCounterPlan, preparedByOpeningCounterPlan, consumesOpeningCounterPlan });
-    }
-    const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
     const round = source.round != null
       ? Math.max(0, Math.floor(Number(source.round) || 0))
@@ -1475,6 +1467,15 @@ class GameScene extends Phaser.Scene {
       : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
     const phase = source.phase != null ? source.phase : G.phase;
     const mode = source.mode != null ? source.mode : G.mode;
+    const hasPreparedGains = this.preparedCounterGains(type).length > 0;
+    const discountPreparesCounter = discount > 0 && boardingCount > 0;
+    const preparedCounter = !!(topDeck && hasPreparedGains && (discountPreparesCounter || openingCounterPlan));
+    const preparedByOpeningCounterPlan = !!(preparedCounter && openingCounterPlan && !discountPreparesCounter);
+    const consumesOpeningCounterPlan = !!openingCounterPlan;
+    if (enthusiasm >= effectiveCost) {
+      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0, openingCounterPlan, preparedByOpeningCounterPlan, consumesOpeningCounterPlan });
+    }
+    const missing = effectiveCost - enthusiasm;
     const openingCounterSubsidy = mode !== 'battleTest'
       && !this.isBattleTest()
       && (isProjection || phase === 'shopping')
