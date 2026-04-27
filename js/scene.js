@@ -4397,6 +4397,65 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  grantOpeningRoutePromotion(combat = G.combat, result = null) {
+    if (!combat || combat.openingRoutePromotionGranted) return combat && combat.openingRoutePromotion ? combat.openingRoutePromotion : null;
+    combat.openingRoutePromotionGranted = true;
+
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const ambush = combat.counterAmbush;
+    if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
+
+    const mainKey = ambush.mainKey || this.counterAmbushMainKey(combat);
+    if (!mainKey
+      || G.openingRouteCounterBoughtMainKey !== mainKey
+      || G.openingRouteCounterBoughtPirateId !== ambush.pirateId
+      || typeof OPENING_ROUTE_PRIMARY_COUNTERS === 'undefined') {
+      return null;
+    }
+
+    const primaryType = OPENING_ROUTE_PRIMARY_COUNTERS[mainKey];
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === ambush.pirateId
+    );
+    if (!primaryType || !survivor) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || null;
+    if (!pirate || !this.pirateStillInCrew(pirate) || pirate.type !== primaryType) return null;
+
+    const gains = this.preparedCounterGains(pirate.type);
+    if (!gains.length) return null;
+
+    const applied = this.applyPersonalGainsToPirate(pirate, gains);
+    if (!applied.applied) return null;
+
+    const def = TYPES[pirate.type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.openingRoutePromotion = {
+      pirateId: pirate.id,
+      type: pirate.type,
+      name: def.name || ambush.name || pirate.type || 'Pirate',
+      mainKey,
+      enemyName: enemy ? enemy.name : (ambush.targetName || mainKey),
+      gains: applied.gains,
+      text: applied.text,
+    };
+    return combat.openingRoutePromotion;
+  }
+
+  showOpeningRoutePromotion(promotion) {
+    if (!promotion || !this.L) return;
+    const label = promotion.text ? ` +${promotion.text}` : '';
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 324 * L.k, `Route Promotion${label}`, '#ffca28', 760);
+  }
+
   isFinalBoardingNode() {
     if (!G.map || !Array.isArray(G.map.layers)) return false;
     const layerIdx = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
@@ -6149,6 +6208,7 @@ class GameScene extends Phaser.Scene {
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
     const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
+    const routePromotion = result === 'win' ? this.grantOpeningRoutePromotion(combat, result) : null;
     const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
     this.clearCacheDrillBountyMarks();
     if (this.currentBoardingNumber() === 1) this.clearOpeningRouteCounterBought();
@@ -6162,6 +6222,7 @@ class GameScene extends Phaser.Scene {
     this.showBoardingAlertPlunder(plunder);
     this.showOpeningBreakPlunder(openingPlunder);
     this.showAmbushBounty(ambushBounty);
+    this.showOpeningRoutePromotion(routePromotion);
     this.showCounterAmbusherReport(ambusherReport);
   }
 
