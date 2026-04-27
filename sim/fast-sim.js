@@ -45,6 +45,7 @@ function parseArgs(argv) {
     checkOpeningCounterPlan: false,
     checkOpeningShellbackCounter: false,
     checkOpeningDeckhandCounters: false,
+    checkOpeningDeckhandScoutPay: false,
     checkOpeningRouteMuster: false,
     checkOpeningRoutePrize: false,
     checkAlarmRushedRouteCounter: false,
@@ -178,6 +179,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-deckhand-counters') {
       out.checkOpeningDeckhandCounters = true;
+      continue;
+    }
+    if (a === '--check-opening-deckhand-scout-pay' || a === '--check-opening-scout-pay') {
+      out.checkOpeningDeckhandScoutPay = true;
       continue;
     }
     if (a === '--check-opening-route-muster') {
@@ -1206,6 +1211,16 @@ function applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFlo
   return { amount: 0 };
 }
 
+function applyOpeningDeckhandScoutPayForSim(scene, pirate, opts = {}) {
+  if (scene && typeof scene.applyOpeningDeckhandScoutPay === 'function') {
+    return scene.applyOpeningDeckhandScoutPay(pirate, {
+      ...opts,
+      silent: true,
+    });
+  }
+  return null;
+}
+
 function applyScoutedCacheDrillForSim(scene, pirate) {
   if (scene && typeof scene.claimScoutedCounterCache === 'function') {
     const claim = scene.claimScoutedCounterCache(pirate, { silent: true });
@@ -1330,6 +1345,10 @@ function assertOpeningRouteCounterShopCheck(condition, message) {
 
 function assertOpeningDeckhandCounterCheck(condition, message) {
   if (!condition) throw new Error(`opening deckhand counter check failed: ${message}`);
+}
+
+function assertOpeningDeckhandScoutPayCheck(condition, message) {
+  if (!condition) throw new Error(`opening deckhand scout pay check failed: ${message}`);
 }
 
 function assertOpeningRouteMusterCheck(condition, message) {
@@ -3748,6 +3767,197 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), `${label} Opening Prep ${primary} missed top-deck Watch`);
     results.push({ name: `${label} primary route counter consumes Opening Counter Prep for +1 Might, top deck, and Watch`, ok: true, quote });
   });
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningDeckhandScoutPayChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routes = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0 },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1 },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3 },
+  ];
+
+  const setupOpening = (route, opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = opts.map || makeScoutedCounterTestMap(route.mainKey);
+    G.map.currentNodeId = opts.currentNodeId != null ? opts.currentNodeId : 1;
+    G.map.currentLayer = opts.currentLayer != null ? opts.currentLayer : 0;
+    G.map.visited = Array.isArray(opts.visited) ? [...opts.visited] : [G.map.currentNodeId];
+    G.round = opts.round != null ? Math.max(0, Math.floor(Number(opts.round) || 0)) : 1;
+    G.boardingCount = opts.boardingCount != null
+      ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+      : 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[route.islandIdx]);
+    G.sent = [];
+    G.deck = [];
+    G.discard = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = Math.max(0, Math.floor(Number(opts.enthusiasm) || 0));
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.openingDeckhandScoutPaid = !!opts.scoutPaid;
+    G.counterWatchIds = [];
+    G.cacheDrillMusterIds = [];
+    G.cacheDrillBountyMarks = [];
+    scene._sacrificedIds.clear();
+    scene._sendingToIsland.clear();
+
+    const count = Math.max(3, scene.maxSend());
+    const pirates = G.allCrew.slice(0, count);
+    pirates.forEach((pirate, index) => {
+      pirate.type = index === 0
+        ? (opts.firstType || route.starterType)
+        : (index === 1 ? (opts.secondType || route.nonmatchingType) : 'lumberjack');
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, count);
+    return { G, pirates };
+  };
+
+  routes.forEach((route) => {
+    const { G, pirates } = setupOpening(route);
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(reward && reward.applied && reward.amount === 1, `${route.label} did not pay scout reward`);
+    assertOpeningDeckhandScoutPayCheck(G.enthusiasm === 1, `${route.label} enthusiasm ${G.enthusiasm} !== 1`);
+    assertOpeningDeckhandScoutPayCheck(G.boardingAlert === 0, `${route.label} scout pay added Alert`);
+    assertOpeningDeckhandScoutPayCheck((pirates[0].might || 0) === 0 && (pirates[0].tempo || 0) === 0 && !pirates[0].weaponKey, `${route.label} scout pay added personal gains`);
+    assertOpeningDeckhandScoutPayCheck(G.openingCounterPlan === false && (G.counterWatchIds || []).length === 0, `${route.label} scout pay granted setup markers`);
+    const repeat = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!repeat && G.enthusiasm === 1, `${route.label} scout pay repeated`);
+    results.push({ name: `${route.label} matching starter sent first gains exactly +1 skull once`, ok: true });
+  });
+
+  ['Rocky/Powder Bomber', 'Port/Deck Sniper'].forEach((label) => {
+    const route = routes.find(entry => entry.label === label);
+    const { G, pirates } = setupOpening(route);
+    const maxSend = scene.maxSend();
+    for (let handIdx = 0; handIdx < maxSend; handIdx++) {
+      const pirate = pirates[handIdx];
+      G.sent.push(handIdx);
+      scene.resolveIsland(pirate);
+      applyOpeningDeckhandScoutPayForSim(scene, pirate, { sentSlot: handIdx });
+    }
+    updateFullCrewDiscountForSim(scene, G);
+    updateOpeningCounterPlanForSim(scene, G);
+    applyShipWagesForSim(scene, G);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shop = [route.primary, 'drummer', 'herald', 'trainer'];
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningDeckhandScoutPayCheck(G.enthusiasm === 2, `${route.label} full send shop skulls ${G.enthusiasm} !== 2`);
+    assertOpeningDeckhandScoutPayCheck(G.fullCrewDiscount === 1, `${route.label} full send did not keep Full Crew Discount`);
+    assertOpeningDeckhandScoutPayCheck(G.boardingAlert === 0, `${route.label} full send scout path added Alert`);
+    assertOpeningDeckhandScoutPayCheck(quote.canBuy && !quote.credit && quote.discount === 1 && quote.topDeck, `${route.label} primary quote not buyable/top-decked without credit: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningDeckhandScoutPayCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
+    assertOpeningDeckhandScoutPayCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} primary did not top-deck`);
+    assertOpeningDeckhandScoutPayCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} primary did not gain Counter Watch`);
+    results.push({ name: `${route.label} full-send starter-first opening reaches first shop with 2 skulls and a top-deck route counter buy`, ok: true });
+  });
+
+  {
+    const route = routes[1];
+    const { G, pirates } = setupOpening(route, { firstType: route.nonmatchingType });
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0 && !G.openingDeckhandScoutPaid, 'nonmatching starter received scout pay');
+    results.push({ name: 'nonmatching first starter gets no scout pay', ok: true });
+  }
+
+  {
+    const route = routes[1];
+    const { G, pirates } = setupOpening(route, { firstType: route.nonmatchingType, secondType: route.starterType });
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    G.sent.push(1);
+    scene.resolveIsland(pirates[1]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[1], { sentSlot: 1 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0 && !G.openingDeckhandScoutPaid, 'matching starter sent second received scout pay');
+    results.push({ name: 'matching starter sent second gets no scout pay', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const { G, pirates } = setupOpening(route);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: -1 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0 && !G.openingDeckhandScoutPaid, 'zero-send setup received scout pay');
+    results.push({ name: 'zero-send openings get no scout pay', ok: true });
+  }
+
+  {
+    const route = routes[2];
+    const { G, pirates } = setupOpening(route, { mode: 'battleTest' });
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'Battle Test received scout pay');
+    results.push({ name: 'Battle Test gets no opening scout pay', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const layerOneMap = {
+      layers: [
+        [{ id: 1, type: 'island', islandIdx: 0, conns: [2] }],
+        [{ id: 2, type: 'island', islandIdx: route.islandIdx, conns: [3] }],
+        [{ id: 3, type: 'ship', strength: 6, openingRouteMainKey: route.mainKey, encounter: { mainKey: route.mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
+      ],
+      visited: [1, 2],
+      currentNodeId: 2,
+      currentLayer: 1,
+    };
+    const { G, pirates } = setupOpening(route, {
+      map: layerOneMap,
+      currentNodeId: 2,
+      currentLayer: 1,
+      visited: [1, 2],
+      round: 1,
+    });
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'layer-1 cache island received scout pay');
+    results.push({ name: 'layer-1 cache islands get no opening scout pay', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const { G, pirates } = setupOpening(route, { boardingCount: 1, round: 2 });
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'post-Boarding-1 round received scout pay');
+    results.push({ name: 'post-Boarding-1 rounds get no opening scout pay', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const { G, pirates } = setupOpening(route);
+    G.sent.push(0);
+    scene.resolveIsland(pirates[0]);
+    removePirateById(G, pirates[0].id);
+    scene._sacrificedIds.add(pirates[0].id);
+    const reward = applyOpeningDeckhandScoutPayForSim(scene, pirates[0], { sentSlot: 0 });
+    assertOpeningDeckhandScoutPayCheck(!reward && G.enthusiasm === 0, 'removed first starter received scout pay');
+    results.push({ name: 'removed first starters get no opening scout pay', ok: true });
+  }
 
   return { ok: true, checks: results };
 }
@@ -7375,6 +7585,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
       removePirateById(G, pirate.id);
       scene._sacrificedIds.add(pirate.id);
     }
+    applyOpeningDeckhandScoutPayForSim(scene, pirate, { sentSlot: G.sent.indexOf(handIdx) });
     applyScoutedCacheDrillForSim(scene, pirate);
   }
 
@@ -7472,6 +7683,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
       removePirateById(G, pirate.id);
       scene._sacrificedIds.add(pirate.id);
     }
+    applyOpeningDeckhandScoutPayForSim(scene, pirate, { sentSlot: G.sent.indexOf(handIdx) });
     applyScoutedCacheDrillForSim(scene, pirate);
     if (G.sent.length >= scene.maxSend()) break;
   }
@@ -8228,6 +8440,11 @@ async function main() {
   }
   if (opts.checkOpeningDeckhandCounters) {
     const result = runOpeningDeckhandCounterChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningDeckhandScoutPay) {
+    const result = runOpeningDeckhandScoutPayChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

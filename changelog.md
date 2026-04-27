@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-141337 — rev b1cb9d7 — build 0.1.0
+
+- Gameplay: true - Added Opening Deckhand Scout Pay: the first matching route starter sent on the round-1 layer-0 opening island now grants a once-per-run +1☠️ after surviving its island action, giving Rocky and Port full-send starter-first openings 2☠️ plus Full Crew Discount for an immediate route-primary top-deck buy without Alert, prep, buffs, or cache markers. Validated with JS syntax checks, targeted opening deckhand scout-pay, opening route shop, opening deckhand/cache/pass-off, scouted cache, and Opening Prep sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-141337.log`.
+
 ## 2026-04-27 — run 20260427-135848 — rev e14b8c2 — build 0.1.0
 
 - Gameplay: true - Changed the opening route secured contract so pre-Boarding-1 route-primary buys only secure the route when the same purchase top-decks and gains Counter Watch through Full Crew Discount/coverage, Opening Counter Prep, or Dockside Rush; discard-only route-primary buys now stay in discard, keep the route-primary shop guarantee alive, and leave Route Starter Cache Prep/Pass-Off available. Validated with JS syntax checks, targeted opening route shop, opening deckhand/pass-off, Dockside rush, Opening Prep, route bounty, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-135848.log`.

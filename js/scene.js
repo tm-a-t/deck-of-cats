@@ -1751,6 +1751,69 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  openingDeckhandScoutPayState(pirate, opts = {}) {
+    if (this.isBattleTest()
+      || !pirate
+      || !pirate.type
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || G.openingDeckhandScoutPaid
+      || Math.max(0, Math.floor(Number(G.round) || 0)) !== 1
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || !G.map
+      || !Number.isFinite(G.map.currentLayer)
+      || G.map.currentLayer !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const sentSlot = opts.sentSlot != null
+      ? Math.floor(Number(opts.sentSlot))
+      : (Array.isArray(G.sent) && Array.isArray(G.hand)
+        ? G.sent.indexOf(G.hand.findIndex(candidate => candidate && candidate.id === pirate.id))
+        : -1);
+    if (sentSlot !== 0) return null;
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    if (!intel || boardingNo !== 1 || !intel.mainKey) return null;
+
+    const starterTypes = openingDeckhandCounterTypes(intel.mainKey, boardingNo, { mode: G.mode });
+    if (!starterTypes.includes(pirate.type)) return null;
+    if (!this.pirateStillInCrew(pirate)) return null;
+    if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return null;
+
+    return {
+      mainKey: intel.mainKey,
+      boardingNo,
+      starterType: pirate.type,
+      sentSlot,
+      amount: 1,
+      label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
+    };
+  }
+
+  applyOpeningDeckhandScoutPay(pirate, opts = {}) {
+    const state = this.openingDeckhandScoutPayState(pirate, opts);
+    if (!state) return null;
+    G.openingDeckhandScoutPaid = true;
+    G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + state.amount;
+    const reward = { ...state, applied: true };
+    if (!opts.silent) this.showOpeningDeckhandScoutPay(reward);
+    return reward;
+  }
+
+  showOpeningDeckhandScoutPay(reward, x = null, y = null) {
+    if (!reward || !this.L) return;
+    const fx = Number.isFinite(x) ? x : this.L.cx;
+    const fy = Number.isFinite(y) ? y : this.endActionY() - 54 * this.L.k;
+    const amount = Math.max(1, Math.floor(Number(reward.amount) || 1));
+    this.effectText(fx, fy, `Deckhand Scout +${amount > 1 ? amount : ''}${RES_EMOJI.enthusiasm}`, '#ffca28', 760);
+  }
+
   routeCounterBadgeForCard(pirate) {
     const state = this.openingRouteCounterState();
     if (!state || !pirate || pirate.type !== state.starterType) return null;
@@ -2529,17 +2592,22 @@ class GameScene extends Phaser.Scene {
         ghost.destroy();
         this._sendingToIsland.delete(idx);
         const result = this.resolveIsland(p);
-        const sentSlot = Math.max(0, G.sent.indexOf(idx));
-        const effectPos = this.sentCardIslandEffectPosition(sentSlot);
+        const sentSlot = G.sent.indexOf(idx);
+        const effectSlot = Math.max(0, sentSlot);
+        const effectPos = this.sentCardIslandEffectPosition(effectSlot);
 
         const isSacrifice = G.island && G.island.sacrifice;
         if (isSacrifice) {
           this.sacrificePirate(p, effectPos.x, effectPos.y);
         }
+        const scoutPay = this.applyOpeningDeckhandScoutPay(p, { sentSlot, silent: true });
         const cacheClaim = this.claimScoutedCounterCache(p, { silent: true });
 
         this.renderAll();
-        const effect = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
+        const effect = this.showIslandResult(p, effectSlot, result, effectPos.x, effectPos.y);
+        if (scoutPay) {
+          this.showOpeningDeckhandScoutPay(scoutPay, effectPos.x, effectPos.y + 44 * L.k);
+        }
         if (cacheClaim && cacheClaim.cacheGrant) {
           this.showScoutedCounterCacheResult(cacheClaim.cacheGrant, effectPos.x, effectPos.y - 44 * L.k);
         }

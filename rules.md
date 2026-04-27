@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, `Counter Watch`, the opening route counter secured marker, bought-pirate marker, `Opening Route Muster`, and Cache Drill bounty marks: `0`/empty.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, `Counter Watch`, the opening route counter secured marker, bought-pirate marker, `Opening Deckhand Scout Pay`, `Opening Route Muster`, and Cache Drill bounty marks: `0`/empty.
 - Starting hand: up to 5 pirates.
 - Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -46,6 +46,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Opening Deckhand Counter` types count for Cache Drill, Short Crew counter Alert refunds and `Counter Watch`, `Counter Watch` readiness, `Counter Ambush`, `Counter Edge`, `Counter Trophy`, and `Ambush Bounty` eligibility.
 - `Opening Deckhand Counter` types do not count for shop generation, shop counter purchase quotes, `Top deck` purchases, `Opening Counter Prep` purchases, `Prepared` counter purchases, or `Full Crew Discount` coverage, because starter pirates are never sold in the shop.
 - `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
+- `Opening Deckhand Scout Pay` happens once per regular run: on round `1`, on the layer-0 selected opening island, before Boarding 1, if the first sent pirate is the selected route's matching `Opening Deckhand Counter` starter and is still in the crew after its island action and any island removal, gain `+1☠️`.
+- `Opening Deckhand Scout Pay` is normal Shop currency only. It adds no `Boarding Alert`, grants no weapon, `Might`, `Tempo`, `Counter Watch`, `Opening Counter Prep`, `Prepared` gains, `Full Crew Discount`, route-secured marker, Cache Drill reward, Cache Drill bounty mark, Route Starter Pass-Off, or cache claim.
+- `Opening Deckhand Scout Pay` never applies in `Battle Test`, on layer-1 cache islands, after Boarding 1, after round `1`, to nonmatching starters, to matching starters sent second or later, to zero-send openings, or to starters removed by the island before the pay check.
 - Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island does not immediately grant that cache's stored resource, stored `☠️`, or stored `Boarding Alert`.
