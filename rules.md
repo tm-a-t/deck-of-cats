@@ -127,6 +127,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Bought pirates normally go straight to discard, not to hand.
 - Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
+- Separate opening exception: during rounds `1` and `2` before any boarding has happened, the first successful non-counter pirate purchase that spends `Full Crew Discount` goes on top of the draw pile instead of discard as an `Opening Full Crew Report`.
+- `Opening Full Crew Report` can still use `Dockside Credit` for any remaining missing `☠️` after the discount; the missing `☠️` adds normal pending `Boarding Alert`, and the bought non-counter still top-decks once.
+- `Opening Full Crew Report` never grants `Counter Watch`, never becomes `Watch Ready`, never creates `Prepared`, never gains `Opening Counter Prep` Might, never shows counter payoff text, and never receives counter ambush benefits. If `Opening Counter Prep` is also active, that prep is consumed by the non-counter purchase with no benefit.
 - On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
 - Sending a watched pirate spends `Counter Watch` unless that same sent pirate earns a new eligible counter `Short Crew Drill` that re-marks `Counter Watch`; Cache Drill and non-counter Short Crew report markers still work normally but do not preserve the watch.
 - When a regular-run boarding starts, `Counter Watch` clears. Any watched pirate that is still owned, in the current hand, not `🩹 Wounded`, and whose type counters that boarding's main scouted enemy becomes `Watch Ready` for that boarding.
@@ -145,8 +148,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If `Full Crew Discount` or `Opening Counter Prep` is spent on a non-counter first, a later `Top deck` counter purchase in the same Shop is not `Prepared` and gains no prep `Might`.
 - `Prepared` does not pay ship costs, grant ship resource or `☠️` outputs, target the leftmost island pirate, consume a ship action, or apply in `Battle Test`.
 - Prepared weapons and buffs are permanent and use the normal weapon replacement and buff stacking rules.
-- The draw pile top is the next card drawn. If multiple eligible counter pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible counter is drawn first.
-- Non-counter purchases, purchases when no ship is scouted, purchases when the scouted ship is more than `3` turns away, and all `Battle Test` purchases still go to discard.
+- The draw pile top is the next card drawn. If multiple Shop `Top deck` pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible purchase is drawn first.
+- Except for `Opening Full Crew Report`, non-counter purchases, purchases when no ship is scouted, purchases when the scouted ship is more than `3` turns away, and all `Battle Test` purchases still go to discard.
 - The player may buy any number of pirates as long as enough `☠️` remains.
 - `Full Crew Discount`, if earned by filling every island send slot, reduces the effective cost of the first pirate bought in the next Shop by `1☠️`.
 - The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.

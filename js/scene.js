@@ -1453,13 +1453,14 @@ class GameScene extends Phaser.Scene {
     const def = TYPES[type];
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
     const counter = !!(def && this.isScoutedCounterShopType(type));
-    const topDeck = !!(def && this.counterRecruitReportsEarly(type));
+    const scoutedCounterTopDeck = !!(def && this.counterRecruitReportsEarly(type));
     if (!def) {
       return {
         canBuy: false,
         credit: false,
         counter: false,
         topDeck: false,
+        openingFullCrewReport: false,
         preparedCounter: false,
         cost,
         effectiveCost: cost,
@@ -1498,15 +1499,28 @@ class GameScene extends Phaser.Scene {
       : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
     const phase = source.phase != null ? source.phase : G.phase;
     const mode = source.mode != null ? source.mode : G.mode;
+    const openingFullCrewReport = !!(
+      mode !== 'battleTest'
+      && !this.isBattleTest()
+      && (isProjection || phase === 'shopping')
+      && round >= 1
+      && round <= 2
+      && boardingCount === 0
+      && discount > 0
+      && !counter
+      && !scoutedCounterTopDeck
+    );
+    const topDeck = !!(scoutedCounterTopDeck || openingFullCrewReport);
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
-    const preparedCounter = !!(topDeck && hasPreparedGains && discountPreparesCounter);
-    const openingCounterPrepMight = !!(topDeck && counter && openingCounterPrep);
+    const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
+    const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
     const consumesOpeningCounterPlan = !!openingCounterPrep;
     const shared = {
       openingCounterPlan: openingCounterPrep,
       openingCounterPrep,
       openingCounterPrepMight,
+      openingFullCrewReport,
       consumesOpeningCounterPlan,
       consumesOpeningCounterPrep: consumesOpeningCounterPlan,
     };
@@ -1638,12 +1652,13 @@ class GameScene extends Phaser.Scene {
     const prep = quote.openingCounterPrep
       ? (quote.openingCounterPrepMight ? ', Opening Prep +💪' : ', spends Opening Prep')
       : '';
+    const report = quote.openingFullCrewReport ? ', Full Crew report' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prep}${prepared}${topDeck}${covered}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${report}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -2439,6 +2454,7 @@ class GameScene extends Phaser.Scene {
     const p = mkP(type);
     G.allCrew.push(p);
     const toTopDeck = !!quote.topDeck;
+    const watchCounter = !!(quote.counter && quote.topDeck);
     const prepMight = quote.openingCounterPrepMight
       ? this.applyPersonalGainsToPirate(p, [{ buff: 'might', count: 1 }])
       : null;
@@ -2447,7 +2463,7 @@ class GameScene extends Phaser.Scene {
       : null;
     if (toTopDeck) {
       G.deck.push(p);
-      this.markCounterWatch(p);
+      if (watchCounter) this.markCounterWatch(p);
     } else {
       G.discard.push(p);
     }
@@ -2464,9 +2480,10 @@ class GameScene extends Phaser.Scene {
         ? (quote.openingCounterPrepMight ? ' Opening Prep' : ' Prep spent')
         : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
+      const reportText = quote.openingFullCrewReport ? ' Full Crew report' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
-      const deckText = toTopDeck ? ' Top deck, Watch' : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + alertText + preparedText + deckText, '#66bb6a');
+      const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + reportText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

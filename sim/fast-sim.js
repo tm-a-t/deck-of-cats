@@ -620,27 +620,40 @@ function shopPurchaseQuote(api, G, type) {
     && typeof api.isScoutedCounterShopType === 'function'
     && api.isScoutedCounterShopType(type, G && G.map, { mode: G && G.mode })
   );
-  const topDeck = counterRecruitReportsEarlyForQuote(api, G, type, counter);
+  const scoutedCounterTopDeck = counterRecruitReportsEarlyForQuote(api, G, type, counter);
   const discount = Math.min(cost, activeFullCrewDiscount(G));
   const effectiveCost = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
   const openingCounterPlan = activeOpeningCounterPlan(G);
   const boardingCount = Math.max(0, Math.floor(Number(G && G.boardingCount) || 0));
+  const openingFullCrewReport = !!(
+    G
+    && G.mode !== 'battleTest'
+    && G.phase === 'shopping'
+    && Math.max(0, Math.floor(Number(G.round) || 0)) >= 1
+    && Math.max(0, Math.floor(Number(G.round) || 0)) <= 2
+    && boardingCount === 0
+    && discount > 0
+    && !counter
+    && !scoutedCounterTopDeck
+  );
+  const topDeck = !!(scoutedCounterTopDeck || openingFullCrewReport);
   const discountPreparesCounter = discount > 0 && boardingCount > 0;
-  const preparedCounter = !!(topDeck
+  const preparedCounter = !!(scoutedCounterTopDeck
     && preparedCounterGainsForQuote(api, type).length
     && discountPreparesCounter);
-  const openingCounterPrepMight = !!(topDeck && counter && openingCounterPlan);
+  const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPlan);
   const consumesOpeningCounterPlan = !!openingCounterPlan;
   const shared = {
     openingCounterPlan,
     openingCounterPrep: openingCounterPlan,
     openingCounterPrepMight,
+    openingFullCrewReport,
     consumesOpeningCounterPlan,
     consumesOpeningCounterPrep: consumesOpeningCounterPlan,
   };
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
+    return { canBuy: false, credit: false, counter: false, topDeck: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
   }
   if (enthusiasm >= effectiveCost) {
     return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, fullCrewCoverage: 0, ...shared };
@@ -656,7 +669,7 @@ function shopPurchaseQuote(api, G, type) {
     && discount > 0
     && !openingCounterPlan
     && counter
-    && topDeck
+    && scoutedCounterTopDeck
     && nextMainKey === 'shellback'
     && missing === 1
     ? 1
@@ -2208,9 +2221,55 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
+    const { G, oldTop } = setupPurchase({
+      type: 'herald',
+      enthusiasm: 1,
+      fullCrewDiscount: 1,
+      round: 1,
+    });
+    const quote = scene.shopPurchaseQuote('herald');
+    const directQuote = shopPurchaseQuote(api, G, 'herald');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && !quote.credit, `opening Full Crew report quote was not affordable normally: ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(!quote.counter && quote.topDeck && quote.openingFullCrewReport, `opening non-counter report quote mismatch: ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(!quote.counterPayoff && !quote.openingCounterPrepMight && !quote.preparedCounter, `opening non-counter report gained counter perks: ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(directQuote.topDeck && directQuote.openingFullCrewReport && !directQuote.counter, `sim helper missed opening Full Crew report: ${JSON.stringify(directQuote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'herald', 'opening Full Crew report buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'opening Full Crew report was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'opening Full Crew report also appeared in discard');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).length === 0, 'opening non-counter report gained Counter Watch');
+    assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0 && G.enthusiasm === 0, `opening report did not spend discount/currency: discount=${G.fullCrewDiscount} enthusiasm=${G.enthusiasm}`);
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === bought, 'opening Full Crew report was not drawn into the next hand');
+    assertCounterRecruitsReportEarlyCheck(!oldTop || G.hand[1] === oldTop, 'opening Full Crew report did not stay above the previous deck top');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).length === 0, 'opening Full Crew report created Counter Watch after Continue');
+    results.push({ name: 'round-1 Full Crew Discount non-counter reports to the next hand without Counter Watch or counter perks', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'trainer',
+      enthusiasm: 1,
+      fullCrewDiscount: 1,
+      round: 2,
+    });
+    const quote = scene.shopPurchaseQuote('trainer');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.discount === 1 && quote.topDeck && quote.openingFullCrewReport, `opening credit report quote mismatch: ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.alert === 1 && !quote.counter && !quote.preparedCounter && !quote.openingCounterPrepMight, `opening credit report gained wrong perks/Alert: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'Dockside Credit Full Crew report was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(G.boardingAlert === 1, `Dockside Credit Full Crew report Alert ${G.boardingAlert} !== 1`);
+    assertCounterRecruitsReportEarlyCheck(G.shopCreditUsed === true, 'Dockside Credit Full Crew report did not consume shop credit');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).length === 0, 'Dockside Credit non-counter report gained Counter Watch');
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === bought, 'Dockside Credit Full Crew report was not drawn into the next hand');
+    results.push({ name: 'round-2 Dockside Credit can cover a Full Crew non-counter report and still adds normal Alert', ok: true });
+  }
+
+  {
     const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.openingFullCrewReport && !quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
     assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 3 && quote.counterPayoff.guardsRemoved === 1 && quote.counterPayoff.bountyRes === 'stone', `eligible quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
@@ -2383,7 +2442,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   {
     const { G } = setupPurchase({ type: 'trainer', enthusiasm: 3 });
     const quote = scene.shopPurchaseQuote('trainer');
-    assertCounterRecruitsReportEarlyCheck(!quote.counter && !quote.counterPayoff, `non-counter quote exposed payoff: ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(!quote.counter && !quote.topDeck && !quote.openingFullCrewReport && !quote.counterPayoff, `non-counter quote exposed report/payoff: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'trainer', 'non-counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'non-counter did not go to discard');
@@ -2507,6 +2566,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(firstQuote.canBuy && firstQuote.discount === 1 && !firstQuote.topDeck && !firstQuote.preparedCounter, `non-counter quote was ${JSON.stringify(firstQuote)}`);
     const first = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(first && first.type === 'herald', 'discount non-counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(first) && !G.deck.includes(first), 'post-boarding discount non-counter did not go to discard');
     assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'non-counter buy did not consume Full Crew Discount');
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 3, `non-counter discount spend left ${G.enthusiasm} enthusiasm`);
     const quote = scene.shopPurchaseQuote('sawbones');

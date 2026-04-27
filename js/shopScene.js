@@ -340,6 +340,7 @@ class ShopScene extends Phaser.Scene {
       if (quote.counter) tags.push('Counter');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
       else if (quote.openingCounterPrep) tags.push('Opening Prep');
+      if (quote.openingFullCrewReport) tags.push('Full Crew report');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
       if (coverage > 0) tags.push('Full Crew cover');
@@ -655,9 +656,10 @@ class ShopScene extends Phaser.Scene {
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingCounterPrepMight ? ' Opening Prep +💪' : ' Prep spent')
         : '';
+      const reportText = quote.openingFullCrewReport ? ' Full Crew report' : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + alertText + preparedText + deckText, '#66bb6a');
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + reportText + alertText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });
