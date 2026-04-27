@@ -651,7 +651,7 @@ function shopPurchaseQuote(api, G, type) {
   );
   const scoutedCounterTopDeck = counterRecruitReportsEarlyForQuote(api, G, type, counter);
   const discount = Math.min(cost, activeFullCrewDiscount(G));
-  const effectiveCost = Math.max(0, cost - discount);
+  const costAfterDiscount = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
   const openingCounterPlan = activeOpeningCounterPlan(G);
   const boardingCount = Math.max(0, Math.floor(Number(G && G.boardingCount) || 0));
@@ -663,21 +663,24 @@ function shopPurchaseQuote(api, G, type) {
     && preparedCounterGainsForQuote(api, type).length
     && discountPreparesCounter);
   const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPlan);
+  const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
+  const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
   const consumesOpeningCounterPlan = !!openingCounterPrepMight;
   const shared = {
     openingCounterPlan,
     openingCounterPrep: openingCounterPrepMight,
     openingCounterPrepMight,
+    openingCounterPrepDiscount,
     openingCommissionReport,
     openingFullCrewReport,
     consumesOpeningCounterPlan,
     consumesOpeningCounterPrep: consumesOpeningCounterPlan,
   };
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, topDeck: false, openingCommissionReport: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
+    return { canBuy: false, credit: false, counter: false, topDeck: false, openingCommissionReport: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, openingCounterPrepDiscount: 0, missing: 0, alert: 0, spend: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
   }
   if (enthusiasm >= effectiveCost) {
-    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, fullCrewCoverage: 0, ...shared };
+    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, fullCrewCoverage: 0, ...shared };
   }
   const missing = effectiveCost - enthusiasm;
   const shopCreditUsed = !!G.shopCreditUsed;
@@ -704,12 +707,13 @@ function shopPurchaseQuote(api, G, type) {
       preparedCounter,
       cost,
       effectiveCost,
-      discount,
-      missing,
-      alert: 0,
-      fullCrewCoverage,
-      ...shared,
-    };
+        discount,
+        missing,
+        alert: 0,
+        spend: Math.max(0, effectiveCost - fullCrewCoverage),
+        fullCrewCoverage,
+        ...shared,
+      };
   }
   const canCredit = G.mode !== 'battleTest'
     && G.phase === 'shopping'
@@ -725,9 +729,10 @@ function shopPurchaseQuote(api, G, type) {
     cost,
     effectiveCost,
     discount,
-    missing,
-    alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
-    fullCrewCoverage: 0,
+      missing,
+      alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
+      spend: canCredit ? enthusiasm : 0,
+      fullCrewCoverage: 0,
     ...shared,
     consumesOpeningCounterPlan: !!(consumesOpeningCounterPlan && canCredit),
     consumesOpeningCounterPrep: !!(consumesOpeningCounterPlan && canCredit),
@@ -2102,11 +2107,11 @@ function runOpeningCounterSubsidyChecks(runtime) {
       opts: { type: 'needler', enthusiasm: 1, fullCrewDiscount: 1, shopCreditUsed: true },
       expect: { canBuy: false, credit: false, alert: 0, prepared: false },
     },
-    {
-      name: 'Opening Counter Prep blocks Full Crew coverage and still gives the counter +Might',
-      opts: { type: 'sawbones', mainKey: 'powderBomber', enthusiasm: 1, fullCrewDiscount: 1, openingCounterPlan: true },
-      expect: { canBuy: true, credit: true, alert: 1, prepared: false, prepMight: true },
-    },
+      {
+        name: 'Opening Counter Prep applies after Full Crew Discount and still gives the counter +Might',
+        opts: { type: 'sawbones', mainKey: 'powderBomber', enthusiasm: 1, fullCrewDiscount: 1, openingCounterPlan: true },
+        expect: { canBuy: true, credit: false, alert: 0, prepared: false, prepMight: true, prepDiscount: 1, effectiveCost: 1, spend: 1 },
+      },
   ];
 
   cases.forEach(({ name, opts, expect }) => {
@@ -2119,10 +2124,17 @@ function runOpeningCounterSubsidyChecks(runtime) {
     assertOpeningCounterSubsidyCheck(!!quote.credit === !!expect.credit, `${name} credit ${quote.credit} !== ${expect.credit}`);
     assertOpeningCounterSubsidyCheck(Math.max(0, quote.alert || 0) === expect.alert, `${name} alert ${quote.alert} !== ${expect.alert}`);
     assertOpeningCounterSubsidyCheck(!!quote.preparedCounter === !!expect.prepared, `${name} prepared ${quote.preparedCounter} !== ${expect.prepared}`);
-    if (expect.prepMight != null) {
-      assertOpeningCounterSubsidyCheck(!!quote.openingCounterPrepMight === !!expect.prepMight, `${name} prep Might ${quote.openingCounterPrepMight} !== ${expect.prepMight}`);
-      assertOpeningCounterSubsidyCheck(!!directQuote.openingCounterPrepMight === !!expect.prepMight, `${name} sim prep Might ${directQuote.openingCounterPrepMight} !== ${expect.prepMight}`);
-    }
+      if (expect.prepMight != null) {
+        assertOpeningCounterSubsidyCheck(!!quote.openingCounterPrepMight === !!expect.prepMight, `${name} prep Might ${quote.openingCounterPrepMight} !== ${expect.prepMight}`);
+        assertOpeningCounterSubsidyCheck(!!directQuote.openingCounterPrepMight === !!expect.prepMight, `${name} sim prep Might ${directQuote.openingCounterPrepMight} !== ${expect.prepMight}`);
+      }
+      if (expect.prepDiscount != null) {
+        assertOpeningCounterSubsidyCheck((quote.openingCounterPrepDiscount || 0) === expect.prepDiscount, `${name} prep discount ${quote.openingCounterPrepDiscount || 0} !== ${expect.prepDiscount}`);
+        assertOpeningCounterSubsidyCheck((directQuote.openingCounterPrepDiscount || 0) === expect.prepDiscount, `${name} sim prep discount ${directQuote.openingCounterPrepDiscount || 0} !== ${expect.prepDiscount}`);
+      }
+      if (expect.effectiveCost != null) {
+        assertOpeningCounterSubsidyCheck(quote.effectiveCost === expect.effectiveCost && quote.spend === expect.spend, `${name} economics ${quote.effectiveCost}/${quote.spend} !== ${expect.effectiveCost}/${expect.spend}`);
+      }
     if (expect.planNoCovered) {
       const plan = scene.shopPlanText();
       assertOpeningCounterSubsidyCheck(!plan.includes('covers'), `${name} displayed coverage: ${plan}`);
@@ -2211,15 +2223,16 @@ function runOpeningCounterPlanChecks(runtime) {
     assertOpeningCounterPlanCheck(G.openingCounterPlan === true, 'eligible one-short did not grant Opening Counter Prep');
     assertOpeningCounterPlanCheck(G.fullCrewDiscount === 0, 'one-short unexpectedly granted Full Crew Discount');
 
-    const quote = scene.shopPurchaseQuote('sawbones');
-    const directQuote = shopPurchaseQuote(api, G, 'sawbones');
-    assertOpeningCounterPlanCheck(quote.canBuy && !quote.credit, `prep counter quote was not affordable normally: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(quote.counter && quote.topDeck && quote.openingCounterPrepMight && !quote.preparedCounter, `prep counter quote was not +Might top-deck: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(quote.discount === 0 && quote.fullCrewCoverage === 0, `prep quote economics mismatch: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(directQuote.openingCounterPrepMight && !directQuote.preparedCounter && directQuote.fullCrewCoverage === 0, `sim helper quote missed prep: ${JSON.stringify(directQuote)}`);
-    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'prep counter buy failed');
-    assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'Opening Counter Prep was not consumed');
+      const quote = scene.shopPurchaseQuote('sawbones');
+      const directQuote = shopPurchaseQuote(api, G, 'sawbones');
+      assertOpeningCounterPlanCheck(quote.canBuy && !quote.credit, `prep counter quote was not affordable normally: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.counter && quote.topDeck && quote.openingCounterPrepMight && !quote.preparedCounter, `prep counter quote was not +Might top-deck: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.discount === 0 && quote.openingCounterPrepDiscount === 1 && quote.effectiveCost === 2 && quote.spend === 2 && quote.fullCrewCoverage === 0, `prep quote economics mismatch: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(directQuote.openingCounterPrepMight && directQuote.openingCounterPrepDiscount === 1 && directQuote.effectiveCost === 2 && !directQuote.preparedCounter && directQuote.fullCrewCoverage === 0, `sim helper quote missed prep: ${JSON.stringify(directQuote)}`);
+      const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+      assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'prep counter buy failed');
+      assertOpeningCounterPlanCheck(G.enthusiasm === 1, `prep counter did not spend discounted cost: ${G.enthusiasm}`);
+      assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'Opening Counter Prep was not consumed');
     assertOpeningCounterPlanCheck(G.deck[G.deck.length - 1] === bought, 'prep counter was not placed on top of deck');
     assertOpeningCounterPlanCheck((G.counterWatchIds || []).includes(bought.id), 'prep counter did not gain Counter Watch');
     assertOpeningCounterPlanCheck(!bought.weaponKey && bought.might === 1, `prep Sawbones did not gain only +1 Might: ${JSON.stringify(bought)}`);
@@ -2237,7 +2250,7 @@ function runOpeningCounterPlanChecks(runtime) {
     assertOpeningCounterPlanCheck((G.counterWatchIds || []).length === 0, 'non-counter first buy gained Counter Watch');
     assertOpeningCounterPlanCheck(!first.weaponKey && (first.might || 0) === 0 && (first.tempo || 0) === 0, `non-counter first buy gained counter/prep perks: ${JSON.stringify(first)}`);
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertOpeningCounterPlanCheck(quote.canBuy && quote.topDeck && !quote.preparedCounter && quote.openingCounterPrepMight && quote.consumesOpeningCounterPlan, `later counter did not keep banked prep: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.canBuy && quote.topDeck && !quote.preparedCounter && quote.openingCounterPrepMight && quote.openingCounterPrepDiscount === 1 && quote.effectiveCost === 2 && quote.consumesOpeningCounterPlan, `later counter did not keep banked prep: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'later counter buy failed');
     assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'later counter did not consume banked Opening Counter Prep');
@@ -2271,7 +2284,7 @@ function runOpeningCounterPlanChecks(runtime) {
     assertOpeningCounterPlanCheck(G.fullCrewDiscount === 0 && G.openingCounterPlan === true, 'Full Crew non-counter buy did not spend only discount');
     assertOpeningCounterPlanCheck(G.discard.includes(bought) && !G.deck.includes(bought) && (G.counterWatchIds || []).length === 0, 'Full Crew non-counter changed discard/watch behavior');
     const counterQuote = scene.shopPurchaseQuote('sawbones');
-    assertOpeningCounterPlanCheck(counterQuote.canBuy && counterQuote.topDeck && counterQuote.openingCounterPrepMight && counterQuote.discount === 0, `counter after Full Crew non-counter did not keep prep: ${JSON.stringify(counterQuote)}`);
+      assertOpeningCounterPlanCheck(counterQuote.canBuy && counterQuote.topDeck && counterQuote.openingCounterPrepMight && counterQuote.openingCounterPrepDiscount === 1 && counterQuote.effectiveCost === 2 && counterQuote.discount === 0, `counter after Full Crew non-counter did not keep prep: ${JSON.stringify(counterQuote)}`);
     const counter = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningCounterPlanCheck(counter && counter.type === 'sawbones', 'counter after Full Crew non-counter buy failed');
     assertOpeningCounterPlanCheck(G.openingCounterPlan === false && G.deck[G.deck.length - 1] === counter && counter.might === 1, `counter after Full Crew non-counter missed prep: ${JSON.stringify(counter)}`);
@@ -2301,21 +2314,21 @@ function runOpeningCounterPlanChecks(runtime) {
   }
 
   {
-    const G = setupShop({ openingCounterPlan: true, fullCrewDiscount: 1, shop: ['sawbones'], enthusiasm: 2 });
-    const quote = scene.shopPurchaseQuote('sawbones');
-    assertOpeningCounterPlanCheck(quote.canBuy && quote.discount === 1 && quote.effectiveCost === 2, `discount+prep quote changed price: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(quote.openingCounterPrepMight && !quote.preparedCounter && quote.fullCrewCoverage === 0, `pre-boarding prep did not own +Might with Full Crew Discount present: ${JSON.stringify(quote)}`);
-    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningCounterPlanCheck(bought && !bought.weaponKey && bought.might === 1, `discount+prep counter did not gain only +1 Might: ${JSON.stringify(bought)}`);
-    assertOpeningCounterPlanCheck(G.fullCrewDiscount === 0 && G.openingCounterPlan === false, 'discount+prep buy did not consume both shop flags');
-    results.push({ name: 'Opening Counter Prep grants +1 Might even when Full Crew Discount changes the price', ok: true });
-  }
+      const G = setupShop({ openingCounterPlan: true, fullCrewDiscount: 1, shop: ['sawbones'], enthusiasm: 2 });
+      const quote = scene.shopPurchaseQuote('sawbones');
+      assertOpeningCounterPlanCheck(quote.canBuy && quote.discount === 1 && quote.openingCounterPrepDiscount === 1 && quote.effectiveCost === 1 && quote.spend === 1, `discount+prep quote changed price: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.openingCounterPrepMight && !quote.preparedCounter && quote.fullCrewCoverage === 0, `pre-boarding prep did not own +Might with Full Crew Discount present: ${JSON.stringify(quote)}`);
+      const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+      assertOpeningCounterPlanCheck(bought && !bought.weaponKey && bought.might === 1, `discount+prep counter did not gain only +1 Might: ${JSON.stringify(bought)}`);
+      assertOpeningCounterPlanCheck(G.enthusiasm === 1 && G.fullCrewDiscount === 0 && G.openingCounterPlan === false, 'discount+prep buy did not consume both shop flags or discounted spend');
+      results.push({ name: 'Opening Counter Prep grants +1 Might even when Full Crew Discount changes the price', ok: true });
+    }
 
   {
-    const G = setupShop({ openingCounterPlan: true, mainKey: 'shellback', shop: ['needler'], enthusiasm: 3 });
-    const quote = scene.shopPurchaseQuote('needler');
-    assertOpeningCounterPlanCheck(quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight, `Shellback prep quote missed +Might: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(!quote.preparedCounter && quote.fullCrewCoverage === 0, `Shellback prep quote incorrectly prepared or covered: ${JSON.stringify(quote)}`);
+      const G = setupShop({ openingCounterPlan: true, mainKey: 'shellback', shop: ['needler'], enthusiasm: 3 });
+      const quote = scene.shopPurchaseQuote('needler');
+      assertOpeningCounterPlanCheck(quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight, `Shellback prep quote missed +Might: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.openingCounterPrepDiscount === 1 && quote.effectiveCost === 2 && !quote.preparedCounter && quote.fullCrewCoverage === 0, `Shellback prep quote incorrectly priced, prepared, or covered: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningCounterPlanCheck(bought && bought.type === 'needler', 'Shellback prep Needler buy failed');
     assertOpeningCounterPlanCheck(G.deck[G.deck.length - 1] === bought, 'Shellback prep Needler did not top-deck');
@@ -2325,10 +2338,10 @@ function runOpeningCounterPlanChecks(runtime) {
   }
 
   {
-    const G = setupShop({ openingCounterPlan: true, shop: ['sawbones'], enthusiasm: 2 });
-    const quote = scene.shopPurchaseQuote('sawbones');
-    assertOpeningCounterPlanCheck(quote.canBuy && quote.credit && quote.alert === 1 && quote.consumesOpeningCounterPlan, `prep should use Dockside Credit for missing one: ${JSON.stringify(quote)}`);
-    assertOpeningCounterPlanCheck(quote.openingCounterPrepMight && quote.fullCrewCoverage === 0, `prep incorrectly triggered Full Crew coverage: ${JSON.stringify(quote)}`);
+      const G = setupShop({ openingCounterPlan: true, shop: ['sawbones'], enthusiasm: 1 });
+      const quote = scene.shopPurchaseQuote('sawbones');
+      assertOpeningCounterPlanCheck(quote.canBuy && quote.credit && quote.alert === 1 && quote.missing === 1 && quote.spend === 1 && quote.consumesOpeningCounterPlan, `prep should use Dockside Credit only for the post-discount missing one: ${JSON.stringify(quote)}`);
+      assertOpeningCounterPlanCheck(quote.openingCounterPrepMight && quote.openingCounterPrepDiscount === 1 && quote.effectiveCost === 2 && quote.fullCrewCoverage === 0, `prep incorrectly priced or triggered Full Crew coverage: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'Dockside Credit prep counter buy failed');
     assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'Dockside Credit prep counter did not consume Opening Counter Prep');
@@ -2596,13 +2609,21 @@ function runOpeningRouteCounterShopChecks(runtime) {
       { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
     );
     assertRouteFocusedShop(G.shop, `${label} Opening Prep shop`, primary);
-    const quote = scene.shopPurchaseQuote(primary);
-    assertOpeningRouteCounterShopCheck(
-      quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight && quote.consumesOpeningCounterPlan,
-      `${label} Opening Counter Prep quote missed top-deck +Might: ${JSON.stringify(quote)}`
-    );
-    const bought = scene.buyPirate(G.shop.indexOf(primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningRouteCounterShopCheck(bought && bought.type === primary, `${label} Opening Prep ${primary} buy failed`);
+      const quote = scene.shopPurchaseQuote(primary);
+      assertOpeningRouteCounterShopCheck(
+        quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight && quote.consumesOpeningCounterPlan,
+        `${label} Opening Counter Prep quote missed top-deck +Might: ${JSON.stringify(quote)}`
+      );
+      assertOpeningRouteCounterShopCheck(
+        quote.cost === api.TYPES[primary].cost
+          && quote.openingCounterPrepDiscount === 1
+          && quote.effectiveCost === Math.max(0, quote.cost - 1)
+          && quote.spend === quote.effectiveCost,
+        `${label} Opening Prep ${primary} discount mismatch: ${JSON.stringify(quote)}`
+      );
+      const bought = scene.buyPirate(G.shop.indexOf(primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+      assertOpeningRouteCounterShopCheck(bought && bought.type === primary, `${label} Opening Prep ${primary} buy failed`);
+      assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `${label} Opening Prep ${primary} did not leave the discounted 1☠️: ${G.enthusiasm}`);
     assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} Opening Prep was not consumed`);
     assertOpeningRouteCounterShopCheck(G.openingRouteCounterBoughtMainKey === mainKey, `${label} Opening Prep primary buy did not mark route counter as bought`);
     assertOpeningRouteCounterShopCheck((bought.might || 0) === 1 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} Opening Prep ${primary} upgrades wrong: ${JSON.stringify(bought)}`);
@@ -3269,7 +3290,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const partialLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
     assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
-    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Prep') && partialLine.includes('Opening Prep +💪') && partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should expose Opening Counter Prep Might: ${partialLine}`);
+      assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Prep') && partialLine.includes('Opening Prep -1☠️ +💪') && partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should expose Opening Counter Prep discount and Might: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && !fullLine.includes('prepared') && fullLine.includes('top deck'), `pre-boarding full-send plan should top-deck without preparation: ${fullLine}`);
     assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+🪨'), `End-now plan missing unprepared counter payoff: ${endLine}`);
     assertCounterRecruitsReportEarlyCheck(partialLine.includes('Vs Powder Bomber') && partialLine.includes('Ambush 5') && partialLine.includes('cut 2 guards') && partialLine.includes('+🪨'), `partial plan missing Opening Prep armed counter payoff: ${partialLine}`);
@@ -5668,7 +5689,7 @@ async function runShoppingPhase(
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
       if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
-      else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep +💪)`);
+        else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);

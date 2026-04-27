@@ -335,9 +335,12 @@ class ShopScene extends Phaser.Scene {
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
+      const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
+      const priceReduced = effectiveCost < Math.max(0, Math.floor(Number(def.cost) || 0));
       const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
+      if (prepDiscount > 0) tags.push('Opening Prep -1☠️');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
@@ -345,12 +348,12 @@ class ShopScene extends Phaser.Scene {
       const payoffLines = quote.counterPayoff && Array.isArray(quote.counterPayoff.shopLines)
         ? quote.counterPayoff.shopLines
         : [];
-      const priceLine = quote.discount > 0
+      const priceLine = priceReduced
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
       const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
-        ? (quote.openingCounterPrepMight ? 'Opening Prep +💪' : 'Opening Prep spent')
+        ? (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent')
         : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
@@ -359,8 +362,8 @@ class ShopScene extends Phaser.Scene {
         coveredLine,
         planLine,
       ].filter(Boolean).join('\n');
-      const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
+      const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, priceReduced ? '#177C05' : UI_THEME.colors.ink, {
+        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((priceReduced || quote.counter) ? 13 : 14)))),
         align: 'center',
         lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
@@ -650,9 +653,10 @@ class ShopScene extends Phaser.Scene {
       G.shopAnimating = false;
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ' Opening Prep +💪' : ' Prep spent')
+        ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent')
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';

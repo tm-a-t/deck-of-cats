@@ -1724,6 +1724,7 @@ class GameScene extends Phaser.Scene {
         openingCounterPlan: false,
         openingCounterPrep: false,
         openingCounterPrepMight: false,
+        openingCounterPrepDiscount: 0,
         consumesOpeningCounterPlan: false,
         consumesOpeningCounterPrep: false,
       };
@@ -1738,7 +1739,7 @@ class GameScene extends Phaser.Scene {
       ? source.fullCrewDiscount
       : this.activeFullCrewDiscount();
     const discount = Math.min(cost, Math.max(0, Math.min(1, Math.floor(Number(discountPool) || 0))));
-    const effectiveCost = Math.max(0, cost - discount);
+    const costAfterDiscount = Math.max(0, cost - discount);
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     const openingCounterPrep = this.openingCounterPrepActiveForState(source, isProjection);
@@ -1758,11 +1759,14 @@ class GameScene extends Phaser.Scene {
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
     const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
+    const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
+    const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
     const consumesOpeningCounterPlan = !!openingCounterPrepMight;
     const shared = {
       openingCounterPlan: openingCounterPrep,
       openingCounterPrep: openingCounterPrepMight,
       openingCounterPrepMight,
+      openingCounterPrepDiscount,
       openingCommissionReport,
       openingFullCrewReport,
       consumesOpeningCounterPlan,
@@ -1880,7 +1884,8 @@ class GameScene extends Phaser.Scene {
     if (!best) return 'Shop: no visible buy';
     const def = TYPES[best.type];
     const quote = best.quote;
-    const price = quote.discount > 0
+    const priceReduced = quote.effectiveCost < quote.cost;
+    const price = priceReduced
       ? `${quote.cost}->${quote.effectiveCost}☠️`
       : `${quote.effectiveCost}☠️`;
     const alertBase = state && state.boardingAlert != null
@@ -1893,7 +1898,10 @@ class GameScene extends Phaser.Scene {
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
     const label = quote.counter ? 'Counter ' : '';
-    const prep = quote.openingCounterPrepMight ? ', Opening Prep +💪' : '';
+    const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
+    const prep = quote.openingCounterPrepMight
+      ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
+      : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
@@ -2738,9 +2746,10 @@ class GameScene extends Phaser.Scene {
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ' Opening Prep' : ' Prep spent')
+        ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent')
         : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';

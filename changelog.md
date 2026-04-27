@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-092658 — rev 535ccc5
+
+- Gameplay: true - Opening Counter Prep now discounts the first eligible pre-Boarding-1 `Top deck` scouted-counter purchase by `-1☠️` after any `Full Crew Discount`, while still granting `+1💪`, `Counter Watch`, and top-deck placement; non-counters preserve prep, route primaries show the reduced price, and Dockside Credit only covers any remaining missing `☠️`. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-counter-prep --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-opening-counter-subsidy --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-full-crew-coverage --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-092658.log`.
+
 ## 2026-04-27 — run 20260427-091315 — rev da38ec8
 
 - Gameplay: true - Opening Route Muster now also grants the selected starter route counter `Counter Watch` until Boarding 1, shows the starter Watch contract in opening route cache badges, next-ship intel, and route-counter card badging, and keeps the mustered watched starter in the Opening Route Muster draw priority without duplicating it or spending its watch. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-muster --json`, related opening route/deckhand/cache/shop/counter/Short Crew checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-091315.log`.
