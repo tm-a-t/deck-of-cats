@@ -44,6 +44,7 @@ function parseArgs(argv) {
     checkOpeningCounterSubsidy: false,
     checkOpeningCounterPlan: false,
     checkOpeningShellbackCounter: false,
+    checkOpeningDeckhandCounters: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -167,6 +168,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-route-counter-shop') {
       out.checkOpeningShellbackCounter = true;
+      continue;
+    }
+    if (a === '--check-opening-deckhand-counters') {
+      out.checkOpeningDeckhandCounters = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -299,6 +304,8 @@ function buildRuntime() {
       applyScoutedCounterToShop,
       scoutedCounterTypesForMap,
       isScoutedCounterShopType,
+      openingDeckhandCounterTypes,
+      gameplayCounterTypes,
       firstBoardingEncounterBlueprint,
       firstShipLayerIndex,
       openingRouteCacheNodeForSelection,
@@ -313,6 +320,7 @@ function buildRuntime() {
       QUIET_DOCKS,
       SHOP_CREDIT,
       SCOUTED_SHIP_COUNTERS,
+      OPENING_DECKHAND_COUNTERS,
       SCOUTED_COUNTER_CACHE_RES,
       GameScene,
       getG: () => G,
@@ -1208,6 +1216,10 @@ function assertOpeningRouteCounterShopCheck(condition, message) {
   if (!condition) throw new Error(`opening route counter shop check failed: ${message}`);
 }
 
+function assertOpeningDeckhandCounterCheck(condition, message) {
+  if (!condition) throw new Error(`opening deckhand counter check failed: ${message}`);
+}
+
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
   if (!condition) throw new Error(`counter recruits report early check failed: ${message}`);
 }
@@ -1739,7 +1751,7 @@ function runScoutedCounterCacheChecks(runtime) {
     const pirates = [
       { id: 9001, type: 'poisoner', weaponKey: null, might: 2, tempo: 0, wounded: false },
       { id: 9002, type: 'needler', weaponKey: null, might: 0, tempo: 0, wounded: false },
-      { id: 9003, type: 'lumberjack', weaponKey: null, might: 0, tempo: 0, wounded: false },
+      { id: 9003, type: 'miner', weaponKey: null, might: 0, tempo: 0, wounded: false },
     ];
     G.allCrew = pirates.slice();
     G.hand = pirates.slice();
@@ -2446,6 +2458,241 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(!G.discard.includes(covered), `${label} covered counter also went to discard`);
     results.push({ name: `round-1 full-send ${label} route buys watched covered ${type} without credit`, ok: true, quote: routeQuote });
   });
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningDeckhandCounterChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routes = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0, sentCount: 1, bountyRes: 'wood' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1, sentCount: 1, bountyRes: 'stone' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, sentCount: 2, bountyRes: 'gold' },
+  ];
+
+  const starterName = (type) => (api.TYPES[type] && api.TYPES[type].name) || type;
+
+  const setupSending = (route, opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = opts.map || makeScoutedCounterTestMap(route.mainKey);
+    G.round = Math.max(1, Math.floor(Number(opts.round) || 1));
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[route.islandIdx]);
+    G.sent = [];
+    const pirates = G.allCrew.slice(0, Math.max(3, route.sentCount + 1));
+    pirates.forEach((pirate, index) => {
+      pirate.type = index === 0 ? (opts.firstType || route.starterType) : 'armsman';
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    if (route.sentCount > 1) pirates[1].type = route.nonmatchingType;
+    G.hand = pirates.slice(0, Math.max(3, route.sentCount + 1));
+    for (let i = 0; i < route.sentCount; i++) G.sent.push(i);
+    G.deck = [];
+    G.discard = [];
+    G.enthusiasm = 0;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 1));
+    G.shortCrewReportIds = [];
+    G.counterWatchIds = [];
+    scene._sacrificedIds.clear();
+    scene._sendingToIsland.clear();
+    return { G, pirates };
+  };
+
+  routes.forEach((route) => {
+    const { G, pirates } = setupSending(route, { boardingAlert: 4 });
+    const drilled = pirates[0];
+    const result = applyShortCrewDrillForSim(scene);
+    assertOpeningDeckhandCounterCheck(result && result.applied, `${route.label} ${starterName(route.starterType)} did not receive Short Crew Drill`);
+    assertOpeningDeckhandCounterCheck((drilled.might || 0) === 1, `${route.label} starter Might ${(drilled.might || 0)} !== 1`);
+    assertOpeningDeckhandCounterCheck(result.reportEarly, `${route.label} starter did not report early`);
+    assertOpeningDeckhandCounterCheck(result.counterAlertRefund && result.counterAlertRefund.eligible, `${route.label} starter did not qualify for counter Alert refund`);
+    assertOpeningDeckhandCounterCheck(result.counterWatch, `${route.label} starter did not gain Counter Watch`);
+    assertOpeningDeckhandCounterCheck((G.shortCrewReportIds || []).includes(drilled.id), `${route.label} starter did not keep report marker`);
+    assertOpeningDeckhandCounterCheck((G.counterWatchIds || []).includes(drilled.id), `${route.label} starter did not keep Counter Watch marker`);
+    const floor = G.boardingAlert;
+    applyShipWagesForSim(scene, G);
+    const refund = applyShortCrewCounterAlertRefundForSim(scene, result, floor);
+    assertOpeningDeckhandCounterCheck(refund && refund.amount === 1, `${route.label} starter refund ${JSON.stringify(refund)}`);
+    assertOpeningDeckhandCounterCheck(G.boardingAlert === floor, `${route.label} starter alert ${G.boardingAlert} !== ${floor}`);
+    const line = scene.formatSendingPlanLine(scene.sendingPlanProjection(route.sentCount));
+    assertOpeningDeckhandCounterCheck(line.includes('Alert +1->+0') && line.includes('Watch'), `${route.label} plan line did not expose starter counter payoff: ${line}`);
+    results.push({ name: `${route.label} ${starterName(route.starterType)} one-short drills, refunds Alert, reports, and gains Watch`, ok: true });
+
+    const mismatch = setupSending(route, { firstType: route.nonmatchingType, boardingAlert: 2 });
+    const mismatchResult = applyShortCrewDrillForSim(scene);
+    assertOpeningDeckhandCounterCheck(mismatchResult && mismatchResult.applied, `${route.label} nonmatching setup did not drill`);
+    assertOpeningDeckhandCounterCheck(!(mismatchResult.counterAlertRefund && mismatchResult.counterAlertRefund.eligible), `${route.label} nonmatching starter qualified for refund`);
+    assertOpeningDeckhandCounterCheck(!mismatchResult.counterWatch, `${route.label} nonmatching starter gained Counter Watch`);
+    const mismatchFloor = mismatch.G.boardingAlert;
+    applyShipWagesForSim(scene, mismatch.G);
+    const mismatchRefund = applyShortCrewCounterAlertRefundForSim(scene, mismatchResult, mismatchFloor);
+    assertOpeningDeckhandCounterCheck(!mismatchRefund || mismatchRefund.amount === 0, `${route.label} nonmatching starter refunded Alert`);
+    assertOpeningDeckhandCounterCheck(mismatch.G.boardingAlert === mismatchFloor + 1, `${route.label} nonmatching starter did not keep Ship Wages Alert`);
+    results.push({ name: `${route.label} nonmatching starter does not get counter refund or Watch`, ok: true });
+  });
+
+  const setupCache = (route, starterType) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap(route.mainKey);
+    G.round = 1;
+    G.boardingCount = 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[route.islandIdx]);
+    G.island.scoutedCacheDrill = {
+      mainKey: route.mainKey,
+      granted: false,
+      alertRefundAmount: 1,
+      alertFloorBeforeCache: 2,
+      alertRefunded: false,
+    };
+    const pirate = G.allCrew[0];
+    pirate.type = starterType;
+    pirate.weaponKey = null;
+    pirate.might = 0;
+    pirate.tempo = 0;
+    pirate.wounded = false;
+    G.hand = [pirate];
+    G.sent = [0];
+    G.deck = [];
+    G.discard = [];
+    G.boardingAlert = 3;
+    G.cacheDrillMusterIds = [];
+    scene._sacrificedIds.clear();
+    return { G, pirate };
+  };
+
+  routes.forEach((route) => {
+    const { G, pirate } = setupCache(route, route.starterType);
+    const reward = applyScoutedCacheDrillForSim(scene, pirate);
+    assertOpeningDeckhandCounterCheck(reward && reward.applied, `${route.label} starter did not claim Cache Drill`);
+    assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1, `${route.label} Cache Drill Might ${(pirate.might || 0)} !== 1`);
+    assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === 1, `${route.label} Cache Drill refund ${JSON.stringify(reward.alertRefund)}`);
+    assertOpeningDeckhandCounterCheck(G.boardingAlert === 2, `${route.label} Cache Drill alert ${G.boardingAlert} !== 2`);
+    assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).includes(pirate.id), `${route.label} Cache Drill did not mark early report`);
+    results.push({ name: `${route.label} ${starterName(route.starterType)} can claim Boarding 1 Cache Drill`, ok: true });
+  });
+
+  {
+    const route = routes[0];
+    const { G, pirate } = setupCache(route, route.nonmatchingType);
+    const reward = applyScoutedCacheDrillForSim(scene, pirate);
+    assertOpeningDeckhandCounterCheck(!reward, 'nonmatching starter claimed Cache Drill');
+    assertOpeningDeckhandCounterCheck((pirate.might || 0) === 0, 'nonmatching starter gained Cache Drill Might');
+    assertOpeningDeckhandCounterCheck(G.island.scoutedCacheDrill.granted === false, 'nonmatching starter consumed Cache Drill');
+    assertOpeningDeckhandCounterCheck(G.boardingAlert === 3, 'nonmatching starter refunded cache Alert');
+    results.push({ name: 'nonmatching starter does not consume Boarding 1 Cache Drill', ok: true });
+  }
+
+  const enemyFor = (key, row, rowOrder, idSuffix = 0) => {
+    const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
+    assertOpeningDeckhandCounterCheck(!!archetype, `missing archetype ${key}`);
+    const member = scene.buildCombatEnemyMember(archetype, `${key}_deckhand_${idSuffix}`);
+    return scene.buildEnemyCombatFighter(member, row, rowOrder);
+  };
+
+  const setupBoarding = (route, opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.boardingCount = Math.max(1, Math.floor(Number(opts.boardingNo) || 1));
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: G.boardingCount,
+      encounter: {
+        mainKey: route.mainKey,
+        supportKeys: ['bilgeRat', 'cabinBoy'],
+        totalCount: 3,
+      },
+    };
+    const starter = G.allCrew[0];
+    starter.type = route.starterType;
+    starter.weaponKey = null;
+    starter.might = Math.max(0, Math.floor(Number(opts.might) || 0));
+    starter.tempo = 0;
+    starter.wounded = false;
+    G.hand = [starter];
+    G.deck = [];
+    G.discard = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: null,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: 0,
+      watchReadyCounterIds: [],
+    };
+    G.combat.playerFighters = [scene.buildPlayerCombatFighter(starter, 0, 0, G.combat)];
+    G.combat.enemyFighters = [
+      enemyFor(route.mainKey, 0, 2, 0),
+      enemyFor('cabinBoy', 0, 1, 1),
+      enemyFor('bilgeRat', 0, 0, 2),
+    ];
+    return { G, starter, combat: G.combat };
+  };
+
+  routes.forEach((route) => {
+    const { G, starter, combat } = setupBoarding(route);
+    assertOpeningDeckhandCounterCheck(scene.counterAmbushTypes(combat).includes(route.starterType), `${route.label} starter missing from Counter Ambush types`);
+    assertOpeningDeckhandCounterCheck(scene.combatCounterEdgeDamageForPirate(starter, combat) === 1, `${route.label} starter did not receive Counter Edge`);
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningDeckhandCounterCheck(result && result.applied && result.pirateId === starter.id, `${route.label} starter did not Counter Ambush`);
+    combat.result = 'win';
+    const trophy = scene.grantCounterTrophy(combat);
+    const bounty = scene.grantAmbushBounty(combat);
+    assertOpeningDeckhandCounterCheck(trophy && trophy.pirateId === starter.id && (starter.tempo || 0) === 1, `${route.label} starter did not gain Counter Trophy`);
+    assertOpeningDeckhandCounterCheck(bounty && bounty.pirateId === starter.id && bounty.resource === route.bountyRes, `${route.label} starter Ambush Bounty ${JSON.stringify(bounty)}`);
+    assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 1, `${route.label} bounty resource not granted: ${JSON.stringify(G.res)}`);
+    results.push({ name: `${route.label} ${starterName(route.starterType)} triggers Ambush, Counter Edge, Counter Trophy, and Ambush Bounty`, ok: true });
+  });
+
+  {
+    const route = routes[0];
+    const { starter, combat } = setupBoarding(route, { boardingNo: 2 });
+    assertOpeningDeckhandCounterCheck(!scene.counterAmbushTypes(combat).includes(route.starterType), 'Boarding 2 included Opening Deckhand counter type');
+    assertOpeningDeckhandCounterCheck(scene.combatCounterEdgeDamageForPirate(starter, combat) === 0, 'Boarding 2 gave starter Counter Edge');
+    assertOpeningDeckhandCounterCheck(!scene.applyCounterAmbush(combat, { silent: true }), 'Boarding 2 starter triggered Counter Ambush');
+    combat.result = 'win';
+    assertOpeningDeckhandCounterCheck(!scene.grantCounterTrophy(combat), 'Boarding 2 starter gained Counter Trophy');
+    assertOpeningDeckhandCounterCheck(!scene.grantAmbushBounty(combat), 'Boarding 2 starter gained Ambush Bounty without ambush');
+    results.push({ name: 'Opening Deckhand counters do not leak into Boarding 2+', ok: true });
+  }
+
+  {
+    const route = routes[1];
+    const { G, starter, combat } = setupBoarding(route, { mode: 'battleTest' });
+    assertOpeningDeckhandCounterCheck(G.mode === 'battleTest', 'Battle Test setup failed');
+    assertOpeningDeckhandCounterCheck(!scene.counterAmbushTypes(combat).includes(route.starterType), 'Battle Test included Opening Deckhand counter type');
+    assertOpeningDeckhandCounterCheck(scene.combatCounterEdgeDamageForPirate(starter, combat) === 0, 'Battle Test gave starter Counter Edge');
+    assertOpeningDeckhandCounterCheck(!scene.applyCounterAmbush(combat, { silent: true }), 'Battle Test starter triggered Counter Ambush');
+    results.push({ name: 'Opening Deckhand counters do not apply in Battle Test', ok: true });
+  }
+
+  {
+    const map = makeScoutedCounterTestMap('shellback');
+    const shopCounters = api.scoutedCounterTypesForMap(map, { mode: 'run' });
+    const gameplayCounters = api.gameplayCounterTypes('shellback', 1, { mode: 'run' });
+    const battleCounters = api.gameplayCounterTypes('shellback', 1, { mode: 'battleTest' });
+    assertOpeningDeckhandCounterCheck(!shopCounters.includes('lumberjack'), `shop counters leaked starter: ${shopCounters.join(',')}`);
+    assertOpeningDeckhandCounterCheck(gameplayCounters.includes('lumberjack') && gameplayCounters.includes('poisoner'), `gameplay counters missing starter/shop mix: ${gameplayCounters.join(',')}`);
+    assertOpeningDeckhandCounterCheck(battleCounters.length === 0, `Battle Test gameplay counters mismatch: ${battleCounters.join(',')}`);
+    results.push({ name: 'starter counters stay out of shop-only counter helpers', ok: true, shopCounters, gameplayCounters });
+  }
 
   return { ok: true, checks: results };
 }
@@ -4365,6 +4612,7 @@ function runShortCrewDrillChecks(runtime) {
       pirate.might = index === 0 ? 2 : 0;
       pirate.tempo = 0;
     });
+    if (G.hand[0] && !opts.keepFirstType) G.hand[0].type = opts.firstType || 'lumberjack';
     if (opts.removeSent) {
       G.sent.forEach((handIdx) => {
         const pirate = G.hand[handIdx];
@@ -5479,6 +5727,11 @@ async function main() {
   }
   if (opts.checkOpeningShellbackCounter) {
     const result = runOpeningRouteCounterShopChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningDeckhandCounters) {
+    const result = runOpeningDeckhandCounterChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

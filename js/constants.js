@@ -182,6 +182,12 @@ const SCOUTED_SHIP_COUNTERS = {
   flintDuelist: ['poisoner', 'needler', 'sawbones', 'scarwright', 'plagueCaptain'],
 };
 
+const OPENING_DECKHAND_COUNTERS = {
+  shellback: ['lumberjack'],
+  powderBomber: ['miner'],
+  deckSniper: ['armsman'],
+};
+
 const SCOUTED_COUNTER_CACHE_RES = {
   shellback: 'wood',
   powderBomber: 'stone',

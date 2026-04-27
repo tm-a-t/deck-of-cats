@@ -273,3 +273,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-043426 — rev 9f7a831
 
 - Gameplay: true - Added Opening Counter Plan: eligible round-1/2 one-short Opening Commission shops now let the first bought top-deck scouted counter become Prepared without changing price, while any first pirate purchase consumes the plan. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-counter-plan --json`, `node sim/fast-sim.js --check-opening-counter-subsidy --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, related counter/cache/ambush checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-043426.log`.
+
+## 2026-04-27 — run 20260427-073312 — rev bf634ae
+
+- Gameplay: true - Added Opening Deckhand Counters: during regular-run Boarding 1, the selected opening route's starter pirate now counts as a gameplay counter for route-facing drills, watch, ambush, edge, trophies, and bounty while staying out of shop-only counter logic. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, related counter/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-073312.log`.

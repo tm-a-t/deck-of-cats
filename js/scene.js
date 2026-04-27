@@ -519,9 +519,11 @@ class GameScene extends Phaser.Scene {
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
-    if (!mainKey || typeof SCOUTED_SHIP_COUNTERS !== 'object') return [];
-    const counters = SCOUTED_SHIP_COUNTERS[mainKey];
-    return Array.isArray(counters) ? counters.filter(type => !!TYPES[type]) : [];
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.mainKey === mainKey
+      ? intel.boardingNo
+      : Math.max(1, Math.floor(Number(G.boardingCount) || 0) + 1);
+    return this.gameplayCounterTypesForShip(mainKey, boardingNo, { intel });
   }
 
   scoutedCacheDrillState() {
@@ -622,10 +624,9 @@ class GameScene extends Phaser.Scene {
     if (!ids.length) return [];
 
     const mainKey = node.encounter && node.encounter.mainKey;
-    const counters = mainKey && typeof SCOUTED_SHIP_COUNTERS === 'object' && SCOUTED_SHIP_COUNTERS
-      ? SCOUTED_SHIP_COUNTERS[mainKey]
-      : null;
-    if (!Array.isArray(counters) || !counters.length) return [];
+    const boardingNo = Math.max(1, Math.floor(Number(G.boardingCount) || 0) + 1);
+    const counters = this.gameplayCounterTypesForShip(mainKey, boardingNo);
+    if (!counters.length) return [];
 
     const counterSet = new Set(counters);
     const ownedIds = new Set((G.allCrew || []).filter(Boolean).map(pirate => pirate.id));
@@ -745,7 +746,8 @@ class GameScene extends Phaser.Scene {
   }
 
   shortCrewCounterAlertRefundState(pirate = null) {
-    const counters = this.shortCrewReportsEarly() ? this.scoutedCounterTypes() : [];
+    const intel = this.nextShipIntel();
+    const counters = this.shortCrewReportsEarly() ? this.gameplayCounterTypesForShip(null, null, { intel }) : [];
     const possible = !this.isBattleTest() && counters.length > 0;
     const eligible = !!(possible && pirate && counters.includes(pirate.type));
     return {
@@ -1196,6 +1198,21 @@ class GameScene extends Phaser.Scene {
     return scoutedCounterTypesForMap(G.map, { mode: G.mode });
   }
 
+  gameplayCounterTypesForShip(mainKey = null, boardingNo = null, opts = {}) {
+    if (this.isBattleTest() || typeof gameplayCounterTypes !== 'function') return [];
+    const intel = opts.intel || ((!mainKey || boardingNo == null) ? this.nextShipIntel() : null);
+    const key = mainKey
+      || (intel && intel.mainKey)
+      || this.counterTrophyMainKey()
+      || null;
+    const no = boardingNo != null
+      ? Math.max(1, Math.floor(Number(boardingNo) || 1))
+      : (intel && intel.boardingNo != null
+        ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+        : this.currentBoardingNumber());
+    return gameplayCounterTypes(key, no, { mode: G.mode });
+  }
+
   isScoutedCounterShopType(type) {
     if (!type) return false;
     return this.scoutedCounterTypes().includes(type);
@@ -1217,11 +1234,9 @@ class GameScene extends Phaser.Scene {
     if (this.isBattleTest()) return null;
     const intel = opts.intel || this.nextShipIntel();
     const mainKey = opts.mainKey || (intel && intel.mainKey);
-    if (!mainKey || typeof SCOUTED_SHIP_COUNTERS !== 'object') return null;
+    if (!mainKey) return null;
 
-    const counterTypes = Array.isArray(SCOUTED_SHIP_COUNTERS[mainKey])
-      ? SCOUTED_SHIP_COUNTERS[mainKey].filter(counterType => !!TYPES[counterType])
-      : [];
+    const counterTypes = this.gameplayCounterTypesForShip(mainKey, opts.boardingNo, { intel });
     if (!counterTypes.length) return null;
     if (type && !counterTypes.includes(type)) return null;
 
@@ -3374,10 +3389,8 @@ class GameScene extends Phaser.Scene {
 
   counterEdgeTypes(combat = G.combat) {
     if (this.isBattleTest() || G.phase !== 'boarding') return [];
-    if (typeof SCOUTED_SHIP_COUNTERS !== 'object' || !SCOUTED_SHIP_COUNTERS) return [];
     const mainKey = this.counterEdgeMainKey(combat);
-    const counters = mainKey ? SCOUTED_SHIP_COUNTERS[mainKey] : null;
-    return Array.isArray(counters) ? counters.filter((type) => !!TYPES[type]) : [];
+    return this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
   }
 
   combatCounterEdgeDamageForPirate(pirate, combat = G.combat) {
@@ -3391,7 +3404,7 @@ class GameScene extends Phaser.Scene {
     if (this.isBattleTest()) return null;
 
     const mainKey = this.counterTrophyMainKey(combat);
-    const counters = (mainKey && SCOUTED_SHIP_COUNTERS && SCOUTED_SHIP_COUNTERS[mainKey]) || [];
+    const counters = this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
     if (!counters.length) return null;
 
     const counterSet = new Set(counters);
@@ -3428,10 +3441,8 @@ class GameScene extends Phaser.Scene {
 
   counterAmbushTypes(combat = G.combat) {
     if (this.isBattleTest() || G.phase !== 'boarding') return [];
-    if (typeof SCOUTED_SHIP_COUNTERS !== 'object' || !SCOUTED_SHIP_COUNTERS) return [];
     const mainKey = this.counterAmbushMainKey(combat);
-    const counters = mainKey ? SCOUTED_SHIP_COUNTERS[mainKey] : null;
-    return Array.isArray(counters) ? counters.filter((type) => !!TYPES[type]) : [];
+    return this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
   }
 
   combatEnemyArchetypeKey(fighter) {

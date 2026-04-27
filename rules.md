@@ -38,6 +38,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a route-defined `Scouted Counter Cache`.
 - The three normal Boarding 1 cache routes define the first ship's main enemy and cache resource: `Forest Island` → `Shellback` and `+1🪵`, `Rocky Island` → `Powder Bomber` and `+1🪨`, `Port Island` → `Deck Sniper` and `+1🪙`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal cache resource map.
 - Selecting an opening path before Boarding 1 updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
+- During regular-run Boarding 1 only, the selected opening route also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
+- `Opening Deckhand Counter` types count for Cache Drill, Short Crew counter Alert refunds and `Counter Watch`, `Counter Watch` readiness, `Counter Ambush`, `Counter Edge`, `Counter Trophy`, and `Ambush Bounty` eligibility.
+- `Opening Deckhand Counter` types do not count for shop generation, shop counter purchase quotes, `Top deck` purchases, `Opening Counter Prep` purchases, `Prepared` counter purchases, or `Full Crew Discount` coverage, because starter pirates are never sold in the shop.
+- `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
 - Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island immediately grants `+1` of the cache resource, `+1☠️`, and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
@@ -46,7 +50,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed and never removes the cache `☠️`.
 - Normal cache resource map for Boarding 2+ caches and `Ambush Bounty`: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Boarding 2+ cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
-- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
+- `Cache Drill` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
 - If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning or top-deck card.
@@ -208,7 +212,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Boarding Trophy` triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no player fighter survives.
 - If a boarding is won by a reinforcement hand, only a survivor from that final winning combat hand can receive the `Boarding Trophy`.
 - After a regular-run boarding is won, if the final winning combat hand has at least 1 surviving pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching survivor gains `+1 ⚡ Tempo` as a `Counter Trophy`.
-- `Counter Trophy` uses the same scouted counter map as the Shop, triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no matching counter pirate survives.
+- `Counter Trophy` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no matching counter pirate survives.
 - If a boarding is won by a reinforcement hand, only a matching survivor from that final winning combat hand can receive the `Counter Trophy`.
 - `Boarding Trophy`, `Counter Trophy`, Alert guard plunder, Opening plunder, and Ambush Bounty can all stack on the same win when their own conditions are met.
 - The old "sum team strength against ship strength" system no longer exists.
@@ -241,7 +245,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.
-- `Counter Edge` uses the same scouted counter map as the Shop and `Counter Trophy`, applies to reinforcement hands during the same boarding, and does not apply to wounded pirates sitting out.
+- `Counter Edge` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It applies to reinforcement hands during the same boarding and does not apply to wounded pirates sitting out.
 - `Counter Edge` is not `Might`, is not a permanent buff, does not change stored `Might` or `Tempo`, does not count toward buff count, and does not affect Officer Sabre, Cadence Pistols, or Banner Axe buff-count thresholds.
 - `Counter Edge` never applies in `Battle Test`.
 - In regular runs, defeated player pirates become `🩹 Wounded`.

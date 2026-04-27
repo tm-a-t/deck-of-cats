@@ -62,11 +62,40 @@ function nextScoutedShipNodeForMap(map, opts = {}) {
   return null;
 }
 
+function baseScoutedCounterTypes(mainKey) {
+  const counters = (SCOUTED_SHIP_COUNTERS && SCOUTED_SHIP_COUNTERS[mainKey]) || [];
+  return Array.isArray(counters) ? counters.filter(t => !!TYPES[t]) : [];
+}
+
+function openingDeckhandCounterTypes(mainKey, boardingNo, opts = {}) {
+  const state = shopGenerationState(opts);
+  const mode = opts.mode || (state && state.mode);
+  const no = Math.max(0, Math.floor(Number(boardingNo) || 0));
+  if (mode === 'battleTest' || no !== 1 || !mainKey) return [];
+  const counters = (OPENING_DECKHAND_COUNTERS && OPENING_DECKHAND_COUNTERS[mainKey]) || [];
+  return Array.isArray(counters) ? counters.filter(t => !!TYPES[t]) : [];
+}
+
+function gameplayCounterTypes(mainKey, boardingNo, opts = {}) {
+  const state = shopGenerationState(opts);
+  const mode = opts.mode || (state && state.mode);
+  if (mode === 'battleTest') return [];
+  const out = [];
+  const seen = new Set();
+  const add = (type) => {
+    if (!type || seen.has(type) || !TYPES[type]) return;
+    seen.add(type);
+    out.push(type);
+  };
+  openingDeckhandCounterTypes(mainKey, boardingNo, opts).forEach(add);
+  baseScoutedCounterTypes(mainKey).forEach(add);
+  return out;
+}
+
 function scoutedCounterTypesForMap(map, opts = {}) {
   const info = nextScoutedShipNodeForMap(map, opts);
   const mainKey = info && info.node && info.node.encounter && info.node.encounter.mainKey;
-  const counters = (SCOUTED_SHIP_COUNTERS && SCOUTED_SHIP_COUNTERS[mainKey]) || [];
-  return counters.filter(t => SHOP_POOL.includes(t) && TYPES[t]);
+  return baseScoutedCounterTypes(mainKey).filter(t => SHOP_POOL.includes(t));
 }
 
 function isScoutedCounterShopType(type, map, opts = {}) {
