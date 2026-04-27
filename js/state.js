@@ -144,19 +144,33 @@ function randomShopType(round, excludeTypes = [], opts = {}) {
   return maybeScoutedCounterShopType(round, picked, excludeTypes, opts);
 }
 
-function starterShopTypeFromLane(lane) {
+function openingStarterShopMainKey(opts = {}) {
+  const info = nextScoutedShipNodeForMap(shopMapForGeneration(opts), opts);
+  return info && info.node && info.node.encounter && info.node.encounter.mainKey;
+}
+
+function starterShopTypeFromLane(lane, opts = {}) {
   const pool = lane.filter(t => SHOP_POOL.includes(t) && TYPES[t] && TYPES[t].cost <= 3);
+  if (
+    opts.mode !== 'battleTest'
+    && lane.includes('poisoner')
+    && lane.includes('drummer')
+    && pool.includes('poisoner')
+    && openingStarterShopMainKey(opts) === 'shellback'
+  ) {
+    return 'poisoner';
+  }
   return Phaser.Utils.Array.GetRandom(pool);
 }
 
-function starterShop() {
-  const picks = STARTER_SHOP_LANES.map(starterShopTypeFromLane).filter(Boolean);
+function starterShop(opts = {}) {
+  const picks = STARTER_SHOP_LANES.map(lane => starterShopTypeFromLane(lane, opts)).filter(Boolean);
   return Phaser.Utils.Array.Shuffle(picks);
 }
 
 function initialShop(n, round, opts = {}) {
   if (round === 0 && n === STARTER_SHOP_LANES.length) {
-    const shop = starterShop();
+    const shop = starterShop(opts);
     return applyScoutedCounterToShop(shop, round, {
       ...opts,
       newSlotIndex: starterShopCounterSlotIndex(shop, round, opts),

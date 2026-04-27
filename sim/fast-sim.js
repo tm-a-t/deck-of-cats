@@ -43,6 +43,7 @@ function parseArgs(argv) {
     checkScoutedCounterCache: false,
     checkOpeningCounterSubsidy: false,
     checkOpeningCounterPlan: false,
+    checkOpeningShellbackCounter: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -149,6 +150,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-counter-plan') {
       out.checkOpeningCounterPlan = true;
+      continue;
+    }
+    if (a === '--check-opening-shellback-counter') {
+      out.checkOpeningShellbackCounter = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -1143,6 +1148,10 @@ function assertOpeningCounterPlanCheck(condition, message) {
   if (!condition) throw new Error(`opening counter plan check failed: ${message}`);
 }
 
+function assertOpeningShellbackCounterCheck(condition, message) {
+  if (!condition) throw new Error(`opening Shellback counter check failed: ${message}`);
+}
+
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
   if (!condition) throw new Error(`counter recruits report early check failed: ${message}`);
 }
@@ -1983,6 +1992,100 @@ function runOpeningCounterPlanChecks(runtime) {
     assertOpeningCounterPlanCheck(G.openingCounterPlan === false, `${name} granted Opening Counter Plan`);
     results.push({ name: `${name} does not grant Opening Counter Plan`, ok: true });
   });
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningShellbackCounterChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const samples = 24;
+  const starters = new Set(['lumberjack', 'miner', 'armsman']);
+
+  for (let sample = 0; sample < samples; sample++) {
+    runtime.setSeed((0x51e11bac + sample * 3571) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const shop = Array.isArray(G.shop) ? G.shop : [];
+    const map = G.map;
+    const firstShipLayer = map && Array.isArray(map.layers)
+      ? map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship')
+      : -1;
+    const firstShip = firstShipLayer >= 0 ? map.layers[firstShipLayer][0] : null;
+
+    assertOpeningShellbackCounterCheck(firstShip && firstShip.encounter && firstShip.encounter.mainKey === 'shellback', `sample ${sample} first ship is ${firstShip && firstShip.encounter && firstShip.encounter.mainKey}`);
+    assertOpeningShellbackCounterCheck(shop.length === 4, `sample ${sample} shop length ${shop.length}`);
+    assertOpeningShellbackCounterCheck(new Set(shop).size === shop.length, `sample ${sample} duplicate shop ${shop.join(',')}`);
+    assertOpeningShellbackCounterCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `sample ${sample} shop has starter or unknown ${shop.join(',')}`);
+    assertOpeningShellbackCounterCheck(shop.includes('poisoner'), `sample ${sample} opening Shellback shop lacks Poisoner: ${shop.join(',')}`);
+    assertOpeningShellbackCounterCheck(shop.includes('needler'), `sample ${sample} opening Shellback shop lacks Needler: ${shop.join(',')}`);
+  }
+  results.push({ name: 'regular opening Shellback shops always show Poisoner and Needler in 4 unique non-starter slots', ok: true, samples });
+
+  const getRandom = runtime.context.Phaser.Utils.Array.GetRandom;
+  runtime.context.Phaser.Utils.Array.GetRandom = (arr) => (arr && arr.length ? arr[arr.length - 1] : undefined);
+  try {
+    const shellbackBattleShop = api.initialShop(4, 0, { map: makeScoutedCounterTestMap('shellback'), mode: 'battleTest' });
+    assertOpeningShellbackCounterCheck(shellbackBattleShop.includes('drummer'), `Battle Test Shellback shop was forced off Drummer: ${shellbackBattleShop.join(',')}`);
+    assertOpeningShellbackCounterCheck(!shellbackBattleShop.includes('poisoner'), `Battle Test Shellback shop unexpectedly forced Poisoner: ${shellbackBattleShop.join(',')}`);
+
+    const powderShop = api.initialShop(4, 0, { map: makeScoutedCounterTestMap('powderBomber'), mode: 'run' });
+    assertOpeningShellbackCounterCheck(powderShop.includes('drummer'), `non-Shellback starter lane was forced off Drummer: ${powderShop.join(',')}`);
+    assertOpeningShellbackCounterCheck(!powderShop.includes('poisoner'), `non-Shellback starter lane unexpectedly forced Poisoner: ${powderShop.join(',')}`);
+    assertOpeningShellbackCounterCheck(powderShop.includes('sawbones'), `non-Shellback scouted-counter fallback failed: ${powderShop.join(',')}`);
+    assertOpeningShellbackCounterCheck(powderShop.includes('needler'), `non-Shellback starter shop lost Needler: ${powderShop.join(',')}`);
+    assertOpeningShellbackCounterCheck(new Set(powderShop).size === powderShop.length, `non-Shellback shop has duplicate: ${powderShop.join(',')}`);
+    results.push({ name: 'Battle Test and non-Shellback starter lanes keep prior random lane behavior and counter fallback', ok: true, shellbackBattleShop, powderShop });
+  } finally {
+    runtime.context.Phaser.Utils.Array.GetRandom = getRandom;
+  }
+
+  runtime.setSeed(0x704501a1);
+  api.initState();
+  const G = api.getG();
+  const firstLayer = G.map && G.map.layers && G.map.layers[0];
+  const firstIsland = Array.isArray(firstLayer)
+    ? firstLayer.find(node => {
+      const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
+      return island && !island.extraSend && !island.healWounded;
+    })
+    : null;
+  assertOpeningShellbackCounterCheck(firstIsland && firstIsland.type === 'island', 'missing first island setup');
+  assertOpeningShellbackCounterCheck(scene.applyMapNodeSelection(firstIsland.id), 'first island selection failed');
+  assertOpeningShellbackCounterCheck(G.phase === 'sending' && G.round === 1 && G.map.currentLayer === 0, `first round setup phase=${G.phase} round=${G.round} layer=${G.map.currentLayer}`);
+  assertOpeningShellbackCounterCheck(G.shop.includes('poisoner'), `round-1 shop lacks Poisoner before full-send buy: ${G.shop.join(',')}`);
+
+  G.sent = [0, 1];
+  updateFullCrewDiscountForSim(scene, G);
+  applyShipWagesForSim(scene, G);
+  G.phase = 'shopping';
+  G.shopCreditUsed = false;
+  assertOpeningShellbackCounterCheck(G.enthusiasm === 1, `full send wages left ${G.enthusiasm} enthusiasm`);
+  assertOpeningShellbackCounterCheck(G.fullCrewDiscount === 1, `full send discount ${G.fullCrewDiscount}`);
+  assertOpeningShellbackCounterCheck(G.boardingAlert === 0, `full send added Alert ${G.boardingAlert}`);
+
+  const poisonerIndex = G.shop.indexOf('poisoner');
+  const quote = scene.shopPurchaseQuote('poisoner');
+  const directQuote = shopPurchaseQuote(api, G, 'poisoner');
+  assertOpeningShellbackCounterCheck(poisonerIndex >= 0, 'Poisoner not found in shop for buy');
+  assertOpeningShellbackCounterCheck(quote.canBuy && !quote.credit, `Poisoner quote was not affordable without credit: ${JSON.stringify(quote)}`);
+  assertOpeningShellbackCounterCheck(quote.counter && quote.topDeck && quote.preparedCounter, `Poisoner was not a prepared top-deck counter: ${JSON.stringify(quote)}`);
+  assertOpeningShellbackCounterCheck(quote.cost === 2 && quote.discount === 1 && quote.effectiveCost === 1 && quote.spend === 1 && quote.missing === 0, `Poisoner economics mismatch: ${JSON.stringify(quote)}`);
+  assertOpeningShellbackCounterCheck(quote.openingCounterSubsidy === 0 && !quote.credit && quote.alert === 0, `Poisoner used subsidy/credit/Alert: ${JSON.stringify(quote)}`);
+  assertOpeningShellbackCounterCheck(directQuote.canBuy && !directQuote.credit && directQuote.openingCounterSubsidy === 0 && directQuote.preparedCounter, `sim policy quote mismatch: ${JSON.stringify(directQuote)}`);
+
+  const bought = scene.buyPirate(poisonerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+  assertOpeningShellbackCounterCheck(bought && bought.type === 'poisoner', 'Poisoner buy failed');
+  assertOpeningShellbackCounterCheck(G.enthusiasm === 0, `Poisoner buy left enthusiasm ${G.enthusiasm}`);
+  assertOpeningShellbackCounterCheck(G.boardingAlert === 0, `Poisoner buy added Alert ${G.boardingAlert}`);
+  assertOpeningShellbackCounterCheck(G.shopCreditUsed === false, 'Poisoner buy used Dockside Credit');
+  assertOpeningShellbackCounterCheck(G.fullCrewDiscount === 0, 'Poisoner buy did not consume Full Crew Discount');
+  assertOpeningShellbackCounterCheck(G.deck[G.deck.length - 1] === bought, 'Poisoner did not go to top of deck');
+  assertOpeningShellbackCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Poisoner did not gain Counter Watch');
+  assertOpeningShellbackCounterCheck(bought.weaponKey === 'venomKnife', `Poisoner was not Prepared with Venom Knife: ${bought.weaponKey}`);
+  assertOpeningShellbackCounterCheck(!G.discard.includes(bought), 'Poisoner also went to discard');
+  results.push({ name: 'round-1 full-send buys prepared Poisoner for 1 with Full Crew Discount and no credit, subsidy, or Alert', ok: true, quote });
 
   return { ok: true, checks: results };
 }
@@ -4918,6 +5021,11 @@ async function main() {
   }
   if (opts.checkOpeningCounterPlan) {
     const result = runOpeningCounterPlanChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningShellbackCounter) {
+    const result = runOpeningShellbackCounterChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
