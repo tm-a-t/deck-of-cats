@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-035540 — rev 79471ca
+
+- Gameplay: true - Counter Watch now arms eligible held scouted counters as `Watch Ready` for the watched boarding's `Counter Ambush` only, giving the 5-damage and up-to-2 Alert-guard Armed Ambush payoff without permanent weapon, Might, or Tempo changes and without Battle Test or Opening Counter Break effects. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-short-crew-drill --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-035540.log`.
+
 ## 2026-04-27 — run 20260427-034521 — rev 4c3a11b
 
 - Gameplay: true - Counter Short Crew Drill now grants `Counter Watch` when the drilled pirate reports early and counters the next scouted ship, so the first report top-decks it once and the watch keeps returning it on later Shop Continues until it is sent without a refreshed eligible drill or the boarding starts. Validated with JS syntax checks, `node sim/fast-sim.js --check-short-crew-drill --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-034521.log`.

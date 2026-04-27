@@ -2497,6 +2497,12 @@ function runCounterAmbushChecks(runtime) {
       returnedPirateIds: [],
       reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
     };
+    const watchReadyCounterIds = (Array.isArray(opts.watchReadyIndices) ? opts.watchReadyIndices : [])
+      .map(index => pirates[Math.max(0, Math.floor(Number(index) || 0))])
+      .filter(Boolean)
+      .map(pirate => pirate.id);
+    G.enemyShip.watchReadyCounterIds = watchReadyCounterIds;
+    G.combat.watchReadyCounterIds = [...watchReadyCounterIds];
     const playerRows = opts.playerRows || [[0, 0], [1, 1], [2, 2]];
     G.combat.playerFighters = playerRows
       .map(([pirateIdx, row, rowOrder]) => {
@@ -2602,6 +2608,104 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(combat.ambushBounty && combat.ambushBounty.resource === 'stone', 'unarmed ambush did not store stone Ambush Bounty');
     assertCounterAmbushCheck(combat.ambushBounty.pirateId === pirates[0].id, 'Ambush Bounty was not tied to the ambusher');
     results.push({ name: 'front-row matching counter ambushes once and surviving ambusher wins mapped Ambush Bounty', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, pirates, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      boardingAlert: 3,
+      guardCount: 2,
+      watchReadyIndices: [0],
+    });
+    const watched = pirates[0];
+    const before = {
+      weaponKey: watched.weaponKey || null,
+      might: watched.might || 0,
+      tempo: watched.tempo || 0,
+    };
+    const target = enemies[0];
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'Watch Ready counter did not ambush');
+    assertCounterAmbushCheck(result.pirateId === watched.id, `Watch Ready ambusher ${result && result.pirateId} !== ${watched.id}`);
+    assertCounterAmbushCheck(result.armedAmbush && result.watchReadyAmbush, 'Watch Ready counter was not treated as armed for ambush');
+    assertCounterAmbushCheck(!result.permanentArmedAmbush, 'Watch Ready counter was marked permanently armed');
+    assertCounterAmbushCheck(result.damage === 5, `Watch Ready damage ${result.damage} !== 5`);
+    assertCounterAmbushCheck(target.hp === target.maxHp - 5 && target.wounds === 1, 'Watch Ready ambush did not wound and deal 5 damage');
+    assertCounterAmbushCheck((result.removedAlertGuards || []).length === 2, 'Watch Ready ambush did not use the armed Alert guard removal limit');
+    assertCounterAmbushCheck((watched.weaponKey || null) === before.weaponKey, 'Watch Ready ambush mutated weaponKey');
+    assertCounterAmbushCheck((watched.might || 0) === before.might, 'Watch Ready ambush mutated Might');
+    assertCounterAmbushCheck((watched.tempo || 0) === before.tempo, 'Watch Ready ambush mutated Tempo');
+    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Watch Ready without permanent upgrades triggered Opening Counter Break');
+    assertCounterAmbushCheck(G.counterWatchIds.length === 0, 'Watch Ready ambush recreated Counter Watch markers');
+    results.push({ name: 'Watch Ready counters use Armed Counter Ambush damage and guard removal without permanent upgrades', ok: true });
+  }
+
+  {
+    const { G, pirates, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 1, 0], [1, 0, 0]],
+      enemies: [['powderBomber', 0, 0]],
+      watchReadyIndices: [0],
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'Watch Ready counter moved out of front row still ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && !enemies[0].wounds, 'moved Watch Ready counter changed target');
+    assertCounterAmbushCheck(pirates[0].weaponKey == null && (pirates[0].might || 0) === 0 && (pirates[0].tempo || 0) === 0, 'moved Watch Ready counter gained permanent upgrades');
+    results.push({ name: 'moving a Watch Ready counter out of the front row prevents the ambush benefit', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 1], ['cabinBoy', 0, 0, 'alert']],
+      boardingAlert: 1,
+      guardCount: 1,
+    });
+    G.enemyShip.watchReadyCounterIds = [999999];
+    combat.watchReadyCounterIds = [999999];
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'non-watch control did not ambush');
+    assertCounterAmbushCheck(!result.armedAmbush && !result.watchReadyAmbush, 'non-hand Watch Ready id armed the ambush');
+    assertCounterAmbushCheck(result.damage === 3, `non-hand Watch Ready id damage ${result.damage} !== 3`);
+    assertCounterAmbushCheck((result.removedAlertGuards || []).length === 1, 'non-hand Watch Ready id used armed guard removal');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp - 3, 'non-hand Watch Ready id dealt armed damage');
+    results.push({ name: 'Watch Ready ids outside the current hand do not arm Counter Ambush', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('powderBomber');
+    G.phase = 'map';
+    const eligible = G.allCrew[0];
+    const wrongCounter = G.allCrew[1];
+    const wounded = G.allCrew[2];
+    const absent = G.allCrew[3];
+    const sentEarlier = G.allCrew[4];
+    eligible.type = 'sawbones';
+    wrongCounter.type = 'poisoner';
+    wounded.type = 'sawbones';
+    wounded.wounded = true;
+    absent.type = 'sawbones';
+    sentEarlier.type = 'sawbones';
+    G.hand = [eligible, wrongCounter, wounded, sentEarlier];
+    G.deck = [absent];
+    G.discard = [];
+    G.sent = [3];
+    G.counterWatchIds = [eligible.id, wrongCounter.id, wounded.id, absent.id, sentEarlier.id];
+    scene.applyMapNodeSelection(2);
+    const readyIds = (G.enemyShip && G.enemyShip.watchReadyCounterIds) || [];
+    assertCounterAmbushCheck(G.phase === 'boarding', 'watch-ready snapshot did not enter boarding');
+    assertCounterAmbushCheck(readyIds.length === 1 && readyIds[0] === eligible.id, `watch-ready snapshot kept ${JSON.stringify(readyIds)} instead of only eligible counter`);
+    assertCounterAmbushCheck((G.counterWatchIds || []).length === 0, 'Counter Watch did not clear at boarding start');
+    results.push({ name: 'boarding start snapshots only owned, hand-held, unwounded watched counters for Watch Ready', ok: true });
   }
 
   {
@@ -3026,6 +3130,28 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!result, 'Battle Test ambushed');
     assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'Battle Test ambush changed target');
     results.push({ name: 'Battle Test excludes Counter Ambush', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      boardingAlert: 3,
+      guardCount: 2,
+      watchReadyIndices: [0],
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'Battle Test Watch Ready ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'Battle Test Watch Ready changed target HP');
+    assertCounterAmbushCheck(
+      scene.combatLiving('enemy').filter((fighter) => scene.isBoardingAlertGuardFighter(fighter)).length === 2,
+      'Battle Test Watch Ready changed Alert guards'
+    );
+    assertCounterAmbushCheck(!combat.counterAmbush, 'Battle Test stored Watch Ready Counter Ambush data');
+    results.push({ name: 'Battle Test ignores Watch Ready Counter Ambush state', ok: true });
   }
 
   {

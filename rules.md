@@ -127,7 +127,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
 - On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
 - Sending a watched pirate spends `Counter Watch` unless that same sent pirate earns a new eligible counter `Short Crew Drill` that re-marks `Counter Watch`; Cache Drill and non-counter Short Crew report markers still work normally but do not preserve the watch.
-- `Counter Watch` clears when the next boarding starts, never applies in `Battle Test`, and does not change `Prepared`, `Counter Edge`, `Counter Ambush`, `Boarding Trophy`, `Counter Trophy`, or `Ambush Bounty`.
+- When a regular-run boarding starts, `Counter Watch` clears. Any watched pirate that is still owned, in the current hand, not `🩹 Wounded`, and whose type counters that boarding's main scouted enemy becomes `Watch Ready` for that boarding.
+- `Watch Ready` counts as armed only for `Counter Ambush` damage and `Boarding Alert` guard removal: if that pirate is the front-row ambusher, its `Counter Ambush` deals `5` damage and removes up to 2 Alert guards even without a permanent weapon, `Might`, or `Tempo`.
+- `Watch Ready` does not grant or mutate a weapon, `Might`, or `Tempo`; does not create `Prepared`; does not affect `Counter Edge`, `Boarding Trophy`, `Counter Trophy`, `Ambush Bounty`, or `Opening Counter Break`; and never applies in `Battle Test`.
+- A watched pirate that was sent earlier, is absent from the current hand, is `🩹 Wounded`, does not counter the main scouted enemy, or is moved out of the front row before `Fight!` gets no `Watch Ready` ambush benefit.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
 - A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
 - `Top deck` scouted counter purchases without `Full Crew Discount` still go on top of the draw pile, but are not `Prepared`.
@@ -203,6 +206,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
 - `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
 - `Armed Counter Ambush`: if the ambushing counter pirate has any permanent personal upgrade at fight start, meaning a weapon, `1+ 💪 Might`, or `1+ ⚡ Tempo`, that `Counter Ambush` deals `5` damage instead of `3`.
+- A `Watch Ready` ambusher also uses the `Armed Counter Ambush` damage and Alert guard-removal limits for that boarding only, without gaining a permanent upgrade and without enabling `Opening Counter Break` by itself.
 - After damaging and wounding the main scouted enemy, normal `Counter Ambush` also removes up to 1 frontmost then leftmost living `Boarding Alert` guard if any are present.
 - `Armed Counter Ambush` removes up to 2 frontmost then leftmost living `Boarding Alert` guards instead of 1.
 - Guards removed by `Counter Ambush` do not fight, but still count for normal Alert guard plunder if the boarding is won.

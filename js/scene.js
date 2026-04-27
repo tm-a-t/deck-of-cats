@@ -615,6 +615,39 @@ class GameScene extends Phaser.Scene {
     return true;
   }
 
+  counterWatchReadyIdsForBoarding(node) {
+    if (this.isBattleTest() || !node || node.type !== 'ship') return [];
+    const ids = Array.isArray(G.counterWatchIds) ? [...G.counterWatchIds] : [];
+    if (!ids.length) return [];
+
+    const mainKey = node.encounter && node.encounter.mainKey;
+    const counters = mainKey && typeof SCOUTED_SHIP_COUNTERS === 'object' && SCOUTED_SHIP_COUNTERS
+      ? SCOUTED_SHIP_COUNTERS[mainKey]
+      : null;
+    if (!Array.isArray(counters) || !counters.length) return [];
+
+    const counterSet = new Set(counters);
+    const ownedIds = new Set((G.allCrew || []).filter(Boolean).map(pirate => pirate.id));
+    const handById = new Map((G.hand || []).filter(Boolean).map(pirate => [pirate.id, pirate]));
+    const sentIds = new Set((Array.isArray(G.sent) ? G.sent : [])
+      .map(handIdx => G.hand && G.hand[handIdx])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const readyIds = [];
+    const seen = new Set();
+
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = handById.get(id);
+      if (!pirate || !ownedIds.has(id) || sentIds.has(id)) return;
+      if (this.pirateWounded(pirate) || !counterSet.has(pirate.type)) return;
+      readyIds.push(id);
+    });
+
+    return readyIds;
+  }
+
   clearCounterWatch(pirateId = null) {
     if (pirateId == null) {
       G.counterWatchIds = [];
@@ -817,6 +850,10 @@ class GameScene extends Phaser.Scene {
     map.currentLayer = layerIdx;
     map.visited.push(nodeId);
 
+    const watchReadyCounterIds = node.type === 'ship'
+      ? this.counterWatchReadyIdsForBoarding(node)
+      : [];
+
     G.round++;
     G.sent = [];
     G.enthusiasm = 0;
@@ -842,6 +879,7 @@ class GameScene extends Phaser.Scene {
         encounter: node.encounter || null,
         boardingAlert: alert.amount,
         boardingAlertGuards: alert.guardCount,
+        watchReadyCounterIds,
       };
     } else {
       cacheGrant = this.applyScoutedCounterCache(node);
@@ -3195,15 +3233,40 @@ class GameScene extends Phaser.Scene {
       || null;
   }
 
-  counterAmbushPirateIsArmed(pirate) {
+  watchReadyCounterIdsForCombat(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    const source = combat && Array.isArray(combat.watchReadyCounterIds)
+      ? combat.watchReadyCounterIds
+      : (G.enemyShip && Array.isArray(G.enemyShip.watchReadyCounterIds) ? G.enemyShip.watchReadyCounterIds : []);
+    const seen = new Set();
+    const ids = [];
+    source.forEach((id) => {
+      if (id == null || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  counterAmbushPirateIsWatchReady(pirate, combat = G.combat) {
+    if (!pirate || pirate.id == null) return false;
+    return this.watchReadyCounterIdsForCombat(combat).includes(pirate.id);
+  }
+
+  counterAmbushPirateHasPermanentUpgrade(pirate) {
     return !!(pirate
       && (this.pirateHasWeapon(pirate)
         || this.pirateMight(pirate) > 0
         || this.pirateTempo(pirate) > 0));
   }
 
-  counterAmbushDamageForPirate(pirate) {
-    return this.counterAmbushPirateIsArmed(pirate) ? 5 : 3;
+  counterAmbushPirateIsArmed(pirate, combat = G.combat) {
+    return this.counterAmbushPirateHasPermanentUpgrade(pirate)
+      || this.counterAmbushPirateIsWatchReady(pirate, combat);
+  }
+
+  counterAmbushDamageForPirate(pirate, combat = G.combat) {
+    return this.counterAmbushPirateIsArmed(pirate, combat) ? 5 : 3;
   }
 
   findCounterAmbushAmbusher(combat = G.combat) {
@@ -3301,8 +3364,10 @@ class GameScene extends Phaser.Scene {
     if (!mainKey || !ambusher || !target) return null;
 
     const pirate = this.counterAmbushPirateForFighter(ambusher);
-    const armedAmbush = this.counterAmbushPirateIsArmed(pirate);
-    const damage = this.counterAmbushDamageForPirate(pirate);
+    const watchReadyAmbush = this.counterAmbushPirateIsWatchReady(pirate, combat);
+    const permanentArmedAmbush = this.counterAmbushPirateHasPermanentUpgrade(pirate);
+    const armedAmbush = permanentArmedAmbush || watchReadyAmbush;
+    const damage = this.counterAmbushDamageForPirate(pirate, combat);
     const beforeHp = Math.max(0, Math.floor(Number(target.hp) || 0));
     const woundResult = this.combatApplyWounds(target, 1);
     target.hp = Math.max(0, beforeHp - damage);
@@ -3320,7 +3385,7 @@ class GameScene extends Phaser.Scene {
       if (!removedAlertGuard) break;
       removedAlertGuards.push(removedAlertGuard);
     }
-    const routedSupport = armedAmbush
+    const routedSupport = permanentArmedAmbush
       && this.currentBoardingNumber() === 1
       && removedAlertGuards.length === 0
       ? this.removeOpeningCounterBreakSupport(combat, deathPositions)
@@ -3341,6 +3406,8 @@ class GameScene extends Phaser.Scene {
       damage,
       armedAmbush,
       upgradedAmbush: armedAmbush,
+      watchReadyAmbush,
+      permanentArmedAmbush,
       wounds: Math.max(0, Math.floor(Number(woundResult.added) || 0)),
       beforeHp,
       afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
@@ -3363,7 +3430,7 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const target = this.combatFindFighter(result.targetId);
     const targetPoint = target ? this.combatWorldPoint(target) : { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
-    const label = result.armedAmbush ? 'Armed Ambush!' : 'Counter Ambush!';
+    const label = result.watchReadyAmbush ? 'Watch Ambush!' : (result.armedAmbush ? 'Armed Ambush!' : 'Counter Ambush!');
     this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, label, '#ffd54f', 700);
     this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
     const removedGuards = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards : [];
@@ -3459,6 +3526,9 @@ class GameScene extends Phaser.Scene {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'encounterMainKey')) {
         G.combat.encounterMainKey = this.counterTrophyMainKey(G.combat);
       }
+      if (!Array.isArray(G.combat.watchReadyCounterIds)) {
+        G.combat.watchReadyCounterIds = this.watchReadyCounterIdsForCombat(G.combat);
+      }
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
       }
@@ -3484,6 +3554,7 @@ class GameScene extends Phaser.Scene {
       encounterDesc: encounter.encounterDesc || null,
       boardingAlert: alert.amount,
       boardingAlertGuards: alert.guardCount,
+      watchReadyCounterIds: this.watchReadyCounterIdsForCombat(),
       enemyParty: encounter.enemies,
       playerSetupRows: this.combatDefaultPlayerSetupRows(),
       enemySetupRows: this.combatNormalizeSetupRows(
@@ -3619,6 +3690,7 @@ class GameScene extends Phaser.Scene {
     if (buffs.length) parts.push(`Buffs: ${buffs.join(' ')}.`);
     const counterEdgeDamage = Math.max(0, Math.floor(Number(fighter.counterEdgeDamage) || 0));
     if (counterEdgeDamage > 0) parts.push(`Counter Edge +${counterEdgeDamage} damage.`);
+    if (fighter.watchReadyCounter) parts.push('Counter Watch ready for Armed Ambush.');
     const statuses = [];
     const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
     const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
@@ -3756,6 +3828,7 @@ class GameScene extends Phaser.Scene {
       tempo,
       buffCount,
       counterEdgeDamage,
+      watchReadyCounter: this.counterAmbushPirateIsWatchReady(pirate, combat),
     };
   }
 
@@ -3782,6 +3855,7 @@ class GameScene extends Phaser.Scene {
       tempo: stats.tempo,
       buffCount: stats.buffCount,
       counterEdgeDamage: stats.counterEdgeDamage,
+      watchReadyCounter: stats.watchReadyCounter,
       poison: 0,
       wounds: 0,
     };
@@ -6232,6 +6306,7 @@ class GameScene extends Phaser.Scene {
             tempo: preview.tempo,
             buffCount: preview.buffCount,
             counterEdgeDamage: preview.counterEdgeDamage,
+            watchReadyCounter: preview.watchReadyCounter,
             poison: 0,
             wounds: 0,
           };
