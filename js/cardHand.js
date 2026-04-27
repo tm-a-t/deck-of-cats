@@ -330,6 +330,48 @@ function createPirateCard(scene, opts) {
   };
 }
 
+function createCardBadgeOverlay(scene, parentContainer, cardView, badge, L) {
+  if (!scene || !parentContainer || !cardView || !badge) return null;
+  const k = L.k;
+  const label = String(badge.label || 'Route counter');
+  const cardW = cardView.cw;
+  const cardH = cardView.ch;
+  const strokeColor = uiColorInt(badge.stroke || '#ffca28');
+  const fillColor = uiColorInt(badge.fill || '#f6d28a');
+  const textColor = badge.textColor || UI_THEME.colors.ink;
+
+  const border = scene.add.graphics();
+  border.lineStyle(Math.max(1, Math.round(2 * k)), strokeColor, 0.96);
+  border.strokeRoundedRect(
+    -cardW / 2 + 3 * k,
+    -cardH / 2 + 3 * k,
+    cardW - 6 * k,
+    cardH - 6 * k,
+    Math.round((CARD.RADIUS + 2) * k)
+  );
+
+  let fontPx = 9;
+  const text = scene.add.text(0, -cardH / 2 + 18 * k, label, uiHeadingStyle(L, fontPx, textColor, {
+    align: 'center',
+  })).setOrigin(0.5, 0.5);
+  const maxTextW = Math.max(48 * k, cardW - 22 * k);
+  while (text.width > maxTextW && fontPx > 7) {
+    fontPx -= 1;
+    text.setFontSize(L.fs(fontPx));
+  }
+
+  const badgeH = Math.max(16 * k, text.height + 2 * k);
+  const badgeW = Math.min(cardW - 12 * k, Math.max(62 * k, text.width + 12 * k));
+  const bg = scene.add.graphics();
+  bg.fillStyle(fillColor, 0.96);
+  bg.lineStyle(Math.max(1, Math.round(1 * k)), strokeColor, 1);
+  bg.fillRoundedRect(-badgeW / 2, text.y - badgeH / 2, badgeW, badgeH, Math.round(5 * k));
+  bg.strokeRoundedRect(-badgeW / 2, text.y - badgeH / 2, badgeW, badgeH, Math.round(5 * k));
+
+  parentContainer.add([border, bg, text]);
+  return { border, bg, text };
+}
+
 function createCardBandOverlay(scene, opts) {
   const L = opts.L || scene.L;
   const k = L.k;
@@ -774,6 +816,7 @@ class CardHand {
     const onCardPointerDown = opts.onCardPointerDown;
     const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
     const cardSlotWeaponKeyForCard = opts.cardSlotWeaponKeyForCard || (() => null);
+    const cardBadgeForCard = opts.cardBadgeForCard || (() => null);
     const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
     this._onCardHoverChange = opts.onCardHoverChange || null;
@@ -833,6 +876,11 @@ class CardHand {
         hovered: false,
         dragging: false,
       };
+
+      const cardBadge = cardBadgeForCard(pirate, handIdx);
+      if (cardBadge) {
+        cardData.badge = createCardBadgeOverlay(scene, ct, cardView, cardBadge, L);
+      }
 
       if (allowInteraction) {
         cardImg.setInteractive({ useHandCursor: true });

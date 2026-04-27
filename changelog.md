@@ -277,3 +277,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-073312 — rev bf634ae
 
 - Gameplay: true - Added Opening Deckhand Counters: during regular-run Boarding 1, the selected opening route's starter pirate now counts as a gameplay counter for route-facing drills, watch, ambush, edge, trophies, and bounty while staying out of shop-only counter logic. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, related counter/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-073312.log`.
+
+## 2026-04-27 — run 20260427-075349 — rev a60c800
+
+- Gameplay: false - Added Opening Route Orders as a sending-phase aid: matching starter cards are badged as route counters before Boarding 1, and one-short/Cache Drill text now names that starter alongside the existing report, Watch, and Alert-refund payoff without changing mechanics. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, related counter/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-075349.log`.

@@ -2484,7 +2484,10 @@ function runOpeningDeckhandCounterChecks(runtime) {
     G.phase = 'sending';
     G.island = scene.buildIslandState(api.ISLANDS[route.islandIdx]);
     G.sent = [];
-    const pirates = G.allCrew.slice(0, Math.max(3, route.sentCount + 1));
+    const sentCount = opts.sentCount != null
+      ? Math.max(0, Math.floor(Number(opts.sentCount) || 0))
+      : route.sentCount;
+    const pirates = G.allCrew.slice(0, Math.max(3, sentCount + 1, route.sentCount + 1));
     pirates.forEach((pirate, index) => {
       pirate.type = index === 0 ? (opts.firstType || route.starterType) : 'armsman';
       pirate.weaponKey = null;
@@ -2492,9 +2495,9 @@ function runOpeningDeckhandCounterChecks(runtime) {
       pirate.tempo = 0;
       pirate.wounded = false;
     });
-    if (route.sentCount > 1) pirates[1].type = route.nonmatchingType;
-    G.hand = pirates.slice(0, Math.max(3, route.sentCount + 1));
-    for (let i = 0; i < route.sentCount; i++) G.sent.push(i);
+    if (route.sentCount > 1 || sentCount > 1) pirates[1].type = route.nonmatchingType;
+    G.hand = pirates.slice(0, Math.max(3, sentCount + 1, route.sentCount + 1));
+    for (let i = 0; i < sentCount; i++) G.sent.push(i);
     G.deck = [];
     G.discard = [];
     G.enthusiasm = 0;
@@ -2507,6 +2510,19 @@ function runOpeningDeckhandCounterChecks(runtime) {
   };
 
   routes.forEach((route) => {
+    const badgeSetup = setupSending(route, { sentCount: 0 });
+    const routeOrder = scene.openingRouteCounterState();
+    assertOpeningDeckhandCounterCheck(routeOrder && routeOrder.starterType === route.starterType, `${route.label} route order starter ${routeOrder && routeOrder.starterType}`);
+    assertOpeningDeckhandCounterCheck(routeOrder.available, `${route.label} route starter was not available`);
+    const routeBadge = scene.routeCounterBadgeForCard(badgeSetup.pirates[0]);
+    const missBadge = scene.routeCounterBadgeForCard(badgeSetup.pirates[1]);
+    assertOpeningDeckhandCounterCheck(routeBadge && routeBadge.label === 'Route counter', `${route.label} starter badge missing`);
+    assertOpeningDeckhandCounterCheck(!missBadge, `${route.label} nonmatching starter was badged`);
+    const routePlanLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(route.sentCount));
+    assertOpeningDeckhandCounterCheck(routePlanLine.includes(`Route counter: ${starterName(route.starterType)}`), `${route.label} one-short line did not name route starter: ${routePlanLine}`);
+    assertOpeningDeckhandCounterCheck(routePlanLine.includes('Watch') && routePlanLine.includes('counter refunds Alert'), `${route.label} one-short route line did not expose Watch/refund: ${routePlanLine}`);
+    results.push({ name: `${route.label} sending aid badges and names ${starterName(route.starterType)} as the route counter`, ok: true, routePlanLine });
+
     const { G, pirates } = setupSending(route, { boardingAlert: 4 });
     const drilled = pirates[0];
     const result = applyShortCrewDrillForSim(scene);
@@ -2573,13 +2589,18 @@ function runOpeningDeckhandCounterChecks(runtime) {
 
   routes.forEach((route) => {
     const { G, pirate } = setupCache(route, route.starterType);
+    const drillDesc = scene.scoutedCacheDrillDescription();
+    const firstShopCounter = scene.scoutedCacheDrillCounterTypes(route.mainKey).find(type => type !== route.starterType);
+    const firstShopName = firstShopCounter && api.TYPES[firstShopCounter] && api.TYPES[firstShopCounter].name;
+    assertOpeningDeckhandCounterCheck(drillDesc.includes(`Route counter: ${starterName(route.starterType)}`), `${route.label} Cache Drill did not name route starter first: ${drillDesc}`);
+    assertOpeningDeckhandCounterCheck(!firstShopName || drillDesc.includes(firstShopName), `${route.label} Cache Drill hid shop counters: ${drillDesc}`);
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
     assertOpeningDeckhandCounterCheck(reward && reward.applied, `${route.label} starter did not claim Cache Drill`);
     assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1, `${route.label} Cache Drill Might ${(pirate.might || 0)} !== 1`);
     assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === 1, `${route.label} Cache Drill refund ${JSON.stringify(reward.alertRefund)}`);
     assertOpeningDeckhandCounterCheck(G.boardingAlert === 2, `${route.label} Cache Drill alert ${G.boardingAlert} !== 2`);
     assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).includes(pirate.id), `${route.label} Cache Drill did not mark early report`);
-    results.push({ name: `${route.label} ${starterName(route.starterType)} can claim Boarding 1 Cache Drill`, ok: true });
+    results.push({ name: `${route.label} ${starterName(route.starterType)} can claim Boarding 1 Cache Drill`, ok: true, drillDesc });
   });
 
   {
@@ -2681,6 +2702,17 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(scene.combatCounterEdgeDamageForPirate(starter, combat) === 0, 'Battle Test gave starter Counter Edge');
     assertOpeningDeckhandCounterCheck(!scene.applyCounterAmbush(combat, { silent: true }), 'Battle Test starter triggered Counter Ambush');
     results.push({ name: 'Opening Deckhand counters do not apply in Battle Test', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const battleAid = setupSending(route, { mode: 'battleTest', sentCount: 0 });
+    assertOpeningDeckhandCounterCheck(!scene.openingRouteCounterState(), 'Battle Test exposed route-counter sending aid');
+    assertOpeningDeckhandCounterCheck(!scene.routeCounterBadgeForCard(battleAid.pirates[0]), 'Battle Test badged starter route counter');
+    const laterAid = setupSending(route, { boardingCount: 1, sentCount: 0 });
+    assertOpeningDeckhandCounterCheck(!scene.openingRouteCounterState(), 'Boarding 2+ exposed route-counter sending aid');
+    assertOpeningDeckhandCounterCheck(!scene.routeCounterBadgeForCard(laterAid.pirates[0]), 'Boarding 2+ badged starter route counter');
+    results.push({ name: 'route-counter sending aid stays out of Battle Test and Boarding 2+', ok: true });
   }
 
   {

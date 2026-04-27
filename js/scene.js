@@ -538,13 +538,34 @@ class GameScene extends Phaser.Scene {
     const drill = this.scoutedCacheDrillState();
     if (!drill) return '';
     if (drill.granted) return 'Cache Drill claimed';
-    const names = this.scoutedCacheDrillCounterTypes(drill.mainKey)
+    const counterTypes = this.scoutedCacheDrillCounterTypes(drill.mainKey);
+    const names = counterTypes
       .map(type => TYPES[type] && TYPES[type].name)
       .filter(Boolean);
+    const routeCounter = this.openingRouteCounterState();
+    const routeCounterType = routeCounter
+      && routeCounter.mainKey === drill.mainKey
+      && routeCounter.present
+      && counterTypes.includes(routeCounter.starterType)
+      ? routeCounter.starterType
+      : null;
+    const shopCounterNames = routeCounterType
+      ? counterTypes
+        .filter(type => type !== routeCounterType)
+        .map(type => TYPES[type] && TYPES[type].name)
+        .filter(Boolean)
+      : [];
+    const shopLabel = shopCounterNames.length > 2
+      ? `${shopCounterNames[0]}/${shopCounterNames[1]}...`
+      : shopCounterNames.join('/');
     const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
     const refundsAlert = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)) > 0
       && !drill.alertRefunded;
     const payoff = refundsAlert ? ' gains +💪, disarms cache Alert, reports next' : ' gains +💪, reports next';
+    if (routeCounterType) {
+      const suffix = shopLabel ? ` (or ${shopLabel})` : '';
+      return `Cache Drill: Route counter: ${routeCounter.starterName}${suffix}${payoff}`;
+    }
     return `Cache Drill: first ${label || 'counter'}${payoff}`;
   }
 
@@ -1213,6 +1234,99 @@ class GameScene extends Phaser.Scene {
     return gameplayCounterTypes(key, no, { mode: G.mode });
   }
 
+  openingRouteCounterState() {
+    if (this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    if (!intel || boardingNo !== 1 || !intel.mainKey) return null;
+
+    const starterTypes = openingDeckhandCounterTypes(intel.mainKey, boardingNo, { mode: G.mode });
+    const starterType = starterTypes[0];
+    if (!starterType || !TYPES[starterType]) return null;
+
+    const sent = new Set(Array.isArray(G.sent) ? G.sent : []);
+    const sending = this._sendingToIsland || new Set();
+    const entries = [];
+    const availableEntries = [];
+    (G.hand || []).forEach((pirate, handIdx) => {
+      if (!pirate || pirate.type !== starterType || !this.pirateStillInCrew(pirate)) return;
+      if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return;
+      const entry = {
+        pirate,
+        handIdx,
+        sent: sent.has(handIdx),
+        available: !sent.has(handIdx) && !sending.has(handIdx),
+      };
+      entries.push(entry);
+      if (entry.available) availableEntries.push(entry);
+    });
+
+    const active = this.leftmostIslandPirateEntry();
+    const activeEntry = active && active.pirate && active.pirate.type === starterType ? active : null;
+    const starterName = TYPES[starterType].name || starterType;
+
+    return {
+      mainKey: intel.mainKey,
+      boardingNo,
+      intel,
+      starterType,
+      starterName,
+      starterTypes,
+      entries,
+      availableEntries,
+      activeEntry,
+      present: entries.length > 0,
+      available: availableEntries.length > 0,
+      active: !!activeEntry,
+    };
+  }
+
+  routeCounterBadgeForCard(pirate) {
+    const state = this.openingRouteCounterState();
+    if (!state || !pirate || pirate.type !== state.starterType) return null;
+    return {
+      label: 'Route counter',
+      fill: '#f6d28a',
+      stroke: '#ffca28',
+      textColor: UI_THEME.colors.ink,
+    };
+  }
+
+  openingRouteCounterShortCrewPlan(sentCount, shortCrewDrill) {
+    if (!shortCrewDrill) return null;
+    const state = this.openingRouteCounterState();
+    if (!state || !state.present) return null;
+
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    if (max <= 0 || sent <= 0 || max - sent !== 1 || sent < currentSent) return null;
+
+    const target = this.leftmostIslandPirateEntry();
+    const active = !!(target && target.pirate && target.pirate.type === state.starterType);
+    const available = !active && currentSent === 0 && sent > currentSent && state.availableEntries.length > 0;
+    if (!active && !available) return null;
+
+    return {
+      type: state.starterType,
+      name: state.starterName,
+      active,
+      available,
+      conditional: available && !active,
+      showCounterPayoff: !!shortCrewDrill.reportsEarly,
+    };
+  }
+
   isScoutedCounterShopType(type) {
     if (!type) return false;
     return this.scoutedCounterTypes().includes(type);
@@ -1677,6 +1791,9 @@ class GameScene extends Phaser.Scene {
     const discount = this.projectFullCrewDiscount(sentCount);
     const baseBoardingAlert = this.pendingBoardingAlert();
     const shortCrewDrill = this.projectShortCrewDrill(sentCount);
+    if (shortCrewDrill) {
+      shortCrewDrill.routeCounterPlan = this.openingRouteCounterShortCrewPlan(sentCount, shortCrewDrill);
+    }
     const refund = shortCrewDrill && shortCrewDrill.counterAlertRefund;
     const alertBeforeRefund = baseBoardingAlert + Math.max(0, Math.floor(Number(wage.alert) || 0));
     const projectedRefund = refund && refund.eligible
@@ -7023,12 +7140,21 @@ class GameScene extends Phaser.Scene {
     let shortCrewText = null;
     if (shortCrew && shortCrew.text) {
       const refund = shortCrew.counterAlertRefund || {};
-      let refundText = '';
-      if (refund.eligible) refundText = ', counter refunds Alert';
-      else if (refund.possible && !shortCrew.targetKnown) refundText = ', counter refunds Alert';
-      else if (refund.possible) refundText = ', leftmost counter refunds Alert';
-      const watchText = shortCrew.counterWatch ? ', Watch' : '';
-      shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+      const routeCounterPlan = shortCrew.routeCounterPlan;
+      if (routeCounterPlan && routeCounterPlan.name) {
+        const refundText = routeCounterPlan.showCounterPayoff
+          ? (routeCounterPlan.conditional ? ', counter refunds Alert if sent' : ', counter refunds Alert')
+          : '';
+        const watchText = routeCounterPlan.showCounterPayoff ? ', Watch' : '';
+        shortCrewText = `Route counter: ${routeCounterPlan.name} · Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+      } else {
+        let refundText = '';
+        if (refund.eligible) refundText = ', counter refunds Alert';
+        else if (refund.possible && !shortCrew.targetKnown) refundText = ', counter refunds Alert';
+        else if (refund.possible) refundText = ', leftmost counter refunds Alert';
+        const watchText = shortCrew.counterWatch ? ', Watch' : '';
+        shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+      }
     }
     return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, openingPlanText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
   }
@@ -7238,6 +7364,7 @@ class GameScene extends Phaser.Scene {
           : (this.pirateHasWeapon(pirate) ? 'armed' : 'none')
       ),
       cardSlotWeaponKeyForCard: (pirate) => this.pirateWeaponKey(pirate),
+      cardBadgeForCard: isSending ? (pirate) => this.routeCounterBadgeForCard(pirate) : null,
       touchTapPreviewsAction: !isWeaponAssignment,
       onCardPointerDown: isWeaponAssignment ? (handIdx) => this.assignWeaponToHandPirate(handIdx) : null,
       onSendToIsland: isSending ? (idx, fromPos) => this.sendToIsland(idx, fromPos) : null,
