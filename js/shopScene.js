@@ -213,6 +213,32 @@ class ShopScene extends Phaser.Scene {
     return text;
   }
 
+  renderOpeningRoutePlan(panel, topY) {
+    const game = this.scene.get('game');
+    if (!game || typeof game.openingRoutePlanLines !== 'function') return 0;
+    const lines = game.openingRoutePlanLines({ context: 'shop' });
+    if (!lines.length) return 0;
+
+    const L = this.L;
+    const x = panel.x + 28 * L.k;
+    const w = panel.w - 96 * L.k;
+    const text = this.add.text(x + 10 * L.k, topY + 8 * L.k, lines.join('\n'), {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(11),
+      lineSpacing: uiLineSpacingPx(L, 11, 13),
+      wordWrap: { width: w - 20 * L.k },
+    }).setOrigin(0, 0);
+    const h = text.height + 16 * L.k;
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.paper), 0.42);
+    bg.fillRoundedRect(x, topY, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.75);
+    bg.strokeRoundedRect(x, topY, w, h, 8 * L.k);
+    this.panelLayer.add(bg);
+    this.panelLayer.add(text);
+    return h;
+  }
+
   renderPanel() {
     this.stopFeaturedTicker();
     this.panelLayer.removeAll(true);
@@ -249,6 +275,9 @@ class ShopScene extends Phaser.Scene {
     });
     this.panelLayer.add(close);
     const intelText = this.renderNextBoardingIntel(m);
+    const routePlanTop = m.y + (intelText ? 116 : 86) * L.k;
+    const routePlanH = this.renderOpeningRoutePlan(m, routePlanTop);
+    const routePlanBottomPad = routePlanH > 0 ? (routePlanTop - m.y + routePlanH + 22 * L.k) : 0;
 
     const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
     const game = this.scene.get('game');
@@ -263,7 +292,7 @@ class ShopScene extends Phaser.Scene {
 
     const rows = Math.max(1, Math.ceil(G.shop.length / 4));
     const layoutBase = {
-      topPad: (intelText ? 176 : 150) * L.k,
+      topPad: Math.max((intelText ? 176 : 150) * L.k, routePlanBottomPad),
       bottomPad: 100 * L.k,
       footerH: 52 * L.k,
       rowGap: 44 * L.k,
@@ -329,7 +358,7 @@ class ShopScene extends Phaser.Scene {
         }
         if (!canBuy) return;
         if (this._cardTips) this._cardTips.hide();
-        this.animateBuyTransition(i, m, cardScale);
+        this.animateBuyTransition(i, m, cardScale, shopLayout);
       });
 
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
@@ -413,7 +442,7 @@ class ShopScene extends Phaser.Scene {
         action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
           if (this._cardTips) this._cardTips.hide();
-          this.animateBuyTransition(i, m, cardScale);
+          this.animateBuyTransition(i, m, cardScale, shopLayout);
         });
       }
     });
@@ -549,7 +578,7 @@ class ShopScene extends Phaser.Scene {
     return dur;
   }
 
-  animateBuyTransition(shopIdx, panel, cardScale = 1) {
+  animateBuyTransition(shopIdx, panel, cardScale = 1, layoutOverride = null) {
     if (G.shopAnimating || G.phase !== 'shopping' || G.busy) return;
     const L = this.L;
     const game = this.scene.get('game');
@@ -566,13 +595,15 @@ class ShopScene extends Phaser.Scene {
 
     G.shopAnimating = true;
 
-    const shopLayout = {
-      cardScale,
-      topPad: 150 * L.k,
-      bottomPad: 100 * L.k,
-      footerH: 52 * L.k,
-      rowGap: 56 * L.k,
-    };
+    const shopLayout = layoutOverride
+      ? { ...layoutOverride, cardScale }
+      : {
+        cardScale,
+        topPad: 150 * L.k,
+        bottomPad: 100 * L.k,
+        footerH: 52 * L.k,
+        rowGap: 56 * L.k,
+      };
     const firstPos = this.shopPos(0, oldN, panel, shopLayout);
     const lastPos = this.shopPos(oldN - 1, oldN, panel, shopLayout);
     const cardH = CARD.H * L.k * cardScale;

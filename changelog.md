@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-215859 — rev 13225b5 — build 0.1.0
+
+- Gameplay: false - Added an Opening Route Plan summary that exposes each opening route's enemy, starter counter, cache stakes, primary/side shop targets, setup state, shop quote outcomes, and Boarding 1 payoff in the map, sending, and shop views without changing mechanics. Validated with JS syntax checks, an opening-route plan helper smoke, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-215859.log`, and `git diff --check`.
+
 ## 2026-04-27 — run 20260427-214452 — rev 7fd12f8 — build 0.1.0
 
 - Gameplay: true - Added Route Sidekick Bounty: Opening Side Prep sidekicks that qualify for Route Sidekick Report on a regular Boarding 1 win now pay `+1` route cache resource (`🪵`/`🪨`/`🪙`) once, with shop and plan text previewing the bounty. Validated with JS syntax checks, `node sim/fast-sim.js --check-route-sidekick-report --json`, `node sim/fast-sim.js --check-opening-side-prep --json`, related counter/cache targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-214452.log`.

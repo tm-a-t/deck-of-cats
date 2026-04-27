@@ -344,6 +344,19 @@ class MapScene extends Phaser.Scene {
           });
         }
 
+        const routePlanLines = this.openingRouteChoicePlanLines(node, li);
+        if (routePlanLines.length) {
+          const routePlan = this.add.text(nx, ny + r + 20 * L.k, routePlanLines.join('\n'), {
+            fontFamily: UI_THEME.fonts.body,
+            fontSize: L.fs(9),
+            color: UI_THEME.colors.ink,
+            align: 'center',
+            lineSpacing: uiLineSpacingPx(L, 9, 11),
+            wordWrap: { width: 124 * L.k },
+          }).setOrigin(0.5, 0);
+          this.mapGfx.add(routePlan);
+        }
+
         // Layer number (small, to the side)
         if (ni === 0) {
           const layerNum = this.add.text(this.panel.innerX + 8, ny, '' + (li + 1), {
@@ -562,6 +575,13 @@ class MapScene extends Phaser.Scene {
     const starterType = openingDeckhandCounterTypes(cache.mainKey, 1, { mode: G.mode })[0];
     const def = starterType && TYPES[starterType];
     return def && def.name ? `${def.name} Watch` : '';
+  }
+
+  openingRouteChoicePlanLines(node, layerIdx) {
+    if (!node || layerIdx !== 0 || !G.map || G.map.currentLayer >= 0) return [];
+    const game = this.scene.get('game');
+    if (!game || typeof game.openingRouteChoicePlanLines !== 'function') return [];
+    return game.openingRouteChoicePlanLines(node);
   }
 
   uiTxt(x, y, str, style) {

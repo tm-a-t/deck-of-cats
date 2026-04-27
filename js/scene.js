@@ -2193,6 +2193,230 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  openingRouteInfoForMainKey(mainKey) {
+    if (!mainKey) return null;
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const starterType = typeof openingDeckhandCounterTypes === 'function'
+      ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })[0]
+      : null;
+    const primaryType = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
+      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
+      : null;
+    const sideType = typeof OPENING_ROUTE_SIDE_OFFERS !== 'undefined'
+      ? OPENING_ROUTE_SIDE_OFFERS[mainKey]
+      : null;
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    return {
+      mainKey,
+      enemy,
+      enemyName: enemy ? enemy.name : mainKey,
+      enemyLabel: enemy ? `${enemy.emoji} ${enemy.name}` : mainKey,
+      starterType,
+      starterName: pirateTypeDisplayName(starterType),
+      primaryType,
+      primaryName: pirateTypeDisplayName(primaryType),
+      sideType,
+      sideName: pirateTypeDisplayName(sideType),
+      bountyRes,
+      bountyEmoji: bountyRes ? (RES_EMOJI[bountyRes] || '') : '',
+    };
+  }
+
+  openingRouteCacheStakesFromNode(node, mainKey = null) {
+    if (!node || node.type !== 'island') return null;
+    const cache = node.scoutedCache;
+    if (cache) {
+      return {
+        mainKey: cache.mainKey || mainKey || null,
+        res: cache.res || null,
+        amount: Math.max(0, Math.floor(Number(cache.amount) || 0)),
+        enthusiasm: cache.enthusiasm == null ? 1 : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0)),
+        alert: Math.max(0, Math.floor(Number(cache.alert) || 0)),
+        claimed: !!cache.claimed,
+      };
+    }
+    const key = mainKey || (typeof openingRouteMainKeyForIslandIdx === 'function'
+      ? openingRouteMainKeyForIslandIdx(node.islandIdx)
+      : null);
+    const stakes = key && typeof openingScoutedCounterCacheStakes === 'function'
+      ? openingScoutedCounterCacheStakes(node, key)
+      : null;
+    return stakes ? {
+      mainKey: key,
+      res: stakes.res || null,
+      amount: Math.max(0, Math.floor(Number(stakes.amount) || 0)),
+      enthusiasm: stakes.enthusiasm == null ? 1 : Math.max(0, Math.floor(Number(stakes.enthusiasm) || 0)),
+      alert: Math.max(0, Math.floor(Number(stakes.alert) || 0)),
+      claimed: false,
+    } : null;
+  }
+
+  openingRouteCacheStakesText(stakes) {
+    if (!stakes) return '';
+    const parts = [];
+    const res = stakes.res || null;
+    const amount = Math.max(0, Math.floor(Number(stakes.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(stakes.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(stakes.alert) || 0));
+    if (res && RES_EMOJI[res] && amount > 0) parts.push(`+${amount > 1 ? amount : ''}${RES_EMOJI[res]}`);
+    if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    return parts.join(' ');
+  }
+
+  openingRouteChoicePlanLines(node) {
+    if (this.isBattleTest() || !node || node.type !== 'island') return [];
+    const stakes = this.openingRouteCacheStakesFromNode(node);
+    const mainKey = stakes && stakes.mainKey;
+    const info = this.openingRouteInfoForMainKey(mainKey);
+    if (!info || !info.enemy) return [];
+    const island = ISLANDS[node.islandIdx];
+    const cacheText = this.openingRouteCacheStakesText(stakes) || 'cache';
+    const routeName = island && island.name ? island.name.replace(' Island', '') : 'Route';
+    return [
+      `${routeName}: ${info.enemyName}`,
+      `${info.starterName} opens ${cacheText}`,
+      `Shop ${info.primaryName}/${info.sideName}`,
+    ];
+  }
+
+  selectedOpeningRouteState() {
+    if (this.isBattleTest()
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || !G.map
+      || typeof openingRouteShopState !== 'function') {
+      return null;
+    }
+    const route = openingRouteShopState({
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    if (!route || !route.mainKey) return null;
+    const info = this.openingRouteInfoForMainKey(route.mainKey);
+    if (!info || !info.enemy) return null;
+
+    const currentNode = typeof mapNodeById === 'function' && G.map.currentNodeId != null
+      ? mapNodeById(G.map, G.map.currentNodeId)
+      : null;
+    let cacheNode = currentNode
+      && currentNode.scoutedCache
+      && currentNode.scoutedCache.mainKey === route.mainKey
+      ? currentNode
+      : null;
+    if (!cacheNode && Array.isArray(G.map.layers)) {
+      const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
+      const cacheLayer = firstLayer > 0 ? G.map.layers[firstLayer - 1] : [];
+      cacheNode = (cacheLayer || []).find(node =>
+        node && node.scoutedCache && node.scoutedCache.mainKey === route.mainKey
+      ) || null;
+    }
+    const stakes = cacheNode ? this.openingRouteCacheStakesFromNode(cacheNode, route.mainKey) : null;
+    return { route, info, cacheNode, stakes };
+  }
+
+  selectedOpeningRouteCacheStatusText(state) {
+    if (!state || !state.info) return '';
+    const stakes = state.stakes;
+    const mainKey = state.info.mainKey;
+    const drill = G.island && G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === mainKey
+      ? G.island.scoutedCacheDrill
+      : null;
+    const cacheText = this.openingRouteCacheStakesText(stakes || drill) || 'cache';
+    const claimed = !!(
+      (stakes && stakes.claimed)
+      || G.openingRouteCacheClaimedMainKey === mainKey
+      || (drill && drill.cacheClaimed)
+    );
+    if (claimed) return `Cache opened ${cacheText}`;
+    if (G.phase === 'sending' && drill && drill.cachePending) return `Cache unopened: first sent opens ${cacheText}`;
+    if ((G.phase === 'ship' || G.phase === 'shopping') && state.cacheNode && state.cacheNode.id === G.map.currentNodeId) {
+      return `Cache missed ${cacheText}`;
+    }
+    return `Cache unopened ${cacheText}`;
+  }
+
+  openingRouteSetupFlagText() {
+    const full = this.activeFullCrewDiscount();
+    const prepArmed = !!G.openingCounterPlan;
+    const parts = [];
+    if (G.phase === 'shopping') {
+      parts.push(full > 0 ? `Full Crew -${full}☠️ active` : 'Full Crew expired');
+      parts.push(prepArmed ? 'Opening Prep active' : 'Opening Prep expired');
+    } else if (G.phase === 'sending') {
+      parts.push('Full send arms Full Crew -1☠️');
+      parts.push(prepArmed ? 'Opening Prep armed' : 'One-short or cache arms Opening Prep');
+    } else {
+      if (full > 0) parts.push(`Full Crew -${full}☠️`);
+      if (prepArmed) parts.push('Opening Prep armed');
+    }
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  openingRouteBuyQuoteText(type) {
+    if (!type || !TYPES[type]) return '';
+    const def = TYPES[type];
+    const visible = Array.isArray(G.shop) && G.shop.includes(type);
+    if (!visible) return `${def.name}: target`;
+    const quote = this.shopPurchaseQuote(type);
+    const price = quote.effectiveCost < quote.cost
+      ? `${quote.cost}->${quote.effectiveCost}☠️`
+      : `${quote.effectiveCost}☠️`;
+    if (!quote.canBuy) {
+      const missing = Math.max(0, Math.floor(Number(quote.missing) || 0));
+      return `${def.name} ${price}: need ${missing}☠️`;
+    }
+    const tags = [];
+    if (quote.fullCrewCoverage > 0) tags.push(`covered ${quote.fullCrewCoverage}☠️`);
+    if (quote.openingCounterPrepMight) tags.push('+💪');
+    if (quote.openingSidePrep) {
+      const gain = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+      const target = quote.openingSidePrepTargetName || pirateTypeDisplayName(quote.openingSidePrepTargetType);
+      const bounty = quote.openingSidekickBountyEmoji ? `win +${quote.openingSidekickBountyEmoji}` : '';
+      tags.push(['Side Prep', gain ? `+${gain} ${target}` : '', bounty].filter(Boolean).join(' '));
+    }
+    if (quote.alarmRushedRouteCounter) tags.push('Alarm rush');
+    if (quote.topDeck) tags.push(quote.counter ? 'top+Watch' : 'top');
+    if (quote.credit && quote.alert > 0) tags.push(`+${quote.alert} Alert`);
+    if (quote.routeCounterCover > 0) tags.push(`Cover -${quote.routeCounterCover} Alert`);
+    return `${def.name} ${price}: ${tags.length ? tags.join(', ') : 'buy'}`;
+  }
+
+  openingRoutePlanLines(opts = {}) {
+    const state = this.selectedOpeningRouteState();
+    if (!state) return [];
+    const info = state.info;
+    const cacheStatus = this.selectedOpeningRouteCacheStatusText(state);
+    const setup = this.openingRouteSetupFlagText();
+    const payoff = info.bountyEmoji
+      ? `B1 payoff: counter win +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
+      : '';
+    const targets = `Targets: ${info.primaryName} primary; ${info.sideName} side`;
+    if (opts.context === 'shop') {
+      const payoffShort = info.bountyEmoji
+        ? `B1 counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
+        : 'B1 counter payoff';
+      return [
+        `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
+        [setup, payoffShort].filter(Boolean).join(' · '),
+        `Buy: ${this.openingRouteBuyQuoteText(info.primaryType)}; ${this.openingRouteBuyQuoteText(info.sideType)}`,
+      ].filter(Boolean);
+    }
+    if (opts.context === 'sending') {
+      const bountyPair = info.bountyEmoji ? `B1 +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
+      return [
+        `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
+        `Full send = Full Crew; one-short = Opening Prep +💪; shop ${info.primaryName}/${info.sideName}; ${bountyPair}`,
+      ];
+    }
+    const sendChoice = '';
+    return [
+      `Opening route: ${info.enemyLabel}; ${info.starterName} starter. ${cacheStatus}`,
+      [targets, setup, payoff].filter(Boolean).join(' · '),
+      sendChoice,
+    ].filter(Boolean);
+  }
+
   updateFullCrewDiscountForCompletedIsland() {
     G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
     return G.fullCrewDiscount;
@@ -8493,12 +8717,21 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const rows = this.sendingPlanRows();
     const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
-    const rowH = 54 * L.k;
     const pad = 8 * L.k;
-    const h = pad * 2 + rowH * rows.length;
+    const routeLines = this.openingRoutePlanLines({ context: 'sending' });
+    const routeText = routeLines.length
+      ? this.add.text(0, 0, routeLines.join('\n'), uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(10),
+        lineSpacing: uiLineSpacingPx(L, 10, 12),
+        wordWrap: { width: w - pad * 2 },
+      })).setOrigin(0, 0)
+      : null;
+    const routeH = routeText ? routeText.height + 12 * L.k : 0;
+    const rowH = (routeText ? 50 : 54) * L.k;
+    const h = pad * 2 + routeH + rowH * rows.length;
     const topBase = L.IS_MOBILE && (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0)
-      ? 104 * L.k
-      : 96 * L.k;
+      ? (routeText ? 76 : 104) * L.k
+      : (routeText ? 78 : 96) * L.k;
     const topLimit = this.islandCenterY() - 160 * L.k;
     const top = Math.max(92 * L.k, Math.min(topBase, topLimit));
     const x = L.cx;
@@ -8514,14 +8747,23 @@ class GameScene extends Phaser.Scene {
     bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.9);
     bg.strokeRoundedRect(left, top, w, h, 8 * L.k);
     bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.65);
+    if (routeText) {
+      const y = top + pad + routeH;
+      bg.lineBetween(left + pad, y, left + w - pad, y);
+    }
     for (let i = 1; i < rows.length; i++) {
-      const y = top + pad + rowH * i;
+      const y = top + pad + routeH + rowH * i;
       bg.lineBetween(left + pad, y, left + w - pad, y);
     }
     this.addTo('phase', bg);
 
+    if (routeText) {
+      routeText.setPosition(left + pad, top + pad + 2 * L.k);
+      this.addTo('phase', routeText);
+    }
+
     rows.forEach((row, index) => {
-      const rowY = top + pad + index * rowH;
+      const rowY = top + pad + routeH + index * rowH;
       const label = this.add.text(rowLeft, rowY + rowH / 2, row.label, uiHeadingStyle(L, 13, '#f6d28a', {
         align: 'left',
       })).setOrigin(0, 0.5);
