@@ -73,6 +73,12 @@ const OPENING_ROUTE_PRIMARY_COUNTERS = {
   deckSniper: 'needler',
 };
 
+const OPENING_ROUTE_SIDE_OFFERS = {
+  shellback: 'drummer',
+  powderBomber: 'trainer',
+  deckSniper: 'survivalist',
+};
+
 const OPENING_ROUTE_COUNTER_CANDIDATES = ['poisoner', 'sawbones', 'needler'];
 const OPENING_ROUTE_SHOP_FILLERS = ['drummer', 'herald', 'trainer', 'survivalist'];
 
@@ -209,6 +215,7 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
   if (!route) return out;
 
   const primary = route.primaryCounterType;
+  const sideOffer = OPENING_ROUTE_SIDE_OFFERS[route.mainKey];
   const openingCandidates = new Set(OPENING_ROUTE_COUNTER_CANDIDATES);
   const n = out.length;
   const maxCost = shopMaxCostForRound(round);
@@ -276,14 +283,37 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
         ? Math.floor(opts.newSlotIndex)
         : (firstOpeningIndex >= 0 ? firstOpeningIndex : 0)));
   const primaryIndex = Phaser.Math.Clamp(rawPrimaryIndex, 0, n - 1);
+  const sideOfferEligible = !!(
+    n > 1
+    && sideOffer
+    && TYPES[sideOffer]
+    && TYPES[sideOffer].cost <= maxCost
+    && !openingCandidates.has(sideOffer)
+  );
+
+  const sideCurrentIndex = sideOfferEligible ? out.findIndex(type => type === sideOffer) : -1;
+  const sideIndex = sideOfferEligible
+    ? [
+        sideCurrentIndex,
+        Number.isFinite(opts.newSlotIndex) ? Math.floor(opts.newSlotIndex) : -1,
+        ...out.map((_, index) => index),
+      ]
+        .map(index => (index >= 0 ? Phaser.Math.Clamp(index, 0, n - 1) : -1))
+        .find(index => index >= 0 && index !== primaryIndex)
+    : -1;
 
   const slots = Array.from({ length: n }, () => null);
   const seen = new Set([primary]);
   slots[primaryIndex] = primary;
+  if (sideOfferEligible && sideIndex >= 0 && sideIndex !== primaryIndex) {
+    slots[sideIndex] = sideOffer;
+    seen.add(sideOffer);
+  }
 
   out.forEach((type, index) => {
-    if (index === primaryIndex) return;
+    if (index === primaryIndex || index === sideIndex) return;
     if (!type || type === primary || openingCandidates.has(type)) return;
+    if (sideOfferEligible && type === sideOffer) return;
     if (!TYPES[type] || seen.has(type)) return;
     if (TYPES[type].cost != null && TYPES[type].cost > maxCost) return;
     slots[index] = type;

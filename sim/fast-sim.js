@@ -3614,10 +3614,15 @@ function runOpeningRouteCounterShopChecks(runtime) {
   const openingCounters = ['poisoner', 'sawbones', 'needler'];
   const fillerTypes = ['drummer', 'herald', 'trainer', 'survivalist'];
   const economyTypes = ['herald', 'survivalist'];
+  const sideOfferByPrimary = {
+    poisoner: 'drummer',
+    sawbones: 'trainer',
+    needler: 'survivalist',
+  };
   const routeCases = [
-    { label: 'Forest', mainKey: 'shellback', primary: 'poisoner' },
-    { label: 'Rocky', mainKey: 'powderBomber', primary: 'sawbones' },
-    { label: 'Port', mainKey: 'deckSniper', primary: 'needler' },
+    { label: 'Forest', mainKey: 'shellback', primary: 'poisoner', sideOffer: 'drummer' },
+    { label: 'Rocky', mainKey: 'powderBomber', primary: 'sawbones', sideOffer: 'trainer' },
+    { label: 'Port', mainKey: 'deckSniper', primary: 'needler', sideOffer: 'survivalist' },
   ];
 
   const assertBasicShop = (shop, label) => {
@@ -3628,10 +3633,15 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   const assertRouteFocusedShop = (shop, label, primary) => {
     assertBasicShop(shop, label);
+    const sideOffer = sideOfferByPrimary[primary];
     const openingVisible = shop.filter(type => openingCounters.includes(type));
     assertOpeningRouteCounterShopCheck(
       openingVisible.length === 1 && openingVisible[0] === primary,
       `${label} route focus expected only ${primary}, got ${shop.join(',')}`
+    );
+    assertOpeningRouteCounterShopCheck(
+      !sideOffer || shop.includes(sideOffer),
+      `${label} route side offer ${sideOffer} missing from ${shop.join(',')}`
     );
     const fillers = shop.filter(type => type !== primary);
     assertOpeningRouteCounterShopCheck(
@@ -3792,7 +3802,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
     results.push({ name: `round-1 full-send ${label} route buys watched ${primary}, then broadens pre-Boarding shop`, ok: true, quote: routeQuote });
   });
 
-  routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
+  routeCases.forEach(({ label, mainKey, primary, sideOffer }, routeIndex) => {
     runtime.setSeed((0x704501f0 + routeIndex) >>> 0);
     api.initState();
     const G = api.getG();
@@ -3800,8 +3810,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} non-counter route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
-    G.fullCrewDiscount = 0;
-    G.openingCounterPlan = false;
+    G.fullCrewDiscount = 1;
+    G.openingCounterPlan = true;
+    G.openingRouteCacheClaimedMainKey = mainKey;
+    G.cacheDrillBountyMarks = [{ pirateId: 999900 + routeIndex, mainKey, boardingNo: 1 }];
     G.enthusiasm = 10;
     G.shop = api.normalizeOpeningRouteShop(
       [primary, ...openingCounters.filter(type => type !== primary), 'herald'],
@@ -3809,13 +3821,30 @@ function runOpeningRouteCounterShopChecks(runtime) {
       { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
     );
     assertRouteFocusedShop(G.shop, `${label} non-counter-first setup`, primary);
-    const fillerIndex = G.shop.findIndex(type => type !== primary);
-    const fillerType = G.shop[fillerIndex];
-    const bought = scene.buyPirate(fillerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningRouteCounterShopCheck(bought && bought.type === fillerType, `${label} non-counter first buy failed`);
-    assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey, `${label} non-counter first buy marked route primary as bought`);
+    const sideIndex = G.shop.indexOf(sideOffer);
+    const sideQuote = scene.shopPurchaseQuote(sideOffer);
+    assertOpeningRouteCounterShopCheck(sideIndex >= 0, `${label} side offer ${sideOffer} missing from ${G.shop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(
+      sideQuote.canBuy
+        && !sideQuote.counter
+        && !sideQuote.topDeck
+        && !sideQuote.openingCounterPrepMight
+        && !sideQuote.consumesOpeningCounterPlan
+        && !sideQuote.alarmRushedRouteCounter
+        && !sideQuote.counterPayoff,
+      `${label} side offer quote gained counter perks: ${JSON.stringify(sideQuote)}`
+    );
+    const marksBefore = JSON.stringify(G.cacheDrillBountyMarks || []);
+    const bought = scene.buyPirate(sideIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === sideOffer, `${label} side offer first buy failed`);
+    assertOpeningRouteCounterShopCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${label} side offer did not go only to discard`);
+    assertOpeningRouteCounterShopCheck(!(G.counterWatchIds || []).includes(bought.id), `${label} side offer gained Counter Watch`);
+    assertOpeningRouteCounterShopCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} side offer gained upgrades: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === true, `${label} side offer consumed Opening Counter Prep`);
+    assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, `${label} side offer marked route primary as bought`);
+    assertOpeningRouteCounterShopCheck(JSON.stringify(G.cacheDrillBountyMarks || []) === marksBefore, `${label} side offer moved Cache Drill bounty marks`);
     assertRouteFocusedShop(G.shop, `${label} after non-counter first buy`, primary);
-    results.push({ name: `${label} non-counter first buy leaves primary route counter guaranteed`, ok: true, bought: fillerType });
+    results.push({ name: `${label} side-offer first buy discards normally and leaves the route counter guaranteed`, ok: true, bought: sideOffer, quote: sideQuote });
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
