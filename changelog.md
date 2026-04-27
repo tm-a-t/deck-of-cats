@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-084606 — rev a4b0991
+
+- Gameplay: true - Added Opening Route Muster: the first selected pre-Boarding-1 route now marks one matching starter counter (Forest/Rigger, Rocky/Ballaster, Port/Armsman) to return on the next Shop Continue below Cache/Short Crew reports but above Counter Watch and shop top-deck cards, without granting buffs, weapons, Alert refunds, discounts, or Battle Test behavior. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-muster --json`, related opening deckhand/route shop/scouted cache/counter recruit checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-084606.log`.
+
 ## 2026-04-27 — run 20260427-083709 — rev 5226ed4
 
 - Gameplay: true - Locked the opening route lanes so layers `0` and `1` reuse one shuffled Forest/Rocky/Port order; each first visible route now connects straight into the matching Boarding 1 Scouted Counter Cache, preserving route enemy, starter counter, primary shop counter, and cache resource identity. Validated with JS syntax checks, targeted map schedule/opening route captain/scouted cache/route shop/opening deckhand counter checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-083709.log`.

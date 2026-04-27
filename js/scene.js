@@ -609,6 +609,84 @@ class GameScene extends Phaser.Scene {
     return this.placePiratesOnDeckTop(pirates);
   }
 
+  openingRouteMusterStillEligible() {
+    return !this.isBattleTest()
+      && Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0;
+  }
+
+  findOpeningRouteMusterPirate(mainKey) {
+    if (!this.openingRouteMusterStillEligible()
+      || !mainKey
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
+    if (!starterTypes.length) return null;
+    const starterSet = new Set(starterTypes);
+    const ownedIds = new Set((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const pick = (pirates) => (Array.isArray(pirates) ? pirates : [])
+      .find(pirate =>
+        pirate
+        && ownedIds.has(pirate.id)
+        && starterSet.has(pirate.type)
+      ) || null;
+
+    return pick(G.hand) || pick(G.deck) || pick(G.discard) || pick(G.allCrew);
+  }
+
+  markOpeningRouteMuster(mainKey) {
+    if (!this.openingRouteMusterStillEligible()
+      || !mainKey
+      || G.openingRouteMuster
+      || G.openingRouteMusterUsed) {
+      return null;
+    }
+    G.openingRouteMusterUsed = true;
+    const pirate = this.findOpeningRouteMusterPirate(mainKey);
+    if (!pirate || pirate.id == null) return null;
+    G.openingRouteMuster = {
+      pirateId: pirate.id,
+      mainKey,
+      type: pirate.type,
+    };
+    return pirate;
+  }
+
+  clearOpeningRouteMuster() {
+    G.openingRouteMuster = null;
+  }
+
+  consumeOpeningRouteMusterPirates(skipIds = new Set()) {
+    const marker = G.openingRouteMuster || null;
+    this.clearOpeningRouteMuster();
+    if (!marker || !this.openingRouteMusterStillEligible()) return [];
+
+    const pirateId = marker.pirateId;
+    if (pirateId == null || (skipIds && typeof skipIds.has === 'function' && skipIds.has(pirateId))) {
+      return [];
+    }
+
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirate = ownedById.get(pirateId);
+    if (!pirate) return [];
+
+    const mainKey = marker.mainKey || null;
+    const starterTypes = typeof openingDeckhandCounterTypes === 'function'
+      ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })
+      : [];
+    if (!starterTypes.includes(pirate.type)) return [];
+    return [pirate];
+  }
+
+  placeOpeningRouteMusterPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
   placeShortCrewReportPiratesOnDeck(pirates) {
     return this.placePiratesOnDeckTop(pirates);
   }
@@ -873,7 +951,8 @@ class GameScene extends Phaser.Scene {
     if (!this.isBattleTest()
       && G.boardingCount === 0
       && typeof applyOpeningRouteToFirstShip === 'function') {
-      applyOpeningRouteToFirstShip(map, node, layerIdx);
+      const route = applyOpeningRouteToFirstShip(map, node, layerIdx);
+      if (route && route.mainKey) this.markOpeningRouteMuster(route.mainKey);
     }
 
     map.currentNodeId = nodeId;
@@ -903,6 +982,7 @@ class GameScene extends Phaser.Scene {
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
       this.clearCounterWatch();
+      this.clearOpeningRouteMuster();
       G.openingRouteCounterBoughtMainKey = null;
       G.boardingCount++;
       G.phase = 'boarding';
@@ -2670,9 +2750,11 @@ class GameScene extends Phaser.Scene {
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
     const reports = this.consumeEarlyReportPirates();
     const reportIds = reports.ids;
+    const openingRouteMuster = this.consumeOpeningRouteMusterPirates(reportIds);
     const shortCrewReportIds = new Set((reports.shortCrew || []).map(pirate => pirate && pirate.id));
     const counterWatch = this.consumeCounterWatchPirates(reportIds, { preserveSentIds: shortCrewReportIds });
     const topDeckReturnIds = new Set(reportIds);
+    openingRouteMuster.forEach(pirate => topDeckReturnIds.add(pirate.id));
     counterWatch.forEach(pirate => topDeckReturnIds.add(pirate.id));
     const handCards = this.snapshotHandCardsForDiscard();
     const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !topDeckReturnIds.has(card.id)));
@@ -2680,6 +2762,7 @@ class GameScene extends Phaser.Scene {
     const nextTurnDelay = Math.max(discardAnimEnd, reportAnimEnd) + CARD_MOTION.betweenTurnsDelay;
     G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !topDeckReturnIds.has(p.id)));
     this.placeCounterWatchPiratesOnDeck(counterWatch);
+    this.placeOpeningRouteMusterPiratesOnDeck(openingRouteMuster);
     this.placeShortCrewReportPiratesOnDeck(reports.shortCrew);
     this.placeCacheDrillMusterPiratesOnDeck(reports.cache);
     G.hand = [];

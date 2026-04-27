@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, and the opening route counter purchase marker: `0`/empty.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, the opening route counter purchase marker, and `Opening Route Muster`: `0`/empty.
 - Starting hand: up to 5 pirates.
 - Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -40,6 +40,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The three normal Boarding 1 cache routes define the first ship's main enemy and cache resource: `Forest Island` → `Shellback` and `+1🪵`, `Rocky Island` → `Powder Bomber` and `+1🪨`, `Port Island` → `Deck Sniper` and `+1🪙`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal cache resource map.
 - Selecting an opening path before Boarding 1 updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
 - During regular-run Boarding 1 only, the selected opening route also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
+- The first selected opening route before Boarding 1 also creates `Opening Route Muster`: one still-owned matching `Opening Deckhand Counter` starter is marked to report on the next Shop `Continue`, preferring a matching pirate currently in hand, then the draw pile, then discard.
+- `Opening Route Muster` happens once per regular run, never duplicates a pirate, grants no weapon, `Might`, `Tempo`, `Counter Watch`, Alert refund, shop discount, or other reward by itself, never applies in `Battle Test`, and clears when Boarding 1 starts.
 - `Opening Deckhand Counter` types count for Cache Drill, Short Crew counter Alert refunds and `Counter Watch`, `Counter Watch` readiness, `Counter Ambush`, `Counter Edge`, `Counter Trophy`, and `Ambush Bounty` eligibility.
 - `Opening Deckhand Counter` types do not count for shop generation, shop counter purchase quotes, `Top deck` purchases, `Opening Counter Prep` purchases, `Prepared` counter purchases, or `Full Crew Discount` coverage, because starter pirates are never sold in the shop.
 - `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
@@ -54,7 +56,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Cache Drill` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
-- If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning or top-deck card.
+- If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning, mustered, watched, or top-deck card.
 - Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes, `Infirmary Island`, claimed caches, or unmarked islands, and a claimed cache cannot grant its resource, `☠️`, Alert, or drill reward again.
 
 ### 2. Island Round
@@ -76,7 +78,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
 - If a pirate has both a Short Crew early-report marker and `Counter Watch`, the Short Crew report places it on top once on the next `Continue`, and `Counter Watch` remains active for later Shop `Continue`s before the next boarding.
-- If Cache Drill early report, Short Crew early report, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, watched counters are drawn third, and ordinary Shop `Top deck` purchases are drawn after all returning pirates.
+- If Cache Drill early report, Short Crew early report, Opening Route Muster, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, the Opening Route Muster pirate is drawn third, watched counters are drawn fourth, and ordinary Shop `Top deck` purchases are drawn after all returning pirates.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
@@ -185,7 +187,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - On `Continue`:
   - the current hand goes to discard only for pirates still present in `allCrew`;
   - any still-owned Cache Drill or Short Crew early-report pirate is separated from that discard step and placed on top of the draw pile, with Cache Drill reports above Short Crew reports;
-  - any still-owned, held Counter Watch pirate is separated from that discard step and placed below Cache Drill and Short Crew reports but above ordinary Shop `Top deck` purchases;
+  - any still-owned Opening Route Muster pirate that is not already returned by Cache Drill or Short Crew is separated from that discard step and placed below those early reports but above watched counters;
+  - any still-owned, held Counter Watch pirate is separated from that discard step and placed below Cache Drill reports, Short Crew reports, and Opening Route Muster but above ordinary Shop `Top deck` purchases;
   - exiled and `get lost` pirates do not return;
   - `☠️` resets to `0`;
   - unused `Full Crew Discount` and `Opening Counter Prep` expire;
