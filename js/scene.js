@@ -3610,7 +3610,7 @@ class GameScene extends Phaser.Scene {
       if (!removedAlertGuard) break;
       removedAlertGuards.push(removedAlertGuard);
     }
-    const routedSupport = permanentArmedAmbush
+    const routedSupport = armedAmbush
       && this.currentBoardingNumber() === 1
       && removedAlertGuards.length === 0
       ? this.removeOpeningCounterBreakSupport(combat, deathPositions)

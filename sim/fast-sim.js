@@ -2651,7 +2651,7 @@ function runAlertTierChecks(runtime) {
   assertAlertTierCheck(fillLine.includes('Alert +0'), `Fill crew line misses Alert +0: ${fillLine}`);
   assertAlertTierCheck(fillLine.includes('Full Crew -1☠️'), `Fill crew line misses Full Crew Discount: ${fillLine}`);
   assertAlertTierCheck(fillLine.includes('Port Drill +⚡'), `Fill crew line misses Port Drill: ${fillLine}`);
-  assertAlertTierCheck(!fillLine.includes('win +'), `Fill crew line implies alert plunder: ${fillLine}`);
+  assertAlertTierCheck(!/Alert \+0 \([^)]*win \+/.test(fillLine), `Fill crew line implies alert plunder: ${fillLine}`);
   results.push({ name: 'round 2 Port plan text', ok: true, endLine, fillLine });
 
   return { ok: true, checks: results };
@@ -3299,7 +3299,7 @@ function runCounterAmbushChecks(runtime) {
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],
       playerRows: [[0, 0, 0]],
-      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      enemies: [['powderBomber', 0, 3], ['cabinBoy', 0, 2, 'alert'], ['bilgeRat', 0, 1, 'alert'], ['cabinBoy', 0, 0]],
       boardingAlert: 3,
       guardCount: 2,
       watchReadyIndices: [0],
@@ -3322,9 +3322,51 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck((watched.weaponKey || null) === before.weaponKey, 'Watch Ready ambush mutated weaponKey');
     assertCounterAmbushCheck((watched.might || 0) === before.might, 'Watch Ready ambush mutated Might');
     assertCounterAmbushCheck((watched.tempo || 0) === before.tempo, 'Watch Ready ambush mutated Tempo');
-    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Watch Ready without permanent upgrades triggered Opening Counter Break');
+    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Watch Ready with Alert guards triggered Opening Counter Break');
+    const normalSupport = enemies.find((fighter) => fighter && !fighter.alertGuard && scene.combatEnemyArchetypeKey(fighter) === 'cabinBoy');
+    assertCounterAmbushCheck(normalSupport && normalSupport.alive, 'Watch Ready with Alert guards routed non-Alert support');
     assertCounterAmbushCheck(G.counterWatchIds.length === 0, 'Watch Ready ambush recreated Counter Watch markers');
     results.push({ name: 'Watch Ready counters use Armed Counter Ambush damage and guard removal without permanent upgrades', ok: true });
+  }
+
+  {
+    const { G, pirates, enemies, combat } = setupRegular({
+      mainKey: 'shellback',
+      types: ['poisoner', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['shellback', 0, 2], ['cabinBoy', 0, 1], ['bilgeRat', 0, 0]],
+      boardingAlert: 0,
+      guardCount: 0,
+      watchReadyIndices: [0],
+    });
+    const watched = pirates[0];
+    const before = {
+      weaponKey: watched.weaponKey || null,
+      might: watched.might || 0,
+      tempo: watched.tempo || 0,
+    };
+    const target = enemies[0];
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'Watch Ready no-Alert counter did not ambush');
+    assertCounterAmbushCheck(result.pirateId === watched.id, `Watch Ready no-Alert ambusher ${result && result.pirateId} !== ${watched.id}`);
+    assertCounterAmbushCheck(result.armedAmbush && result.watchReadyAmbush, 'Watch Ready no-Alert counter was not treated as armed');
+    assertCounterAmbushCheck(!result.permanentArmedAmbush, 'Watch Ready no-Alert counter was marked permanently armed');
+    assertCounterAmbushCheck(result.damage === 5, `Watch Ready no-Alert damage ${result.damage} !== 5`);
+    assertCounterAmbushCheck(target.hp === target.maxHp - 5 && target.wounds === 1, 'Watch Ready no-Alert ambush did not wound and deal 5 damage');
+    assertCounterAmbushCheck((result.removedAlertGuards || []).length === 0, 'Watch Ready no-Alert ambush removed Alert guards');
+    assertCounterAmbushCheck(result.openingCounterBreak && result.routedSupport, 'Watch Ready no-Alert ambush did not trigger Opening Counter Break');
+    assertCounterAmbushCheck(result.routedSupport.key === 'bilgeRat', `Watch Ready no-Alert routed ${result.routedSupport.key} instead of front-left Bilge Rat`);
+    assertCounterAmbushCheck(!scene.combatFindFighter(result.routedSupport.id).alive, 'Watch Ready no-Alert routed support is still alive');
+    assertCounterAmbushCheck((watched.weaponKey || null) === before.weaponKey, 'Watch Ready no-Alert ambush mutated weaponKey');
+    assertCounterAmbushCheck((watched.might || 0) === before.might, 'Watch Ready no-Alert ambush mutated Might');
+    assertCounterAmbushCheck((watched.tempo || 0) === before.tempo, 'Watch Ready no-Alert ambush mutated Tempo');
+    combat.result = 'win';
+    const openingPlunder = scene.grantOpeningBreakPlunder(combat);
+    const ambushBounty = scene.grantAmbushBounty(combat);
+    assertCounterAmbushCheck(openingPlunder && openingPlunder.resource === 'stone', 'Watch Ready no-Alert Opening plunder did not pay Bilge Rat stone');
+    assertCounterAmbushCheck(ambushBounty && ambushBounty.resource === 'wood', 'Watch Ready no-Alert Ambush Bounty did not pay Shellback wood');
+    assertCounterAmbushCheck(G.res.wood === 1 && G.res.stone === 1, `Watch Ready no-Alert plunder mismatch ${JSON.stringify(G.res)}`);
+    results.push({ name: 'Watch Ready no-Alert Boarding 1 triggers Opening Counter Break without permanent upgrades', ok: true, res: { ...G.res } });
   }
 
   {

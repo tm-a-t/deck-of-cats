@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-054949 — rev b1a6fcf
+
+- Gameplay: true - Enabled `Watch Ready` to trigger regular Boarding 1 `Opening Counter Break` when its armed counter ambush removes zero Alert guards, preserving no permanent weapon/Might/Tempo mutation while Alert-guard ambushes, Battle Test, reinforcements, and Boarding 2+ remain excluded; added fast-sim coverage for no-Alert Watch Ready routing support and Alert Watch Ready only cutting guards. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-054949.log`.
+
 ## 2026-04-27 — run 20260427-053743 — rev 2cc3182
 
 - Gameplay: true - Added `Opening Full Crew Report`: during round-1/2 pre-boarding Shops, the first successful non-counter purchase that spends `Full Crew Discount` now top-decks once, including Dockside Credit buys with normal Alert, without gaining `Counter Watch`, `Watch Ready`, `Prepared`, Opening Prep Might, counter payoff text, or ambush perks; scouted counters still watch, and non-discount/post-boarding/Battle Test non-counters still discard. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-opening-counter-prep --json`, `node sim/fast-sim.js --check-full-crew-coverage --json`, `node sim/fast-sim.js --check-opening-shellback-counter --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-053743.log`.
