@@ -3499,20 +3499,41 @@ function runOpeningRoutePromotionChecks(runtime) {
   routes.forEach((route) => {
     const { G, pirate, combat } = setupBoarding(route);
     const startingRes = { ...G.res };
+    assertOpeningRoutePromotionCheck(!pirate.weaponKey && (pirate.might || 0) === 0 && (pirate.tempo || 0) === 0, `${route.label} primary started upgraded`);
     const ambush = scene.applyCounterAmbush(combat, { silent: true });
     assertOpeningRoutePromotionCheck(ambush && ambush.pirateId === pirate.id, `${route.label} primary did not Counter Ambush`);
-    assertOpeningRoutePromotionCheck(!pirate.weaponKey && (pirate.might || 0) === 0 && (pirate.tempo || 0) === 0, `${route.label} primary started upgraded`);
-    scene.finishBoardingCombat('win');
-    assertOpeningRoutePromotionCheck(pirate.weaponKey === route.weaponKey, `${route.label} primary weapon ${pirate.weaponKey} !== ${route.weaponKey}`);
+    assertOpeningRoutePromotionCheck(pirate.weaponKey === route.weaponKey, `${route.label} primary weapon ${pirate.weaponKey} was not applied immediately`);
+    const fighter = combat.playerFighters.find(entry => entry && entry.pirateId === pirate.id);
+    assertOpeningRoutePromotionCheck(fighter && fighter.weaponKey === route.weaponKey, `${route.label} fighter weapon ${fighter && fighter.weaponKey} was not refreshed immediately`);
     assertOpeningRoutePromotionCheck(combat.openingRoutePromotion && combat.openingRoutePromotion.pirateId === pirate.id, `${route.label} missing promotion payload`);
     assertOpeningRoutePromotionCheck(combat.openingRoutePromotion.text && combat.openingRoutePromotion.text.length > 0, `${route.label} promotion text missing`);
+    const promotion = combat.openingRoutePromotion;
+    const duplicate = scene.grantOpeningRoutePromotion(combat, ambush, { silent: true });
+    assertOpeningRoutePromotionCheck(duplicate === promotion, `${route.label} duplicate promotion returned a new payload`);
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePromotionCheck(combat.openingRoutePromotion === promotion, `${route.label} win replaced promotion payload`);
+    assertOpeningRoutePromotionCheck(pirate.weaponKey === route.weaponKey, `${route.label} primary weapon changed after win: ${pirate.weaponKey}`);
     assertOpeningRoutePromotionCheck(G.enthusiasm === 0, `${route.label} promotion paid ship enthusiasm ${G.enthusiasm}`);
     ['wood', 'stone', 'gold'].forEach((resKey) => {
       const expected = startingRes[resKey] + (resKey === route.bountyRes ? 1 : 0);
       assertOpeningRoutePromotionCheck(G.res[resKey] === expected, `${route.label} resource ${resKey} ${G.res[resKey]} !== ${expected}`);
     });
-    results.push({ name: `${route.label} secured bought primary promotes to its ship weapon after surviving Boarding 1 Counter Ambush`, ok: true });
+    results.push({ name: `${route.label} secured bought primary promotes immediately after Boarding 1 Counter Ambush and does not duplicate on win`, ok: true });
   });
+
+  {
+    const route = routes[1];
+    const { pirate, combat } = setupBoarding(route);
+    const bomber = combat.enemyFighters.find(fighter => fighter && fighter.key === route.mainKey);
+    const ambush = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningRoutePromotionCheck(ambush && pirate.weaponKey === 'barbedBlade', 'Rocky Sawbones did not gain Barbed Blade immediately after Counter Ambush');
+    const sawbonesFighter = combat.playerFighters.find(fighter => fighter && fighter.pirateId === pirate.id);
+    assertOpeningRoutePromotionCheck(sawbonesFighter && sawbonesFighter.weaponKey === 'barbedBlade', 'Rocky Sawbones fighter did not refresh to Barbed Blade');
+    const woundsBefore = Math.max(0, Math.floor(Number(bomber && bomber.wounds) || 0));
+    scene.performCombatAttack(sawbonesFighter.id);
+    assertOpeningRoutePromotionCheck((bomber.wounds || 0) === woundsBefore + 1, `Barbed Blade first normal attack did not wound Powder Bomber: ${woundsBefore}->${bomber.wounds || 0}`);
+    results.push({ name: 'Rocky Sawbones promotion is active for the first normal combat attack', ok: true });
+  }
 
   {
     const route = routes[0];
@@ -3566,8 +3587,9 @@ function runOpeningRoutePromotionChecks(runtime) {
       type: pirate.type,
       mainKey: route.mainKey,
     };
+    const promotion = scene.grantOpeningRoutePromotion(combat, combat.counterAmbush, { silent: true });
     scene.finishBoardingCombat('win');
-    assertOpeningRoutePromotionCheck(G.mode === 'battleTest' && !combat.openingRoutePromotion && !pirate.weaponKey, 'Battle Test granted Opening Route Promotion');
+    assertOpeningRoutePromotionCheck(!promotion && G.mode === 'battleTest' && !combat.openingRoutePromotion && !pirate.weaponKey, 'Battle Test granted Opening Route Promotion');
     results.push({ name: 'Battle Test never grants Opening Route Promotion', ok: true });
   }
 
@@ -3576,18 +3598,17 @@ function runOpeningRoutePromotionChecks(runtime) {
     const { pirate, combat } = setupBoarding(route);
     scene.applyCounterAmbush(combat, { silent: true });
     scene.finishBoardingCombat('loss');
-    assertOpeningRoutePromotionCheck(!combat.openingRoutePromotion && !pirate.weaponKey, 'loss granted Opening Route Promotion');
-    results.push({ name: 'losses never grant Opening Route Promotion', ok: true });
+    assertOpeningRoutePromotionCheck(combat.openingRoutePromotion && pirate.weaponKey === route.weaponKey, 'loss after a successful opening ambush did not keep immediate Opening Route Promotion');
+    results.push({ name: 'losses after the ambush keep the already-applied Opening Route Promotion', ok: true });
   }
 
   {
     const route = routes[1];
-    const { pirate, combat } = setupBoarding(route);
+    const { pirate, combat } = setupBoarding(route, { reinforcementCount: 1 });
     scene.applyCounterAmbush(combat, { silent: true });
-    combat.reinforcementCount = 1;
     scene.finishBoardingCombat('win');
     assertOpeningRoutePromotionCheck(!combat.openingRoutePromotion && !pirate.weaponKey, 'reinforcement-hand win granted Opening Route Promotion');
-    results.push({ name: 'reinforcement-hand wins never grant Opening Route Promotion', ok: true });
+    results.push({ name: 'reinforcement hands never grant Opening Route Promotion', ok: true });
   }
 
   {
@@ -3629,10 +3650,20 @@ function runOpeningRoutePromotionChecks(runtime) {
     const { pirate, combat } = setupBoarding(route);
     const ambush = scene.applyCounterAmbush(combat, { silent: true });
     assertOpeningRoutePromotionCheck(ambush && ambush.pirateId === pirate.id, 'defeated-ambusher setup did not ambush');
+    assertOpeningRoutePromotionCheck(pirate.weaponKey === route.weaponKey, 'defeated-ambusher setup did not promote immediately');
     scene.defeatCombatFighter(combat.playerFighters[0], []);
     scene.finishBoardingCombat('win');
-    assertOpeningRoutePromotionCheck(!combat.openingRoutePromotion && !pirate.weaponKey, 'defeated ambusher received Opening Route Promotion');
-    results.push({ name: 'defeated ambushers never receive Opening Route Promotion', ok: true });
+    assertOpeningRoutePromotionCheck(combat.openingRoutePromotion && pirate.weaponKey === route.weaponKey, 'defeating an already-promoted ambusher removed Opening Route Promotion');
+    results.push({ name: 'later defeated ambushers keep the immediate Opening Route Promotion but win no Ambush Bounty', ok: true });
+  }
+
+  {
+    const route = routes[1];
+    const { pirate, combat } = setupBoarding(route, { owned: false });
+    const ambush = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningRoutePromotionCheck(ambush && ambush.pirateId === pirate.id, 'removed/non-owned setup did not ambush');
+    assertOpeningRoutePromotionCheck(!combat.openingRoutePromotion && !pirate.weaponKey, 'removed/non-owned bought primary received Opening Route Promotion');
+    results.push({ name: 'removed or non-owned bought primaries never receive Opening Route Promotion', ok: true });
   }
 
   return { ok: true, checks: results };

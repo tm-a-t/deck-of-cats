@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-234211 — rev 804e93d — build 0.1.0
+
+- Gameplay: true - Retimed Opening Route Promotion to apply immediately after a secured bought route-primary counter triggers Boarding 1 Counter Ambush, refreshing that fighter's same-combat weapon/buff stats before normal attacks while keeping the promotion idempotent and excluding starters, side offers, discard-only primaries, Battle Test, Boarding 2+, reinforcement hands, wrong-main, missing-ambush, and removed/non-owned cases. Validated with JS syntax checks; `node sim/fast-sim.js --check-opening-route-promotion --json`; related Counter Ambush, Opening Deckhand Counter, Drilled Ambusher Bounty, and Opening Route Victory Cache checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-234211.log`; and `git diff --check`.
+
 ## 2026-04-28 — run 20260427-232301 — rev 856a3ed — build 0.1.0
 
 - Gameplay: true - Added Opening Route Primary Commitment: pre-Boarding-1 route shops now pin the unsecured primary counter in slot 0, and the first pirate purchase can commit to that primary for top-deck, Counter Watch, and route security without prep while preserving Full Crew, Opening Prep, side-prep, pass-off, Cover, Battle Test, and Boarding 2+ gates. Validated with JS syntax checks; targeted opening route shop, no-alarm/commitment, route cover, side prep, Opening Counter Prep, Opening Deckhand Counter, Opening Route Muster, and counter recruit report checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-232301-final.log`; and `git diff --check`.

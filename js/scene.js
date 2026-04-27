@@ -4673,17 +4673,43 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  grantOpeningRoutePromotion(combat = G.combat, result = null) {
-    if (!combat || combat.openingRoutePromotionGranted) return combat && combat.openingRoutePromotion ? combat.openingRoutePromotion : null;
-    combat.openingRoutePromotionGranted = true;
+  refreshCombatPlayerFighterStatsFromPirate(fighter, pirate, combat = G.combat) {
+    if (!fighter || !pirate) return false;
+    const oldMaxHp = Math.max(0, Math.floor(Number(fighter.maxHp) || 0));
+    const oldHp = Math.max(0, Math.floor(Number(fighter.hp) || 0));
+    const stats = this.combatPirateStats(pirate, combat);
+    const nextMaxHp = Math.max(1, Math.floor(Number(stats.hp) || oldMaxHp || COMBAT.pirateHp));
+    const gainedMaxHp = Math.max(0, nextMaxHp - oldMaxHp);
 
-    const resolvedResult = result != null ? result : combat.result;
-    if (resolvedResult !== 'win') return null;
+    fighter.maxHp = nextMaxHp;
+    fighter.hp = Math.max(0, Math.min(nextMaxHp, oldHp + gainedMaxHp));
+    fighter.baseDamage = stats.baseDamage;
+    fighter.damage = stats.damage;
+    fighter.attackMs = stats.attackMs;
+    fighter.weaponKey = stats.weaponKey;
+    fighter.attackRange = stats.attackRange;
+    fighter.targetMode = stats.targetMode;
+    fighter.might = stats.might;
+    fighter.tempo = stats.tempo;
+    fighter.buffCount = stats.buffCount;
+    fighter.counterEdgeDamage = stats.counterEdgeDamage;
+    fighter.watchReadyCounter = stats.watchReadyCounter;
+    return true;
+  }
+
+  grantOpeningRoutePromotion(combat = G.combat, ambush = null, opts = {}) {
+    return this.applyOpeningRoutePromotion(combat, ambush && typeof ambush === 'object'
+      ? ambush
+      : (combat && combat.counterAmbush), opts);
+  }
+
+  applyOpeningRoutePromotion(combat = G.combat, ambush = null, opts = {}) {
+    if (!combat) return null;
+    if (combat.openingRoutePromotion) return combat.openingRoutePromotion;
     if (this.isBattleTest() || G.phase !== 'boarding') return null;
     if (this.currentBoardingNumber() !== 1) return null;
     if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
 
-    const ambush = combat.counterAmbush;
     if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
 
     const mainKey = ambush.mainKey || this.counterAmbushMainKey(combat);
@@ -4710,11 +4736,13 @@ class GameScene extends Phaser.Scene {
 
     const applied = this.applyPersonalGainsToPirate(pirate, gains);
     if (!applied.applied) return null;
+    this.refreshCombatPlayerFighterStatsFromPirate(survivor, pirate, combat);
 
     const def = TYPES[pirate.type] || {};
     const enemy = this.combatArchetypeByKey(mainKey);
     combat.openingRoutePromotion = {
       pirateId: pirate.id,
+      fighterId: survivor.id,
       type: pirate.type,
       name: def.name || ambush.name || pirate.type || 'Pirate',
       mainKey,
@@ -4722,6 +4750,8 @@ class GameScene extends Phaser.Scene {
       gains: applied.gains,
       text: applied.text,
     };
+    combat.openingRoutePromotionGranted = true;
+    if (!opts.silent) this.showOpeningRoutePromotion(combat.openingRoutePromotion);
     return combat.openingRoutePromotion;
   }
 
@@ -4730,6 +4760,9 @@ class GameScene extends Phaser.Scene {
     const label = promotion.text ? ` +${promotion.text}` : '';
     const L = this.L;
     this.effectText(L.cx, this.islandContinueY() - 324 * L.k, `Route Promotion${label}`, '#ffca28', 760);
+    if (G.combat && G.combat.openingRoutePromotion === promotion) {
+      G.combat.openingRoutePromotionShown = true;
+    }
   }
 
   isFinalBoardingNode() {
@@ -5310,7 +5343,13 @@ class GameScene extends Phaser.Scene {
       deathPositions,
     };
 
-    if (!opts.silent) this.showCounterAmbush(combat.counterAmbush);
+    const routePromotion = this.grantOpeningRoutePromotion(combat, combat.counterAmbush, { silent: true });
+    if (!opts.silent) {
+      this.showCounterAmbush(combat.counterAmbush);
+      if (routePromotion && !combat.openingRoutePromotionShown) {
+        this.showOpeningRoutePromotion(routePromotion);
+      }
+    }
     return combat.counterAmbush;
   }
 
@@ -6666,7 +6705,9 @@ class GameScene extends Phaser.Scene {
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
     const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
-    const routePromotion = result === 'win' ? this.grantOpeningRoutePromotion(combat, result) : null;
+    const routePromotion = result === 'win' && combat.openingRoutePromotion && !combat.openingRoutePromotionShown
+      ? combat.openingRoutePromotion
+      : null;
     const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
     const routeSidekickReport = result === 'win' ? this.markRouteSidekickReport(combat, result) : null;
     const routeVictoryCache = result === 'win' ? this.grantOpeningRouteVictoryCache(combat, result) : null;
