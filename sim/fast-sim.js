@@ -1219,7 +1219,7 @@ function runFirstShellbackChecks(runtime) {
     const map = api.getG().map;
     assertFirstShellbackCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-    assertFirstShellbackCheck(firstShipLayer === 3, `sample ${sample} first ship layer ${firstShipLayer} !== 3`);
+    assertFirstShellbackCheck(firstShipLayer === 2, `sample ${sample} first ship layer ${firstShipLayer} !== 2`);
 
     const ship = map.layers[firstShipLayer][0];
     const encounter = ship && ship.encounter;
@@ -1262,12 +1262,12 @@ function runFirstShellbackChecks(runtime) {
 function runMapScheduleChecks(runtime) {
   const api = runtime.api;
   const results = [];
-  const expectedShipLayers = [3, 9, 14, 19, 24, 29, 34, 39];
-  const earlyIslandLayers = [0, 1, 2, 4, 5, 6, 7, 8];
+  const expectedShipLayers = [2, 9, 14, 19, 24, 29, 34, 39];
+  const earlyIslandLayers = [0, 1, 3, 4, 5, 6, 7, 8];
   const expectedEarlyIslandIdx = [0, 1, 3];
   const earlySegments = [
-    { base: 0, length: 3 },
-    { base: 4, length: 5 },
+    { base: 0, length: 2 },
+    { base: 3, length: 6 },
   ];
 
   for (let sample = 0; sample < 12; sample++) {
@@ -1322,7 +1322,7 @@ function runMapScheduleChecks(runtime) {
   }
 
   results.push({
-    name: '40-layer map schedule with early 3/5 islands and straight early paths',
+    name: '40-layer map schedule with early 2/6 islands and straight early paths',
     ok: true,
     samples: 12,
     shipLayers: expectedShipLayers,

@@ -392,9 +392,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 - A run has `40` layers total and `8` ship nodes.
 - Early block:
-  - `layers 0–2`: three parallel non-crossing island paths
-  - `layer 3`: first ship node
-  - `layers 4–8`: three parallel non-crossing island paths
+  - `layers 0–1`: three parallel non-crossing island paths
+  - `layer 2`: first ship node
+  - `layers 3–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
 - Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.

@@ -3,7 +3,7 @@
    ============================================================ */
 
 const MAP_LAYERS = 40;
-const EARLY_SEGMENT_LENGTHS = [3, 5];
+const EARLY_SEGMENT_LENGTHS = [2, 6];
 const EARLY_SEGMENTS = EARLY_SEGMENT_LENGTHS.length;
 const EARLY_PATHS = 3;
 const EARLY_LAYER_COUNT = EARLY_SEGMENT_LENGTHS.reduce((sum, length) => sum + length + 1, 0);
