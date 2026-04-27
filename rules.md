@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, `Boarding Alert`, and `Full Crew Discount`: `0`.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, and `Opening Counter Plan`: `0`.
 - Starting hand: up to 5 pirates.
 - Starting shop: 4 unique pirates from starter shop lanes, shuffled: by default 1 of `Poisoner`/`Drummer`, 1 of `Sawbones`/`Trainer`, always `Needler`, and 1 of `Herald`/`Survivalist`. The regular-run scouted counter shop rule can replace one newly generated starter-shop slot if the first scouted ship would otherwise have no visible counter.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -74,6 +74,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Ending a regular island round with `End` or `Work on Ship` pays `Ship Wages` before ship actions resolve: gain a baseline `1☠️`, plus `+1☠️` per unused send slot.
 - During only rounds `1` and `2` before any boarding has happened, ending a regular non-`Infirmary Island` round exactly 1 send slot short with at least 1 sent pirate adds `+1☠️ Opening Commission` to `Ship Wages`.
 - `Opening Commission` does not apply in Battle Test, does not apply to full sends, empty sends, or sends with 2 or more unused slots, does not apply after round `2`, does not apply after the first boarding, and never adds Boarding Alert.
+- During only rounds `1` and `2` before any boarding has happened, if `Opening Commission` is earned and at least 1 sent pirate is still in the crew after island effects, the next Shop also gains `Opening Counter Plan`.
+- `Opening Counter Plan` does not apply in Battle Test, full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, after round `2`, after the first boarding, or if every sent pirate was removed by `Siren Island` or another island effect.
 - A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and `1☠️` when both slots are filled; during eligible Opening Commission rounds, the 1-sent one-short payout is `3☠️` instead.
 - `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates; during eligible Opening Commission rounds, the 2-sent one-short payout is `3☠️` instead.
 - Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot; the baseline `1☠️` adds no Alert. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
@@ -131,10 +133,13 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Watch Ready` counts as armed only for `Counter Ambush` damage and `Boarding Alert` guard removal: if that pirate is the front-row ambusher, its `Counter Ambush` deals `5` damage and removes up to 2 Alert guards even without a permanent weapon, `Might`, or `Tempo`.
 - `Watch Ready` does not grant or mutate a weapon, `Might`, or `Tempo`; does not create `Prepared`; does not affect `Counter Edge`, `Boarding Trophy`, `Counter Trophy`, `Ambush Bounty`, or `Opening Counter Break`; and never applies in `Battle Test`.
 - A watched pirate that was sent earlier, is absent from the current hand, is `🩹 Wounded`, does not counter the main scouted enemy, or is moved out of the front row before `Fight!` gets no `Watch Ready` ambush benefit.
-- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
+- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount` or `Opening Counter Plan`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
+- `Opening Counter Plan` is consumed by the first successful pirate purchase in that Shop. If that first purchase is a `Top deck` scouted counter with ship-side personal gains, it becomes `Prepared` even without `Full Crew Discount`; otherwise the plan is lost.
+- `Opening Counter Plan` does not change prices, does not grant a discount, does not trigger `Opening Counter Subsidy`, does not add or remove `Boarding Alert`, does not affect `Quiet Docks`, and does not stack with `Full Crew Discount`.
+- If `Opening Counter Plan` and `Full Crew Discount` are both present, the discount still changes the price as normal, the plan adds no extra discount or preparation, and both shop flags are consumed by the first successful pirate purchase.
 - A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
-- `Top deck` scouted counter purchases without `Full Crew Discount` still go on top of the draw pile, but are not `Prepared`.
-- If `Full Crew Discount` is spent on a non-counter first, a later `Top deck` counter purchase in the same Shop is not `Prepared`.
+- `Top deck` scouted counter purchases without `Full Crew Discount` or `Opening Counter Plan` still go on top of the draw pile, but are not `Prepared`.
+- If `Full Crew Discount` or `Opening Counter Plan` is spent on a non-counter first, a later `Top deck` counter purchase in the same Shop is not `Prepared`.
 - `Prepared` does not pay ship costs, grant ship resource or `☠️` outputs, target the leftmost island pirate, consume a ship action, or apply in `Battle Test`.
 - Prepared weapons and buffs are permanent and use the normal weapon replacement and buff stacking rules.
 - The draw pile top is the next card drawn. If multiple eligible counter pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible counter is drawn first.
@@ -144,8 +149,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.
 - During the regular-run round-1 Shop, before any boarding, `Opening Counter Subsidy` covers exactly `1☠️` for a `Top deck` scouted-counter pirate if that purchase spends `Full Crew Discount` and is short exactly `1☠️` after the normal discount.
 - `Opening Counter Subsidy` is not spendable currency, does not use `Dockside Credit`, does not mark `shopCreditUsed`, and adds no `Boarding Alert`; the purchase spends the player's current `☠️`, consumes `Full Crew Discount`, and still counts as `Prepared` because that purchase spent the discount.
-- `Opening Counter Subsidy` does not apply without `Full Crew Discount`, to already-affordable purchases, non-counter purchases, purchases missing `2+☠️`, round `2+`, after the first boarding, after `Dockside Credit` was already used in that Shop, or in `Battle Test`.
+- `Opening Counter Subsidy` does not apply without `Full Crew Discount`, from `Opening Counter Plan`, to already-affordable purchases, non-counter purchases, purchases missing `2+☠️`, round `2+`, after the first boarding, after `Dockside Credit` was already used in that Shop, or in `Battle Test`.
 - `Full Crew Discount` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
+- `Opening Counter Plan` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
 - Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
 - A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate using the normal purchase destination rules, and refills that shop slot normally.
 - Affordable purchases do not use `Dockside Credit`, do not add Alert, and do not prevent a later credit purchase in the same Shop phase.
@@ -162,6 +168,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - any still-owned, held Counter Watch pirate is separated from that discard step and placed below Cache Drill and Short Crew reports but above ordinary Shop `Top deck` purchases;
   - exiled and `get lost` pirates do not return;
   - `☠️` resets to `0`;
+  - unused `Full Crew Discount` and `Opening Counter Plan` expire;
   - a new hand is drawn up to 5;
   - the run returns to `map`.
 

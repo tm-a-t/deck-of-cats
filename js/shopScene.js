@@ -338,6 +338,7 @@ class ShopScene extends Phaser.Scene {
       const subsidy = Math.max(0, Math.floor(Number(quote.openingCounterSubsidy) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
+      if (quote.preparedByOpeningCounterPlan) tags.push('Opening Plan');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
       if (subsidy > 0) tags.push('Covered');
@@ -348,14 +349,18 @@ class ShopScene extends Phaser.Scene {
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
       const coveredLine = subsidy > 0 ? `Opening covers ${subsidy}☠️` : '';
+      const planLine = quote.consumesOpeningCounterPlan && canBuy
+        ? (quote.preparedByOpeningCounterPlan ? 'Opening Plan prepares' : 'Opening Plan spent')
+        : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
         ...payoffLines,
         priceLine,
         coveredLine,
+        planLine,
       ].filter(Boolean).join('\n');
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs((payoffLines.length || subsidy > 0) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
+        fontSize: L.fs((payoffLines.length || subsidy > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
         align: 'center',
         lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
@@ -366,7 +371,7 @@ class ShopScene extends Phaser.Scene {
         ? Math.max(0, Math.floor(Number(quote.missing) || 0))
         : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : (subsidy > 0 ? 'Buy covered' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy')))
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (subsidy > 0 ? 'Buy covered' : (quote.preparedByOpeningCounterPlan ? 'Buy plan' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -645,9 +650,12 @@ class ShopScene extends Phaser.Scene {
       G.shopAnimating = false;
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const planText = quote.consumesOpeningCounterPlan
+        ? (quote.preparedByOpeningCounterPlan ? ' Opening Plan' : ' Plan spent')
+        : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + alertText + preparedText + deckText, '#66bb6a');
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + planText + alertText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });

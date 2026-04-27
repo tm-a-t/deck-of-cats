@@ -213,3 +213,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-023831 — rev a72f98a
 
 - Gameplay: true - Added Counter Watch for eligible top-deck scouted counter recruits: held watched counters skip discard and return next hand below Cache/Short Crew reports but above ordinary top-deck buys, while sent or boarding-started watches clear. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-short-crew-drill --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-023831.log`.
+
+## 2026-04-27 — run 20260427-043426 — rev 9f7a831
+
+- Gameplay: true - Added Opening Counter Plan: eligible round-1/2 one-short Opening Commission shops now let the first bought top-deck scouted counter become Prepared without changing price, while any first pirate purchase consumes the plan. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-counter-plan --json`, `node sim/fast-sim.js --check-opening-counter-subsidy --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, related counter/cache/ambush checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-043426.log`.

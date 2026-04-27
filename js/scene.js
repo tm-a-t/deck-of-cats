@@ -238,6 +238,7 @@ class GameScene extends Phaser.Scene {
   continueFromHealing() {
     if (G.phase !== 'healing') return;
     G.healing = null;
+    G.openingCounterPlan = false;
     G.phase = 'map';
     G.island = null;
     this.closePanels();
@@ -865,6 +866,7 @@ class GameScene extends Phaser.Scene {
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
     G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
     let cacheGrant = null;
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
@@ -1159,6 +1161,17 @@ class GameScene extends Phaser.Scene {
     return this.pendingFullCrewDiscount();
   }
 
+  openingCounterPlanActiveForState(source = null, isProjection = false) {
+    const state = source || {};
+    const mode = state.mode != null ? state.mode : G.mode;
+    const phase = state.phase != null ? state.phase : G.phase;
+    const plan = state.openingCounterPlan != null ? state.openingCounterPlan : G.openingCounterPlan;
+    return mode !== 'battleTest'
+      && !this.isBattleTest()
+      && (isProjection || phase === 'shopping')
+      && !!plan;
+  }
+
   scoutedCounterTypes() {
     if (this.isBattleTest() || typeof scoutedCounterTypesForMap !== 'function') return [];
     return scoutedCounterTypesForMap(G.map, { mode: G.mode });
@@ -1271,6 +1284,19 @@ class GameScene extends Phaser.Scene {
       && unused === 1
       ? 1
       : 0;
+  }
+
+  projectOpeningCounterPlan(sentCount) {
+    if (this.projectOpeningCommission(sentCount) <= 0) return 0;
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    if (sent === currentSent) return this.leftmostIslandPirateEntry() ? 1 : 0;
+    return sent > currentSent ? 1 : 0;
+  }
+
+  updateOpeningCounterPlanForCompletedIsland() {
+    G.openingCounterPlan = !!this.projectOpeningCounterPlan(Array.isArray(G.sent) ? G.sent.length : 0);
+    return G.openingCounterPlan;
   }
 
   projectPortDrill(sentCount) {
@@ -1431,9 +1457,13 @@ class GameScene extends Phaser.Scene {
     const effectiveCost = Math.max(0, cost - discount);
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
-    const preparedCounter = !!(topDeck && discount > 0 && this.preparedCounterGains(type).length);
+    const openingCounterPlan = this.openingCounterPlanActiveForState(source, isProjection);
+    const hasPreparedGains = this.preparedCounterGains(type).length > 0;
+    const preparedCounter = !!(topDeck && hasPreparedGains && (discount > 0 || openingCounterPlan));
+    const preparedByOpeningCounterPlan = !!(preparedCounter && openingCounterPlan && discount <= 0);
+    const consumesOpeningCounterPlan = !!openingCounterPlan;
     if (enthusiasm >= effectiveCost) {
-      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0 });
+      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0, openingCounterPlan, preparedByOpeningCounterPlan, consumesOpeningCounterPlan });
     }
     const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
@@ -1452,6 +1482,7 @@ class GameScene extends Phaser.Scene {
       && boardingCount === 0
       && !shopCreditUsed
       && discount > 0
+      && !openingCounterPlan
       && counter
       && topDeck
       && missing === 1
@@ -1471,6 +1502,9 @@ class GameScene extends Phaser.Scene {
         alert: 0,
         spend: Math.max(0, effectiveCost - openingCounterSubsidy),
         openingCounterSubsidy,
+        openingCounterPlan,
+        preparedByOpeningCounterPlan,
+        consumesOpeningCounterPlan,
       });
     }
     const allowCredit = source.allowCredit != null ? !!source.allowCredit : (isProjection ? !this.isBattleTest() : this.shopCreditAvailable());
@@ -1491,6 +1525,9 @@ class GameScene extends Phaser.Scene {
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
       openingCounterSubsidy: 0,
+      openingCounterPlan,
+      preparedByOpeningCounterPlan,
+      consumesOpeningCounterPlan: !!(openingCounterPlan && canCredit),
     });
   }
 
@@ -1544,12 +1581,15 @@ class GameScene extends Phaser.Scene {
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
     const label = quote.counter ? 'Counter ' : '';
+    const plan = quote.openingCounterPlan
+      ? (quote.preparedByOpeningCounterPlan ? ', Opening Plan' : ', spends Opening Plan')
+      : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
     const covered = quote.openingCounterSubsidy > 0 ? `, covered -${quote.openingCounterSubsidy}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${covered}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${plan}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -1569,6 +1609,7 @@ class GameScene extends Phaser.Scene {
       enthusiasm,
       boardingAlert,
       fullCrewDiscount: discount,
+      openingCounterPlan: this.projectOpeningCounterPlan(sentCount),
       shopCreditUsed: false,
     };
     return {
@@ -1579,6 +1620,7 @@ class GameScene extends Phaser.Scene {
       boardingAlert,
       portDrill: opts.includePortDrill ? this.projectPortDrill(sentCount) : null,
       shortCrewDrill,
+      openingCounterPlan: shopState.openingCounterPlan,
       shopText: this.shopPlanText(shopState),
     };
   }
@@ -1612,6 +1654,7 @@ class GameScene extends Phaser.Scene {
     G.phase = 'shopping';
     G.shopCreditUsed = false;
     G.fullCrewDiscount = this.isBattleTest() ? 0 : this.pendingFullCrewDiscount();
+    if (this.isBattleTest()) G.openingCounterPlan = false;
   }
 
   consumeBoardingAlertForBoarding() {
@@ -2079,6 +2122,7 @@ class GameScene extends Phaser.Scene {
     const shortCrewResult = this.applyShortCrewDrill();
     const alertFloorBeforeWages = this.pendingBoardingAlert();
     this.updateFullCrewDiscountForCompletedIsland();
+    this.updateOpeningCounterPlanForCompletedIsland();
     this.grantShipWages();
     this.applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages);
     G.phase = 'ship';
@@ -2337,6 +2381,7 @@ class GameScene extends Phaser.Scene {
       G.enthusiasm = Math.max(0, G.enthusiasm - quote.spend);
     }
     if (quote.discount > 0) G.fullCrewDiscount = 0;
+    if (quote.consumesOpeningCounterPlan) G.openingCounterPlan = false;
     const p = mkP(type);
     G.allCrew.push(p);
     const toTopDeck = !!quote.topDeck;
@@ -2358,9 +2403,12 @@ class GameScene extends Phaser.Scene {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const coveredText = quote.openingCounterSubsidy > 0 ? ` Covered ${quote.openingCounterSubsidy}☠️` : '';
+      const planText = quote.consumesOpeningCounterPlan
+        ? (quote.preparedByOpeningCounterPlan ? ' Opening Plan' : ' Plan spent')
+        : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? ' Top deck, Watch' : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
@@ -2405,6 +2453,7 @@ class GameScene extends Phaser.Scene {
     G.sent = [];
     G.enthusiasm = 0;
     G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
     this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
@@ -6874,6 +6923,7 @@ class GameScene extends Phaser.Scene {
       ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
+    const openingPlanText = plan.openingCounterPlan ? 'Opening Counter Plan' : null;
     const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
     const shortCrew = plan.shortCrewDrill;
     let shortCrewText = null;
@@ -6886,7 +6936,7 @@ class GameScene extends Phaser.Scene {
       const watchText = shortCrew.counterWatch ? ', Watch' : '';
       shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
     }
-    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
+    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, openingPlanText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
   }
 
   sendingPlanRows() {

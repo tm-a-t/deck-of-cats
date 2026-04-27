@@ -42,6 +42,7 @@ function parseArgs(argv) {
     checkScoutedCounterShop: false,
     checkScoutedCounterCache: false,
     checkOpeningCounterSubsidy: false,
+    checkOpeningCounterPlan: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -143,6 +144,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-counter-subsidy') {
       out.checkOpeningCounterSubsidy = true;
+      continue;
+    }
+    if (a === '--check-opening-counter-plan') {
+      out.checkOpeningCounterPlan = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -415,6 +420,7 @@ function baseDecisionTokens(api, G, kindId) {
   t.push(430 + bucket(G.boardingAlert || 0, [0, 1, 2, 3, 5, 8, 12, 20]));
   t.push(440 + islandCode(api, G));
   t.push(450 + clamp(G.fullCrewDiscount || 0, 0, 1));
+  t.push(455 + (G.openingCounterPlan ? 1 : 0));
   t.push(460 + clamp(G.hand.length, 0, 32));
   t.push(500 + clamp(G.sent.length, 0, 8));
   return t;
@@ -549,6 +555,10 @@ function activeFullCrewDiscount(G) {
   return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
 }
 
+function activeOpeningCounterPlan(G) {
+  return !!(G && G.mode !== 'battleTest' && G.phase === 'shopping' && G.openingCounterPlan);
+}
+
 function counterRecruitReportsEarlyForQuote(api, G, type, counter) {
   if (!G || G.mode === 'battleTest' || !counter) return false;
   if (!type || !api.TYPES[type]) return false;
@@ -577,12 +587,17 @@ function shopPurchaseQuote(api, G, type) {
   const discount = Math.min(cost, activeFullCrewDiscount(G));
   const effectiveCost = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
-  const preparedCounter = !!(topDeck && discount > 0 && preparedCounterGainsForQuote(api, type).length);
+  const openingCounterPlan = activeOpeningCounterPlan(G);
+  const preparedCounter = !!(topDeck
+    && preparedCounterGainsForQuote(api, type).length
+    && (discount > 0 || openingCounterPlan));
+  const preparedByOpeningCounterPlan = !!(preparedCounter && openingCounterPlan && discount <= 0);
+  const consumesOpeningCounterPlan = !!openingCounterPlan;
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, openingCounterSubsidy: 0 };
+    return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, openingCounterSubsidy: 0, openingCounterPlan: false, preparedByOpeningCounterPlan: false, consumesOpeningCounterPlan: false };
   }
   if (enthusiasm >= effectiveCost) {
-    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, openingCounterSubsidy: 0 };
+    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, openingCounterSubsidy: 0, openingCounterPlan, preparedByOpeningCounterPlan, consumesOpeningCounterPlan };
   }
   const missing = effectiveCost - enthusiasm;
   const shopCreditUsed = !!G.shopCreditUsed;
@@ -592,6 +607,7 @@ function shopPurchaseQuote(api, G, type) {
     && Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0
     && !shopCreditUsed
     && discount > 0
+    && !openingCounterPlan
     && counter
     && topDeck
     && missing === 1
@@ -610,6 +626,9 @@ function shopPurchaseQuote(api, G, type) {
       missing,
       alert: 0,
       openingCounterSubsidy,
+      openingCounterPlan,
+      preparedByOpeningCounterPlan,
+      consumesOpeningCounterPlan,
     };
   }
   const canCredit = G.mode !== 'battleTest'
@@ -629,6 +648,9 @@ function shopPurchaseQuote(api, G, type) {
     missing,
     alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
     openingCounterSubsidy: 0,
+    openingCounterPlan,
+    preparedByOpeningCounterPlan,
+    consumesOpeningCounterPlan: !!(openingCounterPlan && canCredit),
   };
 }
 
@@ -657,6 +679,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     tokens.push(1900 + buyState);
     tokens.push(1990 + clamp(quote.discount || 0, 0, 1));
     tokens.push(1992 + (quote.counter ? 1 : 0));
+    tokens.push(1994 + (quote.preparedByOpeningCounterPlan ? 1 : 0));
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
@@ -972,6 +995,14 @@ function updateFullCrewDiscountForSim(scene, G) {
   return G.fullCrewDiscount;
 }
 
+function updateOpeningCounterPlanForSim(scene, G) {
+  if (scene && typeof scene.updateOpeningCounterPlanForCompletedIsland === 'function') {
+    return scene.updateOpeningCounterPlanForCompletedIsland();
+  }
+  G.openingCounterPlan = false;
+  return false;
+}
+
 function applyPortDrillForSim(scene) {
   if (scene && typeof scene.applyPortDrill === 'function') {
     return scene.applyPortDrill({ silent: true });
@@ -1101,6 +1132,10 @@ function assertScoutedCounterCacheCheck(condition, message) {
 
 function assertOpeningCounterSubsidyCheck(condition, message) {
   if (!condition) throw new Error(`opening counter subsidy check failed: ${message}`);
+}
+
+function assertOpeningCounterPlanCheck(condition, message) {
+  if (!condition) throw new Error(`opening counter plan check failed: ${message}`);
 }
 
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
@@ -1735,6 +1770,161 @@ function runOpeningCounterSubsidyChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function runOpeningCounterPlanChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const nearbyMap = (mainKey = 'powderBomber') => {
+    return makeScoutedCounterTestMap(mainKey);
+  };
+
+  const setupShop = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = opts.map === undefined ? nearbyMap(opts.mainKey || 'powderBomber') : opts.map;
+    G.round = opts.round != null ? Math.max(0, Math.floor(Number(opts.round) || 0)) : 1;
+    G.boardingCount = opts.boardingCount != null
+      ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+      : 0;
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.enthusiasm = opts.enthusiasm != null ? Math.max(0, Math.floor(Number(opts.enthusiasm) || 0)) : 3;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
+    G.openingCounterPlan = !!opts.openingCounterPlan;
+    G.shopCreditUsed = !!opts.shopCreditUsed;
+    G.shop = opts.shop ? [...opts.shop] : [opts.type || 'sawbones'];
+    G.hand = [];
+    G.sent = [];
+    G.discard = [];
+    G.deck = G.allCrew[0] ? [G.allCrew[0]] : [];
+    G.counterWatchIds = [];
+    return G;
+  };
+
+  const setupSending = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = nearbyMap(opts.mainKey || 'powderBomber');
+    G.round = opts.round != null ? Math.max(0, Math.floor(Number(opts.round) || 0)) : 1;
+    G.boardingCount = opts.boardingCount != null
+      ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+      : 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx != null ? opts.islandIdx : 0]);
+    G.sent = [];
+    const sentCount = Math.max(0, Math.floor(Number(opts.sent) || 0));
+    for (let i = 0; i < sentCount; i++) G.sent.push(i);
+    if (opts.removeFirstSent && G.sent.length) {
+      const pirate = G.hand[G.sent[0]];
+      if (pirate) {
+        removePirateById(G, pirate.id);
+        scene._sacrificedIds.add(pirate.id);
+      }
+    }
+    G.enthusiasm = 0;
+    G.boardingAlert = 0;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.shopCreditUsed = false;
+    return G;
+  };
+
+  {
+    const G = setupSending({ sent: 1 });
+    const preview = scene.shipWagePreview();
+    updateFullCrewDiscountForSim(scene, G);
+    updateOpeningCounterPlanForSim(scene, G);
+    applyShipWagesForSim(scene, G);
+    G.phase = 'shopping';
+    G.shop = ['sawbones'];
+    G.shopCreditUsed = false;
+
+    assertOpeningCounterPlanCheck(preview.openingCommission === 1 && preview.wages === 3 && preview.alert === 1, `one-short wages changed: ${JSON.stringify(preview)}`);
+    assertOpeningCounterPlanCheck(G.openingCounterPlan === true, 'eligible one-short did not grant Opening Counter Plan');
+    assertOpeningCounterPlanCheck(G.fullCrewDiscount === 0, 'one-short unexpectedly granted Full Crew Discount');
+
+    const quote = scene.shopPurchaseQuote('sawbones');
+    const directQuote = shopPurchaseQuote(api, G, 'sawbones');
+    assertOpeningCounterPlanCheck(quote.canBuy && !quote.credit, `plan counter quote was not affordable normally: ${JSON.stringify(quote)}`);
+    assertOpeningCounterPlanCheck(quote.counter && quote.topDeck && quote.preparedCounter, `plan counter quote was not prepared top-deck: ${JSON.stringify(quote)}`);
+    assertOpeningCounterPlanCheck(quote.preparedByOpeningCounterPlan && quote.discount === 0 && quote.openingCounterSubsidy === 0, `plan quote economics mismatch: ${JSON.stringify(quote)}`);
+    assertOpeningCounterPlanCheck(directQuote.preparedByOpeningCounterPlan && directQuote.openingCounterSubsidy === 0, `sim helper quote missed plan: ${JSON.stringify(directQuote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'planned counter buy failed');
+    assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'Opening Counter Plan was not consumed');
+    assertOpeningCounterPlanCheck(G.deck[G.deck.length - 1] === bought, 'planned counter was not placed on top of deck');
+    assertOpeningCounterPlanCheck((G.counterWatchIds || []).includes(bought.id), 'planned counter did not gain Counter Watch');
+    assertOpeningCounterPlanCheck(bought.weaponKey === 'barbedBlade', `planned Sawbones was not Prepared: ${bought.weaponKey}`);
+    results.push({ name: 'one-short Opening Commission grants a plan that prepares the first top-deck scouted counter', ok: true });
+  }
+
+  {
+    const G = setupShop({ openingCounterPlan: true, shop: ['herald', 'sawbones'], enthusiasm: 7 });
+    const firstQuote = scene.shopPurchaseQuote('herald');
+    assertOpeningCounterPlanCheck(firstQuote.canBuy && firstQuote.consumesOpeningCounterPlan && !firstQuote.preparedCounter, `non-counter first quote mismatch: ${JSON.stringify(firstQuote)}`);
+    const first = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningCounterPlanCheck(first && first.type === 'herald', 'non-counter first buy failed');
+    assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'non-counter first buy did not consume Opening Counter Plan');
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertOpeningCounterPlanCheck(quote.canBuy && quote.topDeck && !quote.preparedCounter && !quote.preparedByOpeningCounterPlan, `later counter stayed prepared after plan spent: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningCounterPlanCheck(bought && bought.type === 'sawbones', 'later counter buy failed');
+    assertOpeningCounterPlanCheck(!bought.weaponKey, `later counter was prepared after non-counter consumed plan: ${bought.weaponKey}`);
+    results.push({ name: 'buying a non-counter first consumes Opening Counter Plan without preparing later counters', ok: true });
+  }
+
+  {
+    const G = setupShop({ openingCounterPlan: true, shop: ['sawbones'], enthusiasm: 3 });
+    prepareNextRoundForSim(api, scene);
+    assertOpeningCounterPlanCheck(G.openingCounterPlan === false, 'unused Opening Counter Plan did not expire on Continue');
+    assertOpeningCounterPlanCheck(G.phase === 'map', `Continue did not return to map: ${G.phase}`);
+    results.push({ name: 'unused Opening Counter Plan expires on Shop Continue', ok: true });
+  }
+
+  {
+    const G = setupShop({ openingCounterPlan: true, fullCrewDiscount: 1, shop: ['sawbones'], enthusiasm: 2 });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertOpeningCounterPlanCheck(quote.canBuy && quote.discount === 1 && quote.effectiveCost === 2, `discount+plan quote changed price: ${JSON.stringify(quote)}`);
+    assertOpeningCounterPlanCheck(quote.preparedCounter && !quote.preparedByOpeningCounterPlan && quote.openingCounterSubsidy === 0, `plan stacked with Full Crew Discount: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningCounterPlanCheck(bought && bought.weaponKey === 'barbedBlade', 'discount+plan control did not prepare counter');
+    assertOpeningCounterPlanCheck(G.fullCrewDiscount === 0 && G.openingCounterPlan === false, 'discount+plan buy did not consume both shop flags');
+    results.push({ name: 'Opening Counter Plan does not stack with Full Crew Discount or change price', ok: true });
+  }
+
+  {
+    const G = setupShop({ openingCounterPlan: true, shop: ['sawbones'], enthusiasm: 2 });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertOpeningCounterPlanCheck(quote.canBuy && quote.credit && quote.alert === 1, `plan should use Dockside Credit for missing one: ${JSON.stringify(quote)}`);
+    assertOpeningCounterPlanCheck(quote.preparedByOpeningCounterPlan && quote.openingCounterSubsidy === 0, `plan incorrectly triggered Opening Counter Subsidy: ${JSON.stringify(quote)}`);
+    results.push({ name: 'Opening Counter Plan never triggers Opening Counter Subsidy and still uses normal credit rules', ok: true });
+  }
+
+  const exclusions = [
+    { name: 'full send', opts: { sent: 2 } },
+    { name: 'empty send', opts: { sent: 0 } },
+    { name: 'two-short Port send', opts: { islandIdx: 3, sent: 1 } },
+    { name: 'Infirmary round', opts: { islandIdx: 6, sent: 1 } },
+    { name: 'Battle Test', opts: { mode: 'battleTest', sent: 1 } },
+    { name: 'after first boarding', opts: { boardingCount: 1, sent: 1 } },
+    { name: 'round 3', opts: { round: 3, sent: 1 } },
+    { name: 'removed sent pirate', opts: { sent: 1, removeFirstSent: true } },
+  ];
+  exclusions.forEach(({ name, opts }) => {
+    const G = setupSending(opts);
+    updateOpeningCounterPlanForSim(scene, G);
+    assertOpeningCounterPlanCheck(G.openingCounterPlan === false, `${name} granted Opening Counter Plan`);
+    results.push({ name: `${name} does not grant Opening Counter Plan`, ok: true });
+  });
+
+  return { ok: true, checks: results };
+}
+
 function runCounterRecruitsReportEarlyChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1789,11 +1979,12 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const partialLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
     assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
-    assertCounterRecruitsReportEarlyCheck(partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should top-deck without prepared: ${partialLine}`);
+    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Plan') && partialLine.includes('prepared') && partialLine.includes('top deck'), `partial plan should expose Opening Counter Plan preparation: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && fullLine.includes('prepared') && fullLine.includes('top deck'), `full-send plan should prepare and top-deck: ${fullLine}`);
     assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+🪨'), `End-now plan missing unprepared counter payoff: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Vs Powder Bomber') && partialLine.includes('Ambush 5') && partialLine.includes('cut 2 guards') && partialLine.includes('+🪨'), `partial plan missing Opening Plan prepared counter payoff: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 5') && fullLine.includes('cut 2 guards') && fullLine.includes('+🪨'), `full-send plan missing prepared counter payoff: ${fullLine}`);
-    results.push({ name: 'sending plan separates no-discount top-deck counters from full-send prepared counters', ok: true, endLine, partialLine, fullLine });
+    results.push({ name: 'sending plan separates end-now top-deck counters from Opening Plan and full-send prepared counters', ok: true, endLine, partialLine, fullLine });
   }
 
   {
@@ -3822,6 +4013,7 @@ function prepareNextRoundForSim(api, scene) {
   G.healing = null;
   G.combat = null;
   G.fullCrewDiscount = 0;
+  G.openingCounterPlan = false;
   if (scene && scene._sendingToIsland) scene._sendingToIsland.clear();
   if (scene) scene._pendingEndSending = false;
   G.hand = api.drawCards(5);
@@ -3858,6 +4050,7 @@ function runHeuristicSendingAndShipPhase(runtime, api, scene) {
   const shortCrewResult = applyShortCrewDrillForSim(scene);
   const alertFloorBeforeWages = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   updateFullCrewDiscountForSim(scene, G);
+  updateOpeningCounterPlanForSim(scene, G);
   applyShipWagesForSim(scene, G);
   applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFloorBeforeWages);
 
@@ -3955,6 +4148,7 @@ async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeInde
   const shortCrewResult = applyShortCrewDrillForSim(scene);
   const alertFloorBeforeWages = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   updateFullCrewDiscountForSim(scene, G);
+  updateOpeningCounterPlanForSim(scene, G);
   applyShipWagesForSim(scene, G);
   applyShortCrewCounterAlertRefundForSim(scene, shortCrewResult, alertFloorBeforeWages);
 
@@ -4073,6 +4267,7 @@ async function runShoppingPhase(
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
       if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
+      else if (quote && quote.preparedByOpeningCounterPlan) purchases.push(`${label} (Opening Plan)`);
       else if (quote && quote.openingCounterSubsidy > 0) purchases.push(`${label} (Opening covered ${quote.openingCounterSubsidy}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);
@@ -4656,6 +4851,11 @@ async function main() {
   }
   if (opts.checkOpeningCounterSubsidy) {
     const result = runOpeningCounterSubsidyChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningCounterPlan) {
+    const result = runOpeningCounterPlanChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

@@ -155,6 +155,7 @@ function buildDeckOfCatsTestState(game) {
     enthusiasm: state ? state.enthusiasm || 0 : 0,
     alert: state ? state.boardingAlert || 0 : 0,
     fullCrewDiscount: state ? state.fullCrewDiscount || 0 : 0,
+    openingCounterPlan: !!(state && state.openingCounterPlan),
     shopCreditUsed: !!(state && state.shopCreditUsed),
     boardingCount: state ? state.boardingCount || 0 : 0,
     gameOver: !!(state && state.gameOver),
