@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-223936 — rev 84cdbd8 — build 0.1.0
+
+- Gameplay: true - Retired Cache-Claimed Alarm Rush: claimed route caches and high `Boarding Alert`/`Dockside Credit` no longer top-deck, grant `Counter Watch`, secure the route primary, or trigger `Route Counter Cover`; only `Full Crew Discount`, Full Crew coverage, and `Opening Counter Prep` remain qualifying opening route-primary setup gates. Validated with JS syntax checks, `node sim/fast-sim.js --check-no-alarm-rush-route-counter --json`, `node sim/fast-sim.js --check-route-counter-cover --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-opening-side-prep --json`, `node sim/fast-sim.js --check-opening-counter-plan --json`, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-223936.log`, and `git diff --check`.
+
 ## 2026-04-28 — run 20260427-222734 — rev 9680ee2 — build 0.1.0
 
 - Gameplay: true - Staged opening route side offers behind `Opening Counter Prep`: unsecured route shops now show only the selected primary counter plus neutral starter fillers until the player earns one-short prep, then guarantee the selected side offer for `Opening Side Prep`; route-plan text now presents the side offer as an unlock instead of a simultaneous default target. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-side-prep --json`, `node sim/fast-sim.js --check-route-sidekick-report --json`, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, `node sim/fast-sim.js --check-opening-counter-plan --json`, `node sim/fast-sim.js --check-route-counter-cover --json`, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-222734.log`, and `git diff --check`.
