@@ -215,6 +215,14 @@ function openingRouteSidePrepGain(type) {
   return gain ? { ...gain } : null;
 }
 
+function openingCounterPlanActiveForShopGeneration(opts = {}) {
+  const state = shopGenerationState(opts);
+  const value = opts.openingCounterPlan != null
+    ? opts.openingCounterPlan
+    : (state && state.openingCounterPlan);
+  return !!value;
+}
+
 function fillOpeningRouteShopSlot(slots, slotIndex, type, seen, openingCandidates) {
   if (!type || !TYPES[type] || seen.has(type) || openingCandidates.has(type)) return false;
   if (slotIndex < 0 || slotIndex >= slots.length || slots[slotIndex]) return false;
@@ -305,7 +313,10 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
     && TYPES[sideOffer]
     && TYPES[sideOffer].cost <= maxCost
     && !openingCandidates.has(sideOffer)
+    && openingCounterPlanActiveForShopGeneration(opts)
   );
+  const blockedTypes = new Set(openingCandidates);
+  if (sideOffer && !sideOfferEligible) blockedTypes.add(sideOffer);
 
   const sideCurrentIndex = sideOfferEligible ? out.findIndex(type => type === sideOffer) : -1;
   const sideIndex = sideOfferEligible
@@ -328,7 +339,7 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
 
   out.forEach((type, index) => {
     if (index === primaryIndex || index === sideIndex) return;
-    if (!type || type === primary || openingCandidates.has(type)) return;
+    if (!type || type === primary || blockedTypes.has(type)) return;
     if (sideOfferEligible && type === sideOffer) return;
     if (!TYPES[type] || seen.has(type)) return;
     if (TYPES[type].cost != null && TYPES[type].cost > maxCost) return;
@@ -341,30 +352,30 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
       TYPES[type]
       && TYPES[type].cost <= Math.min(3, maxCost)
       && !seen.has(type)
-      && !openingCandidates.has(type)
+      && !blockedTypes.has(type)
     ));
   for (let i = 0; i < n; i++) {
     if (slots[i]) continue;
     const type = fillerPool.shift();
-    if (type) fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates);
+    if (type) fillOpeningRouteShopSlot(slots, i, type, seen, blockedTypes);
   }
 
   for (let i = 0; i < n; i++) {
     if (slots[i]) continue;
-    const exclude = [...seen, ...openingCandidates];
+    const exclude = [...seen, ...blockedTypes];
     const type = randomShopType(round, exclude, {
       ...opts,
       disableScoutedCounter: true,
     });
-    if (fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates)) continue;
+    if (fillOpeningRouteShopSlot(slots, i, type, seen, blockedTypes)) continue;
 
     const fallback = shopEligiblePool(round)
       .find(candidate =>
         TYPES[candidate]
         && !seen.has(candidate)
-        && !openingCandidates.has(candidate)
+        && !blockedTypes.has(candidate)
       );
-    if (fallback) fillOpeningRouteShopSlot(slots, i, fallback, seen, openingCandidates);
+    if (fallback) fillOpeningRouteShopSlot(slots, i, fallback, seen, blockedTypes);
   }
 
   return slots.map(type => type || primary);

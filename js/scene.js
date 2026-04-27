@@ -2233,7 +2233,7 @@ class GameScene extends Phaser.Scene {
     return [
       `${routeName}: ${info.enemyName}`,
       `${info.starterName} opens ${cacheText}`,
-      `Shop ${info.primaryName}/${info.sideName}`,
+      `Shop ${info.primaryName}; one-short unlocks ${info.sideName}`,
     ];
   }
 
@@ -2348,22 +2348,30 @@ class GameScene extends Phaser.Scene {
     const payoff = info.bountyEmoji
       ? `B1 payoff: counter win +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
       : '';
-    const targets = `Targets: ${info.primaryName} primary; ${info.sideName} side`;
+    const routePrimarySecured = G.openingRouteCounterBoughtMainKey === info.mainKey;
+    const sideUnlocked = !!G.openingCounterPlan && !routePrimarySecured;
+    const sideTarget = sideUnlocked
+      ? `${info.sideName} Side Prep`
+      : (routePrimarySecured ? `${info.sideName} ordinary buy` : `${info.sideName} locked until Opening Prep`);
+    const targets = `Targets: ${info.primaryName} primary; ${sideTarget}`;
     if (opts.context === 'shop') {
       const payoffShort = info.bountyEmoji
         ? `B1 counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
         : 'B1 counter payoff';
+      const sideBuyText = sideUnlocked
+        ? this.openingRouteBuyQuoteText(info.sideType)
+        : (routePrimarySecured ? this.openingRouteBuyQuoteText(info.sideType) : `${info.sideName}: locked until Opening Prep`);
       return [
         `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
         [setup, payoffShort].filter(Boolean).join(' · '),
-        `Buy: ${this.openingRouteBuyQuoteText(info.primaryType)}; ${this.openingRouteBuyQuoteText(info.sideType)}`,
+        `Buy: ${this.openingRouteBuyQuoteText(info.primaryType)}; ${sideBuyText}`,
       ].filter(Boolean);
     }
     if (opts.context === 'sending') {
       const bountyPair = info.bountyEmoji ? `B1 +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
       return [
         `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
-        `Full send = Full Crew; one-short = Opening Prep +💪; shop ${info.primaryName}/${info.sideName}; ${bountyPair}`,
+        `Full send = Full Crew ${info.primaryName}; one-short unlocks ${info.sideName} or +💪 primary; ${bountyPair}`,
       ];
     }
     const sendChoice = '';
@@ -3786,6 +3794,7 @@ class GameScene extends Phaser.Scene {
           mode: G.mode,
           boardingCount: G.boardingCount,
           newSlotIndex: G.shop.length - 1,
+          openingCounterPlan: false,
         });
       }
     }

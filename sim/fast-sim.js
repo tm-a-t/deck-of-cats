@@ -4263,18 +4263,26 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `${label} shop has starter or unknown ${shop.join(',')}`);
   };
 
-  const assertRouteFocusedShop = (shop, label, primary) => {
+  const assertRouteFocusedShop = (shop, label, primary, opts = {}) => {
     assertBasicShop(shop, label);
     const sideOffer = sideOfferByPrimary[primary];
+    const expectSideOffer = !!opts.expectSideOffer;
     const openingVisible = shop.filter(type => openingCounters.includes(type));
     assertOpeningRouteCounterShopCheck(
       openingVisible.length === 1 && openingVisible[0] === primary,
       `${label} route focus expected only ${primary}, got ${shop.join(',')}`
     );
-    assertOpeningRouteCounterShopCheck(
-      !sideOffer || shop.includes(sideOffer),
-      `${label} route side offer ${sideOffer} missing from ${shop.join(',')}`
-    );
+    if (expectSideOffer) {
+      assertOpeningRouteCounterShopCheck(
+        !sideOffer || shop.filter(type => type === sideOffer).length === 1,
+        `${label} route side offer ${sideOffer} missing from ${shop.join(',')}`
+      );
+    } else {
+      assertOpeningRouteCounterShopCheck(
+        !sideOffer || !shop.includes(sideOffer),
+        `${label} route side offer ${sideOffer} should be locked before Opening Prep: ${shop.join(',')}`
+      );
+    }
     const fillers = shop.filter(type => type !== primary);
     assertOpeningRouteCounterShopCheck(
       fillers.length === 3 && fillers.every(type => fillerTypes.includes(type) && api.TYPES[type].cost <= 3),
@@ -4313,6 +4321,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
         mode: G.mode,
         boardingCount: G.boardingCount,
         newSlotIndex: G.shop.length - 1,
+        openingCounterPlan: false,
       });
     }
   };
@@ -4462,7 +4471,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
       G.round,
       { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
     );
-    assertRouteFocusedShop(G.shop, `${label} side-prep setup`, primary);
+    assertRouteFocusedShop(G.shop, `${label} side-prep setup`, primary, { expectSideOffer: true });
     const sideIndex = G.shop.indexOf(sideOffer);
     const sideQuote = scene.shopPurchaseQuote(sideOffer);
     const directQuote = shopPurchaseQuote(api, G, sideOffer);
@@ -4691,7 +4700,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
       G.round,
       { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
     );
-    assertRouteFocusedShop(G.shop, `${label} Opening Prep shop`, primary);
+    assertRouteFocusedShop(G.shop, `${label} Opening Prep shop`, primary, { expectSideOffer: true });
       const quote = scene.shopPurchaseQuote(primary);
       assertOpeningRouteCounterShopCheck(
         quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight && quote.consumesOpeningCounterPlan,
@@ -9493,6 +9502,7 @@ async function runShoppingPhase(
         mode: G.mode,
         boardingCount: G.boardingCount,
         newSlotIndex: G.shop.length - 1,
+        openingCounterPlan: false,
       });
     }
   }
