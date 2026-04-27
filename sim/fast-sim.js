@@ -49,6 +49,7 @@ function parseArgs(argv) {
     checkCounterTrophy: false,
     checkCounterEdge: false,
     checkCounterAmbush: false,
+    checkFirstShellback: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -172,6 +173,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-counter-ambush') {
       out.checkCounterAmbush = true;
+      continue;
+    }
+    if (a === '--check-first-shellback') {
+      out.checkFirstShellback = true;
     }
   }
 
@@ -1144,6 +1149,63 @@ function assertCounterRecruitsReportEarlyCheck(condition, message) {
 
 function assertMapScheduleCheck(condition, message) {
   if (!condition) throw new Error(`map schedule check failed: ${message}`);
+}
+
+function assertFirstShellbackCheck(condition, message) {
+  if (!condition) throw new Error(`first Shellback check failed: ${message}`);
+}
+
+function runFirstShellbackChecks(runtime) {
+  const api = runtime.api;
+  const results = [];
+  const samples = 24;
+  const shellback = api.COMBAT.enemyArchetypes.find(a => a.key === 'shellback');
+  assertFirstShellbackCheck(shellback, 'Shellback archetype is missing');
+
+  for (let sample = 0; sample < samples; sample++) {
+    runtime.setSeed((0x5eed5e11 + sample * 6151) >>> 0);
+    api.initState();
+    const map = api.getG().map;
+    assertFirstShellbackCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    assertFirstShellbackCheck(firstShipLayer === 3, `sample ${sample} first ship layer ${firstShipLayer} !== 3`);
+
+    const ship = map.layers[firstShipLayer][0];
+    const encounter = ship && ship.encounter;
+    assertFirstShellbackCheck(encounter && encounter.mainKey === 'shellback', `sample ${sample} first main ${encounter && encounter.mainKey}`);
+    assertFirstShellbackCheck(encounter.totalCount === 3, `sample ${sample} first total ${encounter.totalCount} !== 3`);
+    assertFirstShellbackCheck(
+      JSON.stringify(encounter.supportKeys) === JSON.stringify(['bilgeRat', 'cabinBoy']),
+      `sample ${sample} first support ${JSON.stringify(encounter.supportKeys)}`
+    );
+    assertFirstShellbackCheck(
+      encounter.encounterDesc === (shellback.encounterDesc || shellback.summary),
+      `sample ${sample} first desc ${encounter.encounterDesc}`
+    );
+
+    const cacheNode = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache);
+    const cache = cacheNode && cacheNode.scoutedCache;
+    assertFirstShellbackCheck(cache && cache.mainKey === 'shellback', `sample ${sample} first cache main ${cache && cache.mainKey}`);
+    assertFirstShellbackCheck(cache.res === 'wood', `sample ${sample} first cache res ${cache.res}`);
+    assertFirstShellbackCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
+    assertFirstShellbackCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
+
+    const laterMainKeys = [];
+    for (let li = firstShipLayer + 1; li < map.layers.length; li++) {
+      const layer = map.layers[li];
+      if (layer && layer.length === 1 && layer[0].type === 'ship') {
+        laterMainKeys.push(layer[0].encounter && layer[0].encounter.mainKey);
+      }
+    }
+    assertFirstShellbackCheck(laterMainKeys.length === 7, `sample ${sample} later ship count ${laterMainKeys.length}`);
+  }
+
+  results.push({
+    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and wood cache',
+    ok: true,
+    samples,
+  });
+  return { ok: true, checks: results };
 }
 
 function runMapScheduleChecks(runtime) {
@@ -4886,6 +4948,11 @@ async function main() {
   }
   if (opts.checkCounterAmbush) {
     const result = runCounterAmbushChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkFirstShellback) {
+    const result = runFirstShellbackChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

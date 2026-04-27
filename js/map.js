@@ -115,9 +115,9 @@ function generateEncounterBlueprint(boardingNo) {
 
   if (boardingNo === 1) {
     totalCount = 3;
-    const mainArch = eligibleStrong.length
-      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
-      : weak[Math.floor(Math.random() * weak.length)];
+    const mainArch = strong.find(a => a.key === 'shellback')
+      || eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      || weak[Math.floor(Math.random() * weak.length)];
     mainKey = mainArch.key;
     desc = mainArch.encounterDesc || mainArch.summary;
     supportKeys = ['bilgeRat', 'cabinBoy'];

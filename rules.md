@@ -372,13 +372,14 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ### Encounter Scaling
 
 - Counts below describe the normal generated party before any `Boarding Alert` guard reinforcements are added.
-- `Boarding 1`: exactly 3 enemies before Alert guards: 1 random eligible strong enemy, exactly 1 `Bilge Rat`, and exactly 1 `Cabin Boy`.
+- `Boarding 1`: exactly 3 enemies before Alert guards: always 1 `Shellback`, exactly 1 `Bilge Rat`, and exactly 1 `Cabin Boy`.
 - `Boarding 2`: exactly 3 enemies, 2 strong and 1 weak.
 - `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
 - `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
 - `Boarding 5` and `Boarding 6`: exactly 5 enemies, all strong. `Flint Duelist` unlocks at `Boarding 5`.
 - `Boarding 7`: exactly 5 enemies, all strong, upgraded to `Veteran`: `+4 HP`, `+1 damage`, and `6%` faster attacks.
 - `Boarding 8`: exactly 5 enemies, all strong, upgraded to `Elite`: `+8 HP`, `+1 damage`, and `12%` faster attacks.
+- Boardings `2+` continue to use the normal random blueprint rules and unlock timing.
 - Each ship node stores a pre-generated blueprint with one main archetype and a short `encounterDesc` hint shown before the fight.
 - Enemy setup generation prefers melee in front and ranged deeper; the formation never leaves living enemies behind an empty front row.
 
