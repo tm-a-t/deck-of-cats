@@ -227,6 +227,7 @@ function installDeckOfCatsTestHook(game) {
         state.allCrew = state.allCrew.filter(p => p.id !== pirate.id);
         state.deck = state.deck.filter(p => p.id !== pirate.id);
         state.discard = state.discard.filter(p => p.id !== pirate.id);
+        if (typeof scene.clearOpeningRouteCounterBought === 'function') scene.clearOpeningRouteCounterBought(pirate.id);
         if (scene._sacrificedIds) scene._sacrificedIds.add(pirate.id);
       }
       const cacheDrill = typeof scene.applyScoutedCacheDrill === 'function'

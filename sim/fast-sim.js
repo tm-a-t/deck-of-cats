@@ -46,7 +46,7 @@ function parseArgs(argv) {
     checkOpeningShellbackCounter: false,
     checkOpeningDeckhandCounters: false,
     checkOpeningRouteMuster: false,
-    checkOpeningRouteContract: false,
+    checkOpeningRoutePrize: false,
     checkOpeningAmbusherReport: false,
     checkDrilledAmbusherBounty: false,
     checkCounterRecruitsReportEarly: false,
@@ -182,8 +182,8 @@ function parseArgs(argv) {
       out.checkOpeningRouteMuster = true;
       continue;
     }
-    if (a === '--check-opening-route-contract') {
-      out.checkOpeningRouteContract = true;
+    if (a === '--check-opening-route-prize' || a === '--check-opening-route-contract') {
+      out.checkOpeningRoutePrize = true;
       continue;
     }
     if (a === '--check-opening-ambusher-report') {
@@ -373,6 +373,10 @@ function removePirateById(G, pirateId) {
   G.allCrew = G.allCrew.filter(p => p.id !== pirateId);
   G.deck = G.deck.filter(p => p.id !== pirateId);
   G.discard = G.discard.filter(p => p.id !== pirateId);
+  if (G.openingRouteCounterBoughtPirateId === pirateId) {
+    G.openingRouteCounterBoughtMainKey = null;
+    G.openingRouteCounterBoughtPirateId = null;
+  }
 }
 
 function canSend(api, G, idx) {
@@ -1251,8 +1255,8 @@ function assertOpeningRouteMusterCheck(condition, message) {
   if (!condition) throw new Error(`opening route muster check failed: ${message}`);
 }
 
-function assertOpeningRouteContractCheck(condition, message) {
-  if (!condition) throw new Error(`opening route contract check failed: ${message}`);
+function assertOpeningRoutePrizeCheck(condition, message) {
+  if (!condition) throw new Error(`opening route prize check failed: ${message}`);
 }
 
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
@@ -2263,6 +2267,248 @@ function runOpeningRouteContractChecks(runtime) {
 
   return { ok: true, checks: results };
 }
+
+function runOpeningRoutePrizeChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routeCases = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler' },
+  ];
+
+  const makePirate = (id, type, opts = {}) => ({
+    id,
+    type,
+    weaponKey: opts.weaponKey || null,
+    might: opts.might || 0,
+    tempo: opts.tempo || 0,
+    wounded: !!opts.wounded,
+  });
+  const fillerShop = (primary) => [primary, 'drummer', 'herald', 'trainer'];
+  const routeFirstIsland = (map, mainKey) => {
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const ship = map.layers[firstShipLayer][0];
+    return { firstShipLayer, routeCache, firstIsland, ship };
+  };
+  const enemyFor = (key, row, rowOrder, idSuffix = 0) => {
+    const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
+    assertOpeningRoutePrizeCheck(!!archetype, `missing archetype ${key}`);
+    const member = scene.buildCombatEnemyMember(archetype, `${key}_route_prize_${idSuffix}`);
+    return scene.buildEnemyCombatFighter(member, row, rowOrder);
+  };
+  const fighterFor = (pirate, row, rowOrder, combat) =>
+    scene.buildPlayerCombatFighter(pirate, row, rowOrder, combat);
+
+  const setupBoarding = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    const mainKey = opts.mainKey || 'deckSniper';
+    const type = opts.type || 'needler';
+    const pirate = makePirate(8800, type);
+    const filler = makePirate(8801, 'trainer');
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.boardingCount = Math.max(1, Math.floor(Number(opts.boardingCount) || 1));
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: G.boardingCount,
+      encounter: { mainKey, supportKeys: [], totalCount: 1 },
+    };
+    G.allCrew = opts.owned === false ? [filler] : [pirate, filler];
+    G.hand = [pirate, filler];
+    G.deck = [];
+    G.discard = [];
+    G.sent = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.openingRouteCounterBoughtMainKey = Object.prototype.hasOwnProperty.call(opts, 'markerMainKey')
+      ? opts.markerMainKey
+      : mainKey;
+    G.openingRouteCounterBoughtPirateId = Object.prototype.hasOwnProperty.call(opts, 'markerPirateId')
+      ? opts.markerPirateId
+      : pirate.id;
+    G.cacheDrillBountyMarks = opts.cacheMarker ? [{ pirateId: pirate.id, mainKey }] : [];
+    G.enemyShip.cacheDrillBountyMarks = G.cacheDrillBountyMarks.slice();
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: mainKey,
+      enemyParty: [],
+      playerFighters: [fighterFor(pirate, 0, 0, null)],
+      enemyFighters: [enemyFor(mainKey, 0, 0)],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+      cacheDrillBountyMarks: G.cacheDrillBountyMarks.slice(),
+    };
+    return { G, pirate, combat: G.combat };
+  };
+
+  routeCases.forEach((route, routeIndex) => {
+    runtime.setSeed((0x61c05700 + routeIndex * 8191) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRoutePrizeCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
+    assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    const primaryIndex = G.shop.indexOf(route.primary);
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningRoutePrizeCheck(primaryIndex >= 0, `${route.label} primary ${route.primary} missing from shop ${G.shop.join(',')}`);
+    assertOpeningRoutePrizeCheck(quote.counterPayoff && quote.counterPayoff.openingRoutePrize && quote.counterPayoff.bountyCount === 2, `${route.label} shop did not preview +2 route prize: ${JSON.stringify(quote.counterPayoff)}`);
+    const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRoutePrizeCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} primary buy did not mark ${route.mainKey}`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} primary buy did not record bought pirate id`);
+
+    const cache = routeCache.scoutedCache;
+    const baseEnthusiasm = Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
+    const baseAlert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    G.phase = 'map';
+    G.enthusiasm = 0;
+    G.boardingAlert = 5;
+    assertOpeningRoutePrizeCheck(scene.applyMapNodeSelection(routeCache.id), `${route.label} cache selection failed`);
+    assertOpeningRoutePrizeCheck(G.enthusiasm === baseEnthusiasm, `${route.label} cache paid old contract ${G.enthusiasm} !== ${baseEnthusiasm}`);
+    assertOpeningRoutePrizeCheck(G.boardingAlert === 5 + baseAlert, `${route.label} prize changed cache Alert ${G.boardingAlert} !== ${5 + baseAlert}`);
+    assertOpeningRoutePrizeCheck(G.res[cache.res] === 1, `${route.label} cache resource was doubled or missing: ${JSON.stringify(G.res)}`);
+    const drillDesc = scene.scoutedCacheDrillDescription();
+    assertOpeningRoutePrizeCheck(!drillDesc.includes('Contract'), `${route.label} drill text still promised Contract: ${drillDesc}`);
+
+    const beforeDrillEnthusiasm = G.enthusiasm;
+    G.hand = [bought];
+    G.sent = [0];
+    const drill = applyScoutedCacheDrillForSim(scene, bought);
+    assertOpeningRoutePrizeCheck(drill && drill.applied, `${route.label} matching bought counter did not claim Cache Drill`);
+    assertOpeningRoutePrizeCheck(!drill.openingRouteContractEnthusiasm, `${route.label} Cache Drill returned old contract reward ${JSON.stringify(drill)}`);
+    assertOpeningRoutePrizeCheck(G.enthusiasm === beforeDrillEnthusiasm, `${route.label} Cache Drill changed enthusiasm ${G.enthusiasm} !== ${beforeDrillEnthusiasm}`);
+
+    G.phase = 'map';
+    assertOpeningRoutePrizeCheck(scene.applyMapNodeSelection(ship.id), `${route.label} ship selection failed`);
+    assertOpeningRoutePrizeCheck(G.phase === 'boarding' && G.boardingCount === 1, `${route.label} did not enter Boarding 1`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} prize marker did not persist into Boarding 1`);
+    scene.ensureBoardingCombat();
+    scene.finishBoardingCombat('loss');
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null && G.openingRouteCounterBoughtMainKey == null, `${route.label} prize marker did not clear after Boarding 1 resolution`);
+    results.push({ name: `${route.label} bought primary records Opening Route Prize without Cache Drill skulls`, ok: true });
+  });
+
+  {
+    const { G, pirate, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler' });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningRoutePrizeCheck(result && result.pirateId === pirate.id, 'bought route primary did not Counter Ambush');
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 2, `Opening Route Prize gold ${G.res.gold} !== 2`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 2 && combat.ambushBounty.openingRoutePrize && !combat.ambushBounty.drilled, `Opening Route Prize bounty payload ${JSON.stringify(combat.ambushBounty)}`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null, 'Opening Route Prize marker survived winning Boarding 1');
+    results.push({ name: 'bought route primary gets +2 Ambush Bounty without Cache Drill mark', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', cacheMarker: true });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 2, `overlap bounty stacked above +2: ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 2 && combat.ambushBounty.openingRoutePrize && combat.ambushBounty.drilled, `overlap bounty payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'Cache Drill and Opening Route Prize overlap still pays only +2 total', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', markerMainKey: null });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 1, `unmarked route primary bounty ${JSON.stringify(G.res)} !== +1`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.openingRoutePrize, `unmarked payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'unmarked surviving ambusher still receives normal +1 Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'flintDuelist', type: 'poisoner', markerMainKey: 'shellback' });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.wood === 1, `wrong-main prize doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.openingRoutePrize, `wrong-main payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'wrong-main fights do not receive Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', boardingCount: 2 });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 1, `Boarding 2 prize doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.openingRoutePrize, `Boarding 2 payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'Boarding 2+ never receives Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'shellback', type: 'needler' });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.wood === 1, `non-primary counter prize doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.openingRoutePrize, `non-primary payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'non-primary counters cannot claim Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', owned: false });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 1, `removed bought pirate prize doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null, 'removed bought pirate marker was not cleared');
+    results.push({ name: 'removed bought pirates do not receive Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler' });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('loss');
+    assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `loss granted prize bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null, 'loss did not clear Opening Route Prize marker');
+    results.push({ name: 'losses clear Opening Route Prize and grant no bounty', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler' });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.defeatCombatFighter(combat.playerFighters[0], []);
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `defeated prize ambusher granted bounty ${JSON.stringify(G.res)}`);
+    results.push({ name: 'defeated ambushers do not receive Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, pirate, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', reinforcementCount: 1 });
+    combat.counterAmbush = { applied: true, pirateId: pirate.id, type: pirate.type, mainKey: 'deckSniper' };
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `reinforcement win granted prize ${JSON.stringify(G.res)}`);
+    results.push({ name: 'reinforcement-hand wins never receive Opening Route Prize', ok: true });
+  }
+
+  {
+    const { G, pirate, combat } = setupBoarding({ mode: 'battleTest', mainKey: 'deckSniper', type: 'needler' });
+    combat.counterAmbush = { applied: true, pirateId: pirate.id, type: pirate.type, mainKey: 'deckSniper' };
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `Battle Test granted prize ${JSON.stringify(G.res)}`);
+    results.push({ name: 'Battle Test ignores Opening Route Prize markers', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
+runOpeningRouteContractChecks = runOpeningRoutePrizeChecks;
 
 function runOpeningCounterSubsidyChecks(runtime) {
   const api = runtime.api;
@@ -3576,9 +3822,9 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
       assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Prep') && partialLine.includes('Opening Prep -1☠️ +💪') && partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should expose Opening Counter Prep discount and Might: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && !fullLine.includes('prepared') && fullLine.includes('top deck'), `pre-boarding full-send plan should top-deck without preparation: ${fullLine}`);
-    assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+🪨'), `End-now plan missing unprepared counter payoff: ${endLine}`);
-    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Vs Powder Bomber') && partialLine.includes('Ambush 5') && partialLine.includes('cut 2 guards') && partialLine.includes('+🪨'), `partial plan missing Opening Prep armed counter payoff: ${partialLine}`);
-    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 3') && fullLine.includes('cut 1 guard') && fullLine.includes('+🪨'), `full-send plan should show unprepared counter payoff before Boarding 1: ${fullLine}`);
+    assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+2🪨'), `End-now plan missing unprepared route-prize payoff: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Vs Powder Bomber') && partialLine.includes('Ambush 5') && partialLine.includes('cut 2 guards') && partialLine.includes('+2🪨'), `partial plan missing Opening Prep route-prize payoff: ${partialLine}`);
+    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 3') && fullLine.includes('cut 1 guard') && fullLine.includes('+2🪨'), `full-send plan should show route-prize payoff before Boarding 1: ${fullLine}`);
     results.push({ name: 'sending plan separates end-now and full-send watched counters from Opening Counter Prep Might before Boarding 1', ok: true, endLine, partialLine, fullLine });
   }
 
@@ -7055,8 +7301,8 @@ async function main() {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
-  if (opts.checkOpeningRouteContract) {
-    const result = runOpeningRouteContractChecks(runtime);
+  if (opts.checkOpeningRoutePrize) {
+    const result = runOpeningRoutePrizeChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
