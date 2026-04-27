@@ -2340,6 +2340,8 @@ class GameScene extends Phaser.Scene {
         openingCounterPrep: false,
         openingCounterPrepMight: false,
         openingCounterPrepDiscount: 0,
+        openingSidePrep: false,
+        openingSidePrepGain: null,
         openingRoutePrimary: false,
         alarmRushedRouteCounter: false,
         consumesOpeningCounterPlan: false,
@@ -2384,17 +2386,36 @@ class GameScene extends Phaser.Scene {
       && routeShopState.mainKey
       && boardingCount === 0
       && mode !== 'battleTest');
+    const openingRouteCounterBoughtMainKey = source.openingRouteCounterBoughtMainKey != null
+      ? source.openingRouteCounterBoughtMainKey
+      : (G.openingRouteCounterBoughtMainKey || null);
+    const openingRouteSideOffer = routeShopState && routeShopState.mainKey && typeof OPENING_ROUTE_SIDE_OFFERS !== 'undefined'
+      ? OPENING_ROUTE_SIDE_OFFERS[routeShopState.mainKey] || null
+      : null;
+    const openingSidePrepGain = typeof openingRouteSidePrepGain === 'function'
+      ? openingRouteSidePrepGain(type)
+      : null;
+    const openingSidePrep = !!(routeShopState
+      && openingRouteSideOffer === type
+      && routeShopState.mainKey
+      && openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      && boardingCount === 0
+      && mode !== 'battleTest'
+      && openingCounterPrep
+      && openingSidePrepGain);
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
     const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
-    const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
+    const openingCounterPrepDiscount = (openingCounterPrepMight || openingSidePrep) ? Math.min(1, costAfterDiscount) : 0;
     const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
-    const consumesOpeningCounterPlan = !!openingCounterPrepMight;
+    const consumesOpeningCounterPlan = !!(openingCounterPrepMight || openingSidePrep);
     const setupTopDeck = !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight));
     const topDeckBeforeAlarm = openingRoutePrimary
       ? setupTopDeck
-      : !!scoutedCounterTopDeck;
+      : (openingSidePrep
+        ? true
+        : !!scoutedCounterTopDeck);
     const alertSource = source.boardingAlert != null ? source.boardingAlert : this.pendingBoardingAlert();
     const pendingAlert = Math.max(0, Math.floor(Number(alertSource) || 0));
     const alarmThreshold = Math.max(1, Math.floor(Number(
@@ -2418,6 +2439,8 @@ class GameScene extends Phaser.Scene {
       openingCounterPrep: openingCounterPrepMight,
       openingCounterPrepMight,
       openingCounterPrepDiscount,
+      openingSidePrep,
+      openingSidePrepGain,
       openingRoutePrimary,
       openingCommissionReport,
       openingFullCrewReport,
@@ -2560,13 +2583,17 @@ class GameScene extends Phaser.Scene {
     const prep = quote.openingCounterPrepMight
       ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
       : '';
+    const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+    const sidePrep = quote.openingSidePrep
+      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+      : '';
     const alarm = quote.alarmRushedRouteCounter ? ', Alarm rush' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? (quote.alarmRushedRouteCounter ? ', top deck, Watch' : ', top deck') : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prep}${alarm}${prepared}${topDeck}${covered}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${alarm}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -3387,6 +3414,9 @@ class GameScene extends Phaser.Scene {
     const prepMight = quote.openingCounterPrepMight
       ? this.applyPersonalGainsToPirate(p, [{ buff: 'might', count: 1 }])
       : null;
+    const sidePrepGain = quote.openingSidePrep && quote.openingSidePrepGain
+      ? this.applyPersonalGainsToPirate(p, [quote.openingSidePrepGain])
+      : null;
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
@@ -3430,14 +3460,15 @@ class GameScene extends Phaser.Scene {
       const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent')
+        ? (quote.openingSidePrep ? ` Side Prep${prepDiscountText}` : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent'))
         : '';
       const alarmText = quote.alarmRushedRouteCounter ? ' Alarm rush' : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
+      const sidePrepText = sidePrepGain && sidePrepGain.applied ? ` +${sidePrepGain.text || ''}` : '';
       const passOffText = routePassOff ? ' Cache mark' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alarmText + prepText + passOffText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alarmText + prepText + sidePrepText + passOffText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

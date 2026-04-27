@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-190103 — rev 08334b4 — build 0.1.0
+
+- Gameplay: true - Added Opening Side Prep: before Boarding 1, an unsecured route's side offer can spend active Opening Counter Prep for the same `-1☠️` timing, top-deck placement, and an immediate support buff (`Drummer +⚡`, `Trainer +💪`, `Survivalist +💪`) while leaving the route primary unsecured and avoiding Counter Watch, pass-off, Alarm Rush, Cache Drill mark, and counter payoff perks. Validated with JS syntax checks, targeted Opening Side Prep, Opening Counter Prep, Full Crew coverage, Alarm Rush, Opening Route Muster, opening deckhand counter/scout-pay, counter recruit, and Opening Route Prize sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-190103.log`.
+
 ## 2026-04-27 — run 20260427-185009 — rev 54087f4 — build 0.1.0
 
 - Gameplay: true - Added Opening Route Side Offers: unsecured pre-Boarding-1 Forest/Rocky/Port route shops now guarantee Drummer/Trainer/Survivalist alongside Poisoner/Sawbones/Needler respectively, while side-offer buys discard normally and do not secure routes or consume prep/watch/alarm/pass-off perks. Validated with JS syntax checks, targeted opening route shop, Opening Counter Prep, Full Crew coverage, Alarm Rush, opening deckhand, route muster/scout pay, scouted cache, drilled bounty, route captains, scouted counter shop, counter recruit, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-185009.log`.

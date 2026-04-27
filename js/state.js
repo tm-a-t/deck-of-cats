@@ -79,6 +79,12 @@ const OPENING_ROUTE_SIDE_OFFERS = {
   deckSniper: 'survivalist',
 };
 
+const OPENING_ROUTE_SIDE_PREP_GAINS = {
+  drummer: { buff: 'tempo', count: 1 },
+  trainer: { buff: 'might', count: 1 },
+  survivalist: { buff: 'might', count: 1 },
+};
+
 const OPENING_ROUTE_COUNTER_CANDIDATES = ['poisoner', 'sawbones', 'needler'];
 const OPENING_ROUTE_SHOP_FILLERS = ['drummer', 'herald', 'trainer', 'survivalist'];
 
@@ -197,6 +203,16 @@ function openingRouteShopState(opts = {}) {
 function openingRoutePrimaryCounterTypeForShop(opts = {}) {
   const state = openingRouteShopState(opts);
   return state ? state.primaryCounterType : null;
+}
+
+function openingRouteSideOfferTypeForShop(opts = {}) {
+  const state = openingRouteShopState(opts);
+  return state && state.mainKey ? OPENING_ROUTE_SIDE_OFFERS[state.mainKey] || null : null;
+}
+
+function openingRouteSidePrepGain(type) {
+  const gain = type && OPENING_ROUTE_SIDE_PREP_GAINS[type];
+  return gain ? { ...gain } : null;
 }
 
 function fillOpeningRouteShopSlot(slots, slotIndex, type, seen, openingCandidates) {

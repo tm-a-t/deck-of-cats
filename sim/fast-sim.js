@@ -43,6 +43,7 @@ function parseArgs(argv) {
     checkScoutedCounterCache: false,
     checkOpeningCounterSubsidy: false,
     checkOpeningCounterPlan: false,
+    checkOpeningSidePrep: false,
     checkOpeningShellbackCounter: false,
     checkOpeningDeckhandCounters: false,
     checkOpeningDeckhandScoutPay: false,
@@ -167,6 +168,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-counter-prep') {
       out.checkOpeningCounterPlan = true;
+      continue;
+    }
+    if (a === '--check-opening-side-prep') {
+      out.checkOpeningSidePrep = true;
       continue;
     }
     if (a === '--check-opening-shellback-counter') {
@@ -340,6 +345,8 @@ function buildRuntime() {
       applyScoutedCounterToShop,
       normalizeOpeningRouteShop,
       openingRoutePrimaryCounterTypeForShop,
+      openingRouteSideOfferTypeForShop,
+      openingRouteSidePrepGain,
       scoutedCounterTypesForMap,
       isScoutedCounterShopType,
       openingDeckhandCounterTypes,
@@ -360,6 +367,8 @@ function buildRuntime() {
       ALARM_RUSHED_ROUTE_COUNTER_ALERT,
       SCOUTED_SHIP_COUNTERS,
       OPENING_DECKHAND_COUNTERS,
+      OPENING_ROUTE_SIDE_OFFERS,
+      OPENING_ROUTE_SIDE_PREP_GAINS,
       SCOUTED_COUNTER_CACHE_RES,
       GameScene,
       getG: () => G,
@@ -707,18 +716,36 @@ function shopPurchaseQuote(api, G, type) {
     && openingRoutePrimaryType === type
     && boardingCount === 0
     && (!G || G.mode !== 'battleTest'));
+  const openingRouteSideOfferType = G && typeof api.openingRouteSideOfferTypeForShop === 'function'
+    ? api.openingRouteSideOfferTypeForShop({
+      map: G.map,
+      mode: G.mode,
+      boardingCount,
+    })
+    : null;
+  const openingSidePrepGain = typeof api.openingRouteSidePrepGain === 'function'
+    ? api.openingRouteSidePrepGain(type)
+    : null;
+  const openingSidePrep = !!(openingRouteSideOfferType
+    && openingRouteSideOfferType === type
+    && G
+    && G.mode !== 'battleTest'
+    && boardingCount === 0
+    && G.openingRouteCounterBoughtMainKey !== nextScoutedShipMainKey(G)
+    && openingCounterPlan
+    && openingSidePrepGain);
   const discountPreparesCounter = discount > 0 && boardingCount > 0;
   const preparedCounter = !!(scoutedCounterTopDeck
     && preparedCounterGainsForQuote(api, type).length
     && discountPreparesCounter);
   const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPlan);
-  const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
+  const openingCounterPrepDiscount = (openingCounterPrepMight || openingSidePrep) ? Math.min(1, costAfterDiscount) : 0;
   const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
-  const consumesOpeningCounterPlan = !!openingCounterPrepMight;
+  const consumesOpeningCounterPlan = !!(openingCounterPrepMight || openingSidePrep);
   const setupTopDeck = !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight));
   const topDeckBeforeAlarm = openingRoutePrimary
     ? setupTopDeck
-    : !!scoutedCounterTopDeck;
+    : (openingSidePrep ? true : !!scoutedCounterTopDeck);
   const pendingAlert = Math.max(0, Math.floor(Number(G && G.boardingAlert) || 0));
   const nextMainKey = nextScoutedShipMainKey(G);
   const claimedRouteCacheMainKey = G && G.openingRouteCacheClaimedMainKey != null
@@ -738,6 +765,8 @@ function shopPurchaseQuote(api, G, type) {
     openingCounterPrep: openingCounterPrepMight,
     openingCounterPrepMight,
     openingCounterPrepDiscount,
+    openingSidePrep,
+    openingSidePrepGain,
     openingRoutePrimary,
     openingCommissionReport,
     openingFullCrewReport,
@@ -764,6 +793,8 @@ function shopPurchaseQuote(api, G, type) {
       openingCounterPlan: false,
       openingCounterPrep: false,
       openingCounterPrepMight: false,
+      openingSidePrep: false,
+      openingSidePrepGain: null,
       openingRoutePrimary: false,
       alarmRushedRouteCounter: false,
       consumesOpeningCounterPlan: false,
@@ -877,6 +908,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     tokens.push(1994 + (quote.openingCounterPrepMight ? 1 : 0));
     tokens.push(1996 + (quote.openingCommissionReport ? 1 : 0));
     tokens.push(2000 + (quote.alarmRushedRouteCounter ? 1 : 0));
+    tokens.push(2002 + (quote.openingSidePrep ? 1 : 0));
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
@@ -1058,6 +1090,7 @@ function buyProbability(api, G, type, buysThisShop) {
 function adjustedBuyProbability(api, G, type, buysThisShop, quote) {
   let p = buyProbability(api, G, type, buysThisShop);
   if (quote && quote.counter) p += quote.credit ? 0.12 : 0.20;
+  if (quote && quote.openingSidePrep) p += 0.16;
   if (quote && quote.credit) {
     p -= 0.10 + Math.max(0, quote.missing - 1) * 0.08;
     if (G.round <= 2) p += 0.18;
@@ -1072,10 +1105,10 @@ function pickProbabilisticShopIndex(runtime, api, G, buysThisShop) {
     const type = G.shop[i];
     const quote = shopPurchaseQuote(api, G, type);
     if (!quote.canBuy) continue;
-    buyable.push({ idx: i, cost: quote.cost, credit: quote.credit ? 1 : 0, counter: quote.counter ? 1 : 0, quote });
+    buyable.push({ idx: i, cost: quote.cost, credit: quote.credit ? 1 : 0, counter: quote.counter ? 1 : 0, sidePrep: quote.openingSidePrep ? 1 : 0, quote });
   }
   if (!buyable.length) return -1;
-  buyable.sort((a, b) => a.credit - b.credit || b.counter - a.counter || b.cost - a.cost);
+  buyable.sort((a, b) => a.credit - b.credit || b.counter - a.counter || b.sidePrep - a.sidePrep || b.cost - a.cost);
 
   for (const item of buyable) {
     const type = G.shop[item.idx];
@@ -3515,12 +3548,12 @@ function runOpeningCounterPlanChecks(runtime) {
   }
 
   {
-    const G = setupShop({ openingCounterPlan: true, shop: ['trainer'], enthusiasm: 1 });
-    const quote = scene.shopPurchaseQuote('trainer');
-    assertOpeningCounterPlanCheck(quote.canBuy && quote.credit && quote.alert === 2 && !quote.openingCommissionReport && !quote.topDeck && !quote.consumesOpeningCounterPlan, `Dockside Credit non-counter quote mismatch: ${JSON.stringify(quote)}`);
+    const G = setupShop({ openingCounterPlan: true, shop: ['survivalist'], enthusiasm: 1 });
+    const quote = scene.shopPurchaseQuote('survivalist');
+    assertOpeningCounterPlanCheck(quote.canBuy && quote.credit && quote.alert === 2 && !quote.openingCommissionReport && !quote.topDeck && !quote.openingSidePrep && !quote.consumesOpeningCounterPlan, `Dockside Credit non-counter quote mismatch: ${JSON.stringify(quote)}`);
     assertOpeningCounterPlanCheck(!quote.counter && !quote.openingCounterPrepMight && !quote.preparedCounter, `Dockside Credit non-counter gained counter perks: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningCounterPlanCheck(bought && bought.type === 'trainer', 'Dockside Credit non-counter buy failed');
+    assertOpeningCounterPlanCheck(bought && bought.type === 'survivalist', 'Dockside Credit non-counter buy failed');
     assertOpeningCounterPlanCheck(G.openingCounterPlan === true, 'Dockside Credit non-counter consumed Opening Counter Prep');
     assertOpeningCounterPlanCheck(G.shopCreditUsed === true && G.boardingAlert === 2, `Dockside Credit non-counter missed Alert/credit state: alert=${G.boardingAlert} credit=${G.shopCreditUsed}`);
     assertOpeningCounterPlanCheck(G.discard.includes(bought) && !G.deck.includes(bought) && (G.counterWatchIds || []).length === 0, 'Dockside Credit non-counter did not discard without Counter Watch');
@@ -3802,49 +3835,120 @@ function runOpeningRouteCounterShopChecks(runtime) {
     results.push({ name: `round-1 full-send ${label} route buys watched ${primary}, then broadens pre-Boarding shop`, ok: true, quote: routeQuote });
   });
 
+  const sidePrepExpectedGain = (type) => {
+    if (type === 'drummer') return { might: 0, tempo: 1 };
+    if (type === 'trainer' || type === 'survivalist') return { might: 1, tempo: 0 };
+    return { might: 0, tempo: 0 };
+  };
+
   routeCases.forEach(({ label, mainKey, primary, sideOffer }, routeIndex) => {
     runtime.setSeed((0x704501f0 + routeIndex) >>> 0);
     api.initState();
     const G = api.getG();
     const { firstIsland } = routeFirstIsland(G.map, mainKey);
-    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} non-counter route selection failed`);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} side-prep route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
-    G.fullCrewDiscount = 1;
+    G.fullCrewDiscount = 0;
     G.openingCounterPlan = true;
     G.openingRouteCacheClaimedMainKey = mainKey;
     G.cacheDrillBountyMarks = [{ pirateId: 999900 + routeIndex, mainKey, boardingNo: 1 }];
-    G.enthusiasm = 10;
+    G.enthusiasm = api.TYPES[sideOffer].cost;
     G.shop = api.normalizeOpeningRouteShop(
       [primary, ...openingCounters.filter(type => type !== primary), 'herald'],
       G.round,
       { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
     );
-    assertRouteFocusedShop(G.shop, `${label} non-counter-first setup`, primary);
+    assertRouteFocusedShop(G.shop, `${label} side-prep setup`, primary);
     const sideIndex = G.shop.indexOf(sideOffer);
     const sideQuote = scene.shopPurchaseQuote(sideOffer);
+    const directQuote = shopPurchaseQuote(api, G, sideOffer);
+    const expectedGain = sidePrepExpectedGain(sideOffer);
     assertOpeningRouteCounterShopCheck(sideIndex >= 0, `${label} side offer ${sideOffer} missing from ${G.shop.join(',')}`);
     assertOpeningRouteCounterShopCheck(
       sideQuote.canBuy
         && !sideQuote.counter
-        && !sideQuote.topDeck
+        && sideQuote.topDeck
+        && sideQuote.openingSidePrep
         && !sideQuote.openingCounterPrepMight
-        && !sideQuote.consumesOpeningCounterPlan
+        && sideQuote.consumesOpeningCounterPlan
+        && sideQuote.openingCounterPrepDiscount === 1
         && !sideQuote.alarmRushedRouteCounter
         && !sideQuote.counterPayoff,
-      `${label} side offer quote gained counter perks: ${JSON.stringify(sideQuote)}`
+      `${label} side offer quote missed Opening Side Prep or gained counter perks: ${JSON.stringify(sideQuote)}`
+    );
+    assertOpeningRouteCounterShopCheck(
+      directQuote.canBuy && directQuote.openingSidePrep && directQuote.topDeck && !directQuote.counter,
+      `${label} sim helper missed Opening Side Prep: ${JSON.stringify(directQuote)}`
     );
     const marksBefore = JSON.stringify(G.cacheDrillBountyMarks || []);
+    const expectedEnthusiasm = api.TYPES[sideOffer].cost - sideQuote.spend;
     const bought = scene.buyPirate(sideIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRouteCounterShopCheck(bought && bought.type === sideOffer, `${label} side offer first buy failed`);
-    assertOpeningRouteCounterShopCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${label} side offer did not go only to discard`);
+    assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${label} side prep did not top-deck only`);
     assertOpeningRouteCounterShopCheck(!(G.counterWatchIds || []).includes(bought.id), `${label} side offer gained Counter Watch`);
-    assertOpeningRouteCounterShopCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} side offer gained upgrades: ${JSON.stringify(bought)}`);
-    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === true, `${label} side offer consumed Opening Counter Prep`);
+    assertOpeningRouteCounterShopCheck((bought.might || 0) === expectedGain.might && (bought.tempo || 0) === expectedGain.tempo && !bought.weaponKey, `${label} side prep upgrades wrong: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} side prep did not consume Opening Counter Prep`);
+    assertOpeningRouteCounterShopCheck(G.enthusiasm === expectedEnthusiasm, `${label} side prep spend ${G.enthusiasm} !== ${expectedEnthusiasm}`);
     assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, `${label} side offer marked route primary as bought`);
     assertOpeningRouteCounterShopCheck(JSON.stringify(G.cacheDrillBountyMarks || []) === marksBefore, `${label} side offer moved Cache Drill bounty marks`);
-    assertRouteFocusedShop(G.shop, `${label} after non-counter first buy`, primary);
-    results.push({ name: `${label} side-offer first buy discards normally and leaves the route counter guaranteed`, ok: true, bought: sideOffer, quote: sideQuote });
+    assertRouteFocusedShop(G.shop, `${label} after side-prep buy`, primary);
+    results.push({ name: `${label} route side offer spends Opening Side Prep, top-decks support, and leaves primary unsecured`, ok: true, bought: sideOffer, quote: sideQuote });
+  });
+
+  {
+    const route = routeCases[0];
+    runtime.setSeed(0x70450210);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'non-side-offer negative route selection failed');
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = true;
+    G.enthusiasm = 10;
+    G.shop = [route.primary, route.sideOffer, 'herald', 'trainer'];
+    const quote = scene.shopPurchaseQuote('herald');
+    assertOpeningRouteCounterShopCheck(
+      quote.canBuy && !quote.counter && !quote.topDeck && !quote.openingSidePrep && !quote.consumesOpeningCounterPlan,
+      `non-side-offer non-counter used Opening Side Prep: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(G.shop.indexOf('herald'), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === 'herald', 'non-side-offer Herald buy failed');
+    assertOpeningRouteCounterShopCheck(G.discard.includes(bought) && !G.deck.includes(bought), 'non-side-offer did not discard normally');
+    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === true, 'non-side-offer consumed Opening Counter Prep');
+    results.push({ name: 'non-side-offer non-counters cannot use Opening Side Prep', ok: true, quote });
+  }
+
+  [
+    { name: 'Battle Test', setup: (G, route) => { G.mode = 'battleTest'; G.boardingCount = 0; G.openingRouteCounterBoughtMainKey = null; } },
+    { name: 'post-Boarding-1', setup: (G, route) => { G.boardingCount = 1; G.openingRouteCounterBoughtMainKey = null; } },
+    { name: 'secured route primary', setup: (G, route) => { G.boardingCount = 0; G.openingRouteCounterBoughtMainKey = route.mainKey; } },
+  ].forEach((negative, negIndex) => {
+    const route = routeCases[negIndex];
+    runtime.setSeed((0x70450220 + negIndex) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${negative.name} side-prep negative route selection failed`);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = true;
+    G.enthusiasm = 10;
+    negative.setup(G, route);
+    G.shop = [route.sideOffer, route.primary, 'herald', 'trainer'];
+    const quote = scene.shopPurchaseQuote(route.sideOffer);
+    assertOpeningRouteCounterShopCheck(
+      quote.canBuy && !quote.openingSidePrep && !quote.topDeck && !quote.consumesOpeningCounterPlan,
+      `${negative.name} side offer used Opening Side Prep: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === route.sideOffer, `${negative.name} side offer buy failed`);
+    assertOpeningRouteCounterShopCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${negative.name} side offer did not discard normally`);
+    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === true, `${negative.name} side offer consumed Opening Counter Prep`);
+    results.push({ name: `${negative.name} side offers cannot use Opening Side Prep`, ok: true, quote });
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
@@ -4633,12 +4737,19 @@ function runOpeningDeckhandCounterChecks(runtime) {
     G.enthusiasm = 10;
     G.shop = ['drummer', route.primary, 'herald', 'trainer'];
     const nonPrimaryQuote = scene.shopPurchaseQuote('drummer');
-    assertOpeningDeckhandCounterCheck(nonPrimaryQuote.canBuy && !nonPrimaryQuote.consumesOpeningCounterPlan, `non-primary quote unexpectedly consumed prep: ${JSON.stringify(nonPrimaryQuote)}`);
+    assertOpeningDeckhandCounterCheck(
+      nonPrimaryQuote.canBuy && nonPrimaryQuote.openingSidePrep && nonPrimaryQuote.consumesOpeningCounterPlan && !nonPrimaryQuote.counter,
+      `side-prep quote missed support prep or gained counter status: ${JSON.stringify(nonPrimaryQuote)}`
+    );
     const nonPrimary = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningDeckhandCounterCheck(nonPrimary && nonPrimary.type === 'drummer', 'non-primary buy failed');
-    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === true, 'non-primary buy consumed starter Cache Prep');
+    assertOpeningDeckhandCounterCheck(G.openingCounterPlan === false, 'side-prep buy did not consume starter Cache Prep');
+    assertOpeningDeckhandCounterCheck(G.deck[G.deck.length - 1] === nonPrimary && !G.discard.includes(nonPrimary), 'side-prep buy did not top-deck');
+    assertOpeningDeckhandCounterCheck((nonPrimary.tempo || 0) === 1 && (nonPrimary.might || 0) === 0, `side-prep Drummer support buff wrong: ${JSON.stringify(nonPrimary)}`);
+    assertOpeningDeckhandCounterCheck(!(G.counterWatchIds || []).includes(nonPrimary.id), 'side-prep non-primary gained Counter Watch');
+    assertOpeningDeckhandCounterCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'side-prep non-primary secured route');
     assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'non-primary buy transferred the starter bounty mark');
-    results.push({ name: 'non-primary buys do not trigger Route Starter Pass-Off', ok: true });
+    results.push({ name: 'Opening Side Prep spends starter Cache Prep without triggering Route Starter Pass-Off', ok: true });
   }
 
   {
@@ -8291,6 +8402,7 @@ async function runShoppingPhase(
       else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Alarm rush)`);
       else if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
       else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
+      else if (quote && quote.openingSidePrep) purchases.push(`${label} (Side Prep -${quote.openingCounterPrepDiscount || 0}☠️)`);
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);
@@ -8907,6 +9019,11 @@ async function main() {
   }
   if (opts.checkOpeningCounterPlan) {
     const result = runOpeningCounterPlanChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningSidePrep) {
+    const result = runOpeningRouteCounterShopChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

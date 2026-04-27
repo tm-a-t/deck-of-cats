@@ -336,14 +336,16 @@ class ShopScene extends Phaser.Scene {
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
       const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
+      const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
       const priceReduced = effectiveCost < Math.max(0, Math.floor(Number(def.cost) || 0));
       const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
       if (quote.alarmRushedRouteCounter) tags.push('Alarm rush');
       if (quote.alarmRushedRouteCounter) tags.push('Watch');
-      if (prepDiscount > 0) tags.push('Opening Prep -1☠️');
+      if (prepDiscount > 0) tags.push(quote.openingSidePrep ? 'Side Prep -1☠️' : 'Opening Prep -1☠️');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
+      if (quote.openingSidePrep && sidePrepGainText) tags.push(`Support +${sidePrepGainText}`);
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
       if (coverage > 0) tags.push('Full Crew cover');
@@ -355,7 +357,9 @@ class ShopScene extends Phaser.Scene {
         : `${def.cost}☠️`;
       const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
-        ? (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent')
+        ? (quote.openingSidePrep
+          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+          : (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent'))
         : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
@@ -376,7 +380,7 @@ class ShopScene extends Phaser.Scene {
         ? Math.max(0, Math.floor(Number(quote.missing) || 0))
         : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingCounterPrepMight ? 'Buy prep' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))))
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingSidePrep ? 'Buy side prep' : (quote.openingCounterPrepMight ? 'Buy prep' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy')))))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -387,11 +391,11 @@ class ShopScene extends Phaser.Scene {
         y: footerY,
         label: actionLabel,
         L,
-        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (discountBuy ? 108 : 74))) * L.k,
+        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (quote.openingSidePrep ? 128 : (discountBuy ? 108 : 74)))) * L.k,
         minH: 44 * L.k,
         fill: actionFill,
         textColor: actionTextColor,
-        textPx: (creditBuy || discountBuy || coverage > 0) ? 14 : 16,
+        textPx: (creditBuy || discountBuy || coverage > 0 || quote.openingSidePrep) ? 14 : 16,
       });
       this.panelLayer.add(action);
 
@@ -657,8 +661,11 @@ class ShopScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
+      const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent')
+        ? (quote.openingSidePrep
+          ? ` Side Prep${prepDiscountText}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+          : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent'))
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
