@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-121151 — rev 88d5c84 — build 0.1.0
+
+- Gameplay: true - Changed Scouted Counter Caches from route-selection payouts into first-sent cache openings: selecting a cache now only arms the island objective, the first opener claims the stored stakes, only a surviving eligible first opener can trigger Cache Drill and refund that cache Alert, later sends cannot drill, and zero-send cache islands skip the cache reward entirely. Validated with JS syntax checks, targeted scouted cache/opening route/deckhand/counter recruit/muster/prep/Short Crew/drilled bounty/map/counter ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-121151.log`.
+
 ## 2026-04-27 — run 20260427-112625 — rev 3d5194a — build 0.1.0
 
 - Gameplay: true - Consolidated the doubled opening Ambush Bounty onto Cache Drill: Opening Counter Prep route-primary buys still discount, top-deck, Watch, and gain +1 Might, but preview and pay normal +1 bounty unless that pirate claims the matching cache; active Cache Drill bounty counters now lead the default formation ahead of unmarked counters. Validated with JS syntax checks, `node sim/fast-sim.js --check-cache-drill-opening-payoff --json`, `node sim/fast-sim.js --check-drilled-ambusher-bounty --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-112625.log`.

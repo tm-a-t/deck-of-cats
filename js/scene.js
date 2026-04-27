@@ -471,6 +471,14 @@ class GameScene extends Phaser.Scene {
             granted: !!drill.granted,
             pirateId: drill.pirateId || null,
             type: drill.type || null,
+            cachePending: !!drill.cachePending,
+            cacheClaimed: !!drill.cacheClaimed || !!drill.granted,
+            cacheNodeId: drill.cacheNodeId != null ? drill.cacheNodeId : null,
+            openerId: drill.openerId != null ? drill.openerId : null,
+            res: drill.res || null,
+            amount: Math.max(0, Math.floor(Number(drill.amount) || 0)),
+            enthusiasm: Math.max(0, Math.floor(Number(drill.enthusiasm) || 0)),
+            alert: Math.max(0, Math.floor(Number(drill.alert) || 0)),
             alertRefundAmount: Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)),
             alertFloorBeforeCache: Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0)),
             alertRefunded: !!drill.alertRefunded,
@@ -486,7 +494,7 @@ class GameScene extends Phaser.Scene {
     return base * 2;
   }
 
-  applyScoutedCounterCache(node) {
+  scoutedCounterCachePayload(node) {
     if (this.isBattleTest() || !node || node.type !== 'island') return null;
     const cache = node.scoutedCache;
     if (!cache || cache.claimed) return null;
@@ -502,7 +510,25 @@ class GameScene extends Phaser.Scene {
     const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
     if (!res || !RES_EMOJI[res] || (amount <= 0 && enthusiasm <= 0 && alert <= 0)) return null;
 
-    const alertFloorBeforeCache = this.pendingBoardingAlert();
+    return {
+      nodeId: node.id,
+      res,
+      amount,
+      enthusiasm,
+      alert,
+      mainKey: cache.mainKey || null,
+    };
+  }
+
+  grantScoutedCounterCachePayload(payload, alertFloorBeforeCache = this.pendingBoardingAlert()) {
+    if (!payload) return null;
+    const res = payload.res;
+    const amount = Math.max(0, Math.floor(Number(payload.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(payload.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(payload.alert) || 0));
+    const floor = Math.max(0, Math.floor(Number(alertFloorBeforeCache) || 0));
+    if (!res || !RES_EMOJI[res] || (amount <= 0 && enthusiasm <= 0 && alert <= 0)) return null;
+
     if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
     if (amount > 0) {
       G.res[res] = Math.max(0, Math.floor(Number(G.res[res]) || 0)) + amount;
@@ -510,12 +536,103 @@ class GameScene extends Phaser.Scene {
     if (enthusiasm > 0) {
       G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + enthusiasm;
     }
-    if (alert > 0) {
-      G.boardingAlert = alertFloorBeforeCache + alert;
-    }
-    cache.claimed = true;
+    if (alert > 0) G.boardingAlert = floor + alert;
 
-    return { res, amount, enthusiasm, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
+    return {
+      ...payload,
+      res,
+      amount,
+      enthusiasm,
+      alert,
+      alertFloorBeforeCache: floor,
+      mainKey: payload.mainKey || null,
+    };
+  }
+
+  applyScoutedCounterCache(node) {
+    const payload = this.scoutedCounterCachePayload(node);
+    if (!payload) return null;
+    const grant = this.grantScoutedCounterCachePayload(payload);
+    if (!grant) return null;
+    if (node.scoutedCache) node.scoutedCache.claimed = true;
+    return grant;
+  }
+
+  armScoutedCounterCache(node) {
+    const payload = this.scoutedCounterCachePayload(node);
+    if (!payload) return null;
+    return {
+      mainKey: payload.mainKey,
+      granted: false,
+      pirateId: null,
+      type: null,
+      cachePending: true,
+      cacheClaimed: false,
+      cacheNodeId: payload.nodeId,
+      openerId: null,
+      res: payload.res,
+      amount: payload.amount,
+      enthusiasm: payload.enthusiasm,
+      alert: payload.alert,
+      alertRefundAmount: payload.alert,
+      alertFloorBeforeCache: 0,
+      alertRefunded: false,
+    };
+  }
+
+  pendingScoutedCounterCacheState() {
+    if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
+    const drill = G.island.scoutedCacheDrill;
+    if (!drill || !drill.cachePending || drill.cacheClaimed) return null;
+    if (!drill.res || !RES_EMOJI[drill.res]) return null;
+    const amount = Math.max(0, Math.floor(Number(drill.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(drill.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    if (amount <= 0 && enthusiasm <= 0 && alert <= 0) return null;
+    return drill;
+  }
+
+  scoutedCounterCacheNodeForDrill(drill) {
+    if (!drill || drill.cacheNodeId == null || !G.map || typeof mapNodeById !== 'function') return null;
+    return mapNodeById(G.map, drill.cacheNodeId);
+  }
+
+  claimScoutedCounterCache(pirate, opts = {}) {
+    const drill = this.pendingScoutedCounterCacheState();
+    if (!drill) return null;
+
+    const payload = {
+      nodeId: drill.cacheNodeId,
+      mainKey: drill.mainKey || null,
+      res: drill.res,
+      amount: Math.max(0, Math.floor(Number(drill.amount) || 0)),
+      enthusiasm: Math.max(0, Math.floor(Number(drill.enthusiasm) || 0)),
+      alert: Math.max(0, Math.floor(Number(drill.alert) || 0)),
+    };
+    const alertFloorBeforeCache = this.pendingBoardingAlert();
+    const cacheGrant = this.grantScoutedCounterCachePayload(payload, alertFloorBeforeCache);
+    if (!cacheGrant) return null;
+
+    drill.cachePending = false;
+    drill.cacheClaimed = true;
+    drill.openerId = pirate && pirate.id != null ? pirate.id : null;
+    drill.alertRefundAmount = cacheGrant.alert;
+    drill.alertFloorBeforeCache = cacheGrant.alertFloorBeforeCache;
+    drill.alertRefunded = false;
+    const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
+    if (cacheNode && cacheNode.scoutedCache) cacheNode.scoutedCache.claimed = true;
+
+    const drillReward = this.applyScoutedCacheDrill(pirate, {
+      ...opts,
+      silent: true,
+      allowClaimedOpener: true,
+    });
+    const result = { cacheGrant, drill: drillReward, openerId: drill.openerId };
+    if (!opts.silent) {
+      this.showScoutedCounterCacheResult(cacheGrant);
+      if (drillReward) this.showScoutedCacheDrillResult(drillReward);
+    }
+    return result;
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
@@ -530,14 +647,28 @@ class GameScene extends Phaser.Scene {
     if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
     const drill = G.island.scoutedCacheDrill;
     if (!drill || !drill.mainKey) return null;
-    if (!this.scoutedCacheDrillCounterTypes(drill.mainKey).length) return null;
+    if (!drill.cachePending && !drill.cacheClaimed && !this.scoutedCacheDrillCounterTypes(drill.mainKey).length) return null;
     return drill;
+  }
+
+  scoutedCounterCacheRewardText(drill) {
+    if (!drill) return '';
+    const parts = [];
+    const res = drill.res;
+    const amount = Math.max(0, Math.floor(Number(drill.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(drill.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    if (res && RES_EMOJI[res] && amount > 0) parts.push(`+${amount > 1 ? amount : ''}${RES_EMOJI[res]}`);
+    if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    return parts.join(' ');
   }
 
   scoutedCacheDrillDescription() {
     const drill = this.scoutedCacheDrillState();
     if (!drill) return '';
     if (drill.granted) return 'Cache Drill claimed';
+    if (drill.cacheClaimed) return 'Cache opened';
     const counterTypes = this.scoutedCacheDrillCounterTypes(drill.mainKey);
     const names = counterTypes
       .map(type => TYPES[type] && TYPES[type].name)
@@ -565,13 +696,15 @@ class GameScene extends Phaser.Scene {
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
     const payoff = refundsAlert
-      ? ` gains +💪, disarms cache Alert, reports next${bountyText}`
+      ? ` disarms cache Alert, gains +💪, reports next${bountyText}`
       : ` gains +💪, reports next${bountyText}`;
+    const cacheText = this.scoutedCounterCacheRewardText(drill);
+    const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
     if (routeCounterType) {
       const suffix = shopLabel ? ` (or ${shopLabel})` : '';
-      return `Cache Drill: Route counter: ${routeCounter.starterName}${suffix}${payoff}`;
+      return `${prefix}route counter ${routeCounter.starterName}${suffix}${payoff}`;
     }
-    return `Cache Drill: first ${label || 'counter'}${payoff}`;
+    return `${prefix}first ${label || 'counter'}${payoff}`;
   }
 
   pirateStillInCrew(pirate) {
@@ -933,6 +1066,9 @@ class GameScene extends Phaser.Scene {
   applyScoutedCacheDrill(pirate, opts = {}) {
     const drill = this.scoutedCacheDrillState();
     if (!drill || drill.granted || !pirate || !pirate.type) return null;
+    const cacheBacked = !!(drill.cachePending || drill.cacheClaimed || drill.cacheNodeId != null || drill.res);
+    if (cacheBacked && (!drill.cacheClaimed || !opts.allowClaimedOpener)) return null;
+    if (cacheBacked && drill.openerId != null && pirate.id !== drill.openerId) return null;
     if (!this.scoutedCacheDrillCounterTypes(drill.mainKey).includes(pirate.type)) return null;
     if (!this.pirateStillInCrew(pirate)) return null;
     if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return null;
@@ -1040,6 +1176,24 @@ class GameScene extends Phaser.Scene {
     return { amount, before, after, floor: alertFloorBeforeCache };
   }
 
+  showScoutedCounterCacheResult(cacheGrant, x = null, y = null) {
+    if (!cacheGrant || !this.L) return;
+    const resText = cacheGrant.res && RES_EMOJI[cacheGrant.res] && cacheGrant.amount > 0
+      ? `+${cacheGrant.amount > 1 ? cacheGrant.amount : ''}${RES_EMOJI[cacheGrant.res]}`
+      : '';
+    const enthusiasmText = cacheGrant.enthusiasm > 0
+      ? ` +${cacheGrant.enthusiasm > 1 ? cacheGrant.enthusiasm : ''}${RES_EMOJI.enthusiasm}`
+      : '';
+    const alertText = cacheGrant.alert > 0
+      ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
+      : '';
+    const label = `${resText}${enthusiasmText}${alertText}`.trim();
+    if (!label) return;
+    const fx = Number.isFinite(x) ? x : this.L.cx;
+    const fy = Number.isFinite(y) ? y : this.L.Y_ISL_CY - 78 * this.L.k;
+    this.float(fx, fy, `Cache opened ${label}`, '#ffd166');
+  }
+
   showScoutedCacheDrillResult(reward) {
     if (!reward || !this.L) return;
     const point = reward.sentSlot != null && reward.sentSlot >= 0
@@ -1111,7 +1265,6 @@ class GameScene extends Phaser.Scene {
     this._sacrificedIds.clear();
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
-    let cacheGrant = null;
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
       const cacheDrillBountyMarks = this.activateCacheDrillBountyMarksForBoarding(node);
@@ -1131,17 +1284,8 @@ class GameScene extends Phaser.Scene {
         cacheDrillBountyMarks,
       };
     } else {
-      cacheGrant = this.applyScoutedCounterCache(node);
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
-      if (cacheGrant && cacheGrant.mainKey && this.scoutedCacheDrillCounterTypes(cacheGrant.mainKey).length) {
-        G.island.scoutedCacheDrill = {
-          mainKey: cacheGrant.mainKey,
-          granted: false,
-          alertRefundAmount: cacheGrant.alert,
-          alertFloorBeforeCache: cacheGrant.alertFloorBeforeCache,
-          alertRefunded: false,
-        };
-      }
+      G.island.scoutedCacheDrill = this.armScoutedCounterCache(node);
       G.enemyShip = null;
       if (G.island.healWounded) {
         G.phase = 'healing';
@@ -1155,16 +1299,6 @@ class GameScene extends Phaser.Scene {
 
     this.closePanels();
     this.renderAll();
-    if (cacheGrant && this.L) {
-      const resText = `${cacheGrant.amount > 1 ? cacheGrant.amount : ''}${RES_EMOJI[cacheGrant.res]}`;
-      const enthusiasmText = cacheGrant.enthusiasm > 0
-        ? ` +${cacheGrant.enthusiasm > 1 ? cacheGrant.enthusiasm : ''}${RES_EMOJI.enthusiasm}`
-        : '';
-      const alertText = cacheGrant.alert > 0
-        ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
-        : '';
-      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${enthusiasmText}${alertText}`, '#ffd166');
-    }
     return true;
   }
 
@@ -2278,11 +2412,14 @@ class GameScene extends Phaser.Scene {
         if (isSacrifice) {
           this.sacrificePirate(p, effectPos.x, effectPos.y);
         }
-        const cacheDrill = this.applyScoutedCacheDrill(p, { silent: true });
+        const cacheClaim = this.claimScoutedCounterCache(p, { silent: true });
 
         this.renderAll();
         const effect = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
-        if (cacheDrill) this.showScoutedCacheDrillResult(cacheDrill);
+        if (cacheClaim && cacheClaim.cacheGrant) {
+          this.showScoutedCounterCacheResult(cacheClaim.cacheGrant, effectPos.x, effectPos.y - 44 * L.k);
+        }
+        if (cacheClaim && cacheClaim.drill) this.showScoutedCacheDrillResult(cacheClaim.drill);
         const baseWait = isSacrifice ? 1400 : (effect.spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (effect.spendDuration || 0);
         this.scheduleEffectFollowup({

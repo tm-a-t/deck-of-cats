@@ -536,9 +536,11 @@ class MapScene extends Phaser.Scene {
     const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
     const parts = [];
     if (enemy && enemy.emoji) parts.push(enemy.emoji);
+    parts.push('1st opens');
     if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
     if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
     if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    if (alert > 0) parts.push('counter disarms');
     const routeWatch = this.openingRouteWatchBadgeText(cache);
     if (routeWatch) parts.push(routeWatch);
     return parts.join(' ');

@@ -48,12 +48,15 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
 - Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
-- Selecting a marked cache island immediately grants that cache's stored resource amount, stored `☠️`, and stored `Boarding Alert` before island actions resolve, then marks that cache claimed.
+- Selecting a marked cache island does not immediately grant that cache's stored resource, stored `☠️`, or stored `Boarding Alert`.
+- On a selected `Scouted Counter Cache` island, the first sent pirate opens the cache after resolving its island action and after any island removal. The cache then grants its stored resource amount, stored `☠️`, and stored `Boarding Alert` once, and the map cache is marked claimed.
+- If that same first opener is still in the crew and its type counters the cache's main scouted enemy, `Cache Drill` triggers: the opener gains `+1 💪 Might`, refunds that cache's stored `Boarding Alert` amount, and is marked to report early.
+- If the first opener is not a surviving eligible counter, the cache is claimed without `Cache Drill`; the stored `Boarding Alert` remains pending and later sent pirates cannot drill that cache.
+- Ending a cache island with zero sent pirates grants no cache resource, no cache `☠️`, and no cache `Boarding Alert`. Because the node is already visited, that skipped cache cannot be claimed later.
 - Boarding 2+ `Scouted Counter Cache` islands use the normal stakes: `+1` mapped cache resource, `+1☠️`, and `+1 Boarding Alert`.
-- The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's stored `Boarding Alert` amount, and is marked to report early.
 - That same `Cache Drill` also marks the drilled pirate for the immediately following scouted boarding. If that exact pirate triggers `Counter Ambush` against that boarding's matching main scouted enemy, survives the final winning opening combat hand, and `Ambush Bounty` would already be granted, that Ambush Bounty pays `+2` of the mapped cache resource instead of `+1`.
 - Cache Drill bounty marks expire after that immediately following boarding, are cleared if the next boarding's main enemy does not match, never carry to later ships, and never apply in `Battle Test`, losses, defeated ambushers, wrong-main encounters, missing `Counter Ambush`, reinforcement-hand wins, or any case where normal `Ambush Bounty` would not be granted.
-- The cache `☠️`, if present, is normal round shop currency, is granted only once, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a `Top deck` counter in that round's Shop.
+- The cache `☠️`, if present, is normal round shop currency, is granted only once by the first cache opener, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a `Top deck` counter in that round's Shop.
 - During regular runs before Boarding 1, buying the selected route's primary opening counter always marks that route counter as secured for route-focused shop refills.
 - Setup-gated opening route-primary buys report early only if that same purchase spends `Full Crew Discount`, uses `Full Crew Discount` coverage, or consumes `Opening Counter Prep`; those qualifying buys go on top of the draw pile and gain `Counter Watch`. A cash-only or Dockside Credit-only route-primary buy still secures the route shop slot, but goes to discard, gains no `Counter Watch`, and gains no prep `Might`.
 - `Opening Counter Prep` on a route-primary buy still grants its normal `-1☠️`, top-deck placement, `Counter Watch`, and `+1 💪 Might`, but does not by itself double `Ambush Bounty`.
@@ -61,7 +64,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed and never removes the cache `☠️`.
 - Normal cache resource map for Boarding 2+ caches and `Ambush Bounty`: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Boarding 2+ cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
-- `Cache Drill` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
+- `Cache Drill` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It can trigger only from the first cache opener, at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
 - If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning, mustered, watched, or top-deck card.
@@ -104,7 +107,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Pirates with island conversion cannot be sent unless the input resource is available.
 - `Bosun` cannot go ashore at all.
 - On `Siren Island`, a pirate resolves its island action first and is then permanently removed from the crew.
-- On a selected `Scouted Counter Cache` island, `Cache Drill` checks after each sent pirate resolves its island action and after any `Siren Island` removal, so a pirate removed by the island cannot receive the `+1 💪 Might` or refund the cache Alert.
+- On a selected `Scouted Counter Cache` island, the first sent pirate opens the cache and checks `Cache Drill` after resolving its island action and after any `Siren Island` removal, so a pirate removed by the island can open and claim the cache but cannot receive the `+1 💪 Might` or refund the cache Alert.
 - Island bonuses double only matching resource outputs (`wood`, `stone`, `gold`). They do not double guaranteed effects, `☠️`, recall/exile effects, buffs, or weapon grants.
 - If an island action grants a weapon, the player chooses which pirate from the current hand gets it.
 
