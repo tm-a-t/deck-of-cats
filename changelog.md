@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-082500 — rev 027b8c7
+
+- Gameplay: true - Changed route-focused pre-Boarding-1 shops to guarantee the selected route primary counter only until the first successful purchase, then suppress `Poisoner`/`Sawbones`/`Needler` from the remaining opening shop refills in favor of distinct affordable non-counter starter options; non-counter first buys leave the primary guarantee intact, and the bought primary keeps existing top-deck, Counter Watch, Opening Counter Prep, Full Crew coverage, and Dockside Credit behavior. Validated with JS syntax checks, targeted opening route shop/opening prep/full-crew/counter-recruit/route-captain/deckhand/cache/ambush checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-082500.log`.
+
 ## 2026-04-27 — run 20260427-080840 — rev b022801
 
 - Gameplay: true - Added route-locked pre-Boarding-1 shop curation: after the opening route is chosen, Forest/Shellback shops show only Poisoner from the opening counter trio, Rocky/Powder Bomber shops show only Sawbones, and Port/Deck Sniper shops show only Needler, with the other opening counters replaced by affordable starter non-counters while existing price, top-deck, Counter Watch, Opening Counter Prep, Full Crew coverage, Dockside Credit, Battle Test, and post-Boarding-1 behavior stay intact. Validated with JS syntax checks, targeted route-shop/opening-prep/scouted-shop/route-captain/full-crew/counter-recruit/deckhand/cache/Short-Crew/ambush/map checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-080840.log`.

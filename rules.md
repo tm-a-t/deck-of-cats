@@ -15,7 +15,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Regular Run Start
 
 - Starting deck: 10 pirates.
-- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, and `Opening Counter Prep`: `0`.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, and the opening route counter purchase marker: `0`/empty.
 - Starting hand: up to 5 pirates.
 - Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
 - When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
@@ -122,8 +122,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The initial display before an opening route is selected is created as `initialShop(4, 0)`, which in regular runs includes `Poisoner`, `Sawbones`, `Needler`, and 1 economy pirate from `Herald`/`Survivalist`, shuffled.
 - Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
 - In regular runs, after the opening route is selected and until Boarding 1 starts, shops are route-focused. The route-selected first ship sets exactly 1 primary opening counter offer: `Forest Island`/`Shellback` → `Poisoner`, `Rocky Island`/`Powder Bomber` → `Sawbones`, and `Port Island`/`Deck Sniper` → `Needler`.
-- During this route-focused window, the visible 4-slot shop contains exactly 1 of `Poisoner`/`Sawbones`/`Needler`, and it must be the route primary. The other opening counter candidates are replaced by distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist`, falling back to normal unique eligible generation only if needed.
-- Route-focused normalization applies when the route is selected, when the Shop phase opens, after immediate purchase refills, and after end-of-shop `Continue` refills. It does not change prices, `Top deck`, `Counter Watch`, `Opening Counter Prep`, `Full Crew Discount` coverage, `Dockside Credit`, or counter payoff logic.
+- Until that route's primary opening counter is successfully bought, the visible 4-slot shop contains exactly 1 of `Poisoner`/`Sawbones`/`Needler`, and it must be the route primary. The other opening counter candidates are replaced by distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist`, falling back to normal unique eligible generation only if needed.
+- Once the route primary is successfully bought before Boarding 1, the run marks that route counter as secured. Remaining pre-Boarding-1 route-focused shop refills suppress all three opening counter candidates (`Poisoner`, `Sawbones`, `Needler`) and fill with distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist` where possible, falling back to normal unique eligible non-opening pirates only if needed.
+- Buying a non-counter before the route primary does not mark the route counter as secured; the primary remains guaranteed until bought or until Boarding 1 starts.
+- Route-focused normalization applies when the route is selected, when the Shop phase opens, after immediate purchase refills, and after end-of-shop `Continue` refills. It does not change prices, `Top deck`, `Counter Watch`, `Opening Counter Prep`, `Full Crew Discount` coverage, `Dockside Credit`, or counter payoff logic, and a bought route primary keeps all of those normal purchase effects.
 - Route-focused opening shops never apply in `Battle Test` and stop after Boarding 1 starts.
 - Outside the route-focused opening window, in regular runs while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
 - The scouted counter rule checks the 4 visible slots after the new slot is generated. If no visible pirate counters the main scouted enemy and the current cost-gated shop pool contains an eligible non-duplicate counter, only the newly generated slot is replaced by one counter.

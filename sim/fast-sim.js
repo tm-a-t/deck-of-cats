@@ -2350,6 +2350,19 @@ function runOpeningRouteCounterShopChecks(runtime) {
     );
   };
 
+  const assertPostPrimaryShop = (shop, label) => {
+    assertBasicShop(shop, label);
+    const openingVisible = shop.filter(type => openingCounters.includes(type));
+    assertOpeningRouteCounterShopCheck(
+      openingVisible.length === 0,
+      `${label} should suppress opening counters after primary purchase, got ${shop.join(',')}`
+    );
+    assertOpeningRouteCounterShopCheck(
+      shop.every(type => fillerTypes.includes(type) && api.TYPES[type].cost <= 3),
+      `${label} post-primary shop did not use affordable starter fillers: ${shop.join(',')}`
+    );
+  };
+
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
@@ -2477,11 +2490,38 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck((G.counterWatchIds || []).includes(covered.id), `${label} covered counter did not gain Counter Watch`);
     assertOpeningRouteCounterShopCheck(!covered.weaponKey && (covered.might || 0) === 0 && (covered.tempo || 0) === 0, `${label} pre-boarding covered counter gained upgrades: ${JSON.stringify(covered)}`);
     assertOpeningRouteCounterShopCheck(!G.discard.includes(covered), `${label} covered counter also went to discard`);
-    assertRouteFocusedShop(G.shop, `${label} purchase refill`, primary);
+    assertOpeningRouteCounterShopCheck(G.openingRouteCounterBoughtMainKey === mainKey, `${label} primary buy did not mark route counter as bought`);
+    assertPostPrimaryShop(G.shop, `${label} purchase refill`);
 
     continueRefreshShopForTest(G);
-    assertRouteFocusedShop(G.shop, `${label} Continue refill`, primary);
-    results.push({ name: `round-1 full-send ${label} route buys watched focused ${primary} without credit`, ok: true, quote: routeQuote });
+    assertPostPrimaryShop(G.shop, `${label} Continue refill`);
+    results.push({ name: `round-1 full-send ${label} route buys watched ${primary}, then broadens pre-Boarding shop`, ok: true, quote: routeQuote });
+  });
+
+  routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
+    runtime.setSeed((0x704501f0 + routeIndex) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} non-counter route selection failed`);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = 10;
+    G.shop = api.normalizeOpeningRouteShop(
+      [primary, ...openingCounters.filter(type => type !== primary), 'herald'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    assertRouteFocusedShop(G.shop, `${label} non-counter-first setup`, primary);
+    const fillerIndex = G.shop.findIndex(type => type !== primary);
+    const fillerType = G.shop[fillerIndex];
+    const bought = scene.buyPirate(fillerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === fillerType, `${label} non-counter first buy failed`);
+    assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey, `${label} non-counter first buy marked route primary as bought`);
+    assertRouteFocusedShop(G.shop, `${label} after non-counter first buy`, primary);
+    results.push({ name: `${label} non-counter first buy leaves primary route counter guaranteed`, ok: true, bought: fillerType });
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
@@ -2510,6 +2550,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
     const bought = scene.buyPirate(G.shop.indexOf(primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRouteCounterShopCheck(bought && bought.type === primary, `${label} Opening Prep ${primary} buy failed`);
     assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} Opening Prep was not consumed`);
+    assertOpeningRouteCounterShopCheck(G.openingRouteCounterBoughtMainKey === mainKey, `${label} Opening Prep primary buy did not mark route counter as bought`);
     assertOpeningRouteCounterShopCheck((bought.might || 0) === 1 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} Opening Prep ${primary} upgrades wrong: ${JSON.stringify(bought)}`);
     assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), `${label} Opening Prep ${primary} missed top-deck Watch`);
     results.push({ name: `${label} primary route counter consumes Opening Counter Prep for +1 Might, top deck, and Watch`, ok: true, quote });

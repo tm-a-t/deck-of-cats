@@ -212,6 +212,60 @@ function normalizeOpeningRouteShop(shop, round, opts = {}) {
   const openingCandidates = new Set(OPENING_ROUTE_COUNTER_CANDIDATES);
   const n = out.length;
   const maxCost = shopMaxCostForRound(round);
+  const state = shopGenerationState(opts);
+  const boughtMainKey = opts.openingRouteCounterBoughtMainKey != null
+    ? opts.openingRouteCounterBoughtMainKey
+    : (state && state.openingRouteCounterBoughtMainKey);
+  const suppressOpeningCounters = boughtMainKey === route.mainKey;
+  if (suppressOpeningCounters) {
+    const slots = Array.from({ length: n }, () => null);
+    const seen = new Set();
+
+    out.forEach((type, index) => {
+      if (!type || openingCandidates.has(type)) return;
+      if (!TYPES[type] || seen.has(type)) return;
+      if (TYPES[type].cost != null && TYPES[type].cost > maxCost) return;
+      slots[index] = type;
+      seen.add(type);
+    });
+
+    const fillerPool = Phaser.Utils.Array.Shuffle(OPENING_ROUTE_SHOP_FILLERS
+      .filter(type =>
+        TYPES[type]
+        && TYPES[type].cost <= Math.min(3, maxCost)
+        && !seen.has(type)
+        && !openingCandidates.has(type)
+      ));
+    for (let i = 0; i < n; i++) {
+      if (slots[i]) continue;
+      const type = fillerPool.shift();
+      if (type) fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates);
+    }
+
+    for (let i = 0; i < n; i++) {
+      if (slots[i]) continue;
+      const exclude = [...seen, ...openingCandidates];
+      const type = randomShopType(round, exclude, {
+        ...opts,
+        disableScoutedCounter: true,
+      });
+      if (fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates)) continue;
+
+      const fallback = shopEligiblePool(round)
+        .find(candidate =>
+          TYPES[candidate]
+          && !seen.has(candidate)
+          && !openingCandidates.has(candidate)
+        );
+      if (fallback) fillOpeningRouteShopSlot(slots, i, fallback, seen, openingCandidates);
+    }
+
+    const nonOpeningFallback = shopEligiblePool(round)
+      .find(candidate => TYPES[candidate] && !openingCandidates.has(candidate))
+      || OPENING_ROUTE_SHOP_FILLERS.find(type => TYPES[type]);
+    return slots.map(type => type || nonOpeningFallback || primary);
+  }
+
   const primaryCurrentIndex = out.findIndex(type => type === primary);
   const firstOpeningIndex = out.findIndex(type => openingCandidates.has(type));
   const rawPrimaryIndex = Number.isFinite(opts.primarySlotIndex)
@@ -473,6 +527,7 @@ function initState() {
     shopCreditUsed: false,
     fullCrewDiscount: 0,
     openingCounterPlan: false,
+    openingRouteCounterBoughtMainKey: null,
     cacheDrillMusterIds: [],
     shortCrewReportIds: [],
     counterWatchIds: [],
@@ -532,6 +587,7 @@ function initBattleTestState(repeatState = null) {
     shopCreditUsed: false,
     fullCrewDiscount: 0,
     openingCounterPlan: false,
+    openingRouteCounterBoughtMainKey: null,
     cacheDrillMusterIds: [],
     shortCrewReportIds: [],
     counterWatchIds: [],

@@ -903,6 +903,7 @@ class GameScene extends Phaser.Scene {
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
       this.clearCounterWatch();
+      G.openingRouteCounterBoughtMainKey = null;
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
@@ -2576,6 +2577,9 @@ class GameScene extends Phaser.Scene {
       this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Not enough ☠️', '#ef5350');
       return;
     }
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
     if (quote.credit) {
       G.enthusiasm = 0;
       G.boardingAlert = this.pendingBoardingAlert() + quote.alert;
@@ -2595,6 +2599,11 @@ class GameScene extends Phaser.Scene {
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
+    if (routeShopState
+      && type === routeShopState.primaryCounterType
+      && routeShopState.mainKey) {
+      G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
+    }
     if (toTopDeck) {
       G.deck.push(p);
       if (watchCounter) this.markCounterWatch(p);
