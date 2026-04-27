@@ -230,15 +230,45 @@ function installDeckOfCatsTestHook(game) {
         if (typeof scene.clearOpeningRouteCounterBought === 'function') scene.clearOpeningRouteCounterBought(pirate.id);
         if (scene._sacrificedIds) scene._sacrificedIds.add(pirate.id);
       }
-      const cacheDrill = typeof scene.applyScoutedCacheDrill === 'function'
-        ? scene.applyScoutedCacheDrill(pirate, { silent: true })
+      const cacheClaim = typeof scene.claimScoutedCounterCache === 'function'
+        ? scene.claimScoutedCounterCache(pirate, { silent: true })
+        : null;
+      const cacheGrant = cacheClaim && cacheClaim.cacheGrant
+        ? { ...cacheClaim.cacheGrant }
+        : null;
+      const cacheDrill = cacheClaim && cacheClaim.drill
+        ? cacheClaim.drill
+        : null;
+      const cacheState = state.island && state.island.scoutedCacheDrill
+        ? {
+          cachePending: !!state.island.scoutedCacheDrill.cachePending,
+          cacheClaimed: !!state.island.scoutedCacheDrill.cacheClaimed,
+          granted: !!state.island.scoutedCacheDrill.granted,
+          openerId: state.island.scoutedCacheDrill.openerId != null
+            ? state.island.scoutedCacheDrill.openerId
+            : null,
+        }
         : null;
       if (typeof scene.renderAll === 'function') scene.renderAll();
       return {
         ok: true,
         type: pirate.type,
         result,
-        cacheDrill: cacheDrill ? { text: cacheDrill.text || '', might: pirate.might || 0 } : null,
+        cacheGrant,
+        cacheState,
+        openingCounterPrep: !!(cacheClaim && cacheClaim.openingCounterPrep),
+        cacheDrill: cacheDrill ? {
+          mainKey: cacheDrill.mainKey || null,
+          applied: !!cacheDrill.applied,
+          might: pirate.might || 0,
+          alertRefund: cacheDrill.alertRefund || { amount: 0 },
+          openingCounterPrep: !!cacheDrill.openingCounterPrep,
+          cacheDrillBounty: !!cacheDrill.cacheDrillBounty,
+        } : null,
+        cacheClaim: cacheClaim ? {
+          openerId: cacheClaim.openerId != null ? cacheClaim.openerId : null,
+          openingCounterPrep: !!cacheClaim.openingCounterPrep,
+        } : null,
       };
     },
   };
