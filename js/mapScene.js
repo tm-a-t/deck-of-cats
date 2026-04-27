@@ -540,7 +540,13 @@ class MapScene extends Phaser.Scene {
     if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
     if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
     if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
-    if (alert > 0) parts.push('counter disarms');
+    if (alert > 0) {
+      const refund = Math.min(alert, 1);
+      const remaining = Math.max(0, alert - refund);
+      parts.push(remaining > 0
+        ? `counter cuts ${refund} Alert, +${remaining} left`
+        : 'counter disarms');
+    }
     const routeWatch = this.openingRouteWatchBadgeText(cache);
     if (routeWatch) parts.push(routeWatch);
     return parts.join(' ');

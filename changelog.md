@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-180152 — rev 826468b — build 0.1.0
+
+- Gameplay: true - Capped `Cache Drill` Alert refunds at `1`, so Forest and Rocky/Boarding 2+ `+1 Alert` caches still clear while the Port `+2 Alert` greed route keeps `+1` pending after a successful starter or Needler drill; route/cache text now calls out the partial Port cut. Validated with JS syntax checks, targeted scouted cache, opening deckhand/pass-off, opening route prize, scout-pay, route shop, Opening Prep, drilled bounty, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-180152.log`.
+
 ## 2026-04-27 — run 20260427-175046 — rev 184195f — build 0.1.0
 
 - Gameplay: true - Collapsed the opening route into one cache island: regular maps now put the Forest/Rocky/Port Boarding 1 cache choices on layer 0, move Boarding 1 to layer 1, stretch the next island block to layers 2-8, and keep Boarding 2 on layer 9 so the selected cache, route enemy, first shop, and first boarding payoff happen back-to-back. Validated with JS syntax checks, targeted map schedule, opening route captain, scouted cache, opening scout-pay/cache-drill, route shop, Opening Prep, route starter pass-off/deckhand, drilled Ambush Bounty, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-175046.log`.

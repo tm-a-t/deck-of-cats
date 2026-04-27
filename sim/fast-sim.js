@@ -1709,6 +1709,16 @@ function expectedOpeningScoutedCounterCacheStakes(api, node, mainKey) {
   };
 }
 
+function cacheDrillAlertRefundCap(alert) {
+  return Math.min(Math.max(0, Math.floor(Number(alert) || 0)), 1);
+}
+
+function alertAfterCacheDrill(floor, cacheAlert) {
+  const base = Math.max(0, Math.floor(Number(floor) || 0));
+  const alert = Math.max(0, Math.floor(Number(cacheAlert) || 0));
+  return base + alert - cacheDrillAlertRefundCap(alert);
+}
+
 function runScoutedCounterCacheChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1826,7 +1836,8 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.enthusiasm === 0, `generated first cache enthusiasm on selection ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 2, `generated first cache alert on selection ${G.boardingAlert} !== 2`);
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === cache.mainKey, 'generated first cache did not arm Cache Drill');
-    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertRefundAmount === cacheCase.alert, `${cacheCase.label} cache drill refund amount ${G.island.scoutedCacheDrill.alertRefundAmount} !== ${cacheCase.alert}`);
+    const expectedRefund = cacheDrillAlertRefundCap(cacheCase.alert);
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertRefundAmount === expectedRefund, `${cacheCase.label} cache drill refund amount ${G.island.scoutedCacheDrill.alertRefundAmount} !== ${expectedRefund}`);
     const opener = G.hand[0];
     opener.type = cacheCase.counterType;
     opener.might = 0;
@@ -1836,8 +1847,9 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(chosen.scoutedCache.claimed === true, 'selected first cache was not claimed after opener');
     assertScoutedCounterCacheCheck(G.res[cache.res] === 1, `generated first cache opener granted ${cache.res} ${G.res[cache.res]}`);
     assertScoutedCounterCacheCheck(G.enthusiasm === cacheCase.enthusiasm, `generated first cache opener enthusiasm ${G.enthusiasm} !== ${cacheCase.enthusiasm}`);
-    assertScoutedCounterCacheCheck(G.boardingAlert === 2, `generated first cache counter opener failed to refund alert to floor 2, got ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(claim.drill && claim.drill.applied, `${cacheCase.label} counter opener did not drill`);
+    assertScoutedCounterCacheCheck(claim.drill.alertRefund && claim.drill.alertRefund.amount === expectedRefund, `${cacheCase.label} counter opener refund ${JSON.stringify(claim.drill.alertRefund)} !== ${expectedRefund}`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === alertAfterCacheDrill(2, cacheCase.alert), `generated first cache counter opener alert ${G.boardingAlert} !== ${alertAfterCacheDrill(2, cacheCase.alert)}`);
     assertScoutedCounterCacheCheck(
       Object.keys(G.res).every((res) => (res === cacheCase.res ? G.res[res] === 1 : G.res[res] === 0)),
       `${cacheCase.label} cache changed wrong resources ${JSON.stringify(G.res)}`
@@ -1966,6 +1978,10 @@ function runScoutedCounterCacheChecks(runtime) {
     const G = api.getG();
     G.mode = opts.mode || 'run';
     G.round = 1;
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    if (opts.map) {
+      G.map = opts.map;
+    }
     G.phase = 'sending';
     G.island = scene.buildIslandState(api.ISLANDS[opts.islandIdx != null ? opts.islandIdx : 0]);
     if (opts.cache !== false) {
@@ -2027,7 +2043,31 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(!second, 'second matching counter received another Cache Drill');
     assertScoutedCounterCacheCheck((pirates[1].might || 0) === 0, 'second matching counter gained Might');
     assertScoutedCounterCacheCheck(G.boardingAlert === 2, `second matching counter changed alert to ${G.boardingAlert}`);
-    results.push({ name: 'Cache Drill grants +1 Might and refunds its cache Alert to the first surviving matching counter only', ok: true });
+    results.push({ name: 'Cache Drill grants +1 Might and clears a normal +1 Alert cache for the first surviving matching counter only', ok: true });
+  }
+
+  {
+    const laterCacheMap = {
+      layers: [
+        [{ id: 1, type: 'ship', strength: 6, encounter: { mainKey: 'shellback', supportKeys: [], totalCount: 1 }, conns: [2] }],
+        [{ id: 2, type: 'island', islandIdx: 0, conns: [3] }],
+        [{ id: 3, type: 'ship', strength: 8, encounter: { mainKey: 'shellback', supportKeys: [], totalCount: 1 }, conns: [] }],
+      ],
+      visited: [1, 2],
+      currentNodeId: 2,
+      currentLayer: 1,
+    };
+    const { G, pirates } = setupDrill({
+      boardingAlert: 6,
+      alertRefundAmount: 1,
+      boardingCount: 1,
+      map: laterCacheMap,
+    });
+    const reward = sendForDrill(G, pirates[0], 0);
+    assertScoutedCounterCacheCheck(reward && reward.applied, 'Boarding 2+ matching counter did not receive Cache Drill');
+    assertScoutedCounterCacheCheck(reward.alertRefund && reward.alertRefund.amount === 1, `Boarding 2+ +1 cache refund ${JSON.stringify(reward.alertRefund)}`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 6, `Boarding 2+ +1 cache did not refund to floor 6, got ${G.boardingAlert}`);
+    results.push({ name: 'Boarding 2+ normal +1 Alert caches are still fully cleared by Cache Drill', ok: true });
   }
 
   {
@@ -2717,7 +2757,7 @@ function runOpeningRoutePrizeChecks(runtime) {
     assertOpeningRoutePrizeCheck(drill && drill.applied, `${route.label} matching bought counter did not claim Cache Drill`);
     assertOpeningRoutePrizeCheck(!drill.openingRouteContractEnthusiasm, `${route.label} Cache Drill returned obsolete contract reward ${JSON.stringify(drill)}`);
     assertOpeningRoutePrizeCheck(G.enthusiasm === beforeDrillEnthusiasm + baseEnthusiasm, `${route.label} cache opener enthusiasm ${G.enthusiasm} !== ${beforeDrillEnthusiasm + baseEnthusiasm}`);
-    assertOpeningRoutePrizeCheck(G.boardingAlert === 5, `${route.label} Cache Drill should refund cache Alert to 5 from +${baseAlert}, got ${G.boardingAlert}`);
+    assertOpeningRoutePrizeCheck(G.boardingAlert === alertAfterCacheDrill(5, baseAlert), `${route.label} Cache Drill alert ${G.boardingAlert} !== ${alertAfterCacheDrill(5, baseAlert)} from +${baseAlert}`);
     assertOpeningRoutePrizeCheck(G.res[cache.res] === 1, `${route.label} opener cache resource missing: ${JSON.stringify(G.res)}`);
 
     G.phase = 'map';
@@ -4192,15 +4232,19 @@ function runOpeningDeckhandCounterChecks(runtime) {
     const firstShopName = firstShopCounter && api.TYPES[firstShopCounter] && api.TYPES[firstShopCounter].name;
     assertOpeningDeckhandCounterCheck(drillDesc.includes('first sent opens') && drillDesc.includes(starterName(route.starterType)), `${route.label} Cache Drill did not name route starter first: ${drillDesc}`);
     assertOpeningDeckhandCounterCheck(!firstShopName || drillDesc.includes(firstShopName), `${route.label} Cache Drill hid shop counters: ${drillDesc}`);
-    assertOpeningDeckhandCounterCheck(route.cacheAlert > 0 ? drillDesc.includes('disarms cache Alert') : !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill Alert copy mismatch: ${drillDesc}`);
+    if (route.cacheAlert > 1) {
+      assertOpeningDeckhandCounterCheck(drillDesc.includes('cuts 1 Alert') && drillDesc.includes('leaves +1 pending') && !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill partial Alert copy mismatch: ${drillDesc}`);
+    } else {
+      assertOpeningDeckhandCounterCheck(route.cacheAlert > 0 ? drillDesc.includes('disarms cache Alert') : !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill Alert copy mismatch: ${drillDesc}`);
+    }
     assertOpeningDeckhandCounterCheck(drillDesc.includes('Opening Prep'), `${route.label} Cache Drill did not preview route-starter Opening Prep: ${drillDesc}`);
     const reward = applyScoutedCacheDrillForSim(scene, pirate);
     assertOpeningDeckhandCounterCheck(reward && reward.applied, `${route.label} starter did not claim Cache Drill`);
     assertOpeningDeckhandCounterCheck(reward.openingCounterPrep === true, `${route.label} starter Cache Drill did not grant Opening Counter Prep`);
     assertOpeningDeckhandCounterCheck(G.openingCounterPlan === true, `${route.label} G.openingCounterPlan not set by starter Cache Drill`);
     assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1, `${route.label} Cache Drill Might ${(pirate.might || 0)} !== 1`);
-    assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === route.cacheAlert, `${route.label} Cache Drill refund ${JSON.stringify(reward.alertRefund)}`);
-    assertOpeningDeckhandCounterCheck(G.boardingAlert === 2, `${route.label} Cache Drill alert ${G.boardingAlert} !== 2`);
+    assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === cacheDrillAlertRefundCap(route.cacheAlert), `${route.label} Cache Drill refund ${JSON.stringify(reward.alertRefund)}`);
+    assertOpeningDeckhandCounterCheck(G.boardingAlert === alertAfterCacheDrill(2, route.cacheAlert), `${route.label} Cache Drill alert ${G.boardingAlert} !== ${alertAfterCacheDrill(2, route.cacheAlert)}`);
     assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).includes(pirate.id), `${route.label} Cache Drill did not mark early report`);
     const maxSend = scene.maxSend();
     while (G.hand.length < maxSend) {
@@ -4353,13 +4397,13 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(!reward.openingCounterPrep && G.openingCounterPlan === false, `${route.label} secured-primary drill granted new Opening Prep`);
     assertOpeningDeckhandCounterCheck(reward.securedRouteCachePassOff && reward.securedRouteCachePassOff.toPirateId === bought.id, `${route.label} secured-primary drill did not pass mark to bought primary: ${JSON.stringify(reward)}`);
     assertOpeningDeckhandCounterCheck((starter.might || 0) === 1, `${route.label} starter did not keep Cache Drill Might`);
-    assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === route.cacheAlert, `${route.label} starter did not keep Alert refund: ${JSON.stringify(reward.alertRefund)}`);
+    assertOpeningDeckhandCounterCheck(reward.alertRefund && reward.alertRefund.amount === cacheDrillAlertRefundCap(route.cacheAlert), `${route.label} starter did not keep Alert refund: ${JSON.stringify(reward.alertRefund)}`);
     assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).includes(starter.id) && !(G.cacheDrillMusterIds || []).includes(bought.id), `${route.label} early report moved off starter`);
     assertOpeningDeckhandCounterCheck((G.counterWatchIds || []).includes(starter.id) && (G.counterWatchIds || []).includes(bought.id), `${route.label} Counter Watch markers changed during pass-off`);
     assertOpeningDeckhandCounterCheck(!bought.weaponKey && (bought.might || 0) === 0 && (bought.tempo || 0) === 0, `${route.label} bought primary gained stats during secured pass-off`);
     const marks = G.cacheDrillBountyMarks || [];
     assertOpeningDeckhandCounterCheck(marks.length === 1 && marks[0].pirateId === bought.id && marks[0].mainKey === route.mainKey, `${route.label} secured pass-off marker mismatch: ${JSON.stringify(marks)}`);
-    assertOpeningDeckhandCounterCheck(G.boardingAlert === 2, `${route.label} secured-primary Alert refund mismatch: ${G.boardingAlert}`);
+    assertOpeningDeckhandCounterCheck(G.boardingAlert === alertAfterCacheDrill(2, route.cacheAlert), `${route.label} secured-primary Alert refund mismatch: ${G.boardingAlert}`);
 
     G.res = { wood: 0, stone: 0, gold: 0 };
     const combat = setupPassOffCombat(G, route, starter, bought);

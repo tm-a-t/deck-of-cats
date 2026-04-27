@@ -574,7 +574,7 @@ class GameScene extends Phaser.Scene {
       amount: payload.amount,
       enthusiasm: payload.enthusiasm,
       alert: payload.alert,
-      alertRefundAmount: payload.alert,
+      alertRefundAmount: this.cacheDrillAlertRefundAmount(payload.alert),
       alertFloorBeforeCache: 0,
       alertRefunded: false,
     };
@@ -616,7 +616,7 @@ class GameScene extends Phaser.Scene {
     drill.cachePending = false;
     drill.cacheClaimed = true;
     drill.openerId = pirate && pirate.id != null ? pirate.id : null;
-    drill.alertRefundAmount = cacheGrant.alert;
+    drill.alertRefundAmount = this.cacheDrillAlertRefundAmount(cacheGrant.alert);
     drill.alertFloorBeforeCache = cacheGrant.alertFloorBeforeCache;
     drill.alertRefunded = false;
     const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
@@ -664,6 +664,35 @@ class GameScene extends Phaser.Scene {
     return parts.join(' ');
   }
 
+  cacheDrillAlertRefundAmount(storedAlert) {
+    const alert = Math.max(0, Math.floor(Number(storedAlert) || 0));
+    return Math.min(alert, 1);
+  }
+
+  cacheDrillAlertRefundInfo(drill) {
+    if (!drill) return { stored: 0, refundable: 0, remaining: 0 };
+    const stored = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    const configured = drill.alertRefundAmount == null
+      ? this.cacheDrillAlertRefundAmount(stored)
+      : Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0));
+    const refundable = Math.min(stored, configured, 1);
+    return {
+      stored,
+      refundable,
+      remaining: Math.max(0, stored - refundable),
+    };
+  }
+
+  scoutedCacheDrillAlertPayoffText(drill) {
+    if (!drill || drill.alertRefunded) return '';
+    const info = this.cacheDrillAlertRefundInfo(drill);
+    if (info.refundable <= 0) return '';
+    if (info.remaining > 0) {
+      return `cuts ${info.refundable} Alert, leaves +${info.remaining} pending`;
+    }
+    return 'disarms cache Alert';
+  }
+
   scoutedCacheDrillDescription() {
     const drill = this.scoutedCacheDrillState();
     if (!drill) return '';
@@ -690,8 +719,7 @@ class GameScene extends Phaser.Scene {
       ? `${shopCounterNames[0]}/${shopCounterNames[1]}...`
       : shopCounterNames.join('/');
     const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
-    const refundsAlert = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)) > 0
-      && !drill.alertRefunded;
+    const alertPayoffText = this.scoutedCacheDrillAlertPayoffText(drill);
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[drill.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
@@ -699,8 +727,8 @@ class GameScene extends Phaser.Scene {
     const prepText = routeCounterType && this.openingRouteStarterCachePrepAvailable(drill.mainKey)
       ? ', opens Opening Prep'
       : (passOffTarget ? `, passes mark to ${passOffTarget.label}` : '');
-    const payoff = refundsAlert
-      ? ` disarms cache Alert, gains +💪, reports next${prepText}${bountyText}`
+    const payoff = alertPayoffText
+      ? ` ${alertPayoffText}, gains +💪, reports next${prepText}${bountyText}`
       : ` gains +💪, reports next${prepText}${bountyText}`;
     const cacheText = this.scoutedCounterCacheRewardText(drill);
     const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
@@ -1352,7 +1380,8 @@ class GameScene extends Phaser.Scene {
 
   applyScoutedCacheAlertRefund(drill) {
     if (!drill || drill.alertRefunded) return { amount: 0 };
-    const alertRefundAmount = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0));
+    const refundInfo = this.cacheDrillAlertRefundInfo(drill);
+    const alertRefundAmount = refundInfo.refundable;
     if (alertRefundAmount <= 0) return { amount: 0 };
 
     const alertFloorBeforeCache = Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0));
@@ -1363,7 +1392,14 @@ class GameScene extends Phaser.Scene {
     const amount = Math.max(0, before - after);
     if (amount > 0) G.boardingAlert = after;
     drill.alertRefunded = true;
-    return { amount, before, after, floor: alertFloorBeforeCache };
+    return {
+      amount,
+      before,
+      after,
+      floor: alertFloorBeforeCache,
+      stored: refundInfo.stored,
+      left: Math.max(0, after - alertFloorBeforeCache),
+    };
   }
 
   showScoutedCounterCacheResult(cacheGrant, x = null, y = null) {
@@ -1392,7 +1428,10 @@ class GameScene extends Phaser.Scene {
     const x = point ? point.x : this.L.cx;
     const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
     const refundAmount = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.amount) || 0));
-    const refundText = refundAmount > 0 ? ` -${refundAmount > 1 ? refundAmount : ''}Alert` : '';
+    const refundLeft = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.left) || 0));
+    const refundText = refundAmount > 0
+      ? ` -${refundAmount > 1 ? refundAmount : ''}Alert${refundLeft > 0 ? ` (+${refundLeft} left)` : ''}`
+      : '';
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[reward.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? ` +2${bountyEmoji} Ambush` : '';
