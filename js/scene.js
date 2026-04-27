@@ -2187,6 +2187,11 @@ class GameScene extends Phaser.Scene {
     return parts.join(' ');
   }
 
+  openingRouteVictoryCachePreviewText(info) {
+    const emoji = info && info.bountyEmoji;
+    return emoji ? `clean +1${emoji}/Alert +3${emoji}` : '';
+  }
+
   openingRouteChoicePlanLines(node) {
     if (this.isBattleTest() || !node || node.type !== 'island') return [];
     const stakes = this.openingRouteCacheStakesFromNode(node);
@@ -2196,7 +2201,8 @@ class GameScene extends Phaser.Scene {
     const island = ISLANDS[node.islandIdx];
     const cacheText = this.openingRouteCacheStakesText(stakes) || 'cache';
     const routeName = island && island.name ? island.name.replace(' Island', '') : 'Route';
-    const victoryText = info.bountyEmoji ? `; B1 win +2${info.bountyEmoji}` : '';
+    const victory = this.openingRouteVictoryCachePreviewText(info);
+    const victoryText = victory ? `; B1 win ${victory}` : '';
     return [
       `${routeName}: ${info.enemyName}`,
       `${info.starterName} opens ${cacheText}${victoryText}`,
@@ -2310,8 +2316,9 @@ class GameScene extends Phaser.Scene {
     const info = state.info;
     const cacheStatus = this.selectedOpeningRouteCacheStatusText(state);
     const setup = this.openingRouteSetupFlagText();
+    const victory = this.openingRouteVictoryCachePreviewText(info);
     const payoff = info.bountyEmoji
-      ? `B1 payoff: opened cache win +2${info.bountyEmoji}; counter +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
+      ? `B1 payoff: opened cache win ${victory}; counter +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
       : '';
     const routePrimarySecured = G.openingRouteCounterBoughtMainKey === info.mainKey;
     const sideUnlocked = !!G.openingCounterPlan && !routePrimarySecured;
@@ -2321,7 +2328,7 @@ class GameScene extends Phaser.Scene {
     const targets = `Targets: ${info.primaryName} primary; ${sideTarget}`;
     if (opts.context === 'shop') {
       const payoffShort = info.bountyEmoji
-        ? `B1 cache +2${info.bountyEmoji}/counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
+        ? `B1 cache ${victory}; counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
         : 'B1 counter payoff';
       const sideBuyText = sideUnlocked
         ? this.openingRouteBuyQuoteText(info.sideType)
@@ -2333,7 +2340,7 @@ class GameScene extends Phaser.Scene {
       ].filter(Boolean);
     }
     if (opts.context === 'sending') {
-      const bountyPair = info.bountyEmoji ? `B1 cache +2${info.bountyEmoji}; counter +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
+      const bountyPair = info.bountyEmoji ? `B1 cache ${victory}; counter +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
       return [
         `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
         `Full send = Full Crew ${info.primaryName}; one-short unlocks ${info.sideName} or +💪 primary; ${bountyPair}`,
@@ -4885,7 +4892,9 @@ class GameScene extends Phaser.Scene {
     const resource = mainKey && SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
     if (!resource || !RES_EMOJI[resource]) return null;
 
-    const count = 2;
+    const alert = this.activeBoardingAlertState();
+    const boardingAlert = Math.max(0, Math.floor(Number(alert && alert.amount) || 0));
+    const count = boardingAlert > 0 ? 3 : 1;
     if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
     G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + count;
     cache.openingRouteVictoryCacheGranted = true;
@@ -4897,6 +4906,7 @@ class GameScene extends Phaser.Scene {
       enemyName: enemy ? enemy.name : mainKey,
       resource,
       count,
+      boardingAlert,
       wood: resource === 'wood' ? count : 0,
       stone: resource === 'stone' ? count : 0,
       gold: resource === 'gold' ? count : 0,
