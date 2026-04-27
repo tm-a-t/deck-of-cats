@@ -437,3 +437,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-193303 — rev 00c4dbb
 
 - Gameplay: true - Selected Boarding 1 route caches now grant the next Shop's `Opening Counter Prep` when claimed by any first opener while the route primary is unsecured, leaving Cache Drill rewards and starter pass-off as the premium counter payoff. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-cache-purse --json`, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, `node sim/fast-sim.js --check-alarm-rushed-route-counter --json`, `node sim/fast-sim.js --check-opening-side-prep --json`, related opening route/cache targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-193303.log`.
+
+## 2026-04-27 — run 20260427-210512 — rev d6dc0ae — build 0.1.0
+
+- Gameplay: true - Added Route Counter Cover: secured pre-Boarding-1 route-primary counter buys now reduce pending `Boarding Alert` by `1` when Alert is present, making the first counter commitment visibly soften the incoming boarding. Validated with JS syntax checks, `node sim/fast-sim.js --check-route-counter-cover --json`, `node sim/fast-sim.js --check-alarm-rushed-route-counter --json`, `node sim/fast-sim.js --check-opening-counter-plan --json`, related opening route/cache targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-210512.log`.

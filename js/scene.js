@@ -1909,6 +1909,42 @@ class GameScene extends Phaser.Scene {
     return !this.isBattleTest() && G.phase === 'shopping' && !G.shopCreditUsed;
   }
 
+  routeCounterCoverEligible(type, quote, routeShopState = null) {
+    if (!type || !quote || !quote.canBuy || this.isBattleTest()) return false;
+    const route = routeShopState || (typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null);
+    return !!(route
+      && route.mainKey
+      && route.primaryCounterType === type
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight
+        || quote.alarmRushedRouteCounter));
+  }
+
+  routeCounterCoverPreviewForQuote(type, quote, opts = {}) {
+    if (!this.routeCounterCoverEligible(type, quote, opts.routeShopState || null)) return 0;
+    const alertBase = opts.alertBase != null
+      ? Math.max(0, Math.floor(Number(opts.alertBase) || 0))
+      : this.pendingBoardingAlert();
+    const purchaseAlert = Math.max(0, Math.floor(Number(quote.alert) || 0));
+    return alertBase + purchaseAlert > 0 ? 1 : 0;
+  }
+
+  applyRouteCounterCover(type, quote, routeShopState = null) {
+    if (!this.routeCounterCoverEligible(type, quote, routeShopState)) return { amount: 0 };
+    const before = this.pendingBoardingAlert();
+    const amount = before > 0 ? 1 : 0;
+    if (amount <= 0) return { amount: 0, before, after: before };
+    const after = Math.max(0, before - amount);
+    G.boardingAlert = after;
+    return { amount, before, after };
+  }
+
   pendingFullCrewDiscount() {
     return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
   }
@@ -2354,14 +2390,22 @@ class GameScene extends Phaser.Scene {
         openingSidePrepTargetPirateId: null,
         openingSidePrepTargetsMuster: false,
         openingRoutePrimary: false,
+        routeCounterCover: 0,
         alarmRushedRouteCounter: false,
         consumesOpeningCounterPlan: false,
         consumesOpeningCounterPrep: false,
       };
     }
     const withPayoff = (quote) => {
-      const payoff = this.counterPayoffPreviewForQuote(type, quote);
-      return payoff ? { ...quote, counterPayoff: payoff } : quote;
+      const withCover = {
+        ...quote,
+        routeCounterCover: this.routeCounterCoverPreviewForQuote(type, quote, {
+          routeShopState,
+          alertBase: pendingAlert,
+        }),
+      };
+      const payoff = this.counterPayoffPreviewForQuote(type, withCover);
+      return payoff ? { ...withCover, counterPayoff: payoff } : withCover;
     };
     const isProjection = !!state;
     const source = state || {};
@@ -2609,9 +2653,10 @@ class GameScene extends Phaser.Scene {
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? (quote.alarmRushedRouteCounter ? ', top deck, Watch' : ', top deck') : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
+    const cover = quote.routeCounterCover > 0 ? `, Cover -${quote.routeCounterCover} Alert` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${alarm}${prepared}${topDeck}${covered}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${alarm}${prepared}${topDeck}${covered}${credit}${cover}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -3452,6 +3497,9 @@ class GameScene extends Phaser.Scene {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
       G.openingRouteCounterBoughtPirateId = p.id;
     }
+    const routeCounterCover = securesOpeningRouteCounter
+      ? this.applyRouteCounterCover(type, quote, routeShopState)
+      : { amount: 0 };
     if (toTopDeck) {
       G.deck.push(p);
       if (watchCounter) this.markCounterWatch(p);
@@ -3486,9 +3534,10 @@ class GameScene extends Phaser.Scene {
         : quote;
       const sidePrepText = sidePrepGain && sidePrepGain.applied ? ` ${openingSidePrepSupportText(sidePrepTargetText)}` : '';
       const passOffText = routePassOff ? ' Cache mark' : '';
+      const coverText = routeCounterCover && routeCounterCover.amount > 0 ? ` Cover -${routeCounterCover.amount} Alert` : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alarmText + prepText + sidePrepText + passOffText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alarmText + prepText + sidePrepText + passOffText + alertText + coverText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

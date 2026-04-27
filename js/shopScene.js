@@ -356,6 +356,7 @@ class ShopScene extends Phaser.Scene {
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
       const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
+      const coverLine = quote.routeCounterCover > 0 ? `Cover -${quote.routeCounterCover} Alert` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
         ? (quote.openingSidePrep
           ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? ` · ${sidePrepSupportText}` : ''}`
@@ -366,10 +367,11 @@ class ShopScene extends Phaser.Scene {
         ...payoffLines,
         priceLine,
         coveredLine,
+        coverLine,
         planLine,
       ].filter(Boolean).join('\n');
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, priceReduced ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((priceReduced || quote.counter) ? 13 : 14)))),
+        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.routeCounterCover > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((priceReduced || quote.counter) ? 13 : 14)))),
         align: 'center',
         lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
@@ -661,6 +663,7 @@ class ShopScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
+      const coverText = quote.routeCounterCover > 0 ? ` Cover -${quote.routeCounterCover} Alert` : '';
       const sidePrepSupportText = openingSidePrepSupportText(quote);
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingSidePrep
@@ -669,7 +672,7 @@ class ShopScene extends Phaser.Scene {
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + alertText + preparedText + deckText, '#66bb6a');
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + alertText + coverText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });
