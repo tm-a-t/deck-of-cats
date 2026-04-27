@@ -2930,6 +2930,75 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  openingBreakPlunderResource(supportKey) {
+    if (supportKey === 'cabinBoy') return 'wood';
+    if (supportKey === 'bilgeRat') return 'stone';
+    return null;
+  }
+
+  openingBreakPlunderItem(plunder) {
+    if (!plunder || !plunder.resource) return null;
+    const key = plunder.resource;
+    const count = Math.max(0, Math.floor(Number(plunder.count) || 0));
+    const emoji = RES_EMOJI[key];
+    return count > 0 && emoji ? { key, emoji, count } : null;
+  }
+
+  grantOpeningBreakPlunder(combat = G.combat) {
+    if (!combat || combat.openingBreakPlunderGranted) return null;
+    combat.openingBreakPlunderGranted = true;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (combat.result && combat.result !== 'win') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+
+    const ambush = combat.counterAmbush;
+    const routedSupport = ambush && ambush.armedAmbush && ambush.openingCounterBreak
+      ? ambush.routedSupport
+      : null;
+    const removedAlertGuardCount = Math.max(0, Math.floor(Number(ambush && ambush.removedAlertGuardCount) || 0));
+    const removedAlertGuards = Array.isArray(ambush && ambush.removedAlertGuards)
+      ? ambush.removedAlertGuards
+      : [];
+    if (!routedSupport || removedAlertGuardCount > 0 || removedAlertGuards.length > 0) return null;
+
+    const supportKey = String(routedSupport.key || routedSupport.targetKey || '').trim();
+    const resource = this.openingBreakPlunderResource(supportKey);
+    if (!resource) return null;
+
+    const archetype = this.combatArchetypeByKey(supportKey);
+    const plunder = {
+      supportId: routedSupport.id,
+      supportKey,
+      supportName: routedSupport.name || (archetype && archetype.name) || supportKey,
+      resource,
+      count: 1,
+      wood: resource === 'wood' ? 1 : 0,
+      stone: resource === 'stone' ? 1 : 0,
+      gold: 0,
+      total: 1,
+    };
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + 1;
+    combat.openingBreakPlunder = plunder;
+    return plunder;
+  }
+
+  showOpeningBreakPlunder(plunder) {
+    if (!plunder || !this.L) return;
+    const item = this.openingBreakPlunderItem(plunder);
+    if (!item) return;
+
+    const label = `+${item.count > 1 ? item.count : ''}${item.emoji}`;
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 204 * L.k;
+    this.effectText(x, y, `Opening plunder ${label}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [item]);
+    }
+  }
+
   grantBoardingTrophy(combat = G.combat) {
     if (!combat || combat.boardingTrophyGranted) return null;
     combat.boardingTrophyGranted = true;
@@ -4546,6 +4615,7 @@ class GameScene extends Phaser.Scene {
     const combat = G.combat;
     if (!combat || combat.mode === 'resolved') return;
     const plunder = result === 'win' ? this.grantBoardingAlertPlunder(combat) : null;
+    const openingPlunder = result === 'win' ? this.grantOpeningBreakPlunder(combat) : null;
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
     combat.mode = 'resolved';
@@ -4556,6 +4626,7 @@ class GameScene extends Phaser.Scene {
     this.showBoardingTrophy(trophy);
     this.showCounterTrophy(counterTrophy);
     this.showBoardingAlertPlunder(plunder);
+    this.showOpeningBreakPlunder(openingPlunder);
   }
 
   continueFromResolvedBoarding() {
@@ -6646,6 +6717,11 @@ class GameScene extends Phaser.Scene {
           const rewardLines = [];
           if (combat.boardingTrophy) rewardLines.push('Boarding Trophy +💪');
           if (combat.counterTrophy) rewardLines.push('Counter Trophy +⚡');
+          const openingPlunderItem = this.openingBreakPlunderItem(combat.openingBreakPlunder);
+          if (openingPlunderItem) {
+            const label = `+${openingPlunderItem.count > 1 ? openingPlunderItem.count : ''}${openingPlunderItem.emoji}`;
+            rewardLines.push(`Opening plunder ${label}`);
+          }
           rewardLines.forEach((line, i) => {
             const rewardText = this.add.text(
               L.cx,

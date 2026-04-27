@@ -2590,6 +2590,9 @@ function runCounterAmbushChecks(runtime) {
     const hpAfter = target.hp;
     const second = scene.applyCounterAmbush(G.combat, { silent: true });
     assertCounterAmbushCheck(!second && target.hp === hpAfter && target.wounds === 1, 'Counter Ambush repeated');
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(!G.combat.openingBreakPlunder, 'unarmed ambush stored Opening plunder');
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `unarmed ambush granted Opening plunder ${JSON.stringify(G.res)}`);
     results.push({ name: 'front-row matching counter ambushes once for 3 damage and 1 Wound', ok: true });
   }
 
@@ -2663,7 +2666,49 @@ function runCounterAmbushChecks(runtime) {
     const plunder = scene.grantBoardingAlertPlunder(combat);
     assertCounterAmbushCheck(plunder && plunder.total === 0, `Opening Counter Break created Alert plunder ${JSON.stringify(plunder)}`);
     assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `Opening Counter Break changed resources ${JSON.stringify(G.res)}`);
-    results.push({ name: 'Boarding 1 Armed Counter Ambush with no Alert guards routes exactly one front-left weak support without plunder', ok: true });
+    scene.finishBoardingCombat('win');
+    scene.finishBoardingCombat('win');
+    scene.grantOpeningBreakPlunder(combat);
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 1, `Opening Break Bilge Rat plunder ${JSON.stringify(G.res)} !== +1 stone`);
+    assertCounterAmbushCheck(combat.openingBreakPlunder && combat.openingBreakPlunder.supportKey === 'bilgeRat', 'Opening Break did not store Bilge Rat plunder');
+    assertCounterAmbushCheck(combat.openingBreakPlunderGranted, 'Opening Break plunder was not marked granted');
+    results.push({ name: 'Boarding 1 Armed Counter Ambush with no Alert guards routes Bilge Rat and wins +1 stone Opening plunder', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 0], ['bilgeRat', 0, 1]],
+      pirateUpgrades: [{ weaponKey: 'barbedBlade' }],
+      boardingAlert: 0,
+      guardCount: 0,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.routedSupport && result.routedSupport.key === 'cabinBoy', 'Opening Counter Break did not route front-left Cabin Boy');
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(G.res.wood === 1 && G.res.stone === 0, `Opening Break Cabin Boy plunder ${JSON.stringify(G.res)} !== +1 wood`);
+    assertCounterAmbushCheck(combat.openingBreakPlunder && combat.openingBreakPlunder.resource === 'wood', 'Opening Break did not store Cabin Boy wood plunder');
+    results.push({ name: 'Boarding 1 Opening Counter Break Cabin Boy win grants +1 wood', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 1], ['bilgeRat', 0, 0]],
+      pirateUpgrades: [{ might: 1 }],
+      boardingAlert: 0,
+      guardCount: 0,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.routedSupport, 'loss setup did not route support');
+    scene.finishBoardingCombat('loss');
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `loss granted Opening plunder ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.openingBreakPlunder, 'loss stored Opening plunder');
+    results.push({ name: 'Opening Counter Break losses grant no Opening plunder', ok: true });
   }
 
   {
@@ -2680,13 +2725,14 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(result && result.armedAmbush, 'Armed Alert guard setup did not ambush');
     assertCounterAmbushCheck((result.removedAlertGuards || []).length === 2, 'Armed Alert guard setup did not cut both guards');
     assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Armed Ambush with Alert guards also routed support');
+    assertCounterAmbushCheck(scene.grantOpeningBreakPlunder(combat) === null, 'Armed Ambush with Alert guards granted Opening plunder');
     const normalSupport = enemies.find((fighter) => fighter && !fighter.alertGuard && scene.combatEnemyArchetypeKey(fighter) === 'cabinBoy');
     assertCounterAmbushCheck(normalSupport && normalSupport.alive, 'Armed Ambush with Alert guards defeated normal support');
     results.push({ name: 'Armed Counter Ambush with Alert guards does not also trigger Opening Counter Break', ok: true });
   }
 
   {
-    const { enemies, combat } = setupRegular({
+    const { G, enemies, combat } = setupRegular({
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],
       playerRows: [[0, 0, 0]],
@@ -2698,6 +2744,8 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(result && result.armedAmbush, 'Boarding 2 Armed Counter Ambush did not ambush');
     assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Boarding 2 triggered Opening Counter Break');
     assertCounterAmbushCheck(enemies[1].alive, 'Boarding 2 routed weak support');
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(!combat.openingBreakPlunder && G.res.wood === 0 && G.res.stone === 0, `Boarding 2 granted Opening plunder ${JSON.stringify(G.res)}`);
     results.push({ name: 'Boarding 2 Armed Counter Ambush does not trigger Opening Counter Break', ok: true });
   }
 
@@ -2714,6 +2762,7 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!result, 'Battle Test triggered Opening Counter Break ambush');
     assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && enemies[1].alive, 'Battle Test Opening Counter Break changed fighters');
     assertCounterAmbushCheck(!combat.counterAmbush, 'Battle Test stored Opening Counter Break data');
+    assertCounterAmbushCheck(scene.grantOpeningBreakPlunder(combat) === null, 'Battle Test granted Opening plunder');
     results.push({ name: 'Battle Test never triggers Opening Counter Break', ok: true });
   }
 
@@ -2730,6 +2779,7 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!result, 'reinforcement hand triggered Opening Counter Break ambush');
     assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && enemies[1].alive, 'reinforcement Opening Counter Break changed fighters');
     assertCounterAmbushCheck(!combat.counterAmbush, 'reinforcement stored Opening Counter Break data');
+    assertCounterAmbushCheck(scene.grantOpeningBreakPlunder(combat) === null, 'reinforcement hand granted Opening plunder');
     results.push({ name: 'reinforcement hands never trigger Opening Counter Break', ok: true });
   }
 
@@ -2766,6 +2816,8 @@ function runCounterAmbushChecks(runtime) {
     const plunder = scene.grantBoardingAlertPlunder(combat);
     assertCounterAmbushCheck(G.res.wood === expectedRes.wood, `${name} wood ${G.res.wood} !== ${expectedRes.wood}`);
     assertCounterAmbushCheck(G.res.stone === expectedRes.stone, `${name} stone ${G.res.stone} !== ${expectedRes.stone}`);
+    assertCounterAmbushCheck(scene.grantOpeningBreakPlunder(combat) === null, `${name} granted Opening plunder`);
+    assertCounterAmbushCheck(G.res.wood === expectedRes.wood && G.res.stone === expectedRes.stone, `${name} Opening plunder changed guard totals to ${JSON.stringify(G.res)}`);
     expectedKeys.forEach((expectedKey) => {
       assertCounterAmbushCheck((plunder.removedByCounterAmbush || []).includes(expectedKey), `${name} plunder did not record removed guard ${expectedKey}`);
     });
@@ -3605,6 +3657,9 @@ function finishSimBoardingWin(api, scene) {
   const G = api.getG();
   if (scene && typeof scene.grantBoardingAlertPlunder === 'function') {
     scene.grantBoardingAlertPlunder(G.combat);
+  }
+  if (scene && typeof scene.grantOpeningBreakPlunder === 'function') {
+    scene.grantOpeningBreakPlunder(G.combat);
   }
   if (scene && typeof scene.grantBoardingTrophy === 'function') {
     scene.grantBoardingTrophy(G.combat);

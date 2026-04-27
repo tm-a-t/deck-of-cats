@@ -206,6 +206,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Guards removed by `Counter Ambush` do not fight, but still count for normal Alert guard plunder if the boarding is won.
 - During regular-run Boarding 1 only, if `Armed Counter Ambush` removes zero `Boarding Alert` guards, `Opening Counter Break` also removes 1 frontmost then leftmost living non-Alert weak support enemy, either `Bilge Rat` or `Cabin Boy`, after damaging and wounding the scouted main enemy and before normal combat timers begin.
 - A support routed by `Opening Counter Break` is not an Alert guard, grants no Alert guard plunder, and does not trigger in `Battle Test`, reinforcement hands, or Boarding 2+.
+- If that Boarding 1 is won, the support routed by `Opening Counter Break` grants separate `Opening plunder` once: `Cabin Boy` grants `+1🪵`, and `Bilge Rat` grants `+1🪨`.
+- `Opening plunder` is not Alert guard plunder, does not change Alert guard plunder totals, never triggers on losses, and never triggers in `Battle Test`, reinforcement hands, Boarding 2+, unarmed `Counter Ambush`, or `Armed Counter Ambush` that removes Alert guards instead of routing support.
 - `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
 - `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
