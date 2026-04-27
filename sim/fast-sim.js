@@ -47,6 +47,7 @@ function parseArgs(argv) {
     checkOpeningDeckhandCounters: false,
     checkOpeningRouteMuster: false,
     checkOpeningRouteContract: false,
+    checkOpeningAmbusherReport: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -182,6 +183,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-route-contract') {
       out.checkOpeningRouteContract = true;
+      continue;
+    }
+    if (a === '--check-opening-ambusher-report') {
+      out.checkOpeningAmbusherReport = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -5214,6 +5219,236 @@ function runCounterAmbushChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertOpeningAmbusherReportCheck(condition, message) {
+  if (!condition) throw new Error(`opening ambusher report check failed: ${message}`);
+}
+
+function runOpeningAmbusherReportChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const enemyFor = (key, row, rowOrder, idx = 0) => {
+    const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
+    assertOpeningAmbusherReportCheck(!!archetype, `missing enemy archetype ${key}`);
+    const member = scene.buildCombatEnemyMember(archetype, `${key}_report_${idx}`);
+    return scene.buildEnemyCombatFighter(member, row, rowOrder);
+  };
+
+  const fighterFor = (pirate, row, rowOrder, combat) =>
+    scene.buildPlayerCombatFighter(pirate, row, rowOrder, combat);
+
+  const setupRegular = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    const mode = opts.mode || 'run';
+    const mainKey = opts.mainKey || 'deckSniper';
+    const encounterNo = Math.max(1, Math.floor(Number(opts.encounterNo) || 1));
+    G.mode = mode;
+    G.phase = 'boarding';
+    G.busy = false;
+    G.boardingCount = opts.boardingCount != null
+      ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+      : encounterNo;
+    G.enemyShip = {
+      strength: 6,
+      encounterNo,
+      encounter: { mainKey, supportKeys: [], totalCount: 1 },
+    };
+    if (G.map) {
+      G.map.currentLayer = Math.min(2, (api.MAP_LAYERS || 40) - 2);
+      G.map.currentNodeId = G.map.currentNodeId || 'report-test-ship';
+    }
+
+    const pirates = G.allCrew.slice(0, 5);
+    const types = opts.types || ['needler', 'sawbones', 'trainer', 'lumberjack', 'miner'];
+    pirates.forEach((pirate, index) => {
+      pirate.type = types[index] || pirate.type;
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    const upgrades = Array.isArray(opts.pirateUpgrades) ? opts.pirateUpgrades : [];
+    upgrades.forEach((upgrade, index) => {
+      const pirate = pirates[index];
+      if (!pirate || !upgrade) return;
+      if (upgrade.weaponKey !== undefined) pirate.weaponKey = upgrade.weaponKey || null;
+      if (upgrade.might !== undefined) pirate.might = Math.max(0, Math.floor(Number(upgrade.might) || 0));
+      if (upgrade.tempo !== undefined) pirate.tempo = Math.max(0, Math.floor(Number(upgrade.tempo) || 0));
+    });
+
+    G.hand = pirates.slice(0, opts.handCount || 3);
+    G.deck = [pirates[3], pirates[4]].filter(Boolean);
+    G.discard = [];
+    G.sent = [];
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: mainKey,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+    };
+    G.combat.playerFighters = (opts.playerRows || [[0, 0, 0], [1, 1, 0]])
+      .map(([pirateIdx, row, rowOrder]) => {
+        const pirate = pirates[pirateIdx];
+        return pirate ? fighterFor(pirate, row, rowOrder, G.combat) : null;
+      })
+      .filter(Boolean);
+    G.combat.enemyFighters = (opts.enemies || [[mainKey, 0, 0]])
+      .map(([key, row, rowOrder], idx) => enemyFor(key, row, rowOrder, idx));
+    return { G, pirates, combat: G.combat };
+  };
+
+  const continueBoardingImmediately = (G) => {
+    scene.snapshotHandCardsForDiscard = () => (G.hand || []).filter(Boolean).map((pirate) => ({
+      id: pirate.id,
+      type: pirate.type,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 1,
+    }));
+    scene.animateCardsToDiscard = () => 0;
+    scene.animateCardsToDraw = () => 0;
+    scene.animateReshuffleToDraw = () => 0;
+    scene.time.delayedCall = (_delay, cb) => {
+      if (typeof cb === 'function') cb();
+      return { hasDispatched: true, remove: () => {} };
+    };
+    scene.continueFromResolvedBoarding();
+  };
+
+  const countRefs = (G, pirate) => [G.hand, G.deck, G.discard]
+    .reduce((count, pile) => count + (Array.isArray(pile) ? pile.filter((entry) => entry === pirate).length : 0), 0);
+
+  {
+    const { G, pirates, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer', 'lumberjack', 'miner'],
+      playerRows: [[0, 0, 0], [1, 1, 0]],
+      pirateUpgrades: [{ weaponKey: 'toxinPistol', might: 1, tempo: 1 }],
+    });
+    const ambusher = pirates[0];
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningAmbusherReportCheck(result && result.pirateId === ambusher.id, 'positive setup did not ambush with the expected pirate');
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(combat.openingAmbusherReport && combat.openingAmbusherReport.pirateId === ambusher.id, 'winning Boarding 1 did not mark ambusher report');
+    assertOpeningAmbusherReportCheck((ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'ambusher did not keep trophy buffs before report');
+    continueBoardingImmediately(G);
+    assertOpeningAmbusherReportCheck(G.hand[0] === ambusher, 'reported ambusher was not drawn first next hand');
+    assertOpeningAmbusherReportCheck(!G.deck.includes(ambusher) && !G.discard.includes(ambusher), 'reported ambusher remained in deck or discard');
+    assertOpeningAmbusherReportCheck(countRefs(G, ambusher) === 1, 'reported ambusher duplicated across piles');
+    assertOpeningAmbusherReportCheck((ambusher.weaponKey || null) === 'toxinPistol' && (ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'reported ambusher lost weapon or buffs');
+    results.push({ name: 'Boarding 1 surviving ambusher reports next, draws first, and keeps upgrades', ok: true });
+  }
+
+  {
+    const { pirates, combat } = setupRegular({
+      mainKey: 'shellback',
+      types: ['lumberjack', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 1, 0]],
+    });
+    const starter = pirates[0];
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningAmbusherReportCheck(result && result.pirateId === starter.id, 'Opening Deckhand Counter starter did not ambush');
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(combat.openingAmbusherReport && combat.openingAmbusherReport.pirateId === starter.id, 'Opening Deckhand Counter starter did not mark report');
+    results.push({ name: 'Opening Deckhand Counter starters can be the reporting ambusher', ok: true });
+  }
+
+  {
+    const { G, combat } = setupRegular();
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('loss');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'loss marked ambusher report');
+    assertOpeningAmbusherReportCheck(G.res.gold === 0, 'loss granted ambush bounty while checking report exclusion');
+    results.push({ name: 'losses do not mark ambusher report', ok: true });
+  }
+
+  {
+    const { combat } = setupRegular();
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.defeatCombatFighter(combat.playerFighters[0], []);
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'defeated ambusher marked report');
+    results.push({ name: 'defeated ambushers do not report next', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular();
+    scene.applyCounterAmbush(combat, { silent: true });
+    G.hand = [pirates[1]];
+    combat.playerFighters = [fighterFor(pirates[1], 0, 0, combat)];
+    combat.reinforcementCount = 1;
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'reinforcement win marked ambusher report');
+    results.push({ name: 'reinforcement-hand wins do not report the opening ambusher', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+    });
+    combat.counterAmbush = {
+      applied: true,
+      pirateId: pirates[0].id,
+      type: pirates[0].type,
+      mainKey: 'deckSniper',
+    };
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'Battle Test marked ambusher report');
+    assertOpeningAmbusherReportCheck(G.phase === 'boarding', 'Battle Test report check unexpectedly left boarding');
+    results.push({ name: 'Battle Test never marks ambusher report', ok: true });
+  }
+
+  {
+    const { combat } = setupRegular({
+      mainKey: 'deckSniper',
+      encounterNo: 2,
+      boardingCount: 2,
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+    });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'Boarding 2 marked ambusher report');
+    results.push({ name: 'Boarding 2 wins do not report the ambusher', ok: true });
+  }
+
+  {
+    const { combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningAmbusherReportCheck(!result, 'missing-ambush setup unexpectedly ambushed');
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'missing ambush marked report');
+    results.push({ name: 'wins without Counter Ambush do not report a pirate', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular();
+    scene.applyCounterAmbush(combat, { silent: true });
+    G.allCrew = G.allCrew.filter((pirate) => pirate && pirate.id !== pirates[0].id);
+    scene.finishBoardingCombat('win');
+    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'removed ambusher marked report');
+    results.push({ name: 'ambushers no longer in crew do not report next', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function runPortDrillChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -5887,6 +6122,7 @@ function initializeSimCombatTimings(runtime, api, fighters, now) {
 
 function finishSimBoardingWin(api, scene) {
   const G = api.getG();
+  if (G.combat) G.combat.result = 'win';
   if (scene && typeof scene.grantBoardingAlertPlunder === 'function') {
     scene.grantBoardingAlertPlunder(G.combat);
   }
@@ -5899,8 +6135,21 @@ function finishSimBoardingWin(api, scene) {
   if (scene && typeof scene.grantCounterTrophy === 'function') {
     scene.grantCounterTrophy(G.combat);
   }
+  if (scene && typeof scene.grantAmbushBounty === 'function') {
+    scene.grantAmbushBounty(G.combat);
+  }
+  if (scene && typeof scene.markOpeningAmbusherReport === 'function') {
+    scene.markOpeningAmbusherReport(G.combat, 'win');
+  }
+  const reportPirates = scene && typeof scene.consumeOpeningAmbusherReportPirates === 'function'
+    ? scene.consumeOpeningAmbusherReportPirates(G.combat)
+    : [];
+  const reportIds = new Set(reportPirates.map((pirate) => pirate && pirate.id));
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
-  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !reportIds.has(p.id)));
+  if (scene && typeof scene.placeOpeningAmbusherReportPiratesOnDeck === 'function') {
+    scene.placeOpeningAmbusherReportPiratesOnDeck(reportPirates);
+  }
   G.hand = [];
   G.sent = [];
 
@@ -6466,6 +6715,11 @@ async function main() {
   }
   if (opts.checkOpeningRouteContract) {
     const result = runOpeningRouteContractChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningAmbusherReport) {
+    const result = runOpeningAmbusherReportChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

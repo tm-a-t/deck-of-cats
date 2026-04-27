@@ -313,3 +313,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-075349 — rev a60c800
 
 - Gameplay: false - Added Opening Route Orders as a sending-phase aid: matching starter cards are badged as route counters before Boarding 1, and one-short/Cache Drill text now names that starter alongside the existing report, Watch, and Alert-refund payoff without changing mechanics. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, related counter/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-075349.log`.
+
+## 2026-04-27 — run 20260427-095457 — rev 8332599 — build 0.1.0
+
+- Gameplay: true - Added Opening Ambusher Report: a surviving Boarding 1 Counter Ambush pirate now reports into the next drawn hand without duplication, preserving its trophies and upgrades. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-ambusher-report --json`, related counter/report targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-095457.log`.

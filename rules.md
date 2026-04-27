@@ -255,6 +255,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Ambush Bounty` uses the cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - `Ambush Bounty` is granted once per boarding, never on losses, never in `Battle Test`, never if the ambusher was defeated, and never if the win comes from a reinforcement hand.
 - `Ambush Bounty` is separate from Alert guard plunder, Opening plunder, `Boarding Trophy`, and `Counter Trophy`.
+- After winning regular-run Boarding 1, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, that pirate `reports next`: on post-boarding `Continue`, it is separated from normal hand discard and placed on top of the draw pile before the next hand is drawn.
+- Opening Ambusher Report applies to either a bought route counter or the `Opening Deckhand Counter` starter, preserves any weapon, `Might`, `Tempo`, `Boarding Trophy`, `Counter Trophy`, Cache Drill, Opening Prep, or other personal upgrades already on that pirate, and cannot duplicate the pirate.
+- Opening Ambusher Report never applies on losses, `Battle Test`, reinforcement-hand wins, Boarding 2+, missing `Counter Ambush`, defeated ambushers, or if the ambusher is no longer in the crew at report time.
 - `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
 - `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
@@ -267,7 +270,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The defeated current hand goes to discard and a new combat hand is drawn from the deck/discard using only pirates that are not `🩹 Wounded`.
 - The replacement combat hand draws up to 5 ready pirates; if fewer than 5 ready pirates remain, it draws all of them.
 - A regular run is lost only when the crew has no ready pirates left, meaning every pirate in `allCrew` is `🩹 Wounded`.
-- After a win, the whole current hand goes to discard, a new hand is drawn, and the player returns to the map.
+- After a win, the whole current hand goes to discard except any eligible Opening Ambusher Report pirate, a new hand is drawn, and the player returns to the map.
 - After that all-wounded loss, the run goes to `Game Over`.
 - Winning the final ship on layer 39 ends the run with the `Victory` screen.
 
