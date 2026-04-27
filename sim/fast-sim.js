@@ -1594,6 +1594,8 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
     assertCounterRecruitsReportEarlyCheck(partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should top-deck without prepared: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && fullLine.includes('prepared') && fullLine.includes('top deck'), `full-send plan should prepare and top-deck: ${fullLine}`);
+    assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+🪨'), `End-now plan missing unprepared counter payoff: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 5') && fullLine.includes('cut 2 guards') && fullLine.includes('+🪨'), `full-send plan missing prepared counter payoff: ${fullLine}`);
     results.push({ name: 'sending plan separates no-discount top-deck counters from full-send prepared counters', ok: true, endLine, partialLine, fullLine });
   }
 
@@ -1601,6 +1603,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
     const quote = scene.shopPurchaseQuote('sawbones');
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 3 && quote.counterPayoff.guardsRemoved === 1 && quote.counterPayoff.bountyRes === 'stone', `eligible quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
@@ -1770,6 +1773,8 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
 
   {
     const { G } = setupPurchase({ type: 'trainer', enthusiasm: 3 });
+    const quote = scene.shopPurchaseQuote('trainer');
+    assertCounterRecruitsReportEarlyCheck(!quote.counter && !quote.counterPayoff, `non-counter quote exposed payoff: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'trainer', 'non-counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'non-counter did not go to discard');
@@ -1786,6 +1791,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     });
     const quote = scene.shopPurchaseQuote('sawbones');
     assertCounterRecruitsReportEarlyCheck(quote.counter && !quote.topDeck, `distant quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 3 && quote.counterPayoff.guardsRemoved === 1 && quote.counterPayoff.bountyRes === 'stone', `distant counter quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'distant counter did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'distant counter went to deck');
@@ -1799,6 +1805,8 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
       enthusiasm: 3,
       map: { layers: [[{ id: 1, type: 'island', islandIdx: 0, conns: [] }]], visited: [1], currentNodeId: 1, currentLayer: 0 },
     });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(!quote.counter && !quote.counterPayoff, `no-ship quote exposed payoff: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'no-ship purchase did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'no-ship purchase went to deck');
@@ -1812,6 +1820,8 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
       enthusiasm: 3,
       mode: 'battleTest',
     });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(!quote.counter && !quote.counterPayoff, `Battle Test quote exposed payoff: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'Battle Test purchase did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'Battle Test purchase went to deck');
@@ -1846,6 +1856,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     });
     const quote = scene.shopPurchaseQuote('sawbones');
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.discount === 1 && quote.topDeck && quote.preparedCounter && quote.alert === 2, `discount credit quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 5 && quote.counterPayoff.guardsRemoved === 2, `discount credit quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'discount credit counter was not placed on top of deck');
     assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `discount credit counter was not prepared: ${bought.weaponKey}`);
@@ -1864,6 +1875,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     });
     const quote = scene.shopPurchaseQuote('sawbones');
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.discount === 1 && quote.topDeck && quote.preparedCounter, `discount quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 5 && quote.counterPayoff.guardsRemoved === 2, `discount quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'discount counter was not placed on top of deck');
     assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `discount counter was not prepared: ${bought.weaponKey}`);

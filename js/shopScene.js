@@ -339,14 +339,21 @@ class ShopScene extends Phaser.Scene {
       if (quote.counter) tags.push('Counter');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
+      const payoffLines = quote.counterPayoff && Array.isArray(quote.counterPayoff.shopLines)
+        ? quote.counterPayoff.shopLines
+        : [];
       const priceLine = quote.discount > 0
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
-      const priceText = tags.length ? `${tags.join(' · ')}\n${priceLine}` : priceLine;
+      const priceText = [
+        tags.length ? tags.join(' · ') : '',
+        ...payoffLines,
+        priceLine,
+      ].filter(Boolean).join('\n');
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs(quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14))),
+        fontSize: L.fs(payoffLines.length ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
         align: 'center',
-        lineSpacing: -2 * L.k,
+        lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);

@@ -1181,6 +1181,62 @@ class GameScene extends Phaser.Scene {
     return normalizePersonalGains(def && def.ship && def.ship.personalGains);
   }
 
+  counterPayoffPreview(type = null, opts = {}) {
+    if (this.isBattleTest()) return null;
+    const intel = opts.intel || this.nextShipIntel();
+    const mainKey = opts.mainKey || (intel && intel.mainKey);
+    if (!mainKey || typeof SCOUTED_SHIP_COUNTERS !== 'object') return null;
+
+    const counterTypes = Array.isArray(SCOUTED_SHIP_COUNTERS[mainKey])
+      ? SCOUTED_SHIP_COUNTERS[mainKey].filter(counterType => !!TYPES[counterType])
+      : [];
+    if (!counterTypes.length) return null;
+    if (type && !counterTypes.includes(type)) return null;
+
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const scaledName = intel && intel.mainLabel
+      ? String(intel.mainLabel).replace(/^\S+\s+/, '').trim()
+      : '';
+    const enemyName = scaledName || (enemy && enemy.name) || mainKey;
+    const counterNames = counterTypes
+      .map(counterType => TYPES[counterType] && TYPES[counterType].name)
+      .filter(Boolean);
+    const armed = !!(opts.armed || opts.prepared || opts.watchReady);
+    const damage = armed ? 5 : 3;
+    const guardsRemoved = armed ? 2 : 1;
+    const guardText = `${guardsRemoved} guard${guardsRemoved === 1 ? '' : 's'}`;
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
+    const bountyText = bountyEmoji ? `survive win +${bountyEmoji}` : '';
+    const line1 = `Vs ${enemyName}: Ambush ${damage}`;
+    const line2 = [`cut ${guardText}`, bountyText].filter(Boolean).join(', ');
+    const text = [line1, line2].filter(Boolean).join(', ');
+
+    return {
+      mainKey,
+      enemyName,
+      counterTypes,
+      counterNames,
+      damage,
+      guardsRemoved,
+      bountyRes: bountyRes || null,
+      bountyEmoji: bountyEmoji || '',
+      armed,
+      line1,
+      line2,
+      text,
+      shopLines: [line1, line2].filter(Boolean),
+    };
+  }
+
+  counterPayoffPreviewForQuote(type, quote, opts = {}) {
+    if (!quote || !quote.counter) return null;
+    return this.counterPayoffPreview(type, {
+      ...opts,
+      prepared: !!quote.preparedCounter,
+    });
+  }
+
   updateFullCrewDiscountForCompletedIsland() {
     G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
     return G.fullCrewDiscount;
@@ -1362,6 +1418,10 @@ class GameScene extends Phaser.Scene {
     if (!def) {
       return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
+    const withPayoff = (quote) => {
+      const payoff = this.counterPayoffPreviewForQuote(type, quote);
+      return payoff ? { ...quote, counterPayoff: payoff } : quote;
+    };
     const isProjection = !!state;
     const source = state || {};
     const discountPool = source.fullCrewDiscount != null
@@ -1373,7 +1433,7 @@ class GameScene extends Phaser.Scene {
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     const preparedCounter = !!(topDeck && discount > 0 && this.preparedCounterGains(type).length);
     if (enthusiasm >= effectiveCost) {
-      return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
+      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost });
     }
     const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
@@ -1382,7 +1442,7 @@ class GameScene extends Phaser.Scene {
       && !shopCreditUsed
       && missing >= 1
       && missing <= this.shopCreditMaxMissing();
-    return {
+    return withPayoff({
       canBuy: canCredit,
       credit: canCredit,
       counter,
@@ -1394,7 +1454,7 @@ class GameScene extends Phaser.Scene {
       missing,
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
-    };
+    });
   }
 
   shopPurchaseQuote(type, state = null) {
@@ -1449,7 +1509,9 @@ class GameScene extends Phaser.Scene {
     const label = quote.counter ? 'Counter ' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
-    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${credit}`;
+    const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
+    const payoffText = payoff ? ` · ${payoff.text}` : '';
+    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
