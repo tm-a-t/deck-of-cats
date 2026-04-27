@@ -1234,12 +1234,20 @@ function runFirstShellbackChecks(runtime) {
       `sample ${sample} first desc ${encounter.encounterDesc}`
     );
 
-    const cacheNode = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache);
-    const cache = cacheNode && cacheNode.scoutedCache;
-    assertFirstShellbackCheck(cache && cache.mainKey === 'shellback', `sample ${sample} first cache main ${cache && cache.mainKey}`);
-    assertFirstShellbackCheck(cache.res === 'wood', `sample ${sample} first cache res ${cache.res}`);
-    assertFirstShellbackCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
-    assertFirstShellbackCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
+    const firstEligibleCacheNodes = eligibleScoutedCounterCacheNodes(api, map.layers[firstShipLayer - 1]);
+    const firstCacheNodes = map.layers[firstShipLayer - 1].filter(node => node && node.scoutedCache);
+    assertFirstShellbackCheck(firstEligibleCacheNodes.length > 1, `sample ${sample} first pre-ship layer has ${firstEligibleCacheNodes.length} eligible lanes`);
+    assertFirstShellbackCheck(
+      firstCacheNodes.length === firstEligibleCacheNodes.length,
+      `sample ${sample} first cache nodes ${firstCacheNodes.length} !== eligible lanes ${firstEligibleCacheNodes.length}`
+    );
+    firstEligibleCacheNodes.forEach((node) => {
+      const cache = node && node.scoutedCache;
+      assertFirstShellbackCheck(cache && cache.mainKey === 'shellback', `sample ${sample} first cache main ${cache && cache.mainKey}`);
+      assertFirstShellbackCheck(cache.res === 'wood', `sample ${sample} first cache res ${cache.res}`);
+      assertFirstShellbackCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
+      assertFirstShellbackCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
+    });
 
     const laterMainKeys = [];
     for (let li = firstShipLayer + 1; li < map.layers.length; li++) {
@@ -1252,7 +1260,7 @@ function runFirstShellbackChecks(runtime) {
   }
 
   results.push({
-    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and wood cache',
+    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and wood caches on every lane',
     ok: true,
     samples,
   });
@@ -1414,11 +1422,15 @@ function runScoutedCounterShopChecks(runtime) {
   return { ok: true, checks: results };
 }
 
-function expectedScoutedCounterCacheNode(api, layer, res) {
-  const candidates = (Array.isArray(layer) ? layer : []).filter((node) => {
+function eligibleScoutedCounterCacheNodes(api, layer) {
+  return (Array.isArray(layer) ? layer : []).filter((node) => {
     const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
     return island && !island.healWounded;
   });
+}
+
+function expectedScoutedCounterCacheNode(api, layer, res) {
+  const candidates = eligibleScoutedCounterCacheNodes(api, layer);
   if (!candidates.length) return null;
 
   const matchingBonus = candidates.find((node) => {
@@ -1448,37 +1460,93 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map`);
 
     const shipCacheLayers = [];
+    let shipNo = 0;
     for (let li = 1; li < map.layers.length; li++) {
       const layer = map.layers[li];
       if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+      shipNo++;
 
       const ship = layer[0];
       const mainKey = ship.encounter && ship.encounter.mainKey;
       const res = api.SCOUTED_COUNTER_CACHE_RES[mainKey];
-      const expectedNode = expectedScoutedCounterCacheNode(api, map.layers[li - 1], res);
-      if (!expectedNode) continue;
+      const prevLayer = map.layers[li - 1];
+      const eligibleNodes = eligibleScoutedCounterCacheNodes(api, prevLayer);
+      if (!res || !eligibleNodes.length) continue;
 
-      const cacheNodes = map.layers[li - 1].filter((node) => node && node.scoutedCache);
-      assertScoutedCounterCacheCheck(cacheNodes.length === 1, `sample ${sample} layer ${li - 1} has ${cacheNodes.length} caches`);
-      const cacheNode = cacheNodes[0];
-      const cache = cacheNode.scoutedCache;
-      assertScoutedCounterCacheCheck(cacheNode.id === expectedNode.id, `sample ${sample} cache node ${cacheNode.id} !== preferred ${expectedNode.id}`);
-      assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
-      assertScoutedCounterCacheCheck(cache.res === res, `sample ${sample} cache res ${cache.res} !== ${res}`);
-      assertScoutedCounterCacheCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} cache amount/enthusiasm/alert ${cache.amount}/${cache.enthusiasm}/${cache.alert}`);
-      assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
+      const cacheNodes = prevLayer.filter((node) => node && node.scoutedCache);
+      if (shipNo === 1) {
+        const eligibleIds = new Set(eligibleNodes.map((node) => node.id));
+        assertScoutedCounterCacheCheck(
+          cacheNodes.length === eligibleNodes.length,
+          `sample ${sample} first pre-boarding layer ${li - 1} has ${cacheNodes.length} caches for ${eligibleNodes.length} eligible lanes`
+        );
+        for (const node of cacheNodes) {
+          assertScoutedCounterCacheCheck(eligibleIds.has(node.id), `sample ${sample} first cache marked ineligible node ${node.id}`);
+        }
+      } else {
+        const expectedNode = expectedScoutedCounterCacheNode(api, prevLayer, res);
+        assertScoutedCounterCacheCheck(cacheNodes.length === 1, `sample ${sample} layer ${li - 1} has ${cacheNodes.length} caches`);
+        assertScoutedCounterCacheCheck(cacheNodes[0].id === expectedNode.id, `sample ${sample} cache node ${cacheNodes[0].id} !== preferred ${expectedNode.id}`);
+      }
+
+      for (const cacheNode of cacheNodes) {
+        const cache = cacheNode.scoutedCache;
+        assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
+        assertScoutedCounterCacheCheck(cache.res === res, `sample ${sample} cache res ${cache.res} !== ${res}`);
+        assertScoutedCounterCacheCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} cache amount/enthusiasm/alert ${cache.amount}/${cache.enthusiasm}/${cache.alert}`);
+        assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
+      }
       shipCacheLayers.push(li - 1);
-      generatedCacheCount++;
+      generatedCacheCount += cacheNodes.length;
     }
 
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-    const firstCache = firstShipLayer > 0
-      ? map.layers[firstShipLayer - 1].find((node) => node && node.scoutedCache)
+    const firstEligibleNodes = firstShipLayer > 0
+      ? eligibleScoutedCounterCacheNodes(api, map.layers[firstShipLayer - 1])
+      : [];
+    const firstCaches = firstShipLayer > 0
+      ? map.layers[firstShipLayer - 1].filter((node) => node && node.scoutedCache)
       : null;
-    assertScoutedCounterCacheCheck(firstCache && !firstCache.scoutedCache.claimed, `sample ${sample} first ship cache is missing before route selection`);
+    assertScoutedCounterCacheCheck(
+      firstCaches && firstCaches.length === firstEligibleNodes.length && firstCaches.every(node => !node.scoutedCache.claimed),
+      `sample ${sample} first ship caches are missing before route selection`
+    );
     assertScoutedCounterCacheCheck(shipCacheLayers.length === 8, `sample ${sample} generated ${shipCacheLayers.length} caches`);
   }
-  results.push({ name: 'generated regular maps mark one preferred cache before every ship', ok: true, samples: 12, generatedCacheCount });
+  results.push({ name: 'generated regular maps mark every Boarding 1 lane and one preferred cache before later ships', ok: true, samples: 12, generatedCacheCount });
+
+  {
+    runtime.setSeed(0x5c0a7e11);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const cacheNodes = map.layers[firstShipLayer - 1].filter((node) => node && node.scoutedCache);
+    assertScoutedCounterCacheCheck(cacheNodes.length > 1, `first cache selection sample has only ${cacheNodes.length} cache lane`);
+    const chosen = cacheNodes[0];
+    const untouched = cacheNodes.slice(1);
+    const cache = chosen.scoutedCache;
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = 0;
+    G.boardingAlert = 2;
+    G.phase = 'map';
+    const handled = scene.applyMapNodeSelection(chosen.id);
+    assertScoutedCounterCacheCheck(handled, 'generated first cache island selection failed');
+    assertScoutedCounterCacheCheck(chosen.scoutedCache.claimed === true, 'selected first cache was not claimed');
+    assertScoutedCounterCacheCheck(untouched.every(node => node.scoutedCache && node.scoutedCache.claimed === false), 'unselected first cache lane was claimed');
+    assertScoutedCounterCacheCheck(G.res[cache.res] === 1, `generated first cache granted ${cache.res} ${G.res[cache.res]}`);
+    assertScoutedCounterCacheCheck(G.enthusiasm === 1, `generated first cache enthusiasm ${G.enthusiasm}`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `generated first cache alert ${G.boardingAlert} !== 3`);
+    assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === cache.mainKey, 'generated first cache did not arm Cache Drill');
+    results.push({ name: 'selecting one Boarding 1 cache lane claims only that lane and grants the normal cache package', ok: true });
+  }
+
+  {
+    api.initBattleTestState();
+    const G = api.getG();
+    assertScoutedCounterCacheCheck(G.mode === 'battleTest' && G.map === null, 'Battle Test generated a cache-bearing map');
+    results.push({ name: 'Battle Test starts without a map or cache lanes', ok: true });
+  }
 
   const selectNode = (node, opts = {}) => {
     api.initState();

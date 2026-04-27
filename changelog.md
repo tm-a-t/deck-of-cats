@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-064347 — rev c37deb3
+
+- Gameplay: true - Boarding 1 now marks every eligible pre-ship island lane as a Shellback Scouted Counter Cache while Boarding 2+ still marks exactly one preferred cache, so any opening route can claim the existing +1 resource, +1☠️, +1 Alert, and Cache Drill package. Validated with JS syntax checks, targeted scouted-cache/first-Shellback/map-schedule/opening-Shellback/shop checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-064347.log`.
+
 ## 2026-04-27 — run 20260427-063512 — rev 6100059
 
 - Gameplay: true - Moved Boarding 1 to layer `2` by changing the early map pacing from `3/5` island layers to `2/6`, keeping Boarding 2 on layer `9`, total map length at `40`, and the later ship schedule unchanged so Opening Counter Prep has a hard two-turn deadline before Shellback. Validated with JS syntax checks, targeted map/first-Shellback/cache/shop/opening checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-063512.log`.
