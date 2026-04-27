@@ -291,13 +291,16 @@ function generateMap() {
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
     const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
     const pathCount = earlyPathCount(seg);
+    const lockedOpeningLanes = seg === 0
+      ? chooseIslandIndices(regularIslandIndices().filter(i => i !== 2 && i !== 4), pathCount, true)
+      : null;
     for (let step = 0; step < segmentLength; step++) {
       const li = segmentBase + step;
       const earlyRestricted = li < 9;
       const available = earlyRestricted
         ? regularIslandIndices().filter(i => i !== 2 && i !== 4)
         : regularIslandIndices();
-      const islandChoices = chooseIslandIndices(
+      const islandChoices = lockedOpeningLanes || chooseIslandIndices(
         available,
         pathCount,
         earlyRestricted && pathCount >= available.length

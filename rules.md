@@ -36,6 +36,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
 - In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a route-defined `Scouted Counter Cache`.
+- Before Boarding 1, the first two island layers share one shuffled Forest/Rocky/Port lane order, so the layer-0 route choice visibly commits to the matching layer-1 `Scouted Counter Cache`.
 - The three normal Boarding 1 cache routes define the first ship's main enemy and cache resource: `Forest Island` → `Shellback` and `+1🪵`, `Rocky Island` → `Powder Bomber` and `+1🪨`, `Port Island` → `Deck Sniper` and `+1🪙`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal cache resource map.
 - Selecting an opening path before Boarding 1 updates the first ship encounter to that route's main enemy with exactly 1 `Bilge Rat` and 1 `Cabin Boy` as support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
 - During regular-run Boarding 1 only, the selected opening route also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
@@ -411,6 +412,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - `layers 3–8`: three parallel non-crossing island paths
   - `layer 9`: second ship node
 - Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
+- During the opening block before `Boarding 1`, `layers 0–1` reuse the same shuffled `Forest Island`/`Rocky Island`/`Port Island` lane order, so each straight opening path keeps its island identity from the first visible island into the `layer 1` cache.
 - The three islands on `layer 1` are the Boarding 1 route caches: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
 - `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.

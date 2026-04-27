@@ -1321,6 +1321,10 @@ function runOpeningRouteCaptainsChecks(runtime) {
     const startNode = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(cacheNode.id));
     assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
     assertOpeningRouteCaptainsCheck(startNode, `${route.label} start route missing`);
+    assertOpeningRouteCaptainsCheck(
+      startNode.islandIdx === route.islandIdx,
+      `${route.label} start island ${startNode.islandIdx} does not match cache island ${route.islandIdx}`
+    );
 
     assertOpeningRouteCaptainsCheck(scene.applyMapNodeSelection(startNode.id), `${route.label} start selection failed`);
     assertOpeningRouteCaptainsCheck(ship.encounter && ship.encounter.mainKey === route.mainKey, `${route.label} route selected ${ship.encounter && ship.encounter.mainKey}`);
@@ -1385,6 +1389,19 @@ function runMapScheduleChecks(runtime) {
       assertMapScheduleCheck(
         JSON.stringify(islandIdx) === JSON.stringify(expectedEarlyIslandIdx),
         `sample ${sample} layer ${li} islands ${islandIdx.join(',')} are not Forest/Rocky/Port once`
+      );
+    }
+
+    for (let pi = 0; pi < 3; pi++) {
+      const startNode = map.layers[0][pi];
+      const cacheNode = map.layers[1][pi];
+      assertMapScheduleCheck(
+        startNode.islandIdx === cacheNode.islandIdx,
+        `sample ${sample} opening path ${pi} changed island identity ${startNode.islandIdx} -> ${cacheNode.islandIdx}`
+      );
+      assertMapScheduleCheck(
+        cacheNode.scoutedCache,
+        `sample ${sample} opening path ${pi} layer-1 cache is missing`
       );
     }
 

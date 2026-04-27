@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-083709 — rev 5226ed4
+
+- Gameplay: true - Locked the opening route lanes so layers `0` and `1` reuse one shuffled Forest/Rocky/Port order; each first visible route now connects straight into the matching Boarding 1 Scouted Counter Cache, preserving route enemy, starter counter, primary shop counter, and cache resource identity. Validated with JS syntax checks, targeted map schedule/opening route captain/scouted cache/route shop/opening deckhand counter checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-083709.log`.
+
 ## 2026-04-27 — run 20260427-082500 — rev 027b8c7
 
 - Gameplay: true - Changed route-focused pre-Boarding-1 shops to guarantee the selected route primary counter only until the first successful purchase, then suppress `Poisoner`/`Sawbones`/`Needler` from the remaining opening shop refills in favor of distinct affordable non-counter starter options; non-counter first buys leave the primary guarantee intact, and the bought primary keeps existing top-deck, Counter Watch, Opening Counter Prep, Full Crew coverage, and Dockside Credit behavior. Validated with JS syntax checks, targeted opening route shop/opening prep/full-crew/counter-recruit/route-captain/deckhand/cache/ambush checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-082500.log`.
