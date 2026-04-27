@@ -676,7 +676,7 @@ function shopPurchaseQuote(api, G, type) {
     && !openingCounterPlan
     && counter
     && scoutedCounterTopDeck
-    && nextMainKey === 'shellback'
+    && nextMainKey
     && missing === 1
     ? 1
     : 0;
@@ -1411,7 +1411,7 @@ function makeScoutedCounterTestMap(mainKey) {
   return {
     layers: [
       [{ id: 1, type: 'island', islandIdx: 0, conns: [2] }],
-      [{ id: 2, type: 'ship', strength: 6, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
+      [{ id: 2, type: 'ship', strength: 6, openingRouteMainKey: mainKey, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
     ],
     visited: [],
     currentNodeId: null,
@@ -1426,7 +1426,7 @@ function makeDistantScoutedCounterTestMap(mainKey) {
       [{ id: 2, type: 'island', islandIdx: 1, conns: [3] }],
       [{ id: 3, type: 'island', islandIdx: 2, conns: [4] }],
       [{ id: 4, type: 'island', islandIdx: 3, conns: [5] }],
-      [{ id: 5, type: 'ship', strength: 6, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
+      [{ id: 5, type: 'ship', strength: 6, openingRouteMainKey: mainKey, encounter: { mainKey, supportKeys: ['bilgeRat', 'cabinBoy'], totalCount: 3 }, conns: [] }],
     ],
     visited: [1],
     currentNodeId: 1,
@@ -1929,6 +1929,7 @@ function runOpeningCounterSubsidyChecks(runtime) {
     G.enthusiasm = opts.enthusiasm != null ? Math.max(0, Math.floor(Number(opts.enthusiasm) || 0)) : 1;
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
     G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
+    G.openingCounterPlan = !!opts.openingCounterPlan;
     G.shopCreditUsed = !!opts.shopCreditUsed;
     G.shop = [opts.type || 'sawbones'];
     G.hand = [];
@@ -1939,50 +1940,58 @@ function runOpeningCounterSubsidyChecks(runtime) {
     return G;
   };
 
-  {
-    const G = setupPurchase({ type: 'needler', enthusiasm: 1, fullCrewDiscount: 1 });
-    const quote = scene.shopPurchaseQuote('needler');
-    const directQuote = shopPurchaseQuote(api, G, 'needler');
-    assertOpeningCounterSubsidyCheck(quote.canBuy && !quote.credit, `eligible quote was not buyable without credit: ${JSON.stringify(quote)}`);
-    assertOpeningCounterSubsidyCheck(quote.fullCrewCoverage === 1, `eligible coverage ${quote.fullCrewCoverage} !== 1`);
-    assertOpeningCounterSubsidyCheck(quote.discount === 1 && quote.missing === 1 && quote.spend === 1 && quote.alert === 0, `eligible quote economics mismatch: ${JSON.stringify(quote)}`);
-    assertOpeningCounterSubsidyCheck(quote.counter && quote.topDeck && !quote.preparedCounter && !quote.openingCounterPrepMight, `eligible quote should be top-deck without pre-boarding preparation: ${JSON.stringify(quote)}`);
-    assertOpeningCounterSubsidyCheck(directQuote.canBuy && !directQuote.credit && directQuote.fullCrewCoverage === 1 && !directQuote.preparedCounter && !directQuote.openingCounterPrepMight, `sim policy quote missed coverage or prepped early: ${JSON.stringify(directQuote)}`);
+  [
+    { label: 'Shellback', mainKey: 'shellback', type: 'needler' },
+    { label: 'Powder Bomber', mainKey: 'powderBomber', type: 'sawbones' },
+    { label: 'Deck Sniper', mainKey: 'deckSniper', type: 'needler' },
+  ].forEach(({ label, mainKey, type }) => {
+    const G = setupPurchase({ type, mainKey, enthusiasm: 1, fullCrewDiscount: 1 });
+    const quote = scene.shopPurchaseQuote(type);
+    const directQuote = shopPurchaseQuote(api, G, type);
+    assertOpeningCounterSubsidyCheck(quote.canBuy && !quote.credit, `${label} quote was not buyable without credit: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(quote.fullCrewCoverage === 1, `${label} coverage ${quote.fullCrewCoverage} !== 1`);
+    assertOpeningCounterSubsidyCheck(quote.discount === 1 && quote.missing === 1 && quote.spend === 1 && quote.alert === 0, `${label} quote economics mismatch: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(quote.counter && quote.topDeck && !quote.preparedCounter && !quote.openingCounterPrepMight, `${label} quote should be top-deck without pre-boarding preparation: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(directQuote.canBuy && !directQuote.credit && directQuote.fullCrewCoverage === 1 && !directQuote.preparedCounter && !directQuote.openingCounterPrepMight, `${label} sim policy quote missed coverage or prepped early: ${JSON.stringify(directQuote)}`);
     const plan = scene.shopPlanText();
-    assertOpeningCounterSubsidyCheck(plan.includes('Full Crew covers -1☠️') && !plan.includes('credit') && !plan.includes('prepared'), `eligible plan did not show Full Crew coverage buy: ${plan}`);
+    assertOpeningCounterSubsidyCheck(plan.includes('Full Crew covers -1☠️') && !plan.includes('credit') && !plan.includes('prepared'), `${label} plan did not show Full Crew coverage buy: ${plan}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningCounterSubsidyCheck(bought && bought.type === 'needler', 'covered Needler buy failed');
-    assertOpeningCounterSubsidyCheck(G.enthusiasm === 0, `covered buy left enthusiasm ${G.enthusiasm}`);
-    assertOpeningCounterSubsidyCheck(G.boardingAlert === 0, `covered buy added Alert ${G.boardingAlert}`);
-    assertOpeningCounterSubsidyCheck(G.shopCreditUsed === false, 'covered buy marked shopCreditUsed');
-    assertOpeningCounterSubsidyCheck(G.fullCrewDiscount === 0, 'covered buy did not consume Full Crew Discount');
-    assertOpeningCounterSubsidyCheck(G.deck[G.deck.length - 1] === bought, 'covered counter did not go to top of deck');
-    assertOpeningCounterSubsidyCheck((G.counterWatchIds || []).includes(bought.id), 'covered counter did not gain Counter Watch');
-    assertOpeningCounterSubsidyCheck(!bought.weaponKey && bought.might === 0 && bought.tempo === 0, `covered pre-boarding counter gained upgrades: ${JSON.stringify(bought)}`);
-    assertOpeningCounterSubsidyCheck(!G.discard.includes(bought), 'covered counter also went to discard');
-    results.push({ name: 'round-1 full-discount Shellback counter missing exactly one is covered without credit, Alert, Might, or Prepared', ok: true, plan });
-  }
+    assertOpeningCounterSubsidyCheck(bought && bought.type === type, `${label} covered ${type} buy failed`);
+    assertOpeningCounterSubsidyCheck(G.enthusiasm === 0, `${label} covered buy left enthusiasm ${G.enthusiasm}`);
+    assertOpeningCounterSubsidyCheck(G.boardingAlert === 0, `${label} covered buy added Alert ${G.boardingAlert}`);
+    assertOpeningCounterSubsidyCheck(G.shopCreditUsed === false, `${label} covered buy marked shopCreditUsed`);
+    assertOpeningCounterSubsidyCheck(G.fullCrewDiscount === 0, `${label} covered buy did not consume Full Crew Discount`);
+    assertOpeningCounterSubsidyCheck(G.deck[G.deck.length - 1] === bought, `${label} covered counter did not go to top of deck`);
+    assertOpeningCounterSubsidyCheck((G.counterWatchIds || []).includes(bought.id), `${label} covered counter did not gain Counter Watch`);
+    assertOpeningCounterSubsidyCheck(!bought.weaponKey && bought.might === 0 && bought.tempo === 0, `${label} covered pre-boarding counter gained upgrades: ${JSON.stringify(bought)}`);
+    assertOpeningCounterSubsidyCheck(!G.discard.includes(bought), `${label} covered counter also went to discard`);
+    results.push({ name: `round-1 full-discount ${label} counter missing exactly one is covered without credit, Alert, Might, or Prepared`, ok: true, plan });
+  });
 
-  {
+  [
+    { label: 'Shellback', mainKey: 'shellback', type: 'needler' },
+    { label: 'Powder Bomber', mainKey: 'powderBomber', type: 'sawbones' },
+    { label: 'Deck Sniper', mainKey: 'deckSniper', type: 'needler' },
+  ].forEach(({ label, mainKey, type }) => {
     api.initState();
     const G = api.getG();
     G.mode = 'run';
-    G.map = makeScoutedCounterTestMap('shellback');
+    G.map = makeScoutedCounterTestMap(mainKey);
     G.round = 1;
     G.boardingCount = 0;
     G.phase = 'sending';
     G.island = scene.buildIslandState(api.ISLANDS[0]);
-    G.shop = ['needler'];
+    G.shop = [type];
     G.enthusiasm = 0;
     G.boardingAlert = 0;
     G.fullCrewDiscount = 0;
     G.shopCreditUsed = false;
     G.sent = [];
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
-    assertOpeningCounterSubsidyCheck(fullLine.includes('Full Crew -1☠️'), `full-send line lacks discount: ${fullLine}`);
-    assertOpeningCounterSubsidyCheck(fullLine.includes('Full Crew covers -1☠️') && !fullLine.includes('credit') && !fullLine.includes('prepared'), `full-send projection did not expose Full Crew coverage without credit: ${fullLine}`);
-    results.push({ name: 'round-1 full-send sending plan previews Full Crew coverage for the Shellback counter buy', ok: true, fullLine });
-  }
+    assertOpeningCounterSubsidyCheck(fullLine.includes('Full Crew -1☠️'), `${label} full-send line lacks discount: ${fullLine}`);
+    assertOpeningCounterSubsidyCheck(fullLine.includes('Full Crew covers -1☠️') && !fullLine.includes('credit') && !fullLine.includes('prepared'), `${label} full-send projection did not expose Full Crew coverage without credit: ${fullLine}`);
+    results.push({ name: `round-1 full-send sending plan previews Full Crew coverage for the ${label} counter buy`, ok: true, fullLine });
+  });
 
   const cases = [
     {
@@ -2026,9 +2035,9 @@ function runOpeningCounterSubsidyChecks(runtime) {
       expect: { canBuy: false, credit: false, alert: 0, prepared: false },
     },
     {
-      name: 'non-Shellback one-missing discounted top-deck counters use Dockside Credit',
-      opts: { type: 'sawbones', mainKey: 'powderBomber', enthusiasm: 1, fullCrewDiscount: 1 },
-      expect: { canBuy: true, credit: true, alert: 1, prepared: false },
+      name: 'Opening Counter Prep blocks Full Crew coverage and still gives the counter +Might',
+      opts: { type: 'sawbones', mainKey: 'powderBomber', enthusiasm: 1, fullCrewDiscount: 1, openingCounterPlan: true },
+      expect: { canBuy: true, credit: true, alert: 1, prepared: false, prepMight: true },
     },
   ];
 
@@ -2042,6 +2051,10 @@ function runOpeningCounterSubsidyChecks(runtime) {
     assertOpeningCounterSubsidyCheck(!!quote.credit === !!expect.credit, `${name} credit ${quote.credit} !== ${expect.credit}`);
     assertOpeningCounterSubsidyCheck(Math.max(0, quote.alert || 0) === expect.alert, `${name} alert ${quote.alert} !== ${expect.alert}`);
     assertOpeningCounterSubsidyCheck(!!quote.preparedCounter === !!expect.prepared, `${name} prepared ${quote.preparedCounter} !== ${expect.prepared}`);
+    if (expect.prepMight != null) {
+      assertOpeningCounterSubsidyCheck(!!quote.openingCounterPrepMight === !!expect.prepMight, `${name} prep Might ${quote.openingCounterPrepMight} !== ${expect.prepMight}`);
+      assertOpeningCounterSubsidyCheck(!!directQuote.openingCounterPrepMight === !!expect.prepMight, `${name} sim prep Might ${directQuote.openingCounterPrepMight} !== ${expect.prepMight}`);
+    }
     if (expect.planNoCovered) {
       const plan = scene.shopPlanText();
       assertOpeningCounterSubsidyCheck(!plan.includes('covers'), `${name} displayed coverage: ${plan}`);
@@ -2384,6 +2397,55 @@ function runOpeningRouteCounterShopChecks(runtime) {
   assertOpeningRouteCounterShopCheck(!bought.weaponKey, `pre-boarding full-send Poisoner was Prepared with ${bought.weaponKey}`);
   assertOpeningRouteCounterShopCheck(!G.discard.includes(bought), 'Poisoner also went to discard');
   results.push({ name: 'round-1 full-send buys watched top-deck Poisoner for 1 without pre-boarding discount preparation', ok: true, quote });
+
+  [
+    { label: 'Rocky', mainKey: 'powderBomber', type: 'sawbones' },
+    { label: 'Port', mainKey: 'deckSniper', type: 'needler' },
+  ].forEach(({ label, mainKey, type }, routeIndex) => {
+    runtime.setSeed((0x704501b0 + routeIndex) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    assertOpeningRouteCounterShopCheck(routeCache, `missing ${label} ${mainKey} cache`);
+    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(routeCache.id));
+    assertOpeningRouteCounterShopCheck(firstIsland && firstIsland.type === 'island', `missing ${label} first island setup`);
+    assertOpeningRouteCounterShopCheck(scene.applyMapNodeSelection(firstIsland.id), `${label} first island selection failed`);
+    assertOpeningRouteCounterShopCheck(map.layers[firstShipLayer][0].encounter.mainKey === mainKey, `${label} route did not scout ${mainKey}`);
+    assertOpeningRouteCounterShopCheck(G.shop.includes(type), `${label} round-1 shop lacks ${type}: ${G.shop.join(',')}`);
+
+    G.sent = Array.from({ length: scene.maxSend() }, (_, index) => index);
+    updateFullCrewDiscountForSim(scene, G);
+    applyShipWagesForSim(scene, G);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `${label} full send wages left ${G.enthusiasm} enthusiasm`);
+    assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 1, `${label} full send discount ${G.fullCrewDiscount}`);
+    assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `${label} full send added Alert ${G.boardingAlert}`);
+
+    const index = G.shop.indexOf(type);
+    const routeQuote = scene.shopPurchaseQuote(type);
+    const routeDirectQuote = shopPurchaseQuote(api, G, type);
+    assertOpeningRouteCounterShopCheck(index >= 0, `${label} ${type} not found in shop for buy`);
+    assertOpeningRouteCounterShopCheck(routeQuote.canBuy && !routeQuote.credit, `${label} ${type} quote was not covered without credit: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.counter && routeQuote.topDeck && !routeQuote.preparedCounter, `${label} ${type} should be a watched top-deck counter without preparation: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.discount === 1 && routeQuote.effectiveCost === 2 && routeQuote.spend === 1 && routeQuote.missing === 1, `${label} ${type} economics mismatch: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.fullCrewCoverage === 1 && !routeQuote.credit && routeQuote.alert === 0, `${label} ${type} missed route-agnostic Full Crew coverage: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeDirectQuote.canBuy && !routeDirectQuote.credit && routeDirectQuote.fullCrewCoverage === 1 && !routeDirectQuote.preparedCounter, `${label} sim policy quote mismatch: ${JSON.stringify(routeDirectQuote)}`);
+
+    const covered = scene.buyPirate(index, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(covered && covered.type === type, `${label} ${type} buy failed`);
+    assertOpeningRouteCounterShopCheck(G.enthusiasm === 0, `${label} covered buy left enthusiasm ${G.enthusiasm}`);
+    assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `${label} covered buy added Alert ${G.boardingAlert}`);
+    assertOpeningRouteCounterShopCheck(G.shopCreditUsed === false, `${label} covered buy used Dockside Credit`);
+    assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 0, `${label} covered buy did not consume Full Crew Discount`);
+    assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === covered, `${label} covered counter did not go to top of deck`);
+    assertOpeningRouteCounterShopCheck((G.counterWatchIds || []).includes(covered.id), `${label} covered counter did not gain Counter Watch`);
+    assertOpeningRouteCounterShopCheck(!covered.weaponKey && (covered.might || 0) === 0 && (covered.tempo || 0) === 0, `${label} pre-boarding covered counter gained upgrades: ${JSON.stringify(covered)}`);
+    assertOpeningRouteCounterShopCheck(!G.discard.includes(covered), `${label} covered counter also went to discard`);
+    results.push({ name: `round-1 full-send ${label} route buys watched covered ${type} without credit`, ok: true, quote: routeQuote });
+  });
 
   return { ok: true, checks: results };
 }

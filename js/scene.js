@@ -1553,7 +1553,7 @@ class GameScene extends Phaser.Scene {
       && counter
       && topDeck
       && intel
-      && intel.mainKey === 'shellback'
+      && intel.mainKey
       && missing === 1
       ? 1
       : 0;
