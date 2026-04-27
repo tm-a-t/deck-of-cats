@@ -339,7 +339,6 @@ class ShopScene extends Phaser.Scene {
       const tags = [];
       if (quote.counter) tags.push('Counter');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
-      else if (quote.openingCounterPrep) tags.push('Opening Prep');
       if (quote.openingFullCrewReport) tags.push('Full Crew report');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');

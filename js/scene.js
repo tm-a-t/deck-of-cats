@@ -1515,10 +1515,10 @@ class GameScene extends Phaser.Scene {
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
     const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
-    const consumesOpeningCounterPlan = !!openingCounterPrep;
+    const consumesOpeningCounterPlan = !!openingCounterPrepMight;
     const shared = {
       openingCounterPlan: openingCounterPrep,
-      openingCounterPrep,
+      openingCounterPrep: openingCounterPrepMight,
       openingCounterPrepMight,
       openingFullCrewReport,
       consumesOpeningCounterPlan,
@@ -1594,8 +1594,8 @@ class GameScene extends Phaser.Scene {
       spend: canCredit ? enthusiasm : 0,
       fullCrewCoverage: 0,
       ...shared,
-      consumesOpeningCounterPlan: !!(openingCounterPrep && canCredit),
-      consumesOpeningCounterPrep: !!(openingCounterPrep && canCredit),
+      consumesOpeningCounterPlan: !!(openingCounterPrepMight && canCredit),
+      consumesOpeningCounterPrep: !!(openingCounterPrepMight && canCredit),
     });
   }
 
@@ -1649,9 +1649,7 @@ class GameScene extends Phaser.Scene {
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
     const label = quote.counter ? 'Counter ' : '';
-    const prep = quote.openingCounterPrep
-      ? (quote.openingCounterPrepMight ? ', Opening Prep +💪' : ', spends Opening Prep')
-      : '';
+    const prep = quote.openingCounterPrepMight ? ', Opening Prep +💪' : '';
     const report = quote.openingFullCrewReport ? ', Full Crew report' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
