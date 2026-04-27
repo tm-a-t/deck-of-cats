@@ -2570,7 +2570,7 @@ function runCounterAmbushChecks(runtime) {
   }
 
   {
-    const { G, pirates, enemies } = setupRegular({
+    const { G, pirates, enemies, combat } = setupRegular({
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],
       playerRows: [[0, 0, 0], [1, 1, 0]],
@@ -2592,8 +2592,80 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!second && target.hp === hpAfter && target.wounds === 1, 'Counter Ambush repeated');
     scene.finishBoardingCombat('win');
     assertCounterAmbushCheck(!G.combat.openingBreakPlunder, 'unarmed ambush stored Opening plunder');
-    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `unarmed ambush granted Opening plunder ${JSON.stringify(G.res)}`);
-    results.push({ name: 'front-row matching counter ambushes once for 3 damage and 1 Wound', ok: true });
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 1, `unarmed ambush bounty ${JSON.stringify(G.res)} !== +1 stone`);
+    assertCounterAmbushCheck(combat.ambushBounty && combat.ambushBounty.resource === 'stone', 'unarmed ambush did not store stone Ambush Bounty');
+    assertCounterAmbushCheck(combat.ambushBounty.pirateId === pirates[0].id, 'Ambush Bounty was not tied to the ambusher');
+    results.push({ name: 'front-row matching counter ambushes once and surviving ambusher wins mapped Ambush Bounty', ok: true, res: { ...G.res } });
+  }
+
+  {
+    const { G, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 1, 0]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'Ambush Bounty death setup did not ambush');
+    scene.defeatCombatFighter(combat.playerFighters[0], []);
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(G.res.gold === 0, `defeated ambusher granted Ambush Bounty ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.ambushBounty, 'defeated ambusher stored Ambush Bounty');
+    results.push({ name: 'defeated ambusher wins no Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'reinforcement bounty setup did not ambush');
+    G.hand = [pirates[1]];
+    combat.playerFighters = [fighterFor(pirates[1], 0, 0, combat)];
+    combat.reinforcementCount = 1;
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(G.res.gold === 0, `reinforcement win granted Ambush Bounty ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.ambushBounty, 'reinforcement win stored Ambush Bounty');
+    results.push({ name: 'reinforcement winning hand grants no Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'reinforcement loss bounty setup did not ambush');
+    combat.reinforcementCount = 1;
+    scene.finishBoardingCombat('loss');
+    assertCounterAmbushCheck(G.res.gold === 0, `reinforcement loss granted Ambush Bounty ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.ambushBounty, 'reinforcement loss stored Ambush Bounty');
+    results.push({ name: 'reinforcement losses grant no Ambush Bounty', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'deckSniper',
+      types: ['needler', 'sawbones', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    combat.counterAmbush = {
+      applied: true,
+      pirateId: pirates[0].id,
+      type: pirates[0].type,
+      mainKey: 'deckSniper',
+    };
+    scene.finishBoardingCombat('win');
+    assertCounterAmbushCheck(G.res.gold === 0, `Battle Test granted Ambush Bounty ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.ambushBounty, 'Battle Test stored Ambush Bounty');
+    results.push({ name: 'Battle Test never grants Ambush Bounty', ok: true });
   }
 
   const checkArmedAmbush = (name, opts = {}) => {
@@ -2669,10 +2741,11 @@ function runCounterAmbushChecks(runtime) {
     scene.finishBoardingCombat('win');
     scene.finishBoardingCombat('win');
     scene.grantOpeningBreakPlunder(combat);
-    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 1, `Opening Break Bilge Rat plunder ${JSON.stringify(G.res)} !== +1 stone`);
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 2, `Opening Break plus Ambush Bounty ${JSON.stringify(G.res)} !== +2 stone`);
     assertCounterAmbushCheck(combat.openingBreakPlunder && combat.openingBreakPlunder.supportKey === 'bilgeRat', 'Opening Break did not store Bilge Rat plunder');
     assertCounterAmbushCheck(combat.openingBreakPlunderGranted, 'Opening Break plunder was not marked granted');
-    results.push({ name: 'Boarding 1 Armed Counter Ambush with no Alert guards routes Bilge Rat and wins +1 stone Opening plunder', ok: true, res: { ...G.res } });
+    assertCounterAmbushCheck(combat.ambushBounty && combat.ambushBounty.resource === 'stone', 'Opening Break stack did not store Ambush Bounty');
+    results.push({ name: 'Boarding 1 Opening Break Bilge Rat plunder stacks with stone Ambush Bounty', ok: true, res: { ...G.res } });
   }
 
   {
@@ -2688,9 +2761,10 @@ function runCounterAmbushChecks(runtime) {
     const result = scene.applyCounterAmbush(combat, { silent: true });
     assertCounterAmbushCheck(result && result.routedSupport && result.routedSupport.key === 'cabinBoy', 'Opening Counter Break did not route front-left Cabin Boy');
     scene.finishBoardingCombat('win');
-    assertCounterAmbushCheck(G.res.wood === 1 && G.res.stone === 0, `Opening Break Cabin Boy plunder ${JSON.stringify(G.res)} !== +1 wood`);
+    assertCounterAmbushCheck(G.res.wood === 1 && G.res.stone === 1, `Opening Break Cabin Boy plus Ambush Bounty ${JSON.stringify(G.res)} !== +1 wood +1 stone`);
     assertCounterAmbushCheck(combat.openingBreakPlunder && combat.openingBreakPlunder.resource === 'wood', 'Opening Break did not store Cabin Boy wood plunder');
-    results.push({ name: 'Boarding 1 Opening Counter Break Cabin Boy win grants +1 wood', ok: true, res: { ...G.res } });
+    assertCounterAmbushCheck(combat.ambushBounty && combat.ambushBounty.resource === 'stone', 'Cabin Boy Opening Break did not store Ambush Bounty');
+    results.push({ name: 'Boarding 1 Opening Counter Break Cabin Boy win grants +1 wood and Ambush Bounty stone', ok: true, res: { ...G.res } });
   }
 
   {
@@ -2708,6 +2782,7 @@ function runCounterAmbushChecks(runtime) {
     scene.finishBoardingCombat('loss');
     assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `loss granted Opening plunder ${JSON.stringify(G.res)}`);
     assertCounterAmbushCheck(!combat.openingBreakPlunder, 'loss stored Opening plunder');
+    assertCounterAmbushCheck(!combat.ambushBounty, 'loss stored Ambush Bounty');
     results.push({ name: 'Opening Counter Break losses grant no Opening plunder', ok: true });
   }
 
@@ -2745,7 +2820,8 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Boarding 2 triggered Opening Counter Break');
     assertCounterAmbushCheck(enemies[1].alive, 'Boarding 2 routed weak support');
     scene.finishBoardingCombat('win');
-    assertCounterAmbushCheck(!combat.openingBreakPlunder && G.res.wood === 0 && G.res.stone === 0, `Boarding 2 granted Opening plunder ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.openingBreakPlunder && G.res.wood === 0 && G.res.stone === 1, `Boarding 2 Ambush Bounty result mismatch ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(combat.ambushBounty && combat.ambushBounty.resource === 'stone', 'Boarding 2 did not store Ambush Bounty');
     results.push({ name: 'Boarding 2 Armed Counter Ambush does not trigger Opening Counter Break', ok: true });
   }
 

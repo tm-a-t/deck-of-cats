@@ -2999,6 +2999,74 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  ambushBountyItem(bounty) {
+    if (!bounty || !bounty.resource) return null;
+    const key = bounty.resource;
+    const count = Math.max(0, Math.floor(Number(bounty.count) || 0));
+    const emoji = RES_EMOJI[key];
+    return count > 0 && emoji ? { key, emoji, count } : null;
+  }
+
+  grantAmbushBounty(combat = G.combat) {
+    if (!combat || combat.ambushBountyGranted) return null;
+    combat.ambushBountyGranted = true;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (combat.result && combat.result !== 'win') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const ambush = combat.counterAmbush;
+    if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
+
+    const mainKey = ambush.mainKey || this.counterAmbushMainKey(combat);
+    const resource = mainKey && SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === ambush.pirateId
+    );
+    if (!survivor) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || null;
+    const type = (pirate && pirate.type) || ambush.type || survivor.type;
+    const def = TYPES[type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const bounty = {
+      pirateId: ambush.pirateId,
+      type,
+      name: def.name || ambush.name || type || 'Pirate',
+      mainKey,
+      enemyName: enemy ? enemy.name : (ambush.targetName || mainKey),
+      resource,
+      count: 1,
+      wood: resource === 'wood' ? 1 : 0,
+      stone: resource === 'stone' ? 1 : 0,
+      gold: resource === 'gold' ? 1 : 0,
+      total: 1,
+    };
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + 1;
+    combat.ambushBounty = bounty;
+    return bounty;
+  }
+
+  showAmbushBounty(bounty) {
+    if (!bounty || !this.L) return;
+    const item = this.ambushBountyItem(bounty);
+    if (!item) return;
+
+    const label = `+${item.count > 1 ? item.count : ''}${item.emoji}`;
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 244 * L.k;
+    this.effectText(x, y, `Ambush bounty ${label}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [item]);
+    }
+  }
+
   grantBoardingTrophy(combat = G.combat) {
     if (!combat || combat.boardingTrophyGranted) return null;
     combat.boardingTrophyGranted = true;
@@ -4618,6 +4686,7 @@ class GameScene extends Phaser.Scene {
     const openingPlunder = result === 'win' ? this.grantOpeningBreakPlunder(combat) : null;
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
+    const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
@@ -4627,6 +4696,7 @@ class GameScene extends Phaser.Scene {
     this.showCounterTrophy(counterTrophy);
     this.showBoardingAlertPlunder(plunder);
     this.showOpeningBreakPlunder(openingPlunder);
+    this.showAmbushBounty(ambushBounty);
   }
 
   continueFromResolvedBoarding() {
@@ -6721,6 +6791,11 @@ class GameScene extends Phaser.Scene {
           if (openingPlunderItem) {
             const label = `+${openingPlunderItem.count > 1 ? openingPlunderItem.count : ''}${openingPlunderItem.emoji}`;
             rewardLines.push(`Opening plunder ${label}`);
+          }
+          const ambushBountyItem = this.ambushBountyItem(combat.ambushBounty);
+          if (ambushBountyItem) {
+            const label = `+${ambushBountyItem.count > 1 ? ambushBountyItem.count : ''}${ambushBountyItem.emoji}`;
+            rewardLines.push(`Ambush bounty ${label}`);
           }
           rewardLines.forEach((line, i) => {
             const rewardText = this.add.text(

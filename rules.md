@@ -125,7 +125,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
 - On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
 - Sending a watched pirate spends `Counter Watch`; if that sent pirate independently gained a Cache Drill or Short Crew early-report marker, that report marker still works normally.
-- `Counter Watch` clears when the next boarding starts, never applies in `Battle Test`, and does not change `Prepared`, `Counter Edge`, `Counter Ambush`, `Boarding Trophy`, or `Counter Trophy`.
+- `Counter Watch` clears when the next boarding starts, never applies in `Battle Test`, and does not change `Prepared`, `Counter Edge`, `Counter Ambush`, `Boarding Trophy`, `Counter Trophy`, or `Ambush Bounty`.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
 - A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
 - `Top deck` scouted counter purchases without `Full Crew Discount` still go on top of the draw pile, but are not `Prepared`.
@@ -186,7 +186,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - After a regular-run boarding is won, if the final winning combat hand has at least 1 surviving pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching survivor gains `+1 ⚡ Tempo` as a `Counter Trophy`.
 - `Counter Trophy` uses the same scouted counter map as the Shop, triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no matching counter pirate survives.
 - If a boarding is won by a reinforcement hand, only a matching survivor from that final winning combat hand can receive the `Counter Trophy`.
-- `Boarding Trophy`, `Counter Trophy`, and Alert guard plunder can all stack on the same win.
+- `Boarding Trophy`, `Counter Trophy`, Alert guard plunder, Opening plunder, and Ambush Bounty can all stack on the same win when their own conditions are met.
 - The old "sum team strength against ship strength" system no longer exists.
 - Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.
 - Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.
@@ -208,6 +208,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - A support routed by `Opening Counter Break` is not an Alert guard, grants no Alert guard plunder, and does not trigger in `Battle Test`, reinforcement hands, or Boarding 2+.
 - If that Boarding 1 is won, the support routed by `Opening Counter Break` grants separate `Opening plunder` once: `Cabin Boy` grants `+1🪵`, and `Bilge Rat` grants `+1🪨`.
 - `Opening plunder` is not Alert guard plunder, does not change Alert guard plunder totals, never triggers on losses, and never triggers in `Battle Test`, reinforcement hands, Boarding 2+, unarmed `Counter Ambush`, or `Armed Counter Ambush` that removes Alert guards instead of routing support.
+- After a regular-run boarding is won, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, grant `Ambush Bounty`: `+1` of that main enemy's Scouted Counter Cache resource.
+- `Ambush Bounty` uses the cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
+- `Ambush Bounty` is granted once per boarding, never on losses, never in `Battle Test`, never if the ambusher was defeated, and never if the win comes from a reinforcement hand.
+- `Ambush Bounty` is separate from Alert guard plunder, Opening plunder, `Boarding Trophy`, and `Counter Trophy`.
 - `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
 - `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
