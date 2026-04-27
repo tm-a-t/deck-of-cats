@@ -2667,18 +2667,10 @@ class GameScene extends Phaser.Scene {
       .filter(Boolean);
   }
 
-  boardingAlertGuardPlunder(guardCount, opts = {}) {
+  boardingAlertGuardPlunder(guardCount) {
     const plunder = { wood: 0, stone: 0, gold: 0 };
-    const removedKeys = Array.isArray(opts.removedKeys)
-      ? opts.removedKeys.map((key) => String(key || '')).filter(Boolean)
-      : [];
     this.boardingAlertGuardArchetypes(guardCount).forEach((archetype) => {
       if (!archetype) return;
-      const removedIdx = removedKeys.indexOf(archetype.key);
-      if (removedIdx >= 0) {
-        removedKeys.splice(removedIdx, 1);
-        return;
-      }
       if (archetype.key === 'cabinBoy') plunder.wood += 1;
       if (archetype.key === 'bilgeRat') plunder.stone += 1;
     });
@@ -2704,7 +2696,7 @@ class GameScene extends Phaser.Scene {
 
     const guardCount = Math.max(0, Math.min(3, Math.floor(Number(combat.boardingAlertGuards) || 0)));
     const removedKeys = this.counterAmbushRemovedAlertGuardKeys(combat);
-    const plunder = this.boardingAlertGuardPlunder(guardCount, { removedKeys });
+    const plunder = this.boardingAlertGuardPlunder(guardCount);
     if (removedKeys.length) plunder.removedByCounterAmbush = removedKeys;
     combat.alertGuardPlunder = plunder;
     if (!plunder.total) return plunder;

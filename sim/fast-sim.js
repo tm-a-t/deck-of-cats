@@ -2547,26 +2547,55 @@ function runCounterAmbushChecks(runtime) {
   };
 
   checkAlertGuardRemoval(
-    'Alert 1 Counter Ambush removes the lone Cabin Boy and pays no guard plunder',
+    'Alert 1 Counter Ambush removes the lone Cabin Boy and still pays Cabin Boy plunder',
     1,
     [['powderBomber', 0, 1], ['cabinBoy', 0, 0, 'alert']],
     'cabinBoy',
-    { wood: 0, stone: 0 }
-  );
-  checkAlertGuardRemoval(
-    'Alert 3 Counter Ambush removes the front-left Bilge Rat and preserves Cabin Boy plunder',
-    3,
-    [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
-    'bilgeRat',
     { wood: 1, stone: 0 }
   );
   checkAlertGuardRemoval(
-    'Alert 6 Counter Ambush removes one front Cabin Boy and preserves remaining guard plunder',
+    'Alert 3 Counter Ambush removes the front-left Bilge Rat and still pays full guard plunder',
+    3,
+    [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+    'bilgeRat',
+    { wood: 1, stone: 1 }
+  );
+  checkAlertGuardRemoval(
+    'Alert 6 Counter Ambush removes one front Cabin Boy and still pays full guard plunder',
     6,
     [['powderBomber', 0, 3], ['cabinBoy', 1, 0, 'alert'], ['bilgeRat', 0, 1, 'alert'], ['cabinBoy', 0, 0, 'alert']],
     'cabinBoy',
-    { wood: 1, stone: 1 }
+    { wood: 2, stone: 1 }
   );
+
+  {
+    const { G, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      enemies: [['powderBomber', 0, 3], ['cabinBoy', 1, 0, 'alert'], ['bilgeRat', 0, 1, 'alert'], ['cabinBoy', 0, 0, 'alert']],
+      boardingAlert: 6,
+      guardCount: 3,
+    });
+    scene.finishBoardingCombat('loss');
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `loss granted guard plunder: ${JSON.stringify(G.res)}`);
+    assertCounterAmbushCheck(!combat.alertGuardPlunderGranted, 'loss marked guard plunder as granted');
+    results.push({ name: 'losses grant no Alert guard plunder', ok: true });
+  }
+
+  {
+    const { G, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      enemies: [['powderBomber', 0, 3], ['cabinBoy', 1, 0, 'alert'], ['bilgeRat', 0, 1, 'alert'], ['cabinBoy', 0, 0, 'alert']],
+      boardingAlert: 6,
+      guardCount: 3,
+    });
+    const plunder = scene.grantBoardingAlertPlunder(combat);
+    assertCounterAmbushCheck(plunder === null, 'Battle Test returned Alert guard plunder');
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `Battle Test granted guard plunder: ${JSON.stringify(G.res)}`);
+    results.push({ name: 'Battle Test grants no Alert guard plunder', ok: true });
+  }
 
   {
     const { G, enemies } = setupRegular({
