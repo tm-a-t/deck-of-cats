@@ -2413,6 +2413,8 @@ class GameScene extends Phaser.Scene {
         openingSidePrepTargetName: '',
         openingSidePrepTargetPirateId: null,
         openingSidePrepTargetsMuster: false,
+        openingSidekickBountyRes: null,
+        openingSidekickBountyEmoji: '',
         openingRoutePrimary: false,
         routeCounterCover: 0,
         alarmRushedRouteCounter: false,
@@ -2485,6 +2487,12 @@ class GameScene extends Phaser.Scene {
     const openingSidePrepTarget = openingSidePrep
       ? this.openingSidePrepSupportTargetInfo(routeShopState, type)
       : null;
+    const openingSidekickBountyRes = openingSidePrep
+      && routeShopState
+      && routeShopState.mainKey
+      && SCOUTED_COUNTER_CACHE_RES
+      ? SCOUTED_COUNTER_CACHE_RES[routeShopState.mainKey] || null
+      : null;
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
@@ -2527,6 +2535,8 @@ class GameScene extends Phaser.Scene {
       openingSidePrepTargetName: openingSidePrepTarget ? openingSidePrepTarget.name : '',
       openingSidePrepTargetPirateId: openingSidePrepTarget ? openingSidePrepTarget.pirateId : null,
       openingSidePrepTargetsMuster: !!(openingSidePrepTarget && openingSidePrepTarget.targetsMuster),
+      openingSidekickBountyRes,
+      openingSidekickBountyEmoji: openingSidekickBountyRes ? (RES_EMOJI[openingSidekickBountyRes] || '') : '',
       openingRoutePrimary,
       openingCommissionReport,
       openingFullCrewReport,
@@ -2670,8 +2680,9 @@ class GameScene extends Phaser.Scene {
       ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
       : '';
     const sidePrepSupportText = openingSidePrepSupportText(quote);
+    const sidekickBountyText = openingSidekickBountyText(quote);
     const sidePrep = quote.openingSidePrep
-      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? `, ${sidePrepSupportText}` : ''}`
+      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? `, ${sidePrepSupportText}` : ''}${sidekickBountyText ? `, ${sidekickBountyText}` : ''}`
       : '';
     const alarm = quote.alarmRushedRouteCounter ? ', Alarm rush' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
@@ -3555,8 +3566,9 @@ class GameScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
+      const sidekickBountyText = openingSidekickBountyText(quote);
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingSidePrep ? ` Side Prep${prepDiscountText}` : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent'))
+        ? (quote.openingSidePrep ? ` Side Prep${prepDiscountText}${sidekickBountyText ? ` ${sidekickBountyText}` : ''}` : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent'))
         : '';
       const alarmText = quote.alarmRushedRouteCounter ? ' Alarm rush' : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
@@ -4663,12 +4675,42 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  grantRouteSidekickBounty(report, combat = G.combat) {
+    if (!combat || combat.routeSidekickBounty) return combat ? combat.routeSidekickBounty : null;
+    if (!report || report.pirateId == null || !report.mainKey) return null;
+    const resource = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[report.mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + 1;
+
+    const bounty = {
+      pirateId: report.pirateId,
+      type: report.type,
+      name: report.name,
+      mainKey: report.mainKey,
+      resource,
+      count: 1,
+      wood: resource === 'wood' ? 1 : 0,
+      stone: resource === 'stone' ? 1 : 0,
+      gold: resource === 'gold' ? 1 : 0,
+      total: 1,
+    };
+    combat.routeSidekickBounty = bounty;
+    report.bounty = bounty;
+    return bounty;
+  }
+
   markRouteSidekickReport(combat = G.combat, result = null) {
     if (!combat) return null;
-    if (combat.routeSidekickReport) return combat.routeSidekickReport;
+    if (combat.routeSidekickReport) {
+      this.grantRouteSidekickBounty(combat.routeSidekickReport, combat);
+      return combat.routeSidekickReport;
+    }
     const report = this.routeSidekickReportEligibility(combat, result);
     if (!report) return null;
     combat.routeSidekickReport = report;
+    this.grantRouteSidekickBounty(report, combat);
     return report;
   }
 
@@ -4693,7 +4735,16 @@ class GameScene extends Phaser.Scene {
   showRouteSidekickReport(report) {
     if (!report || !this.L) return;
     const L = this.L;
-    this.effectText(L.cx, this.islandContinueY() - 244 * L.k, `${report.name} sidekick reports`, '#ffd166', 760);
+    const bounty = report.bounty || (G.combat && G.combat.routeSidekickBounty) || null;
+    const emoji = bounty && RES_EMOJI[bounty.resource] ? RES_EMOJI[bounty.resource] : '';
+    const count = Math.max(0, Math.floor(Number(bounty && bounty.count) || 0));
+    const reward = emoji && count > 0 ? ` +${count > 1 ? count : ''}${emoji}` : '';
+    const x = L.cx;
+    const y = this.islandContinueY() - 244 * L.k;
+    this.effectText(x, y, `${report.name} sidekick reports${reward}`, '#ffd166', 760);
+    if (reward && typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [{ key: bounty.resource, emoji, count }]);
+    }
   }
 
   grantBoardingTrophy(combat = G.combat) {
@@ -6930,7 +6981,11 @@ class GameScene extends Phaser.Scene {
         if (counterTrophy) rewardParts.push(`${counterTrophy.name} +⚡`);
         const ambusherReport = combat.counterAmbusherReport || combat.openingAmbusherReport;
         if (ambusherReport) rewardParts.push(`${ambusherReport.name} reports next`);
-        if (combat.routeSidekickReport) rewardParts.push(`${combat.routeSidekickReport.name} sidekick reports`);
+        if (combat.routeSidekickReport) {
+          const bounty = combat.routeSidekickBounty || combat.routeSidekickReport.bounty || null;
+          const bountyEmoji = bounty && RES_EMOJI[bounty.resource] ? RES_EMOJI[bounty.resource] : '';
+          rewardParts.push(`${combat.routeSidekickReport.name} sidekick reports${bountyEmoji ? ` +${bountyEmoji}` : ''}`);
+        }
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
           line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',

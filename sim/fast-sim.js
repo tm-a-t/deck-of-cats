@@ -391,6 +391,7 @@ function buildRuntime() {
       OPENING_ROUTE_SIDE_OFFERS,
       OPENING_ROUTE_SIDE_PREP_GAINS,
       SCOUTED_COUNTER_CACHE_RES,
+      RES_EMOJI,
       GameScene,
       getG: () => G,
       setG: (next) => { G = next; },
@@ -744,6 +745,12 @@ function openingSidePrepSupportTextForQuote(api, quote) {
   return `Support${targetName ? ` ${targetName}` : ''}${gainText ? ` +${gainText}` : ''}`;
 }
 
+function openingSidekickBountyTextForQuote(api, quote) {
+  if (!quote || !quote.openingSidePrep || !quote.openingSidekickBountyRes) return '';
+  const emoji = api.RES_EMOJI && api.RES_EMOJI[quote.openingSidekickBountyRes];
+  return emoji ? `Sidekick win +${emoji}` : '';
+}
+
 function preparedCounterGainsForQuote(api, type) {
   const gains = api.TYPES[type]
     && api.TYPES[type].ship
@@ -802,6 +809,11 @@ function shopPurchaseQuote(api, G, type) {
   const openingSidePrepTarget = openingSidePrep
     ? openingSidePrepTargetInfoForQuote(api, G, openingRouteMainKey, type)
     : null;
+  const openingSidekickBountyRes = openingSidePrep
+    && openingRouteMainKey
+    && api.SCOUTED_COUNTER_CACHE_RES
+    ? api.SCOUTED_COUNTER_CACHE_RES[openingRouteMainKey] || null
+    : null;
   const discountPreparesCounter = discount > 0 && boardingCount > 0;
   const preparedCounter = !!(scoutedCounterTopDeck
     && preparedCounterGainsForQuote(api, type).length
@@ -838,6 +850,8 @@ function shopPurchaseQuote(api, G, type) {
     openingSidePrepTargetName: openingSidePrepTarget ? openingSidePrepTarget.name : '',
     openingSidePrepTargetPirateId: openingSidePrepTarget ? openingSidePrepTarget.pirateId : null,
     openingSidePrepTargetsMuster: !!(openingSidePrepTarget && openingSidePrepTarget.targetsMuster),
+    openingSidekickBountyRes,
+    openingSidekickBountyEmoji: openingSidekickBountyRes && api.RES_EMOJI ? (api.RES_EMOJI[openingSidekickBountyRes] || '') : '',
     openingRoutePrimary,
     openingCommissionReport,
     openingFullCrewReport,
@@ -4459,6 +4473,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
         && !sideQuote.counter
         && sideQuote.topDeck
         && sideQuote.openingSidePrep
+        && sideQuote.openingSidekickBountyRes === api.SCOUTED_COUNTER_CACHE_RES[mainKey]
         && !sideQuote.openingCounterPrepMight
         && sideQuote.consumesOpeningCounterPlan
         && sideQuote.openingCounterPrepDiscount === 1
@@ -4479,13 +4494,19 @@ function runOpeningRouteCounterShopChecks(runtime) {
         && directQuote.topDeck
         && !directQuote.counter
         && directQuote.openingSidePrepTargetsMuster
-        && directQuote.openingSidePrepTargetType === starterType,
+        && directQuote.openingSidePrepTargetType === starterType
+        && directQuote.openingSidekickBountyRes === api.SCOUTED_COUNTER_CACHE_RES[mainKey],
       `${label} sim helper missed Opening Side Prep: ${JSON.stringify(directQuote)}`
     );
     const supportText = openingSidePrepSupportTextForQuote(api, sideQuote);
+    const sidekickBountyText = openingSidekickBountyTextForQuote(api, sideQuote);
     assertOpeningRouteCounterShopCheck(
       supportText.includes(api.TYPES[starterType].name) && supportText.includes(expectedGain.might ? '💪' : '⚡'),
       `${label} side prep support text missed target/gain: ${supportText}`
+    );
+    assertOpeningRouteCounterShopCheck(
+      sidekickBountyText.includes(api.RES_EMOJI[api.SCOUTED_COUNTER_CACHE_RES[mainKey]]),
+      `${label} side prep bounty text missed resource: ${sidekickBountyText}`
     );
     const marksBefore = JSON.stringify(G.cacheDrillBountyMarks || []);
     const expectedEnthusiasm = api.TYPES[sideOffer].cost - sideQuote.spend;
@@ -4559,10 +4580,12 @@ function runOpeningRouteCounterShopChecks(runtime) {
     G.boardingAlert = 0;
     const planLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     assertOpeningRouteCounterShopCheck(
-      planLine.includes(`Support ${api.TYPES[route.starterType].name} +💪`) && planLine.includes('Side Prep -1☠️'),
-      `side-prep sending plan did not expose target support: ${planLine}`
+      planLine.includes(`Support ${api.TYPES[route.starterType].name} +💪`)
+        && planLine.includes('Side Prep -1☠️')
+        && planLine.includes(`Sidekick win +${api.RES_EMOJI[api.SCOUTED_COUNTER_CACHE_RES[route.mainKey]]}`),
+      `side-prep sending plan did not expose target support and bounty: ${planLine}`
     );
-    results.push({ name: 'sending plan exposes the Opening Side Prep support target by name', ok: true, planLine });
+    results.push({ name: 'sending plan exposes the Opening Side Prep support target and sidekick bounty by name', ok: true, planLine });
   }
 
   {
@@ -8487,13 +8510,32 @@ function runRouteSidekickReportChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
   const results = [];
-  const route = {
-    label: 'Rocky',
-    mainKey: 'powderBomber',
-    starterType: 'miner',
-    primary: 'sawbones',
-    sideOffer: 'trainer',
-  };
+  const routes = [
+    {
+      label: 'Forest',
+      mainKey: 'shellback',
+      starterType: 'lumberjack',
+      primary: 'poisoner',
+      sideOffer: 'drummer',
+      bountyRes: 'wood',
+    },
+    {
+      label: 'Rocky',
+      mainKey: 'powderBomber',
+      starterType: 'miner',
+      primary: 'sawbones',
+      sideOffer: 'trainer',
+      bountyRes: 'stone',
+    },
+    {
+      label: 'Port',
+      mainKey: 'deckSniper',
+      starterType: 'armsman',
+      primary: 'needler',
+      sideOffer: 'survivalist',
+      bountyRes: 'gold',
+    },
+  ];
 
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
@@ -8504,12 +8546,14 @@ function runRouteSidekickReportChecks(runtime) {
     return { firstShipLayer, routeCache, firstIsland };
   };
 
-  const buyOpeningSidekick = (seed = 0x51de51de) => {
+  const resourceCount = (G, res) => Math.max(0, Math.floor(Number(G.res && G.res[res]) || 0));
+
+  const buyOpeningSidekick = (route, seed = 0x51de51de) => {
     runtime.setSeed(seed >>> 0);
     api.initState();
     const G = api.getG();
     const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
-    assertRouteSidekickReportCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'route selection failed');
+    assertRouteSidekickReportCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
     G.fullCrewDiscount = 0;
@@ -8518,12 +8562,22 @@ function runRouteSidekickReportChecks(runtime) {
     G.enthusiasm = api.TYPES[route.sideOffer].cost;
     G.shop = [route.primary, route.sideOffer, 'herald', 'survivalist'];
     const quote = scene.shopPurchaseQuote(route.sideOffer);
-    assertRouteSidekickReportCheck(quote.canBuy && quote.openingSidePrep && quote.topDeck && !quote.counter, `sidekick quote mismatch: ${JSON.stringify(quote)}`);
+    const bountyRes = api.SCOUTED_COUNTER_CACHE_RES[route.mainKey];
+    const bountyText = openingSidekickBountyTextForQuote(api, quote);
+    assertRouteSidekickReportCheck(
+      quote.canBuy
+        && quote.openingSidePrep
+        && quote.topDeck
+        && !quote.counter
+        && quote.openingSidekickBountyRes === bountyRes
+        && bountyText.includes(api.RES_EMOJI[bountyRes]),
+      `${route.label} sidekick quote mismatch: ${JSON.stringify(quote)}`
+    );
     const sidekick = scene.buyPirate(1, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertRouteSidekickReportCheck(sidekick && sidekick.type === route.sideOffer, 'Opening Side Prep buy failed');
-    assertRouteSidekickReportCheck(G.openingRouteSidekick && G.openingRouteSidekick.pirateId === sidekick.id && G.openingRouteSidekick.mainKey === route.mainKey && G.openingRouteSidekick.type === route.sideOffer, `wrong sidekick marker: ${JSON.stringify(G.openingRouteSidekick)}`);
-    assertRouteSidekickReportCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'sidekick buy secured the route primary');
-    assertRouteSidekickReportCheck(!(G.counterWatchIds || []).includes(sidekick.id), 'sidekick gained Counter Watch');
+    assertRouteSidekickReportCheck(sidekick && sidekick.type === route.sideOffer, `${route.label} Opening Side Prep buy failed`);
+    assertRouteSidekickReportCheck(G.openingRouteSidekick && G.openingRouteSidekick.pirateId === sidekick.id && G.openingRouteSidekick.mainKey === route.mainKey && G.openingRouteSidekick.type === route.sideOffer, `${route.label} wrong sidekick marker: ${JSON.stringify(G.openingRouteSidekick)}`);
+    assertRouteSidekickReportCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, `${route.label} sidekick buy secured the route primary`);
+    assertRouteSidekickReportCheck(!(G.counterWatchIds || []).includes(sidekick.id), `${route.label} sidekick gained Counter Watch`);
     return { G, sidekick };
   };
 
@@ -8549,8 +8603,8 @@ function runRouteSidekickReportChecks(runtime) {
     scene.continueFromResolvedBoarding();
   };
 
-  const setupBoarding = (opts = {}) => {
-    const { G, sidekick } = buyOpeningSidekick(opts.seed || 0x51de51de);
+  const setupBoarding = (route, opts = {}) => {
+    const { G, sidekick } = buyOpeningSidekick(route, opts.seed || 0x51de51de);
     const ambusher = (G.allCrew || []).find(pirate => pirate && pirate.type === route.starterType && pirate.id !== sidekick.id);
     const filler = (G.allCrew || []).find(pirate => pirate && pirate.id !== sidekick.id && (!ambusher || pirate.id !== ambusher.id));
     [sidekick, ambusher, filler].filter(Boolean).forEach((pirate) => {
@@ -8603,24 +8657,32 @@ function runRouteSidekickReportChecks(runtime) {
     return { G, sidekick, ambusher, filler, combat: G.combat };
   };
 
-  {
-    const { G, sidekick, combat } = setupBoarding({ seed: 0x51de5101 });
+  routes.forEach((route, index) => {
+    const { G, sidekick, combat } = setupBoarding(route, { seed: 0x51de5101 + index });
+    const before = resourceCount(G, route.bountyRes);
     scene.finishBoardingCombat('win');
-    assertRouteSidekickReportCheck(combat.routeSidekickReport && combat.routeSidekickReport.pirateId === sidekick.id, 'winning Boarding 1 did not mark Route Sidekick Report');
-    assertRouteSidekickReportCheck(!G.openingRouteSidekick, 'Route Sidekick marker did not clear after Boarding 1 resolved');
+    assertRouteSidekickReportCheck(combat.routeSidekickReport && combat.routeSidekickReport.pirateId === sidekick.id, `${route.label} winning Boarding 1 did not mark Route Sidekick Report`);
+    assertRouteSidekickReportCheck(combat.routeSidekickBounty && combat.routeSidekickBounty.pirateId === sidekick.id, `${route.label} winning Boarding 1 did not mark Route Sidekick Bounty`);
+    assertRouteSidekickReportCheck(combat.routeSidekickBounty.resource === route.bountyRes && combat.routeSidekickBounty.count === 1, `${route.label} wrong sidekick bounty: ${JSON.stringify(combat.routeSidekickBounty)}`);
+    assertRouteSidekickReportCheck(resourceCount(G, route.bountyRes) === before + 1, `${route.label} sidekick bounty did not pay exactly +1 ${route.bountyRes}`);
+    scene.markRouteSidekickReport(combat, 'win');
+    assertRouteSidekickReportCheck(resourceCount(G, route.bountyRes) === before + 1, `${route.label} sidekick bounty duplicated on remark`);
+    assertRouteSidekickReportCheck(!G.openingRouteSidekick, `${route.label} Route Sidekick marker did not clear after Boarding 1 resolved`);
     continueBoardingImmediately(G);
-    assertRouteSidekickReportCheck(G.hand[0] === sidekick, 'reported sidekick was not drawn first');
-    assertRouteSidekickReportCheck(!G.deck.includes(sidekick) && !G.discard.includes(sidekick), 'reported sidekick remained in deck or discard');
-    assertRouteSidekickReportCheck(countRefs(G, sidekick) === 1, 'reported sidekick duplicated across piles');
-    results.push({ name: 'surviving Opening Side Prep sidekick reports next after a non-reinforcement Boarding 1 win', ok: true });
-  }
+    assertRouteSidekickReportCheck(G.hand[0] === sidekick, `${route.label} reported sidekick was not drawn first`);
+    assertRouteSidekickReportCheck(!G.deck.includes(sidekick) && !G.discard.includes(sidekick), `${route.label} reported sidekick remained in deck or discard`);
+    assertRouteSidekickReportCheck(countRefs(G, sidekick) === 1, `${route.label} reported sidekick duplicated across piles`);
+    results.push({ name: `${route.label} Opening Side Prep sidekick reports next and pays +1 ${route.bountyRes}`, ok: true });
+  });
 
   {
-    const { G, sidekick, ambusher, combat } = setupBoarding({ seed: 0x51de5102, counterAmbush: true });
+    const route = routes[1];
+    const { G, sidekick, ambusher, combat } = setupBoarding(route, { seed: 0x51de5104, counterAmbush: true });
     assertRouteSidekickReportCheck(ambusher, 'missing starter ambusher for priority setup');
     scene.finishBoardingCombat('win');
     assertRouteSidekickReportCheck(combat.counterAmbusherReport && combat.counterAmbusherReport.pirateId === ambusher.id, 'ambusher report was not marked');
     assertRouteSidekickReportCheck(combat.routeSidekickReport && combat.routeSidekickReport.pirateId === sidekick.id, 'sidekick report was not marked alongside ambusher');
+    assertRouteSidekickReportCheck(combat.routeSidekickBounty && combat.routeSidekickBounty.resource === route.bountyRes, 'sidekick bounty was not marked alongside ambusher');
     continueBoardingImmediately(G);
     assertRouteSidekickReportCheck(G.hand[0] === ambusher && G.hand[1] === sidekick, 'ambusher did not draw above Route Sidekick');
     assertRouteSidekickReportCheck(countRefs(G, ambusher) === 1 && countRefs(G, sidekick) === 1, 'priority reports duplicated a pirate');
@@ -8628,41 +8690,43 @@ function runRouteSidekickReportChecks(runtime) {
   }
 
   {
-    const { G, sidekick } = buyOpeningSidekick(0x51de5103);
+    const route = routes[1];
+    const { G, sidekick } = buyOpeningSidekick(route, 0x51de5105);
     scene.sacrificePirate(sidekick, 0, 0);
     assertRouteSidekickReportCheck(!G.openingRouteSidekick, 'removed sidekick left its marker active');
     results.push({ name: 'removed Route Sidekick markers clear immediately', ok: true });
   }
 
+  const negativeRoute = routes[1];
   [
     {
       name: 'losses',
-      setup: () => setupBoarding({ seed: 0x51de5104 }),
+      setup: () => setupBoarding(negativeRoute, { seed: 0x51de5106 }),
       result: 'loss',
       check: ({ combat }) => !combat.routeSidekickReport,
     },
     {
       name: 'reinforcement-hand wins',
-      setup: () => setupBoarding({ seed: 0x51de5105, reinforcementCount: 1 }),
+      setup: () => setupBoarding(negativeRoute, { seed: 0x51de5107, reinforcementCount: 1 }),
       result: 'win',
       check: ({ combat }) => !combat.routeSidekickReport,
     },
     {
       name: 'Battle Test',
-      setup: () => setupBoarding({ seed: 0x51de5106, mode: 'battleTest' }),
+      setup: () => setupBoarding(negativeRoute, { seed: 0x51de5108, mode: 'battleTest' }),
       result: 'win',
       check: ({ combat }) => !combat.routeSidekickReport,
     },
     {
       name: 'Boarding 2+',
-      setup: () => setupBoarding({ seed: 0x51de5107, boardingCount: 2 }),
+      setup: () => setupBoarding(negativeRoute, { seed: 0x51de5109, boardingCount: 2 }),
       result: 'win',
       check: ({ combat }) => !combat.routeSidekickReport,
     },
     {
       name: 'wounded sidekicks',
       setup: () => {
-        const setup = setupBoarding({ seed: 0x51de5108 });
+        const setup = setupBoarding(negativeRoute, { seed: 0x51de5110 });
         setup.sidekick.wounded = true;
         setup.G.hand = [setup.sidekick, setup.filler].filter(Boolean);
         setup.combat.playerFighters = setup.filler
@@ -8674,9 +8738,20 @@ function runRouteSidekickReportChecks(runtime) {
       check: ({ combat }) => !combat.routeSidekickReport,
     },
     {
+      name: 'defeated sidekicks',
+      setup: () => {
+        const setup = setupBoarding(negativeRoute, { seed: 0x51de5111 });
+        const fighter = setup.combat.playerFighters.find(entry => entry && entry.pirateId === setup.sidekick.id);
+        if (fighter) scene.defeatCombatFighter(fighter, []);
+        return setup;
+      },
+      result: 'win',
+      check: ({ combat }) => !combat.routeSidekickReport,
+    },
+    {
       name: 'absent sidekicks',
       setup: () => {
-        const setup = setupBoarding({ seed: 0x51de5109 });
+        const setup = setupBoarding(negativeRoute, { seed: 0x51de5112 });
         setup.G.hand = [setup.filler].filter(Boolean);
         setup.combat.playerFighters = setup.filler
           ? [scene.buildPlayerCombatFighter(setup.filler, 0, 0, setup.combat)]
@@ -8686,16 +8761,30 @@ function runRouteSidekickReportChecks(runtime) {
       result: 'win',
       check: ({ combat }) => !combat.routeSidekickReport,
     },
+    {
+      name: 'removed sidekicks',
+      setup: () => {
+        const setup = setupBoarding(negativeRoute, { seed: 0x51de5113 });
+        setup.G.allCrew = (setup.G.allCrew || []).filter(pirate => pirate && pirate.id !== setup.sidekick.id);
+        return setup;
+      },
+      result: 'win',
+      check: ({ combat }) => !combat.routeSidekickReport,
+    },
   ].forEach((negative) => {
     const setup = negative.setup();
+    const before = resourceCount(setup.G, negativeRoute.bountyRes);
     scene.finishBoardingCombat(negative.result);
     assertRouteSidekickReportCheck(negative.check(setup), `${negative.name} marked Route Sidekick Report`);
+    assertRouteSidekickReportCheck(!setup.combat.routeSidekickBounty, `${negative.name} marked Route Sidekick Bounty`);
+    assertRouteSidekickReportCheck(resourceCount(setup.G, negativeRoute.bountyRes) === before, `${negative.name} paid Route Sidekick Bounty`);
     assertRouteSidekickReportCheck(!setup.G.openingRouteSidekick, `${negative.name} did not clear Route Sidekick marker`);
-    results.push({ name: `${negative.name} do not Route Sidekick Report`, ok: true });
+    results.push({ name: `${negative.name} do not Route Sidekick Report or Bounty`, ok: true });
   });
 
   {
-    const { G } = buyOpeningSidekick(0x51de5110);
+    const route = routes[1];
+    const { G } = buyOpeningSidekick(route, 0x51de5114);
     G.openingRouteSidekick = null;
     G.phase = 'shopping';
     G.openingCounterPlan = false;
@@ -8706,7 +8795,33 @@ function runRouteSidekickReportChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertRouteSidekickReportCheck(bought && bought.type === route.sideOffer, 'ordinary side offer buy failed');
     assertRouteSidekickReportCheck(!G.openingRouteSidekick, `ordinary side offer marked Route Sidekick: ${JSON.stringify(G.openingRouteSidekick)}`);
-    results.push({ name: 'ordinary side-offer buys do not mark Route Sidekick', ok: true });
+    const before = resourceCount(G, route.bountyRes);
+    G.phase = 'boarding';
+    G.boardingCount = 1;
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: 1,
+      encounter: { mainKey: route.mainKey, supportKeys: [], totalCount: 1 },
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+    };
+    G.hand = [bought];
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: route.mainKey,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: 0,
+    };
+    G.combat.playerFighters = [scene.buildPlayerCombatFighter(bought, 0, 0, G.combat)];
+    scene.finishBoardingCombat('win');
+    assertRouteSidekickReportCheck(!G.combat.routeSidekickReport && !G.combat.routeSidekickBounty, 'ordinary side offer triggered sidekick report or bounty');
+    assertRouteSidekickReportCheck(resourceCount(G, route.bountyRes) === before, 'ordinary side offer paid Route Sidekick Bounty');
+    results.push({ name: 'ordinary side-offer buys do not mark Route Sidekick Report or Bounty', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -9351,7 +9466,10 @@ async function runShoppingPhase(
       else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Alarm rush${coverText})`);
       else if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert${coverText})`);
       else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪${coverText})`);
-      else if (quote && quote.openingSidePrep) purchases.push(`${label} (Side Prep -${quote.openingCounterPrepDiscount || 0}☠️, ${openingSidePrepSupportTextForQuote(api, quote)}${coverText})`);
+      else if (quote && quote.openingSidePrep) {
+        const sidekickBountyText = openingSidekickBountyTextForQuote(api, quote);
+        purchases.push(`${label} (Side Prep -${quote.openingCounterPrepDiscount || 0}☠️, ${[openingSidePrepSupportTextForQuote(api, quote), sidekickBountyText].filter(Boolean).join(', ')}${coverText})`);
+      }
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️${coverText})`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️${coverText})`);
       else if (coverText) purchases.push(`${label} (${coverText.slice(2)})`);

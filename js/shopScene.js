@@ -337,6 +337,7 @@ class ShopScene extends Phaser.Scene {
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
       const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
       const sidePrepSupportText = openingSidePrepSupportText(quote);
+      const sidekickBountyText = openingSidekickBountyText(quote);
       const priceReduced = effectiveCost < Math.max(0, Math.floor(Number(def.cost) || 0));
       const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
@@ -346,6 +347,7 @@ class ShopScene extends Phaser.Scene {
       if (prepDiscount > 0) tags.push(quote.openingSidePrep ? 'Side Prep -1☠️' : 'Opening Prep -1☠️');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
       if (quote.openingSidePrep && sidePrepSupportText) tags.push(sidePrepSupportText);
+      if (quote.openingSidePrep && sidekickBountyText) tags.push(sidekickBountyText);
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
       if (coverage > 0) tags.push('Full Crew cover');
@@ -359,7 +361,7 @@ class ShopScene extends Phaser.Scene {
       const coverLine = quote.routeCounterCover > 0 ? `Cover -${quote.routeCounterCover} Alert` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
         ? (quote.openingSidePrep
-          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? ` · ${sidePrepSupportText}` : ''}`
+          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? ` · ${sidePrepSupportText}` : ''}${sidekickBountyText ? ` · ${sidekickBountyText}` : ''}`
           : (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent'))
         : '';
       const priceText = [
@@ -665,9 +667,10 @@ class ShopScene extends Phaser.Scene {
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const coverText = quote.routeCounterCover > 0 ? ` Cover -${quote.routeCounterCover} Alert` : '';
       const sidePrepSupportText = openingSidePrepSupportText(quote);
+      const sidekickBountyText = openingSidekickBountyText(quote);
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingSidePrep
-          ? ` Side Prep${prepDiscountText}${sidePrepSupportText ? ` ${sidePrepSupportText}` : ''}`
+          ? ` Side Prep${prepDiscountText}${sidePrepSupportText ? ` ${sidePrepSupportText}` : ''}${sidekickBountyText ? ` ${sidekickBountyText}` : ''}`
           : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent'))
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';

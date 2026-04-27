@@ -586,6 +586,12 @@ function openingSidePrepSupportText(quote) {
   return `Support${targetText}${gainText ? ` +${gainText}` : ''}`;
 }
 
+function openingSidekickBountyText(quote) {
+  if (!quote || !quote.openingSidePrep || !quote.openingSidekickBountyRes) return '';
+  const emoji = RES_EMOJI[quote.openingSidekickBountyRes] || '';
+  return emoji ? `Sidekick win +${emoji}` : '';
+}
+
 function pirateBuffStatusText(pirate) {
   if (!pirate || typeof pirate !== 'object') return '';
   const might = Math.max(0, Math.floor(Number(pirate.might) || 0));

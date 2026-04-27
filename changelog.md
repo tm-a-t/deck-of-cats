@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-214452 — rev 7fd12f8 — build 0.1.0
+
+- Gameplay: true - Added Route Sidekick Bounty: Opening Side Prep sidekicks that qualify for Route Sidekick Report on a regular Boarding 1 win now pay `+1` route cache resource (`🪵`/`🪨`/`🪙`) once, with shop and plan text previewing the bounty. Validated with JS syntax checks, `node sim/fast-sim.js --check-route-sidekick-report --json`, `node sim/fast-sim.js --check-opening-side-prep --json`, related counter/cache targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-214452.log`.
+
 ## 2026-04-27 — run 20260427-212947 — rev 2149bca — build 0.1.0
 
 - Gameplay: true - Added Route Sidekick Report: Opening Side Prep side-offer buys now mark the bought pirate as the Route Sidekick, and a surviving, unwounded sidekick in the winning Boarding 1 opening hand reports into the next draw below any Counter Ambusher Report pirate. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-side-prep --json`, `node sim/fast-sim.js --check-route-sidekick-report --json`, `node sim/fast-sim.js --check-counter-ambusher-report --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-212947.log`.
