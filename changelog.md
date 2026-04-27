@@ -2,6 +2,14 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-004528 — rev 17e8458
+
+- Gameplay: true - Cache Drill now musters the drilled counter for the scouted fight: the first surviving matching counter that claims Cache Drill is marked, then on the next Shop `Continue` it is placed on top of the draw pile above any shop `Top deck` buys, without duplicating the card or mustering removed pirates. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-map-schedule --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-004528.log`.
+
+## 2026-04-27 — run 20260426-232438 — rev 17e8458
+
+- Gameplay: true - Prepared counter recruits now require the same purchase to spend `Full Crew Discount`: no-discount and credit-only scouted counters still go `Top deck` but gain no personal weapon or buffs, discount-plus-credit counters still prepare, and spending the discount on a non-counter prevents later preparation in that Shop. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-232438.log`.
+
 ## 2026-04-27 — run 20260426-230253 — rev ea04d19
 
 - Gameplay: true - Cache Drill now disarms its Scouted Counter Cache alarm: the first surviving matching counter still gains `+1💪` and also refunds that cache's own pending `Boarding Alert` once, clamped to the pre-cache Alert floor, while non-counters, Battle Test, unmarked/claimed caches, ship/Infirmary nodes, and Siren-removed pirates do not qualify. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-port-drill --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-map-schedule --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260426-230253.log`.

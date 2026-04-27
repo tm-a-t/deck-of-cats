@@ -37,11 +37,14 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
 - In regular runs, each ship's immediately preceding normal island layer marks 1 `Scouted Counter Cache` tied to that ship's main scouted enemy.
 - Selecting a marked cache island immediately grants `+1` of the cache resource and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
-- The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might` and refunds that cache's own `+1 Boarding Alert`.
+- The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's own `+1 Boarding Alert`, and is marked to report early.
 - The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed.
 - Cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
-- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain and Alert refund are not doubled by island bonuses.
+- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, and early report are not doubled by island bonuses.
+- A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
+- Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
+- If both Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, the Cache Drill pirate is placed above those purchases and is drawn first.
 - Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes or `Infirmary Island`, and a claimed cache cannot grant its reward again.
 
 ### 2. Island Round
@@ -111,8 +114,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates normally go straight to discard, not to hand.
 - Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
-- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
-- `Prepared` applies to normal purchases, `Full Crew Discount` purchases, and `Dockside Credit` purchases that qualify for `Top deck`.
+- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
+- A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
+- `Top deck` scouted counter purchases without `Full Crew Discount` still go on top of the draw pile, but are not `Prepared`.
+- If `Full Crew Discount` is spent on a non-counter first, a later `Top deck` counter purchase in the same Shop is not `Prepared`.
 - `Prepared` does not pay ship costs, grant ship resource or `☠️` outputs, target the leftmost island pirate, consume a ship action, or apply in `Battle Test`.
 - Prepared weapons and buffs are permanent and use the normal weapon replacement and buff stacking rules.
 - The draw pile top is the next card drawn. If multiple eligible counter pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible counter is drawn first.
@@ -133,6 +138,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Battle Test has no `Quiet Docks` service because it ignores `Boarding Alert`.
 - On `Continue`:
   - the current hand goes to discard only for pirates still present in `allCrew`;
+  - any still-owned Cache Drill early-report pirate is separated from that discard step and placed on top of the draw pile;
   - exiled and `get lost` pirates do not return;
   - `☠️` resets to `0`;
   - a new hand is drawn up to 5;

@@ -535,13 +535,54 @@ class GameScene extends Phaser.Scene {
     const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
     const refundsAlert = Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)) > 0
       && !drill.alertRefunded;
-    const payoff = refundsAlert ? ' gains +💪, disarms cache Alert' : ' gains +💪';
+    const payoff = refundsAlert ? ' gains +💪, disarms cache Alert, reports next' : ' gains +💪, reports next';
     return `Cache Drill: first ${label || 'counter'}${payoff}`;
   }
 
   pirateStillInCrew(pirate) {
     if (!pirate) return false;
     return (G.allCrew || []).some(candidate => candidate && candidate.id === pirate.id);
+  }
+
+  cacheDrillMusterIds() {
+    if (!Array.isArray(G.cacheDrillMusterIds)) G.cacheDrillMusterIds = [];
+    return G.cacheDrillMusterIds;
+  }
+
+  markCacheDrillMuster(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    const ids = this.cacheDrillMusterIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  consumeCacheDrillMusterPirates() {
+    const ids = Array.isArray(G.cacheDrillMusterIds) ? [...G.cacheDrillMusterIds] : [];
+    G.cacheDrillMusterIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const seen = new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirates = [];
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (pirate) pirates.push(pirate);
+    });
+    return pirates;
+  }
+
+  placeCacheDrillMusterPiratesOnDeck(pirates) {
+    const mustered = Array.isArray(pirates) ? pirates.filter(Boolean) : [];
+    if (!mustered.length) return { pirates: [], ids: new Set() };
+    const ids = new Set(mustered.map(pirate => pirate.id));
+    G.deck = (G.deck || []).filter(pirate => pirate && !ids.has(pirate.id));
+    G.discard = (G.discard || []).filter(pirate => pirate && !ids.has(pirate.id));
+    mustered.forEach((pirate) => G.deck.push(pirate));
+    return { pirates: mustered, ids };
   }
 
   applyScoutedCacheDrill(pirate, opts = {}) {
@@ -557,6 +598,7 @@ class GameScene extends Phaser.Scene {
     drill.granted = true;
     drill.pirateId = pirate.id;
     drill.type = pirate.type;
+    this.markCacheDrillMuster(pirate);
     const alertRefund = this.applyScoutedCacheAlertRefund(drill);
 
     const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
@@ -598,7 +640,7 @@ class GameScene extends Phaser.Scene {
     const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
     const refundAmount = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.amount) || 0));
     const refundText = refundAmount > 0 ? ` -${refundAmount > 1 ? refundAmount : ''}Alert` : '';
-    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText}`, '#ffca28', 760);
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next`, '#ffca28', 760);
     this.renderIsland();
   }
 
@@ -1082,7 +1124,6 @@ class GameScene extends Phaser.Scene {
     const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
     const counter = !!(def && this.isScoutedCounterShopType(type));
     const topDeck = !!(def && this.counterRecruitReportsEarly(type));
-    const preparedCounter = !!(topDeck && this.preparedCounterGains(type).length);
     if (!def) {
       return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
     }
@@ -1095,6 +1136,7 @@ class GameScene extends Phaser.Scene {
     const effectiveCost = Math.max(0, cost - discount);
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
+    const preparedCounter = !!(topDeck && discount > 0 && this.preparedCounterGains(type).length);
     if (enthusiasm >= effectiveCost) {
       return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost };
     }
@@ -1985,10 +2027,15 @@ class GameScene extends Phaser.Scene {
   prepareNextRound() {
     if (G.phase !== 'shopping') return;
     G.busy = true;
-    const discardAnimEnd = this.animateCurrentHandToDiscard();
-    const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
-    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id)));
+    const mustered = this.consumeCacheDrillMusterPirates();
+    const musteredIds = new Set(mustered.map(p => p.id));
+    const handCards = this.snapshotHandCardsForDiscard();
+    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !musteredIds.has(card.id)));
+    const musterAnimEnd = this.animateCardsToDraw(handCards.filter(card => musteredIds.has(card.id)));
+    const nextTurnDelay = Math.max(discardAnimEnd, musterAnimEnd) + CARD_MOTION.betweenTurnsDelay;
+    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !musteredIds.has(p.id)));
+    this.placeCacheDrillMusterPiratesOnDeck(mustered);
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
@@ -4912,6 +4959,7 @@ class GameScene extends Phaser.Scene {
       const visible = visibleByIdx[handIdx];
       if (visible) {
         cards.push({
+          id: pirate.id,
           type: pirate.type,
           x: visible.container.x,
           y: visible.container.y,
@@ -4929,6 +4977,7 @@ class GameScene extends Phaser.Scene {
       if (combatFighter && this._combatPlayerViews && this._combatPlayerViews[combatFighter.id]) {
         const view = this._combatPlayerViews[combatFighter.id];
         cards.push({
+          id: pirate.id,
           type: pirate.type,
           x: view.x,
           y: view.y,
@@ -4945,6 +4994,7 @@ class GameScene extends Phaser.Scene {
       if (!sentSlotByIdx.has(handIdx)) return;
       const placement = this.sentCardPlacement(sentSlotByIdx.get(handIdx));
       cards.push({
+        id: pirate.id,
         type: pirate.type,
         x: placement.x,
         y: placement.y,
@@ -5046,8 +5096,32 @@ class GameScene extends Phaser.Scene {
     return endAt;
   }
 
+  animateCardsToDraw(cards, opts = {}) {
+    if (!Array.isArray(cards) || cards.length === 0) return opts.delay || 0;
+    const target = this.pileButtonCenter('draw');
+    const baseDelay = opts.delay || 0;
+    const stagger = opts.stagger != null ? opts.stagger : CARD_MOTION.discardStagger;
+    let endAt = baseDelay;
+    cards.forEach((card, idx) => {
+      endAt = Math.max(endAt, this.animateCardGhost(card, target, {
+        delay: baseDelay + idx * stagger,
+        duration: CARD_MOTION.discardDuration,
+        arcHeight: 110 * this.L.k,
+        arcSpreadX: 64 * this.L.k,
+        endScale: 0.34,
+        endAlpha: 0.2,
+      }));
+    });
+    return endAt;
+  }
+
   animateCurrentHandToDiscard(opts = {}) {
-    return this.animateCardsToDiscard(this.snapshotHandCardsForDiscard(), opts);
+    const excludeIds = opts.excludeIds instanceof Set
+      ? opts.excludeIds
+      : new Set(Array.isArray(opts.excludeIds) ? opts.excludeIds : []);
+    const cards = this.snapshotHandCardsForDiscard()
+      .filter(card => !excludeIds.has(card.id));
+    return this.animateCardsToDiscard(cards, opts);
   }
 
   animateReshuffleToDraw(reshuffles, opts = {}) {

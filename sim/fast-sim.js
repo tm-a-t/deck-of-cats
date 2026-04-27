@@ -1343,6 +1343,7 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 3, `matching counter might ${pirates[0].might || 0} !== 3`);
     assertScoutedCounterCacheCheck(reward.alertRefund && reward.alertRefund.amount === 1, `matching counter refund ${reward.alertRefund && reward.alertRefund.amount} !== 1`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 2, `matching counter alert ${G.boardingAlert} !== 2`);
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).includes(pirates[0].id), 'matching counter did not create Cache Drill muster marker');
     const second = sendForDrill(G, pirates[1], 1);
     assertScoutedCounterCacheCheck(!second, 'second matching counter received another Cache Drill');
     assertScoutedCounterCacheCheck((pirates[1].might || 0) === 0, 'second matching counter gained Might');
@@ -1358,6 +1359,7 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `non-counter changed alert to ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.granted === false, 'non-counter consumed Cache Drill');
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertRefunded === false, 'non-counter consumed cache Alert refund');
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'non-counter created Cache Drill muster marker');
     results.push({ name: 'Cache Drill ignores non-counter pirates without consuming the drill', ok: true });
   }
 
@@ -1367,6 +1369,7 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(!reward, 'Battle Test received Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Battle Test changed counter Might');
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `Battle Test changed alert to ${G.boardingAlert}`);
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'Battle Test created Cache Drill muster marker');
     results.push({ name: 'Battle Test receives no Cache Drill even with defensive cache state', ok: true });
   }
 
@@ -1375,6 +1378,7 @@ function runScoutedCounterCacheChecks(runtime) {
     const reward = sendForDrill(G, pirates[0], 0);
     assertScoutedCounterCacheCheck(!reward, 'no-cache island received Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'no-cache island changed counter Might');
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'unmarked island created Cache Drill muster marker');
     results.push({ name: 'unmarked islands receive no Cache Drill', ok: true });
   }
 
@@ -1385,7 +1389,37 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 2, 'Siren-removed counter gained Might');
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `Siren-removed counter changed alert to ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(!G.allCrew.some(p => p.id === pirates[0].id), 'Siren setup failed to remove pirate');
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'Siren-removed counter created Cache Drill muster marker');
     results.push({ name: 'Cache Drill skips pirates removed by Siren Island', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill({ boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
+    const reward = sendForDrill(G, pirates[0], 0);
+    const shopTop = { id: 9010, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew.push(shopTop);
+    G.deck = [shopTop];
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertScoutedCounterCacheCheck(reward && reward.applied, 'muster setup failed to grant Cache Drill');
+    assertScoutedCounterCacheCheck(G.hand[0] === pirates[0], 'Cache Drill pirate was not drawn first after Shop Continue');
+    assertScoutedCounterCacheCheck(G.hand[1] === shopTop, 'Cache Drill pirate did not stay above existing top-deck shop purchase');
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'Cache Drill muster marker was not cleared on Continue');
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === pirates[0].id);
+    assertScoutedCounterCacheCheck(zones.length === 1, `Cache Drill pirate duplicated across zones ${zones.length} times`);
+    results.push({ name: 'Cache Drill muster places the drilled counter above shop top-deck cards without duplication', ok: true });
+  }
+
+  {
+    const { G, pirates } = setupDrill({ boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
+    sendForDrill(G, pirates[0], 0);
+    G.allCrew = G.allCrew.filter(p => p.id !== pirates[0].id);
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === pirates[0].id);
+    assertScoutedCounterCacheCheck(zones.length === 0, 'removed Cache Drill pirate was mustered after leaving crew');
+    assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).length === 0, 'removed Cache Drill pirate left a stale muster marker');
+    results.push({ name: 'Cache Drill muster ignores pirates no longer in crew and clears stale markers', ok: true });
   }
 
   {
@@ -1481,24 +1515,49 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   };
 
   {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = powderMap;
+    G.round = 2;
+    G.boardingCount = 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[0]);
+    G.shop = ['sawbones'];
+    G.enthusiasm = 0;
+    G.boardingAlert = 0;
+    G.fullCrewDiscount = 0;
+    G.shopCreditUsed = false;
+    G.sent = [];
+    const endLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(0));
+    const partialLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+    const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
+    assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should top-deck without prepared: ${partialLine}`);
+    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && fullLine.includes('prepared') && fullLine.includes('top deck'), `full-send plan should prepare and top-deck: ${fullLine}`);
+    results.push({ name: 'sending plan separates no-discount top-deck counters from full-send prepared counters', ok: true, endLine, partialLine, fullLine });
+  }
+
+  {
     const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
-    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `prepared Sawbones weapon was ${bought.weaponKey}`);
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-discount Sawbones was prepared with ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'eligible counter also appeared in discard');
     const drawn = api.drawCards(1)[0];
     assertCounterRecruitsReportEarlyCheck(drawn === bought, 'next draw did not return the bought counter');
     assertCounterRecruitsReportEarlyCheck(!oldTop || G.deck[G.deck.length - 1] === oldTop, 'older deck card did not remain below bought counter');
-    results.push({ name: 'eligible nearby scouted counter is prepared, top-decks, and draws first', ok: true });
+    results.push({ name: 'eligible nearby scouted counter top-decks and draws first without discount preparation', ok: true });
   }
 
   {
     const { G, islandTarget } = setupPurchase({
       type: 'needler',
-      enthusiasm: 3,
+      enthusiasm: 2,
+      fullCrewDiscount: 1,
       map: makeScoutedCounterTestMap('deckSniper'),
       islandTarget: true,
     });
@@ -1513,7 +1572,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
-    const { G } = setupPurchase({ type: 'drummer', enthusiasm: 2, map: makeScoutedCounterTestMap('netter') });
+    const { G } = setupPurchase({ type: 'drummer', enthusiasm: 1, fullCrewDiscount: 1, map: makeScoutedCounterTestMap('netter') });
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.tempo === 1, `prepared Drummer tempo was ${bought && bought.tempo}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.wood === 0, 'prepared Drummer paid ship cost or output');
@@ -1521,7 +1580,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
-    const { G } = setupPurchase({ type: 'trainer', enthusiasm: 3, map: makeScoutedCounterTestMap('netter') });
+    const { G } = setupPurchase({ type: 'trainer', enthusiasm: 2, fullCrewDiscount: 1, map: makeScoutedCounterTestMap('netter') });
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.might === 1, `prepared Trainer might was ${bought && bought.might}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.stone === 0, 'prepared Trainer paid ship cost or output');
@@ -1529,7 +1588,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
-    const { G } = setupPurchase({ type: 'flagbearer', enthusiasm: 7, map: makeScoutedCounterTestMap('netter') });
+    const { G } = setupPurchase({ type: 'flagbearer', enthusiasm: 6, fullCrewDiscount: 1, map: makeScoutedCounterTestMap('netter') });
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.might === 1 && bought.tempo === 1, `prepared Flagbearer buffs were might=${bought && bought.might} tempo=${bought && bought.tempo}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.wood === 0 && G.res.stone === 0, 'prepared Flagbearer paid ship costs or output');
@@ -1537,7 +1596,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
-    const { G } = setupPurchase({ type: 'plagueCaptain', enthusiasm: 10, map: makeScoutedCounterTestMap('shellback') });
+    const { G } = setupPurchase({ type: 'plagueCaptain', enthusiasm: 9, fullCrewDiscount: 1, map: makeScoutedCounterTestMap('shellback') });
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.weaponKey === 'toxinPistol' && bought.might === 1, `prepared Plague Captain gains were weapon=${bought && bought.weaponKey} might=${bought && bought.might}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0 && G.res.gold === 0, 'prepared Plague Captain paid ship cost or output');
@@ -1602,14 +1661,33 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
       boardingAlert: 1,
     });
     const quote = scene.shopPurchaseQuote('sawbones');
-    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.topDeck && quote.alert === 2, `credit quote was ${JSON.stringify(quote)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.topDeck && !quote.preparedCounter && quote.alert === 2, `credit quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'credit counter was not placed on top of deck');
-    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `credit counter was not prepared: ${bought.weaponKey}`);
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-discount credit counter was prepared: ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `credit did not spend all enthusiasm: ${G.enthusiasm}`);
     assertCounterRecruitsReportEarlyCheck(G.boardingAlert === 3, `credit Alert ${G.boardingAlert} !== 3`);
     assertCounterRecruitsReportEarlyCheck(G.shopCreditUsed === true, 'credit flag was not consumed');
-    results.push({ name: 'eligible Dockside Credit counter top-decks and still adds Alert', ok: true });
+    results.push({ name: 'eligible Dockside Credit counter top-decks without discount preparation and still adds Alert', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'sawbones',
+      enthusiasm: 0,
+      fullCrewDiscount: 1,
+      boardingAlert: 1,
+    });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.discount === 1 && quote.topDeck && quote.preparedCounter && quote.alert === 2, `discount credit quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'discount credit counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `discount credit counter was not prepared: ${bought.weaponKey}`);
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `discount credit did not spend all enthusiasm: ${G.enthusiasm}`);
+    assertCounterRecruitsReportEarlyCheck(G.boardingAlert === 3, `discount credit Alert ${G.boardingAlert} !== 3`);
+    assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'discount credit did not consume Full Crew Discount');
+    assertCounterRecruitsReportEarlyCheck(G.shopCreditUsed === true, 'discount credit flag was not consumed');
+    results.push({ name: 'Full Crew Discount plus Dockside Credit prepares an eligible top-deck counter', ok: true });
   }
 
   {
@@ -1625,7 +1703,29 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(bought.weaponKey === 'barbedBlade', `discount counter was not prepared: ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 0, `discount spend left ${G.enthusiasm} enthusiasm`);
     assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'discount was not consumed');
-    results.push({ name: 'Full Crew Discount is unchanged for eligible top-deck buys', ok: true });
+    results.push({ name: 'Full Crew Discount prepares eligible top-deck buys', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({
+      type: 'herald',
+      enthusiasm: 4,
+      fullCrewDiscount: 1,
+    });
+    G.shop = ['herald', 'sawbones'];
+    const firstQuote = scene.shopPurchaseQuote('herald');
+    assertCounterRecruitsReportEarlyCheck(firstQuote.canBuy && firstQuote.discount === 1 && !firstQuote.topDeck && !firstQuote.preparedCounter, `non-counter quote was ${JSON.stringify(firstQuote)}`);
+    const first = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(first && first.type === 'herald', 'discount non-counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.fullCrewDiscount === 0, 'non-counter buy did not consume Full Crew Discount');
+    assertCounterRecruitsReportEarlyCheck(G.enthusiasm === 3, `non-counter discount spend left ${G.enthusiasm} enthusiasm`);
+    const quote = scene.shopPurchaseQuote('sawbones');
+    assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.topDeck && !quote.preparedCounter && quote.discount === 0, `post-discount counter quote was ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'post-discount counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'post-discount counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `post-discount counter was prepared: ${bought.weaponKey}`);
+    results.push({ name: 'spending Full Crew Discount on a non-counter prevents later top-deck preparation', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -2136,7 +2236,18 @@ function prepareNextRoundForSim(api, scene) {
   if (G.phase !== 'shopping') return;
 
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
-  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id)));
+  const mustered = scene && typeof scene.consumeCacheDrillMusterPirates === 'function'
+    ? scene.consumeCacheDrillMusterPirates()
+    : [];
+  const musteredIds = new Set(mustered.map(p => p.id));
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !musteredIds.has(p.id)));
+  if (scene && typeof scene.placeCacheDrillMusterPiratesOnDeck === 'function') {
+    scene.placeCacheDrillMusterPiratesOnDeck(mustered);
+  } else if (mustered.length) {
+    G.deck = (G.deck || []).filter(p => p && !musteredIds.has(p.id));
+    G.discard = (G.discard || []).filter(p => p && !musteredIds.has(p.id));
+    mustered.forEach(p => G.deck.push(p));
+  }
   G.hand = [];
   G.sent = [];
   G.enthusiasm = 0;
