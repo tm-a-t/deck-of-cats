@@ -474,6 +474,7 @@ class GameScene extends Phaser.Scene {
             alertRefundAmount: Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)),
             alertFloorBeforeCache: Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0)),
             alertRefunded: !!drill.alertRefunded,
+            routeContractPirateId: drill.routeContractPirateId == null ? null : drill.routeContractPirateId,
           }
           : null;
       })(),
@@ -513,17 +514,9 @@ class GameScene extends Phaser.Scene {
     if (alert > 0) {
       G.boardingAlert = alertFloorBeforeCache + alert;
     }
-    const routeContractEnthusiasm = (
-      Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0
-      && cache.mainKey
-      && cache.mainKey === G.openingRouteCounterBoughtMainKey
-    ) ? 1 : 0;
-    if (routeContractEnthusiasm > 0) {
-      G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + routeContractEnthusiasm;
-    }
     cache.claimed = true;
 
-    return { res, amount, enthusiasm, routeContractEnthusiasm, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
+    return { res, amount, enthusiasm, routeContractEnthusiasm: 0, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
@@ -546,6 +539,8 @@ class GameScene extends Phaser.Scene {
     const drill = this.scoutedCacheDrillState();
     if (!drill) return '';
     if (drill.granted) return 'Cache Drill claimed';
+    const contract = this.openingRouteContractDrillState(drill);
+    const contractPrefix = contract ? `${contract.name} claims +☠️ Contract. ` : '';
     const counterTypes = this.scoutedCacheDrillCounterTypes(drill.mainKey);
     const names = counterTypes
       .map(type => TYPES[type] && TYPES[type].name)
@@ -572,9 +567,76 @@ class GameScene extends Phaser.Scene {
     const payoff = refundsAlert ? ' gains +💪, disarms cache Alert, reports next' : ' gains +💪, reports next';
     if (routeCounterType) {
       const suffix = shopLabel ? ` (or ${shopLabel})` : '';
-      return `Cache Drill: Route counter: ${routeCounter.starterName}${suffix}${payoff}`;
+      return `${contractPrefix}Cache Drill: Route counter: ${routeCounter.starterName}${suffix}${payoff}`;
     }
-    return `Cache Drill: first ${label || 'counter'}${payoff}`;
+    return `${contractPrefix}Cache Drill: first ${label || 'counter'}${payoff}`;
+  }
+
+  openingRouteContractDrillState(drill) {
+    if (this.isBattleTest()
+      || !drill
+      || !drill.mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || G.openingRouteCounterBoughtMainKey !== drill.mainKey
+      || G.openingRouteCounterBoughtPirateId == null
+      || drill.routeContractPirateId == null
+      || drill.routeContractPirateId !== G.openingRouteCounterBoughtPirateId) {
+      return null;
+    }
+
+    const pirate = (G.allCrew || []).find(candidate =>
+      candidate
+      && candidate.id === G.openingRouteCounterBoughtPirateId
+    );
+    if (!pirate) return null;
+    const expectedType = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
+      ? OPENING_ROUTE_PRIMARY_COUNTERS[drill.mainKey]
+      : null;
+    if (expectedType && pirate.type !== expectedType) return null;
+
+    const def = TYPES[pirate.type];
+    return {
+      pirate,
+      pirateId: pirate.id,
+      mainKey: drill.mainKey,
+      name: (def && def.name) || 'Bought counter',
+    };
+  }
+
+  openingRouteContractAppliesToDrillPirate(drill, pirate) {
+    const state = this.openingRouteContractDrillState(drill);
+    return !!(state
+      && pirate
+      && pirate.id != null
+      && pirate.id === state.pirateId
+      && this.pirateStillInCrew(pirate));
+  }
+
+  applyOpeningRouteContractForDrill(drill, pirate) {
+    if (!this.openingRouteContractAppliesToDrillPirate(drill, pirate)) return 0;
+    G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + 1;
+    return 1;
+  }
+
+  openingRouteContractPirateIdForCache(mainKey) {
+    if (this.isBattleTest()
+      || !mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || G.openingRouteCounterBoughtMainKey !== mainKey
+      || G.openingRouteCounterBoughtPirateId == null) {
+      return null;
+    }
+    const pirateId = G.openingRouteCounterBoughtPirateId;
+    const expectedType = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
+      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
+      : null;
+    return (G.allCrew || []).some(candidate =>
+      candidate
+      && candidate.id === pirateId
+      && (!expectedType || candidate.type === expectedType)
+    )
+      ? pirateId
+      : null;
   }
 
   pirateStillInCrew(pirate) {
@@ -852,6 +914,7 @@ class GameScene extends Phaser.Scene {
     drill.type = pirate.type;
     this.markCacheDrillMuster(pirate);
     const alertRefund = this.applyScoutedCacheAlertRefund(drill);
+    const openingRouteContractEnthusiasm = this.applyOpeningRouteContractForDrill(drill, pirate);
 
     const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
     const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
@@ -862,6 +925,7 @@ class GameScene extends Phaser.Scene {
       sentSlot,
       label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
       alertRefund,
+      openingRouteContractEnthusiasm,
     };
     if (!opts.silent) this.showScoutedCacheDrillResult(reward);
     return reward;
@@ -954,7 +1018,9 @@ class GameScene extends Phaser.Scene {
     const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
     const refundAmount = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.amount) || 0));
     const refundText = refundAmount > 0 ? ` -${refundAmount > 1 ? refundAmount : ''}Alert` : '';
-    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next`, '#ffca28', 760);
+    const contractAmount = Math.max(0, Math.floor(Number(reward.openingRouteContractEnthusiasm) || 0));
+    const contractText = contractAmount > 0 ? ` +${contractAmount > 1 ? contractAmount : ''}☠️ Contract` : '';
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${contractText}${refundText} Reports next`, '#ffca28', 760);
     this.renderIsland();
   }
 
@@ -1019,6 +1085,7 @@ class GameScene extends Phaser.Scene {
       this.clearCounterWatch();
       this.clearOpeningRouteMuster();
       G.openingRouteCounterBoughtMainKey = null;
+      G.openingRouteCounterBoughtPirateId = null;
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
@@ -1041,6 +1108,7 @@ class GameScene extends Phaser.Scene {
           alertRefundAmount: cacheGrant.alert,
           alertFloorBeforeCache: cacheGrant.alertFloorBeforeCache,
           alertRefunded: false,
+          routeContractPirateId: this.openingRouteContractPirateIdForCache(cacheGrant.mainKey),
         };
       }
       G.enemyShip = null;
@@ -2734,6 +2802,7 @@ class GameScene extends Phaser.Scene {
       && type === routeShopState.primaryCounterType
       && routeShopState.mainKey) {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
+      G.openingRouteCounterBoughtPirateId = p.id;
     }
     if (toTopDeck) {
       G.deck.push(p);

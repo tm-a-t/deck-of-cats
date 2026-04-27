@@ -1999,10 +1999,18 @@ function runOpeningRouteContractChecks(runtime) {
   const scene = makeSimScene(api);
   const results = [];
   const routeCases = [
-    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner' },
-    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones' },
-    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler' },
+    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman' },
   ];
+  const makePirate = (id, type, opts = {}) => ({
+    id,
+    type,
+    weaponKey: opts.weaponKey || null,
+    might: opts.might || 0,
+    tempo: opts.tempo || 0,
+    wounded: !!opts.wounded,
+  });
   const fillerShop = (primary) => [primary, 'drummer', 'herald', 'trainer'];
   const routeFirstIsland = (map, mainKey) => {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
@@ -2034,6 +2042,7 @@ function runOpeningRouteContractChecks(runtime) {
     const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRouteContractCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
     assertOpeningRouteContractCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} primary buy did not mark ${route.mainKey}`);
+    assertOpeningRouteContractCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} primary buy did not record bought pirate id`);
 
     const cache = routeCache.scoutedCache;
     const baseEnthusiasm = Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
@@ -2042,19 +2051,61 @@ function runOpeningRouteContractChecks(runtime) {
     G.enthusiasm = 0;
     G.boardingAlert = 5;
     assertOpeningRouteContractCheck(scene.applyMapNodeSelection(routeCache.id), `${route.label} cache selection failed`);
-    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm + 1, `${route.label} contract enthusiasm ${G.enthusiasm} !== ${baseEnthusiasm + 1}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm, `${route.label} cache paid passive contract ${G.enthusiasm} !== ${baseEnthusiasm}`);
     assertOpeningRouteContractCheck(G.boardingAlert === 5 + baseAlert, `${route.label} contract changed Alert ${G.boardingAlert} !== ${5 + baseAlert}`);
     assertOpeningRouteContractCheck(G.res[cache.res] === 1, `${route.label} cache resource was doubled or missing: ${JSON.stringify(G.res)}`);
+    const drillDesc = scene.scoutedCacheDrillDescription();
+    const primaryName = api.TYPES[route.primary].name;
+    assertOpeningRouteContractCheck(drillDesc.includes(`${primaryName} claims +☠️ Contract`), `${route.label} drill text did not surface contract: ${drillDesc}`);
 
     const beforeDrillEnthusiasm = G.enthusiasm;
     G.hand = [bought];
     G.sent = [0];
     const drill = applyScoutedCacheDrillForSim(scene, bought);
     assertOpeningRouteContractCheck(drill && drill.applied, `${route.label} matching bought counter did not claim Cache Drill`);
-    assertOpeningRouteContractCheck(G.enthusiasm === beforeDrillEnthusiasm, `${route.label} Cache Drill changed contract enthusiasm ${G.enthusiasm} !== ${beforeDrillEnthusiasm}`);
+    assertOpeningRouteContractCheck(drill.openingRouteContractEnthusiasm === 1, `${route.label} Cache Drill contract reward ${JSON.stringify(drill)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === beforeDrillEnthusiasm + 1, `${route.label} Cache Drill contract enthusiasm ${G.enthusiasm} !== ${beforeDrillEnthusiasm + 1}`);
     assertOpeningRouteContractCheck(G.boardingAlert === 5, `${route.label} Cache Drill refund should return only cache Alert to 5, got ${G.boardingAlert}`);
-    results.push({ name: `${route.label} bought primary counter earns +1 Opening Route Contract on the matching Boarding 1 cache`, ok: true });
+    results.push({ name: `${route.label} bought primary counter earns +1 Opening Route Contract only through Cache Drill`, ok: true });
   });
+
+  {
+    const route = routeCases[0];
+    runtime.setSeed(0x61c04820);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'starter claimant route selection failed');
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteContractCheck(bought && G.openingRouteCounterBoughtPirateId === bought.id, 'starter claimant setup did not record primary');
+    const starter = (G.allCrew || []).find(pirate => pirate && pirate.type === route.starterType);
+    assertOpeningRouteContractCheck(starter, 'starter claimant setup has no route starter');
+    const baseEnthusiasm = Math.max(0, Math.floor(Number(routeCache.scoutedCache.enthusiasm) || 0));
+    G.phase = 'map';
+    G.enthusiasm = 0;
+    G.boardingAlert = 3;
+    assertOpeningRouteContractCheck(scene.applyMapNodeSelection(routeCache.id), 'starter claimant cache selection failed');
+    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm, 'starter claimant cache paid passive contract');
+    G.hand = [starter];
+    G.sent = [0];
+    const drill = applyScoutedCacheDrillForSim(scene, starter);
+    assertOpeningRouteContractCheck(drill && drill.applied, 'starter route counter did not claim Cache Drill');
+    assertOpeningRouteContractCheck(!drill.openingRouteContractEnthusiasm, `starter route counter earned contract ${JSON.stringify(drill)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm, `starter route counter changed enthusiasm ${G.enthusiasm}`);
+    const latePrimaryDrill = applyScoutedCacheDrillForSim(scene, bought);
+    assertOpeningRouteContractCheck(!latePrimaryDrill, 'bought primary claimed contract after starter consumed Cache Drill');
+    results.push({ name: 'starter route counter can claim Cache Drill but cannot earn the bought-primary contract', ok: true });
+  }
 
   {
     const route = routeCases[0];
@@ -2077,6 +2128,7 @@ function runOpeningRouteContractChecks(runtime) {
     const bought = scene.buyPirate(fillerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRouteContractCheck(bought && bought.type !== route.primary, `non-counter setup bought ${bought && bought.type}`);
     assertOpeningRouteContractCheck(!G.openingRouteCounterBoughtMainKey, 'non-counter buy marked opening route counter');
+    assertOpeningRouteContractCheck(G.openingRouteCounterBoughtPirateId == null, 'non-counter buy recorded opening route pirate id');
     const baseEnthusiasm = Math.max(0, Math.floor(Number(routeCache.scoutedCache.enthusiasm) || 0));
     G.phase = 'map';
     G.enthusiasm = 0;
@@ -2091,6 +2143,7 @@ function runOpeningRouteContractChecks(runtime) {
     G.mode = opts.mode || 'run';
     G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
     G.openingRouteCounterBoughtMainKey = opts.marker == null ? null : opts.marker;
+    G.openingRouteCounterBoughtPirateId = opts.pirateId == null ? null : opts.pirateId;
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.enthusiasm = 0;
     G.boardingAlert = 2;
@@ -2111,10 +2164,45 @@ function runOpeningRouteContractChecks(runtime) {
     return { G, node, grant: scene.applyScoutedCounterCache(node) };
   };
 
+  const setupDirectDrill = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    const pirate = makePirate(opts.pirateId || 8100, opts.type || 'poisoner');
+    G.allCrew = opts.owned === false ? [] : [pirate];
+    G.deck = [];
+    G.discard = [];
+    G.hand = [pirate];
+    G.sent = [0];
+    G.phase = 'sending';
+    G.enthusiasm = 0;
+    G.boardingAlert = 2;
+    G.openingRouteCounterBoughtMainKey = opts.marker == null ? 'shellback' : opts.marker;
+    G.openingRouteCounterBoughtPirateId = opts.recordedPirateId == null ? pirate.id : opts.recordedPirateId;
+    const mainKey = opts.mainKey || 'shellback';
+    const routeContractPirateId = Object.prototype.hasOwnProperty.call(opts, 'routeContractPirateId')
+      ? opts.routeContractPirateId
+      : (G.openingRouteCounterBoughtMainKey === mainKey ? G.openingRouteCounterBoughtPirateId : null);
+    G.island = scene.buildIslandState(api.ISLANDS[0]);
+    G.island.scoutedCacheDrill = {
+      mainKey,
+      granted: false,
+      alertRefundAmount: 0,
+      alertFloorBeforeCache: 2,
+      alertRefunded: false,
+      routeContractPirateId,
+    };
+    return { G, pirate, drill: applyScoutedCacheDrillForSim(scene, pirate) };
+  };
+
   {
     const { G, grant } = applyDirectCache({ marker: 'powderBomber', mainKey: 'shellback' });
     assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0, `wrong marker route contract ${JSON.stringify(grant)}`);
     assertOpeningRouteContractCheck(G.enthusiasm === 1 && G.boardingAlert === 3, `wrong marker cache values ${G.enthusiasm}/${G.boardingAlert}`);
+    const wrongDrill = setupDirectDrill({ marker: 'powderBomber', mainKey: 'shellback' });
+    assertOpeningRouteContractCheck(wrongDrill.drill && !wrongDrill.drill.openingRouteContractEnthusiasm, `wrong marker drill contract ${JSON.stringify(wrongDrill.drill)}`);
+    assertOpeningRouteContractCheck(wrongDrill.G.enthusiasm === 0, `wrong marker drill changed enthusiasm ${wrongDrill.G.enthusiasm}`);
     results.push({ name: 'wrong route primary marker does not earn Opening Route Contract', ok: true });
   }
 
@@ -2122,6 +2210,9 @@ function runOpeningRouteContractChecks(runtime) {
     const { G, grant } = applyDirectCache({ marker: 'shellback', mainKey: 'shellback', boardingCount: 1 });
     assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0, `post-Boarding cache route contract ${JSON.stringify(grant)}`);
     assertOpeningRouteContractCheck(G.enthusiasm === 1, `post-Boarding cache granted contract ${G.enthusiasm}`);
+    const laterDrill = setupDirectDrill({ marker: 'shellback', mainKey: 'shellback', boardingCount: 1 });
+    assertOpeningRouteContractCheck(laterDrill.drill && !laterDrill.drill.openingRouteContractEnthusiasm, `post-Boarding drill contract ${JSON.stringify(laterDrill.drill)}`);
+    assertOpeningRouteContractCheck(laterDrill.G.enthusiasm === 0, `post-Boarding drill granted contract ${laterDrill.G.enthusiasm}`);
     results.push({ name: 'Boarding 2+ caches do not earn Opening Route Contract even with a stale marker', ok: true });
   }
 
@@ -2129,6 +2220,9 @@ function runOpeningRouteContractChecks(runtime) {
     const { G, grant } = applyDirectCache({ marker: 'shellback', mainKey: 'shellback', mode: 'battleTest' });
     assertOpeningRouteContractCheck(!grant, `Battle Test cache granted ${JSON.stringify(grant)}`);
     assertOpeningRouteContractCheck(G.enthusiasm === 0 && G.boardingAlert === 2, `Battle Test cache changed values ${G.enthusiasm}/${G.boardingAlert}`);
+    const battleDrill = setupDirectDrill({ marker: 'shellback', mainKey: 'shellback', mode: 'battleTest' });
+    assertOpeningRouteContractCheck(!battleDrill.drill, `Battle Test drill granted ${JSON.stringify(battleDrill.drill)}`);
+    assertOpeningRouteContractCheck(battleDrill.G.enthusiasm === 0, `Battle Test drill changed enthusiasm ${battleDrill.G.enthusiasm}`);
     results.push({ name: 'Battle Test ignores Opening Route Contract and cache rewards', ok: true });
   }
 
@@ -2136,10 +2230,30 @@ function runOpeningRouteContractChecks(runtime) {
     const { G, node, grant } = applyDirectCache({ marker: null, mainKey: 'shellback' });
     assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0 && G.enthusiasm === 1, `pre-primary cache grant mismatch ${JSON.stringify(grant)}`);
     G.openingRouteCounterBoughtMainKey = 'shellback';
+    G.openingRouteCounterBoughtPirateId = 8100;
     const retry = scene.applyScoutedCounterCache(node);
     assertOpeningRouteContractCheck(!retry, `claimed cache paid retroactive contract ${JSON.stringify(retry)}`);
     assertOpeningRouteContractCheck(G.enthusiasm === 1, `claimed cache changed enthusiasm after late primary marker ${G.enthusiasm}`);
+    const lateDrill = setupDirectDrill({ type: 'poisoner', marker: 'shellback', mainKey: 'shellback', routeContractPirateId: null });
+    assertOpeningRouteContractCheck(lateDrill.drill && lateDrill.drill.applied, 'late-purchase primary did not claim normal Cache Drill');
+    assertOpeningRouteContractCheck(!lateDrill.drill.openingRouteContractEnthusiasm, `late-purchase primary earned contract ${JSON.stringify(lateDrill.drill)}`);
+    assertOpeningRouteContractCheck(lateDrill.G.enthusiasm === 0, `late-purchase primary changed enthusiasm ${lateDrill.G.enthusiasm}`);
     results.push({ name: 'buying the route primary after the cache is claimed cannot pay Opening Route Contract retroactively', ok: true });
+  }
+
+  {
+    const otherCounter = setupDirectDrill({ type: 'needler', marker: 'shellback', mainKey: 'shellback', recordedPirateId: 9999 });
+    assertOpeningRouteContractCheck(otherCounter.drill && otherCounter.drill.applied, 'other counter did not claim direct Cache Drill');
+    assertOpeningRouteContractCheck(!otherCounter.drill.openingRouteContractEnthusiasm, `other counter earned contract ${JSON.stringify(otherCounter.drill)}`);
+    assertOpeningRouteContractCheck(otherCounter.G.enthusiasm === 0, `other counter changed enthusiasm ${otherCounter.G.enthusiasm}`);
+    results.push({ name: 'other shop counters can claim Cache Drill but cannot earn the bought-primary contract', ok: true });
+  }
+
+  {
+    const removed = setupDirectDrill({ type: 'poisoner', marker: 'shellback', mainKey: 'shellback', owned: false });
+    assertOpeningRouteContractCheck(!removed.drill, `removed bought primary received Cache Drill ${JSON.stringify(removed.drill)}`);
+    assertOpeningRouteContractCheck(removed.G.enthusiasm === 0, `removed bought primary changed enthusiasm ${removed.G.enthusiasm}`);
+    results.push({ name: 'removed bought primary cannot earn Opening Route Contract', ok: true });
   }
 
   return { ok: true, checks: results };
