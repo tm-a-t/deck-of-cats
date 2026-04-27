@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-191635 — rev 4c51685 — build 0.1.0
+
+- Gameplay: true - Added Visible Opening Cache Purse: Boarding 1 Forest/Rocky/Port route caches now visibly pay `+1☠️`/`+2☠️`/`+3☠️` from the cache itself, and the hidden Opening Deckhand Scout Pay state, resolver, and floating reward text were removed so matching starters keep their counter, drill, prep, pass-off, and watch roles without separate skull income. Validated with JS syntax checks, targeted opening cache purse, scouted cache, route shop, Opening Counter Prep, Opening Side Prep, Opening Route Muster, opening route captain, opening deckhand counter, Alarm Rush, Full Crew coverage, counter recruit, Opening Route Prize, drilled bounty, and map schedule sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-191635.log`.
+
 ## 2026-04-27 — run 20260427-190103 — rev 08334b4 — build 0.1.0
 
 - Gameplay: true - Added Opening Side Prep: before Boarding 1, an unsecured route's side offer can spend active Opening Counter Prep for the same `-1☠️` timing, top-deck placement, and an immediate support buff (`Drummer +⚡`, `Trainer +💪`, `Survivalist +💪`) while leaving the route primary unsecured and avoiding Counter Watch, pass-off, Alarm Rush, Cache Drill mark, and counter payoff perks. Validated with JS syntax checks, targeted Opening Side Prep, Opening Counter Prep, Full Crew coverage, Alarm Rush, Opening Route Muster, opening deckhand counter/scout-pay, counter recruit, and Opening Route Prize sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-190103.log`.

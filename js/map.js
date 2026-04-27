@@ -90,13 +90,13 @@ function openingScoutedCounterCacheResource(node, mainKey) {
 function openingScoutedCounterCacheStakes(node, mainKey) {
   const island = node && node.type === 'island' ? ISLANDS[node.islandIdx] : null;
   if (island && island.bonus === 'wood') {
-    return { res: 'wood', amount: 1, enthusiasm: 0, alert: 0 };
+    return { res: 'wood', amount: 1, enthusiasm: 1, alert: 0 };
   }
   if (island && island.bonus === 'stone') {
-    return { res: 'stone', amount: 1, enthusiasm: 1, alert: 1 };
+    return { res: 'stone', amount: 1, enthusiasm: 2, alert: 1 };
   }
   if (island && island.extraSend) {
-    return { res: 'gold', amount: 1, enthusiasm: 2, alert: 2 };
+    return { res: 'gold', amount: 1, enthusiasm: 3, alert: 2 };
   }
   return {
     res: openingScoutedCounterCacheResource(node, mainKey),
