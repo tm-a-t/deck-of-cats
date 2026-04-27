@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-122922 — rev 4596c5b — build 0.1.0
+
+- Gameplay: true - Added Route Starter Cache Prep: a successful Boarding 1 first-opener Cache Drill by the selected route's starter counter now arms the next Shop's normal Opening Counter Prep if the route primary has not been bought, giving full-send and skipped-buy openings a recoverable discounted top-deck counter path while preserving the stronger one-short setup. Validated with targeted opening deckhand/cache/prep/shop sim checks, JS syntax checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-122922.log`.
+
 ## 2026-04-27 — run 20260427-121151 — rev 88d5c84 — build 0.1.0
 
 - Gameplay: true - Changed Scouted Counter Caches from route-selection payouts into first-sent cache openings: selecting a cache now only arms the island objective, the first opener claims the stored stakes, only a surviving eligible first opener can trigger Cache Drill and refund that cache Alert, later sends cannot drill, and zero-send cache islands skip the cache reward entirely. Validated with JS syntax checks, targeted scouted cache/opening route/deckhand/counter recruit/muster/prep/Short Crew/drilled bounty/map/counter ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-121151.log`.

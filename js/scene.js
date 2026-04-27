@@ -695,9 +695,12 @@ class GameScene extends Phaser.Scene {
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[drill.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
+    const prepText = routeCounterType && this.openingRouteStarterCachePrepAvailable(drill.mainKey)
+      ? ', opens Opening Prep'
+      : '';
     const payoff = refundsAlert
-      ? ` disarms cache Alert, gains +💪, reports next${bountyText}`
-      : ` gains +💪, reports next${bountyText}`;
+      ? ` disarms cache Alert, gains +💪, reports next${prepText}${bountyText}`
+      : ` gains +💪, reports next${prepText}${bountyText}`;
     const cacheText = this.scoutedCounterCacheRewardText(drill);
     const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
     if (routeCounterType) {
@@ -705,6 +708,56 @@ class GameScene extends Phaser.Scene {
       return `${prefix}route counter ${routeCounter.starterName}${suffix}${payoff}`;
     }
     return `${prefix}first ${label || 'counter'}${payoff}`;
+  }
+
+  openingRouteStarterCachePrepAvailable(mainKey) {
+    if (this.isBattleTest()
+      || !mainKey
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return false;
+    }
+
+    const primary = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
+      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
+      : null;
+    if (!primary || !TYPES[primary]) return false;
+    if (G.openingRouteCounterBoughtMainKey === mainKey) return false;
+
+    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
+    if (!starterTypes.length) return false;
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    return !!(intel && intel.mainKey === mainKey && boardingNo === 1);
+  }
+
+  openingRouteStarterCachePrepEligible(pirate, drill) {
+    if (!pirate
+      || pirate.id == null
+      || !pirate.type
+      || !drill
+      || !drill.cacheClaimed
+      || drill.openerId !== pirate.id
+      || !this.openingRouteStarterCachePrepAvailable(drill.mainKey)) {
+      return false;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(drill.mainKey, 1, { mode: G.mode });
+    return starterTypes.includes(pirate.type)
+      && this.pirateStillInCrew(pirate)
+      && !(this._sacrificedIds && this._sacrificedIds.has(pirate.id));
+  }
+
+  applyOpeningRouteStarterCachePrep(pirate, drill) {
+    if (!this.openingRouteStarterCachePrepEligible(pirate, drill)) return false;
+    G.openingCounterPlan = true;
+    return true;
   }
 
   pirateStillInCrew(pirate) {
@@ -1082,6 +1135,7 @@ class GameScene extends Phaser.Scene {
     this.markCacheDrillMuster(pirate);
     this.markCacheDrillBounty(pirate, drill.mainKey);
     const alertRefund = this.applyScoutedCacheAlertRefund(drill);
+    const openingCounterPrep = this.applyOpeningRouteStarterCachePrep(pirate, drill);
 
     const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
     const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
@@ -1093,6 +1147,7 @@ class GameScene extends Phaser.Scene {
       label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
       alertRefund,
       cacheDrillBounty: true,
+      openingCounterPrep,
     };
     if (!opts.silent) this.showScoutedCacheDrillResult(reward);
     return reward;
@@ -1206,7 +1261,8 @@ class GameScene extends Phaser.Scene {
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[reward.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? ` +2${bountyEmoji} Ambush` : '';
-    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next${bountyText}`, '#ffca28', 760);
+    const prepText = reward.openingCounterPrep ? ' Opening Prep' : '';
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next${prepText}${bountyText}`, '#ffca28', 760);
     this.renderIsland();
   }
 
@@ -1802,7 +1858,10 @@ class GameScene extends Phaser.Scene {
   }
 
   updateOpeningCounterPlanForCompletedIsland() {
-    G.openingCounterPlan = !!this.projectOpeningCounterPlan(Array.isArray(G.sent) ? G.sent.length : 0);
+    G.openingCounterPlan = !!(
+      G.openingCounterPlan
+      || this.projectOpeningCounterPlan(Array.isArray(G.sent) ? G.sent.length : 0)
+    );
     return G.openingCounterPlan;
   }
 
