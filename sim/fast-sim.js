@@ -2299,12 +2299,17 @@ function runCounterAmbushChecks(runtime) {
     };
     const pirates = G.allCrew.slice(0, 5);
     const types = opts.types || ['sawbones', 'needler', 'bandmaster', 'poisoner', 'trainer'];
+    const pirateUpgrades = Array.isArray(opts.pirateUpgrades) ? opts.pirateUpgrades : [];
     pirates.forEach((pirate, i) => {
       pirate.type = types[i] || pirate.type;
       pirate.weaponKey = null;
       pirate.might = 0;
       pirate.tempo = 0;
       pirate.wounded = false;
+      const upgrade = pirateUpgrades[i] || {};
+      if (upgrade.weaponKey !== undefined) pirate.weaponKey = upgrade.weaponKey || null;
+      if (upgrade.might !== undefined) pirate.might = Math.max(0, Math.floor(Number(upgrade.might) || 0));
+      if (upgrade.tempo !== undefined) pirate.tempo = Math.max(0, Math.floor(Number(upgrade.tempo) || 0));
     });
     G.hand = pirates.slice(0, opts.handCount || 3);
     G.deck = [];
@@ -2346,6 +2351,8 @@ function runCounterAmbushChecks(runtime) {
     const result = scene.applyCounterAmbush(G.combat, { silent: true });
     assertCounterAmbushCheck(result && result.applied, 'front-row matching counter did not ambush');
     assertCounterAmbushCheck(result.pirateId === pirates[0].id, `ambusher ${result.pirateId} !== ${pirates[0].id}`);
+    assertCounterAmbushCheck(!result.armedAmbush && !result.upgradedAmbush, 'unupgraded ambush was marked armed');
+    assertCounterAmbushCheck(result.damage === 3, `unupgraded damage ${result.damage} !== 3`);
     assertCounterAmbushCheck(target.hp === target.maxHp - 3, `target hp ${target.hp} !== ${target.maxHp - 3}`);
     assertCounterAmbushCheck(target.wounds === 1, `target wounds ${target.wounds} !== 1`);
     assertCounterAmbushCheck((result.removedAlertGuardCount || 0) === 0, 'normal non-alert enemy was removed as an Alert guard');
@@ -2354,6 +2361,56 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!second && target.hp === hpAfter && target.wounds === 1, 'Counter Ambush repeated');
     results.push({ name: 'front-row matching counter ambushes once for 3 damage and 1 Wound', ok: true });
   }
+
+  const checkArmedAmbush = (name, opts = {}) => {
+    const { G, pirates, enemies } = setupRegular({
+      mainKey: opts.mainKey,
+      types: opts.types,
+      playerRows: opts.playerRows || [[0, 0, 0]],
+      enemies: opts.enemies,
+      pirateUpgrades: opts.pirateUpgrades,
+    });
+    const target = enemies[Math.max(0, Math.floor(Number(opts.targetIndex) || 0))];
+    const beforeNextAttackAt = target.nextAttackAt;
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, `${name} did not ambush`);
+    assertCounterAmbushCheck(result.pirateId === pirates[0].id, `${name} ambusher ${result.pirateId} !== ${pirates[0].id}`);
+    assertCounterAmbushCheck(result.armedAmbush && result.upgradedAmbush, `${name} was not marked armed`);
+    assertCounterAmbushCheck(result.damage === 5, `${name} damage ${result.damage} !== 5`);
+    assertCounterAmbushCheck(target.hp === target.maxHp - 5, `${name} target hp ${target.hp} !== ${target.maxHp - 5}`);
+    assertCounterAmbushCheck(target.wounds === 1, `${name} target wounds ${target.wounds} !== 1`);
+    assertCounterAmbushCheck((target.poison || 0) === 0, `${name} applied weapon poison ${target.poison || 0}`);
+    assertCounterAmbushCheck(target.nextAttackAt === beforeNextAttackAt, `${name} triggered enemy hit reaction`);
+    results.push({ name, ok: true, damage: result.damage, wounds: target.wounds });
+  };
+
+  checkArmedAmbush('Prepared Sawbones-style Barbed Blade arms Counter Ambush for 5 without extra weapon Wound', {
+    mainKey: 'powderBomber',
+    types: ['sawbones', 'poisoner', 'trainer'],
+    enemies: [['powderBomber', 0, 0]],
+    pirateUpgrades: [{ weaponKey: 'barbedBlade' }],
+  });
+
+  checkArmedAmbush('Toxin Pistol armed counter ambushes for 5 without poison on-hit', {
+    mainKey: 'deckSniper',
+    types: ['needler', 'sawbones', 'trainer'],
+    enemies: [['deckSniper', 0, 0]],
+    pirateUpgrades: [{ weaponKey: 'toxinPistol' }],
+  });
+
+  checkArmedAmbush('Might-upgraded counter ambushes for exactly 5 without Counter Edge stacking', {
+    mainKey: 'flintDuelist',
+    types: ['poisoner', 'sawbones', 'trainer'],
+    enemies: [['flintDuelist', 0, 0]],
+    pirateUpgrades: [{ might: 1 }],
+  });
+
+  checkArmedAmbush('Tempo-upgraded counter ambushes for exactly 5', {
+    mainKey: 'netter',
+    types: ['drummer', 'sawbones', 'trainer'],
+    enemies: [['netter', 0, 0]],
+    pirateUpgrades: [{ tempo: 1 }],
+  });
 
   const checkAlertGuardRemoval = (name, alert, enemies, expectedRemovedKey, expectedRes) => {
     const guardCount = scene.boardingAlertGuardCount(alert);

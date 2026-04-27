@@ -185,9 +185,11 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - In regular-run boarding only, `Counter Ambush` checks once when `Fight!` starts for the opening combat hand.
 - If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
 - `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
+- `Armed Counter Ambush`: if the ambushing counter pirate has any permanent personal upgrade at fight start, meaning a weapon, `1+ 💪 Might`, or `1+ ⚡ Tempo`, that `Counter Ambush` deals `5` damage instead of `3`.
 - After damaging and wounding the main scouted enemy, `Counter Ambush` also removes the frontmost then leftmost living `Boarding Alert` guard if any are present.
 - A guard removed by `Counter Ambush` does not fight and is excluded from Alert guard plunder on a win; remaining Alert guards still grant their normal plunder.
-- `Counter Ambush` does not count as an attack, does not trigger weapon on-hit effects, does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
+- `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
+- `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.
 - `Counter Edge` uses the same scouted counter map as the Shop and `Counter Trophy`, applies to reinforcement hands during the same boarding, and does not apply to wounded pirates sitting out.

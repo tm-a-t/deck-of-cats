@@ -2828,6 +2828,17 @@ class GameScene extends Phaser.Scene {
       || null;
   }
 
+  counterAmbushPirateIsArmed(pirate) {
+    return !!(pirate
+      && (this.pirateHasWeapon(pirate)
+        || this.pirateMight(pirate) > 0
+        || this.pirateTempo(pirate) > 0));
+  }
+
+  counterAmbushDamageForPirate(pirate) {
+    return this.counterAmbushPirateIsArmed(pirate) ? 5 : 3;
+  }
+
   findCounterAmbushAmbusher(combat = G.combat) {
     const counterSet = new Set(this.counterAmbushTypes(combat));
     if (!counterSet.size) return null;
@@ -2896,7 +2907,9 @@ class GameScene extends Phaser.Scene {
     const target = this.findCounterAmbushTarget(mainKey);
     if (!mainKey || !ambusher || !target) return null;
 
-    const damage = 3;
+    const pirate = this.counterAmbushPirateForFighter(ambusher);
+    const armedAmbush = this.counterAmbushPirateIsArmed(pirate);
+    const damage = this.counterAmbushDamageForPirate(pirate);
     const beforeHp = Math.max(0, Math.floor(Number(target.hp) || 0));
     const woundResult = this.combatApplyWounds(target, 1);
     target.hp = Math.max(0, beforeHp - damage);
@@ -2910,7 +2923,6 @@ class GameScene extends Phaser.Scene {
     const removedAlertGuard = this.removeCounterAmbushAlertGuard(combat, deathPositions);
     const removedAlertGuards = removedAlertGuard ? [removedAlertGuard] : [];
 
-    const pirate = this.counterAmbushPirateForFighter(ambusher);
     const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
     const enemy = this.combatArchetypeByKey(mainKey);
     combat.counterAmbush = {
@@ -2924,6 +2936,8 @@ class GameScene extends Phaser.Scene {
       targetName: target.name || (enemy && enemy.name) || mainKey,
       mainKey,
       damage,
+      armedAmbush,
+      upgradedAmbush: armedAmbush,
       wounds: Math.max(0, Math.floor(Number(woundResult.added) || 0)),
       beforeHp,
       afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
@@ -2943,7 +2957,8 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const target = this.combatFindFighter(result.targetId);
     const targetPoint = target ? this.combatWorldPoint(target) : { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
-    this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, 'Counter Ambush!', '#ffd54f', 700);
+    const label = result.armedAmbush ? 'Armed Ambush!' : 'Counter Ambush!';
+    this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, label, '#ffd54f', 700);
     this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
     const removedGuard = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards[0] : null;
     if (removedGuard) {
