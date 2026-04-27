@@ -47,6 +47,7 @@ function parseArgs(argv) {
     checkOpeningDeckhandCounters: false,
     checkOpeningRouteMuster: false,
     checkOpeningRoutePrize: false,
+    checkAlarmRushedRouteCounter: false,
     checkOpeningAmbusherReport: false,
     checkDrilledAmbusherBounty: false,
     checkCounterRecruitsReportEarly: false,
@@ -184,6 +185,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-cache-drill-opening-payoff' || a === '--check-opening-route-prize' || a === '--check-opening-route-contract') {
       out.checkOpeningRoutePrize = true;
+      continue;
+    }
+    if (a === '--check-alarm-rushed-route-counter') {
+      out.checkAlarmRushedRouteCounter = true;
       continue;
     }
     if (a === '--check-opening-ambusher-report') {
@@ -341,6 +346,7 @@ function buildRuntime() {
       ISLANDS,
       QUIET_DOCKS,
       SHOP_CREDIT,
+      ALARM_RUSHED_ROUTE_COUNTER_ALERT,
       SCOUTED_SHIP_COUNTERS,
       OPENING_DECKHAND_COUNTERS,
       SCOUTED_COUNTER_CACHE_RES,
@@ -615,6 +621,10 @@ function shopCreditAlertPerMissing(api) {
   return Math.max(0, Math.floor(Number((api.SHOP_CREDIT && api.SHOP_CREDIT.alertPerMissing) || 0) || 0));
 }
 
+function alarmRushedRouteCounterAlertThreshold(api) {
+  return Math.max(1, Math.floor(Number(api.ALARM_RUSHED_ROUTE_COUNTER_ALERT || 3) || 3));
+}
+
 function activeFullCrewDiscount(G) {
   if (!G || G.mode === 'battleTest' || G.phase !== 'shopping') return 0;
   return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
@@ -694,9 +704,14 @@ function shopPurchaseQuote(api, G, type) {
   const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
   const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
   const consumesOpeningCounterPlan = !!openingCounterPrepMight;
-  const topDeck = openingRoutePrimary
-    ? !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight))
+  const setupTopDeck = !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight));
+  const topDeckBeforeAlarm = openingRoutePrimary
+    ? setupTopDeck
     : !!scoutedCounterTopDeck;
+  const pendingAlert = Math.max(0, Math.floor(Number(G && G.boardingAlert) || 0));
+  const canAlarmRush = !!(openingRoutePrimary && scoutedCounterTopDeck && !setupTopDeck);
+  const alarmRushesWithAlert = (extraAlert = 0) => canAlarmRush
+    && pendingAlert + Math.max(0, Math.floor(Number(extraAlert) || 0)) >= alarmRushedRouteCounterAlertThreshold(api);
   const shared = {
     openingCounterPlan,
     openingCounterPrep: openingCounterPrepMight,
@@ -709,10 +724,49 @@ function shopPurchaseQuote(api, G, type) {
     consumesOpeningCounterPrep: consumesOpeningCounterPlan,
   };
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, topDeck: false, openingCommissionReport: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, openingCounterPrepDiscount: 0, missing: 0, alert: 0, spend: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, openingRoutePrimary: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
+    return {
+      canBuy: false,
+      credit: false,
+      counter: false,
+      topDeck: false,
+      openingCommissionReport: false,
+      openingFullCrewReport: false,
+      preparedCounter: false,
+      cost,
+      effectiveCost,
+      discount: 0,
+      openingCounterPrepDiscount: 0,
+      missing: 0,
+      alert: 0,
+      spend: 0,
+      fullCrewCoverage: 0,
+      openingCounterPlan: false,
+      openingCounterPrep: false,
+      openingCounterPrepMight: false,
+      openingRoutePrimary: false,
+      alarmRushedRouteCounter: false,
+      consumesOpeningCounterPlan: false,
+      consumesOpeningCounterPrep: false,
+    };
   }
   if (enthusiasm >= effectiveCost) {
-    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, fullCrewCoverage: 0, ...shared };
+    const alarmRushedRouteCounter = alarmRushesWithAlert(0);
+    return {
+      canBuy: true,
+      credit: false,
+      counter,
+      topDeck: topDeckBeforeAlarm || alarmRushedRouteCounter,
+      preparedCounter,
+      cost,
+      effectiveCost,
+      discount,
+      missing: 0,
+      alert: 0,
+      spend: effectiveCost,
+      fullCrewCoverage: 0,
+      ...shared,
+      alarmRushedRouteCounter,
+    };
   }
   const missing = effectiveCost - enthusiasm;
   const shopCreditUsed = !!G.shopCreditUsed;
@@ -725,7 +779,7 @@ function shopPurchaseQuote(api, G, type) {
     && discount > 0
     && !openingCounterPlan
     && counter
-    && scoutedCounterTopDeck
+    && topDeckBeforeAlarm
     && nextMainKey
     && missing === 1
     ? 1
@@ -735,37 +789,41 @@ function shopPurchaseQuote(api, G, type) {
       canBuy: true,
       credit: false,
       counter,
-      topDeck,
+      topDeck: topDeckBeforeAlarm,
       preparedCounter,
       cost,
       effectiveCost,
-        discount,
-        missing,
-        alert: 0,
-        spend: Math.max(0, effectiveCost - fullCrewCoverage),
-        fullCrewCoverage,
-        ...shared,
-      };
+      discount,
+      missing,
+      alert: 0,
+      spend: Math.max(0, effectiveCost - fullCrewCoverage),
+      fullCrewCoverage,
+      ...shared,
+      alarmRushedRouteCounter: false,
+    };
   }
   const canCredit = G.mode !== 'battleTest'
     && G.phase === 'shopping'
     && !shopCreditUsed
     && missing >= 1
     && missing <= shopCreditMaxMissing(api);
+  const creditAlert = canCredit ? missing * shopCreditAlertPerMissing(api) : 0;
+  const alarmRushedRouteCounter = !!(canCredit && alarmRushesWithAlert(creditAlert));
   return {
     canBuy: canCredit,
     credit: canCredit,
     counter,
-    topDeck,
+    topDeck: topDeckBeforeAlarm || alarmRushedRouteCounter,
     preparedCounter,
     cost,
     effectiveCost,
     discount,
-      missing,
-      alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
-      spend: canCredit ? enthusiasm : 0,
-      fullCrewCoverage: 0,
+    missing,
+    alert: creditAlert,
+    spend: canCredit ? enthusiasm : 0,
+    fullCrewCoverage: 0,
     ...shared,
+    alarmRushedRouteCounter,
     consumesOpeningCounterPlan: !!(consumesOpeningCounterPlan && canCredit),
     consumesOpeningCounterPrep: !!(consumesOpeningCounterPlan && canCredit),
   };
@@ -798,6 +856,7 @@ function buildShopDecision(api, G, buysThisShop, typeIndexMap, actionCap) {
     tokens.push(1992 + (quote.counter ? 1 : 0));
     tokens.push(1994 + (quote.openingCounterPrepMight ? 1 : 0));
     tokens.push(1996 + (quote.openingCommissionReport ? 1 : 0));
+    tokens.push(2000 + (quote.alarmRushedRouteCounter ? 1 : 0));
   }
   const pendingAlert = Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
   tokens.push(1940 + bucket(pendingAlert, [0, 1, 2, 3, 5, 8, 12, 20]));
@@ -1274,6 +1333,10 @@ function assertOpeningRouteMusterCheck(condition, message) {
 
 function assertOpeningRoutePrizeCheck(condition, message) {
   if (!condition) throw new Error(`cache drill opening payoff check failed: ${message}`);
+}
+
+function assertAlarmRushedRouteCounterCheck(condition, message) {
+  if (!condition) throw new Error(`alarm-rushed route counter check failed: ${message}`);
 }
 
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
@@ -2794,6 +2857,168 @@ function runOpeningRoutePrizeChecks(runtime) {
     scene.finishBoardingCombat('win');
     assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `Battle Test granted bounty ${JSON.stringify(G.res)}`);
     results.push({ name: 'Battle Test ignores Cache Drill bounty markers', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
+function runAlarmRushedRouteCounterChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routeCases = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler' },
+  ];
+  const fillerShop = (primary) => [primary, 'drummer', 'herald', 'trainer'];
+  const routeFirstIsland = (map, mainKey) => {
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    return { firstShipLayer, routeCache, firstIsland };
+  };
+  const setupRouteShop = (route, opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    const desiredMode = opts.mode || 'run';
+    G.mode = 'run';
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertAlarmRushedRouteCounterCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+    G.mode = desiredMode;
+    G.phase = opts.phase || 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shopCreditUsed = !!opts.shopCreditUsed;
+    G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
+    G.openingCounterPlan = !!opts.openingCounterPlan;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    G.enthusiasm = opts.enthusiasm != null
+      ? Math.max(0, Math.floor(Number(opts.enthusiasm) || 0))
+      : api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    G.deck = [];
+    G.discard = [];
+    G.counterWatchIds = [];
+    return G;
+  };
+  const assertSceneAndPolicyMatch = (G, type, label) => {
+    const quote = scene.shopPurchaseQuote(type);
+    const directQuote = shopPurchaseQuote(api, G, type);
+    assertAlarmRushedRouteCounterCheck(
+      !!quote.alarmRushedRouteCounter === !!directQuote.alarmRushedRouteCounter
+        && !!quote.topDeck === !!directQuote.topDeck
+        && !!quote.credit === !!directQuote.credit
+        && (quote.alert || 0) === (directQuote.alert || 0),
+      `${label} scene/direct quote mismatch: ${JSON.stringify({ quote, directQuote })}`
+    );
+    return quote;
+  };
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 3 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port cash alarm');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.counter && quote.openingRoutePrimary, `Port quote not buyable primary counter: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(quote.alarmRushedRouteCounter && quote.topDeck && !quote.credit && quote.alert === 0, `Port cash alarm did not top-deck without credit: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(!quote.openingCounterPrepMight && !quote.preparedCounter && quote.fullCrewCoverage === 0, `Port cash alarm gained setup perks: ${JSON.stringify(quote)}`);
+    const plan = scene.shopPlanText();
+    assertAlarmRushedRouteCounterCheck(plan.includes('Alarm-rushed') && plan.includes('top deck') && plan.includes('Watch'), `Port shop plan missing alarm top-deck Watch text: ${plan}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertAlarmRushedRouteCounterCheck(bought && bought.type === route.primary, 'Port alarm buy failed');
+    assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), 'Port alarm buy did not go to draw pile only');
+    assertAlarmRushedRouteCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Port alarm buy did not gain Counter Watch');
+    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port alarm buy gained prep/Prepared upgrades: ${JSON.stringify(bought)}`);
+    assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port alarm buy created Cache Drill marks');
+    results.push({ name: 'Port route primary can be alarm-rushed at 3 pending Alert without prep or Prepared gains', ok: true, quote, plan });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 2 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port cash below threshold');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && !quote.alarmRushedRouteCounter && !quote.topDeck, `below-threshold cash primary top-decked: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertAlarmRushedRouteCounterCheck(G.discard.includes(bought) && !G.deck.includes(bought), 'below-threshold cash primary did not discard');
+    assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'below-threshold cash primary gained Counter Watch');
+    results.push({ name: 'cash route-primary buys below 3 post-purchase Alert still discard', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 1, enthusiasm: api.TYPES[route.primary].cost - 2 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port credit alarm');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.credit && quote.alert === 2, `credit alarm did not expose +2 Alert: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(quote.alarmRushedRouteCounter && quote.topDeck, `credit alarm did not top-deck: ${JSON.stringify(quote)}`);
+    const plan = scene.shopPlanText();
+    assertAlarmRushedRouteCounterCheck(plan.includes('Alarm-rushed') && plan.includes('credit +2 Alert') && plan.includes('top deck') && plan.includes('Watch'), `credit plan missing alarm/credit/top-deck Watch: ${plan}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertAlarmRushedRouteCounterCheck(G.boardingAlert === 3 && G.shopCreditUsed === true, `credit alarm Alert/shopCredit mismatch: ${G.boardingAlert}/${G.shopCreditUsed}`);
+    assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), 'credit alarm buy missed draw pile or Watch');
+    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `credit alarm gained excluded upgrades: ${JSON.stringify(bought)}`);
+    results.push({ name: 'Dockside Credit alarm-rush counts same-purchase Alert toward the 3 Alert threshold', ok: true, quote, plan });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 0, enthusiasm: api.TYPES[route.primary].cost - 2 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port credit below threshold');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.credit && quote.alert === 2 && !quote.alarmRushedRouteCounter && !quote.topDeck, `credit below threshold top-decked: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertAlarmRushedRouteCounterCheck(G.boardingAlert === 2 && G.discard.includes(bought) && !G.deck.includes(bought), 'credit below threshold did not discard with +2 Alert');
+    assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'credit below threshold gained Counter Watch');
+    results.push({ name: 'Dockside Credit route-primary buys below 3 projected Alert still discard', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[1];
+    const G = setupRouteShop(route, {
+      boardingAlert: 3,
+      fullCrewDiscount: 1,
+      enthusiasm: api.TYPES[route.primary].cost - 1,
+    });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Full Crew setup owns top-deck');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && !quote.alarmRushedRouteCounter && quote.discount === 1, `Full Crew setup was mislabeled alarm-rushed: ${JSON.stringify(quote)}`);
+    results.push({ name: 'Full Crew setup remains separate from Alarm-rushed labeling', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[0];
+    const G = setupRouteShop(route, { boardingAlert: 3, openingCounterPlan: true });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Opening Prep setup owns top-deck');
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && !quote.alarmRushedRouteCounter, `Opening Prep setup was mislabeled alarm-rushed: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 1, 'Opening Prep no longer granted prep Might');
+    results.push({ name: 'Opening Counter Prep remains the only opening route-primary prep Might path', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 3 });
+    const quote = assertSceneAndPolicyMatch(G, 'drummer', 'non-counter alarm exclusion');
+    assertAlarmRushedRouteCounterCheck(!quote.counter && !quote.alarmRushedRouteCounter && !quote.topDeck, `non-counter received alarm-rushed route setup: ${JSON.stringify(quote)}`);
+    results.push({ name: 'non-counter buys never become Alarm-rushed route counters', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { boardingAlert: 3, boardingCount: 1 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Boarding 2+ alarm exclusion');
+    assertAlarmRushedRouteCounterCheck(!quote.openingRoutePrimary && !quote.alarmRushedRouteCounter, `Boarding 2+ received alarm route setup: ${JSON.stringify(quote)}`);
+    results.push({ name: 'Boarding 2+ route-primary buys cannot use Alarm-rushed setup', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[2];
+    const G = setupRouteShop(route, { mode: 'battleTest', boardingAlert: 3 });
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Battle Test alarm exclusion');
+    assertAlarmRushedRouteCounterCheck(!quote.openingRoutePrimary && !quote.alarmRushedRouteCounter && !quote.topDeck, `Battle Test received alarm route setup: ${JSON.stringify(quote)}`);
+    results.push({ name: 'Battle Test purchases cannot use Alarm-rushed setup', ok: true, quote });
   }
 
   return { ok: true, checks: results };
@@ -7248,8 +7473,10 @@ async function runShoppingPhase(
     if (!bought) break;
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
-      if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
-        else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
+      if (quote && quote.alarmRushedRouteCounter && quote.credit) purchases.push(`${label} (Alarm-rushed Credit +${quote.alert} Alert)`);
+      else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Alarm-rushed)`);
+      else if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
+      else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);
@@ -7880,6 +8107,11 @@ async function main() {
   }
   if (opts.checkOpeningRoutePrize) {
     const result = runOpeningRoutePrizeChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkAlarmRushedRouteCounter) {
+    const result = runAlarmRushedRouteCounterChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

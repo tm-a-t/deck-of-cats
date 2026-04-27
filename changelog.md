@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-130306 — rev 0a4c19b — build 0.1.0
+
+- Gameplay: true - Added Alarm-Rushed Route Counter: before Boarding 1, a selected route-primary counter bought at 3+ projected pending Alert now top-decks and gains Counter Watch without Opening Prep discounts/Might, Prepared gains, Route Starter Pass-Off, Cache Drill marks, Alert refunds, Full Crew coverage, or doubled Ambush Bounty. Validated with JS syntax checks, targeted alarm-rushed route counter, opening route shop, Opening Counter Prep, route starter pass-off, counter recruit, opening route prize, drilled Ambush Bounty, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-130306.log`.
+
 ## 2026-04-27 — run 20260427-124532 — rev 5c30cc3 — build 0.1.0
 
 - Gameplay: true - Added Route Starter Pass-Off: when a Boarding 1 starter counter opens its route cache and the resulting Route Starter Cache Prep buys the matching route-primary counter, the active Cache Drill bounty mark moves from the starter to that bought specialist while the starter keeps Might, Alert refund, early report, and Counter Watch. Validated with JS syntax checks, targeted opening deckhand/pass-off, opening route shop, Opening Counter Prep, and drilled Ambush Bounty sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-124532.log`.
