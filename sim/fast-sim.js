@@ -46,6 +46,7 @@ function parseArgs(argv) {
     checkOpeningShellbackCounter: false,
     checkOpeningDeckhandCounters: false,
     checkOpeningRouteMuster: false,
+    checkOpeningRouteContract: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -177,6 +178,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-route-muster') {
       out.checkOpeningRouteMuster = true;
+      continue;
+    }
+    if (a === '--check-opening-route-contract') {
+      out.checkOpeningRouteContract = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -1236,6 +1241,10 @@ function assertOpeningRouteMusterCheck(condition, message) {
   if (!condition) throw new Error(`opening route muster check failed: ${message}`);
 }
 
+function assertOpeningRouteContractCheck(condition, message) {
+  if (!condition) throw new Error(`opening route contract check failed: ${message}`);
+}
+
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
   if (!condition) throw new Error(`counter recruits report early check failed: ${message}`);
 }
@@ -1975,6 +1984,157 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.res.wood === 0 && G.enthusiasm === 0, 'ship node granted cache reward');
     assertScoutedCounterCacheCheck(G.enemyShip && G.phase === 'boarding', 'ship node did not enter boarding');
     results.push({ name: 'ship nodes do not grant cache rewards', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningRouteContractChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routeCases = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler' },
+  ];
+  const fillerShop = (primary) => [primary, 'drummer', 'herald', 'trainer'];
+  const routeFirstIsland = (map, mainKey) => {
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    return { firstShipLayer, routeCache, firstIsland };
+  };
+
+  routeCases.forEach((route, routeIndex) => {
+    runtime.setSeed((0x61c04700 + routeIndex * 8191) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteContractCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
+    assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    const primaryIndex = G.shop.indexOf(route.primary);
+    assertOpeningRouteContractCheck(primaryIndex >= 0, `${route.label} primary ${route.primary} missing from shop ${G.shop.join(',')}`);
+    const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteContractCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
+    assertOpeningRouteContractCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} primary buy did not mark ${route.mainKey}`);
+
+    const cache = routeCache.scoutedCache;
+    const baseEnthusiasm = Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
+    const baseAlert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    G.phase = 'map';
+    G.enthusiasm = 0;
+    G.boardingAlert = 5;
+    assertOpeningRouteContractCheck(scene.applyMapNodeSelection(routeCache.id), `${route.label} cache selection failed`);
+    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm + 1, `${route.label} contract enthusiasm ${G.enthusiasm} !== ${baseEnthusiasm + 1}`);
+    assertOpeningRouteContractCheck(G.boardingAlert === 5 + baseAlert, `${route.label} contract changed Alert ${G.boardingAlert} !== ${5 + baseAlert}`);
+    assertOpeningRouteContractCheck(G.res[cache.res] === 1, `${route.label} cache resource was doubled or missing: ${JSON.stringify(G.res)}`);
+
+    const beforeDrillEnthusiasm = G.enthusiasm;
+    G.hand = [bought];
+    G.sent = [0];
+    const drill = applyScoutedCacheDrillForSim(scene, bought);
+    assertOpeningRouteContractCheck(drill && drill.applied, `${route.label} matching bought counter did not claim Cache Drill`);
+    assertOpeningRouteContractCheck(G.enthusiasm === beforeDrillEnthusiasm, `${route.label} Cache Drill changed contract enthusiasm ${G.enthusiasm} !== ${beforeDrillEnthusiasm}`);
+    assertOpeningRouteContractCheck(G.boardingAlert === 5, `${route.label} Cache Drill refund should return only cache Alert to 5, got ${G.boardingAlert}`);
+    results.push({ name: `${route.label} bought primary counter earns +1 Opening Route Contract on the matching Boarding 1 cache`, ok: true });
+  });
+
+  {
+    const route = routeCases[0];
+    runtime.setSeed(0x61c04780);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'non-counter route selection failed');
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = 10;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    const fillerIndex = G.shop.findIndex(type => type !== route.primary);
+    const bought = scene.buyPirate(fillerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteContractCheck(bought && bought.type !== route.primary, `non-counter setup bought ${bought && bought.type}`);
+    assertOpeningRouteContractCheck(!G.openingRouteCounterBoughtMainKey, 'non-counter buy marked opening route counter');
+    const baseEnthusiasm = Math.max(0, Math.floor(Number(routeCache.scoutedCache.enthusiasm) || 0));
+    G.phase = 'map';
+    G.enthusiasm = 0;
+    assertOpeningRouteContractCheck(scene.applyMapNodeSelection(routeCache.id), 'non-counter cache selection failed');
+    assertOpeningRouteContractCheck(G.enthusiasm === baseEnthusiasm, `non-counter first buy granted contract ${G.enthusiasm} !== ${baseEnthusiasm}`);
+    results.push({ name: 'buying a non-counter before the cache does not earn Opening Route Contract', ok: true });
+  }
+
+  const applyDirectCache = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount) || 0));
+    G.openingRouteCounterBoughtMainKey = opts.marker == null ? null : opts.marker;
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = 0;
+    G.boardingAlert = 2;
+    const node = {
+      id: opts.id || 500,
+      type: 'island',
+      islandIdx: 0,
+      conns: [],
+      scoutedCache: {
+        mainKey: opts.mainKey || 'shellback',
+        res: 'wood',
+        amount: 1,
+        enthusiasm: 1,
+        alert: 1,
+        claimed: !!opts.claimed,
+      },
+    };
+    return { G, node, grant: scene.applyScoutedCounterCache(node) };
+  };
+
+  {
+    const { G, grant } = applyDirectCache({ marker: 'powderBomber', mainKey: 'shellback' });
+    assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0, `wrong marker route contract ${JSON.stringify(grant)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === 1 && G.boardingAlert === 3, `wrong marker cache values ${G.enthusiasm}/${G.boardingAlert}`);
+    results.push({ name: 'wrong route primary marker does not earn Opening Route Contract', ok: true });
+  }
+
+  {
+    const { G, grant } = applyDirectCache({ marker: 'shellback', mainKey: 'shellback', boardingCount: 1 });
+    assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0, `post-Boarding cache route contract ${JSON.stringify(grant)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === 1, `post-Boarding cache granted contract ${G.enthusiasm}`);
+    results.push({ name: 'Boarding 2+ caches do not earn Opening Route Contract even with a stale marker', ok: true });
+  }
+
+  {
+    const { G, grant } = applyDirectCache({ marker: 'shellback', mainKey: 'shellback', mode: 'battleTest' });
+    assertOpeningRouteContractCheck(!grant, `Battle Test cache granted ${JSON.stringify(grant)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === 0 && G.boardingAlert === 2, `Battle Test cache changed values ${G.enthusiasm}/${G.boardingAlert}`);
+    results.push({ name: 'Battle Test ignores Opening Route Contract and cache rewards', ok: true });
+  }
+
+  {
+    const { G, node, grant } = applyDirectCache({ marker: null, mainKey: 'shellback' });
+    assertOpeningRouteContractCheck(grant && grant.routeContractEnthusiasm === 0 && G.enthusiasm === 1, `pre-primary cache grant mismatch ${JSON.stringify(grant)}`);
+    G.openingRouteCounterBoughtMainKey = 'shellback';
+    const retry = scene.applyScoutedCounterCache(node);
+    assertOpeningRouteContractCheck(!retry, `claimed cache paid retroactive contract ${JSON.stringify(retry)}`);
+    assertOpeningRouteContractCheck(G.enthusiasm === 1, `claimed cache changed enthusiasm after late primary marker ${G.enthusiasm}`);
+    results.push({ name: 'buying the route primary after the cache is claimed cannot pay Opening Route Contract retroactively', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -6301,6 +6461,11 @@ async function main() {
   }
   if (opts.checkOpeningRouteMuster) {
     const result = runOpeningRouteMusterChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningRouteContract) {
+    const result = runOpeningRouteContractChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

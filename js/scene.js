@@ -513,9 +513,17 @@ class GameScene extends Phaser.Scene {
     if (alert > 0) {
       G.boardingAlert = alertFloorBeforeCache + alert;
     }
+    const routeContractEnthusiasm = (
+      Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0
+      && cache.mainKey
+      && cache.mainKey === G.openingRouteCounterBoughtMainKey
+    ) ? 1 : 0;
+    if (routeContractEnthusiasm > 0) {
+      G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + routeContractEnthusiasm;
+    }
     cache.claimed = true;
 
-    return { res, amount, enthusiasm, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
+    return { res, amount, enthusiasm, routeContractEnthusiasm, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
@@ -1053,10 +1061,13 @@ class GameScene extends Phaser.Scene {
       const enthusiasmText = cacheGrant.enthusiasm > 0
         ? ` +${cacheGrant.enthusiasm > 1 ? cacheGrant.enthusiasm : ''}${RES_EMOJI.enthusiasm}`
         : '';
+      const contractText = cacheGrant.routeContractEnthusiasm > 0
+        ? ` +Contract ${cacheGrant.routeContractEnthusiasm > 1 ? cacheGrant.routeContractEnthusiasm : ''}${RES_EMOJI.enthusiasm}`
+        : '';
       const alertText = cacheGrant.alert > 0
         ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
         : '';
-      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${enthusiasmText}${alertText}`, '#ffd166');
+      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${enthusiasmText}${contractText}${alertText}`, '#ffd166');
     }
     return true;
   }
