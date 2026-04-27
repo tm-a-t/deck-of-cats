@@ -36,16 +36,17 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
 - In regular runs, each ship's immediately preceding normal island layer marks 1 `Scouted Counter Cache` tied to that ship's main scouted enemy.
-- Selecting a marked cache island immediately grants `+1` of the cache resource and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
+- Selecting a marked cache island immediately grants `+1` of the cache resource, `+1☠️`, and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
 - The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's own `+1 Boarding Alert`, and is marked to report early.
-- The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed.
+- The cache `☠️` is normal round shop currency, is granted only once, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a prepared `Top deck` counter in that round's Shop.
+- The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed and never removes the cache `☠️`.
 - Cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
-- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, and early report are not doubled by island bonuses.
+- `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
 - If both Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, the Cache Drill pirate is placed above those purchases and is drawn first.
-- Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes or `Infirmary Island`, and a claimed cache cannot grant its reward again.
+- Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes, `Infirmary Island`, claimed caches, or unmarked islands, and a claimed cache cannot grant its resource, `☠️`, Alert, or drill reward again.
 
 ### 2. Island Round
 

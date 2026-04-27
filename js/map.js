@@ -91,6 +91,7 @@ function markScoutedCounterCaches(layers) {
       mainKey,
       res,
       amount: 1,
+      enthusiasm: 1,
       alert: 1,
       claimed: false,
     };

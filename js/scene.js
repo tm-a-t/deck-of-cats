@@ -495,20 +495,26 @@ class GameScene extends Phaser.Scene {
 
     const res = cache.res;
     const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
+    const enthusiasm = cache.enthusiasm == null
+      ? 1
+      : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
     const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
-    if (!res || !RES_EMOJI[res] || (amount <= 0 && alert <= 0)) return null;
+    if (!res || !RES_EMOJI[res] || (amount <= 0 && enthusiasm <= 0 && alert <= 0)) return null;
 
     const alertFloorBeforeCache = this.pendingBoardingAlert();
     if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
     if (amount > 0) {
       G.res[res] = Math.max(0, Math.floor(Number(G.res[res]) || 0)) + amount;
     }
+    if (enthusiasm > 0) {
+      G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + enthusiasm;
+    }
     if (alert > 0) {
       G.boardingAlert = alertFloorBeforeCache + alert;
     }
     cache.claimed = true;
 
-    return { res, amount, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
+    return { res, amount, enthusiasm, alert, alertFloorBeforeCache, mainKey: cache.mainKey || null };
   }
 
   scoutedCacheDrillCounterTypes(mainKey) {
@@ -725,10 +731,13 @@ class GameScene extends Phaser.Scene {
     this.renderAll();
     if (cacheGrant && this.L) {
       const resText = `${cacheGrant.amount > 1 ? cacheGrant.amount : ''}${RES_EMOJI[cacheGrant.res]}`;
+      const enthusiasmText = cacheGrant.enthusiasm > 0
+        ? ` +${cacheGrant.enthusiasm > 1 ? cacheGrant.enthusiasm : ''}${RES_EMOJI.enthusiasm}`
+        : '';
       const alertText = cacheGrant.alert > 0
         ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
         : '';
-      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${alertText}`, '#ffd166');
+      this.float(this.L.cx, this.L.Y_ISL_CY - 78 * this.L.k, `Scouted cache +${resText}${enthusiasmText}${alertText}`, '#ffd166');
     }
     return true;
   }

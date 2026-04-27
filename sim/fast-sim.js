@@ -1247,7 +1247,7 @@ function runScoutedCounterCacheChecks(runtime) {
       assertScoutedCounterCacheCheck(cacheNode.id === expectedNode.id, `sample ${sample} cache node ${cacheNode.id} !== preferred ${expectedNode.id}`);
       assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
       assertScoutedCounterCacheCheck(cache.res === res, `sample ${sample} cache res ${cache.res} !== ${res}`);
-      assertScoutedCounterCacheCheck(cache.amount === 1 && cache.alert === 1, `sample ${sample} cache amount/alert ${cache.amount}/${cache.alert}`);
+      assertScoutedCounterCacheCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} cache amount/enthusiasm/alert ${cache.amount}/${cache.enthusiasm}/${cache.alert}`);
       assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
       shipCacheLayers.push(li - 1);
       generatedCacheCount++;
@@ -1274,6 +1274,7 @@ function runScoutedCounterCacheChecks(runtime) {
     };
     G.phase = 'map';
     G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = 0;
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
     G.enemyShip = null;
     G.island = null;
@@ -1287,11 +1288,12 @@ function runScoutedCounterCacheChecks(runtime) {
       type: 'island',
       islandIdx: 0,
       conns: [99],
-      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 1, claimed: false },
     };
     const { G, handled } = selectNode(node, { boardingAlert: 2 });
     assertScoutedCounterCacheCheck(handled, 'cache island selection failed');
     assertScoutedCounterCacheCheck(G.res.wood === 1, `cache granted wood ${G.res.wood}`);
+    assertScoutedCounterCacheCheck(G.enthusiasm === 1, `cache granted enthusiasm ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `cache alert ${G.boardingAlert} !== 3`);
     assertScoutedCounterCacheCheck(node.scoutedCache.claimed === true, 'cache was not claimed');
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === 'shellback', 'cache island did not arm Cache Drill');
@@ -1299,9 +1301,41 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill.alertFloorBeforeCache === 2, `cache refund floor ${G.island.scoutedCacheDrill.alertFloorBeforeCache} !== 2`);
     scene.applyMapNodeSelection(node.id);
     assertScoutedCounterCacheCheck(G.res.wood === 1, `claimed cache granted again to wood ${G.res.wood}`);
+    assertScoutedCounterCacheCheck(G.enthusiasm === 0, `claimed cache granted again to enthusiasm ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `claimed cache alerted again to ${G.boardingAlert}`);
     assertScoutedCounterCacheCheck(!G.island.scoutedCacheDrill, 'claimed cache armed Cache Drill again');
-    results.push({ name: 'cache selection grants mapped resource and Alert exactly once', ok: true });
+    results.push({ name: 'cache selection grants mapped resource, enthusiasm, and Alert exactly once', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('powderBomber');
+    G.round = 3;
+    G.boardingCount = 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[0]);
+    G.shop = ['sawbones'];
+    G.enthusiasm = 1;
+    G.boardingAlert = 1;
+    G.shopCreditUsed = false;
+    const wage = scene.shipWageProjection(2);
+    const discount = scene.projectFullCrewDiscount(2);
+    const quote = scene.shopPurchaseQuote('sawbones', {
+      enthusiasm: G.enthusiasm + wage.wages,
+      boardingAlert: G.boardingAlert + wage.alert,
+      fullCrewDiscount: discount,
+      shopCreditUsed: false,
+      allowCredit: true,
+    });
+    const plan = scene.formatSendingPlanLine(scene.sendingPlanProjection(2));
+    assertScoutedCounterCacheCheck(wage.wages === 1 && discount === 1, `full-send projection wages/discount ${wage.wages}/${discount}`);
+    assertScoutedCounterCacheCheck(quote.canBuy && !quote.credit, `cache bounty full-send quote needed credit: ${JSON.stringify(quote)}`);
+    assertScoutedCounterCacheCheck(quote.counter && quote.topDeck && quote.preparedCounter, `cache bounty quote was not prepared top-deck counter: ${JSON.stringify(quote)}`);
+    assertScoutedCounterCacheCheck(quote.effectiveCost === 2 && quote.spend === 2, `cache bounty quote cost/spend ${quote.effectiveCost}/${quote.spend}`);
+    assertScoutedCounterCacheCheck(plan.includes('prepared') && plan.includes('top deck') && !plan.includes('credit'), `cache bounty plan missing prepared top deck without credit: ${plan}`);
+    results.push({ name: 'cache bounty plus full-send discount makes a cost-3 counter prepared and affordable without Dockside Credit', ok: true, plan });
   }
 
   const setupDrill = (opts = {}) => {
@@ -1331,6 +1365,7 @@ function runScoutedCounterCacheChecks(runtime) {
     G.discard = [];
     G.sent = [];
     G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = Math.max(0, Math.floor(Number(opts.enthusiasm) || 0));
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
     scene._sacrificedIds.clear();
     return { G, pirates };
@@ -1347,12 +1382,13 @@ function runScoutedCounterCacheChecks(runtime) {
   };
 
   {
-    const { G, pirates } = setupDrill({ boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
+    const { G, pirates } = setupDrill({ enthusiasm: 1, boardingAlert: 3, alertRefundAmount: 1, alertFloorBeforeCache: 2 });
     const reward = sendForDrill(G, pirates[0], 0);
     assertScoutedCounterCacheCheck(reward && reward.applied, 'matching counter did not receive Cache Drill');
     assertScoutedCounterCacheCheck((pirates[0].might || 0) === 3, `matching counter might ${pirates[0].might || 0} !== 3`);
     assertScoutedCounterCacheCheck(reward.alertRefund && reward.alertRefund.amount === 1, `matching counter refund ${reward.alertRefund && reward.alertRefund.amount} !== 1`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 2, `matching counter alert ${G.boardingAlert} !== 2`);
+    assertScoutedCounterCacheCheck(G.enthusiasm === 3, `Cache Drill refund removed cache enthusiasm or island gain ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck((G.cacheDrillMusterIds || []).includes(pirates[0].id), 'matching counter did not create Cache Drill muster marker');
     const second = sendForDrill(G, pirates[1], 1);
     assertScoutedCounterCacheCheck(!second, 'second matching counter received another Cache Drill');
@@ -1435,7 +1471,7 @@ function runScoutedCounterCacheChecks(runtime) {
   {
     const node = { id: 20, type: 'island', islandIdx: 0, conns: [99] };
     const { G } = selectNode(node);
-    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'unmarked island granted a cache');
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.enthusiasm === 0 && G.boardingAlert === 0, 'unmarked island granted a cache');
     results.push({ name: 'unmarked islands do not grant cache rewards', ok: true });
   }
 
@@ -1445,10 +1481,10 @@ function runScoutedCounterCacheChecks(runtime) {
       type: 'island',
       islandIdx: 6,
       conns: [99],
-      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 1, claimed: false },
     };
     const { G } = selectNode(node);
-    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'Infirmary Island granted a cache');
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.enthusiasm === 0 && G.boardingAlert === 0, 'Infirmary Island granted a cache');
     results.push({ name: 'Infirmary cache markers are ignored defensively', ok: true });
   }
 
@@ -1458,10 +1494,10 @@ function runScoutedCounterCacheChecks(runtime) {
       type: 'island',
       islandIdx: 0,
       conns: [99],
-      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 1, claimed: false },
     };
     const { G } = selectNode(node, { mode: 'battleTest' });
-    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.boardingAlert === 0, 'Battle Test granted a cache');
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.enthusiasm === 0 && G.boardingAlert === 0, 'Battle Test granted a cache');
     results.push({ name: 'Battle Test mode ignores cache rewards', ok: true });
   }
 
@@ -1474,14 +1510,14 @@ function runScoutedCounterCacheChecks(runtime) {
       strength: 6,
       encounter: { mainKey: 'shellback', supportKeys: [], totalCount: 1 },
       conns: [],
-      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, alert: 1, claimed: false },
+      scoutedCache: { mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 1, claimed: false },
     };
     G.map = { layers: [[ship]], visited: [], currentNodeId: null, currentLayer: -1 };
     G.phase = 'map';
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.boardingAlert = 0;
     scene.applyMapNodeSelection(ship.id);
-    assertScoutedCounterCacheCheck(G.res.wood === 0, 'ship node granted cache resource');
+    assertScoutedCounterCacheCheck(G.res.wood === 0 && G.enthusiasm === 0, 'ship node granted cache reward');
     assertScoutedCounterCacheCheck(G.enemyShip && G.phase === 'boarding', 'ship node did not enter boarding');
     results.push({ name: 'ship nodes do not grant cache rewards', ok: true });
   }

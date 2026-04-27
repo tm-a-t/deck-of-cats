@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-014704 — rev 5b11c2f
+
+- Gameplay: true - Scouted Counter Cache islands now pay a `+1☠️` counter bounty in addition to their mapped resource and `+1 Boarding Alert`, with map/floating labels showing the bounty; Cache Drill still only refunds the cache Alert and leaves the bounty available for prepared top-deck counter buys. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-shop --json`, `node sim/fast-sim.js --check-map-schedule --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-014704.log`.
+
 ## 2026-04-27 — run 20260427-012701 — rev 14f48e0
 
 - Gameplay: true - Counter Ambush now cuts the alarm: after a front-row matching counter wounds and damages the scouted main enemy, it removes the frontmost then leftmost living Boarding Alert guard before combat starts, and that removed guard is excluded from win plunder while remaining guards still pay normally. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `node sim/fast-sim.js --check-boarding-trophy --json`, `node sim/fast-sim.js --check-counter-trophy --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-012701.log`.
