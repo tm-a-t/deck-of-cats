@@ -879,6 +879,9 @@ class GameScene extends Phaser.Scene {
     map.currentNodeId = nodeId;
     map.currentLayer = layerIdx;
     map.visited.push(nodeId);
+    if (typeof normalizeOpeningRouteShop === 'function') {
+      G.shop = normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    }
 
     const watchReadyCounterIds = node.type === 'ship'
       ? this.counterWatchReadyIdsForBoarding(node)
@@ -1852,6 +1855,9 @@ class GameScene extends Phaser.Scene {
     G.shopCreditUsed = false;
     G.fullCrewDiscount = this.isBattleTest() ? 0 : this.pendingFullCrewDiscount();
     if (this.isBattleTest()) G.openingCounterPlan = false;
+    if (typeof normalizeOpeningRouteShop === 'function') {
+      G.shop = normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    }
   }
 
   consumeBoardingAlertForBoarding() {
@@ -2599,6 +2605,14 @@ class GameScene extends Phaser.Scene {
     G.shop.splice(si, 1);
     if (G.shop.length) {
       G.shop.push(randomShopType(G.round, G.shop, { map: G.map, mode: G.mode }));
+      if (typeof normalizeOpeningRouteShop === 'function') {
+        G.shop = normalizeOpeningRouteShop(G.shop, G.round, {
+          map: G.map,
+          mode: G.mode,
+          boardingCount: G.boardingCount,
+          newSlotIndex: G.shop.length - 1,
+        });
+      }
     }
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
@@ -2629,6 +2643,14 @@ class GameScene extends Phaser.Scene {
     if (G.shop.length) {
       G.shop.shift();
       G.shop.push(randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
+      if (typeof normalizeOpeningRouteShop === 'function') {
+        G.shop = normalizeOpeningRouteShop(G.shop, G.round + 1, {
+          map: G.map,
+          mode: G.mode,
+          boardingCount: G.boardingCount,
+          newSlotIndex: G.shop.length - 1,
+        });
+      }
     }
     this.prepareNextRound();
   }

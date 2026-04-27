@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-080840 — rev b022801
+
+- Gameplay: true - Added route-locked pre-Boarding-1 shop curation: after the opening route is chosen, Forest/Shellback shops show only Poisoner from the opening counter trio, Rocky/Powder Bomber shops show only Sawbones, and Port/Deck Sniper shops show only Needler, with the other opening counters replaced by affordable starter non-counters while existing price, top-deck, Counter Watch, Opening Counter Prep, Full Crew coverage, Dockside Credit, Battle Test, and post-Boarding-1 behavior stay intact. Validated with JS syntax checks, targeted route-shop/opening-prep/scouted-shop/route-captain/full-crew/counter-recruit/deckhand/cache/Short-Crew/ambush/map checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-080840.log`.
+
 ## 2026-04-27 — run 20260427-071843 — rev 8dedde6
 
 - Gameplay: true - Made round-1 `Full Crew Discount` coverage route-agnostic: full-send Rocky and Port openings can now cover the missing `1☠️` for Sawbones/Needler first-ship counters just like the Forest Shellback lane, without Dockside Credit, Alert, `Prepared`, or Opening Prep Might. Validated with JS syntax checks, `node sim/fast-sim.js --check-full-crew-coverage --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-opening-counter-prep --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, related scouted counter/cache/route-captain checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-071843.log`.

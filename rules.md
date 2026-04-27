@@ -119,9 +119,13 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The shop appears only after island rounds. There is no shop after boarding.
 - The shop always has 4 slots. Starters (`Rigger`, `Ballaster`, `Armsman`) are never sold there.
 - `randomShopType(round, excludeTypes = [])` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`, first avoiding any excluded visible shop types when the eligible pool has an unused type.
-- The initial display is created as `initialShop(4, 0)`, which in regular runs always includes `Poisoner`, `Sawbones`, `Needler`, and 1 economy pirate from `Herald`/`Survivalist`, shuffled.
+- The initial display before an opening route is selected is created as `initialShop(4, 0)`, which in regular runs includes `Poisoner`, `Sawbones`, `Needler`, and 1 economy pirate from `Herald`/`Survivalist`, shuffled.
 - Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
-- In regular runs, while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
+- In regular runs, after the opening route is selected and until Boarding 1 starts, shops are route-focused. The route-selected first ship sets exactly 1 primary opening counter offer: `Forest Island`/`Shellback` → `Poisoner`, `Rocky Island`/`Powder Bomber` → `Sawbones`, and `Port Island`/`Deck Sniper` → `Needler`.
+- During this route-focused window, the visible 4-slot shop contains exactly 1 of `Poisoner`/`Sawbones`/`Needler`, and it must be the route primary. The other opening counter candidates are replaced by distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist`, falling back to normal unique eligible generation only if needed.
+- Route-focused normalization applies when the route is selected, when the Shop phase opens, after immediate purchase refills, and after end-of-shop `Continue` refills. It does not change prices, `Top deck`, `Counter Watch`, `Opening Counter Prep`, `Full Crew Discount` coverage, `Dockside Credit`, or counter payoff logic.
+- Route-focused opening shops never apply in `Battle Test` and stop after Boarding 1 starts.
+- Outside the route-focused opening window, in regular runs while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
 - The scouted counter rule checks the 4 visible slots after the new slot is generated. If no visible pirate counters the main scouted enemy and the current cost-gated shop pool contains an eligible non-duplicate counter, only the newly generated slot is replaced by one counter.
 - The scouted counter rule does not apply in `Battle Test`, never sells starter pirates, and does nothing when no eligible non-duplicate counter exists.
 - Scouted counter map:

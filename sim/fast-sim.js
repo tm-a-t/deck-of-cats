@@ -302,6 +302,8 @@ function buildRuntime() {
       randomShopType,
       initialShop,
       applyScoutedCounterToShop,
+      normalizeOpeningRouteShop,
+      openingRoutePrimaryCounterTypeForShop,
       scoutedCounterTypesForMap,
       isScoutedCounterShopType,
       openingDeckhandCounterTypes,
@@ -2319,8 +2321,54 @@ function runOpeningRouteCounterShopChecks(runtime) {
   const results = [];
   const samples = 24;
   const starters = new Set(['lumberjack', 'miner', 'armsman']);
-  const requiredCounters = ['poisoner', 'sawbones', 'needler'];
+  const openingCounters = ['poisoner', 'sawbones', 'needler'];
+  const fillerTypes = ['drummer', 'herald', 'trainer', 'survivalist'];
   const economyTypes = ['herald', 'survivalist'];
+  const routeCases = [
+    { label: 'Forest', mainKey: 'shellback', primary: 'poisoner' },
+    { label: 'Rocky', mainKey: 'powderBomber', primary: 'sawbones' },
+    { label: 'Port', mainKey: 'deckSniper', primary: 'needler' },
+  ];
+
+  const assertBasicShop = (shop, label) => {
+    assertOpeningRouteCounterShopCheck(shop.length === 4, `${label} shop length ${shop.length}`);
+    assertOpeningRouteCounterShopCheck(new Set(shop).size === shop.length, `${label} duplicate shop ${shop.join(',')}`);
+    assertOpeningRouteCounterShopCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `${label} shop has starter or unknown ${shop.join(',')}`);
+  };
+
+  const assertRouteFocusedShop = (shop, label, primary) => {
+    assertBasicShop(shop, label);
+    const openingVisible = shop.filter(type => openingCounters.includes(type));
+    assertOpeningRouteCounterShopCheck(
+      openingVisible.length === 1 && openingVisible[0] === primary,
+      `${label} route focus expected only ${primary}, got ${shop.join(',')}`
+    );
+    const fillers = shop.filter(type => type !== primary);
+    assertOpeningRouteCounterShopCheck(
+      fillers.length === 3 && fillers.every(type => fillerTypes.includes(type) && api.TYPES[type].cost <= 3),
+      `${label} route fillers are not distinct affordable starters: ${shop.join(',')}`
+    );
+  };
+
+  const routeFirstIsland = (map, mainKey) => {
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    return { firstShipLayer, routeCache, firstIsland };
+  };
+
+  const continueRefreshShopForTest = (G) => {
+    G.shop.shift();
+    G.shop.push(api.randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
+    if (typeof api.normalizeOpeningRouteShop === 'function') {
+      G.shop = api.normalizeOpeningRouteShop(G.shop, G.round + 1, {
+        map: G.map,
+        mode: G.mode,
+        boardingCount: G.boardingCount,
+        newSlotIndex: G.shop.length - 1,
+      });
+    }
+  };
 
   for (let sample = 0; sample < samples; sample++) {
     runtime.setSeed((0x51e11bac + sample * 3571) >>> 0);
@@ -2334,10 +2382,8 @@ function runOpeningRouteCounterShopChecks(runtime) {
     const firstShip = firstShipLayer >= 0 ? map.layers[firstShipLayer][0] : null;
 
     assertOpeningRouteCounterShopCheck(firstShip && firstShip.encounter, `sample ${sample} first ship is missing`);
-    assertOpeningRouteCounterShopCheck(shop.length === 4, `sample ${sample} shop length ${shop.length}`);
-    assertOpeningRouteCounterShopCheck(new Set(shop).size === shop.length, `sample ${sample} duplicate shop ${shop.join(',')}`);
-    assertOpeningRouteCounterShopCheck(shop.every(type => api.TYPES[type] && !starters.has(type)), `sample ${sample} shop has starter or unknown ${shop.join(',')}`);
-    requiredCounters.forEach((type) => {
+    assertBasicShop(shop, `sample ${sample} pre-route`);
+    openingCounters.forEach((type) => {
       assertOpeningRouteCounterShopCheck(shop.includes(type), `sample ${sample} opening shop lacks ${type}: ${shop.join(',')}`);
     });
     assertOpeningRouteCounterShopCheck(
@@ -2345,7 +2391,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
       `sample ${sample} opening shop lacks exactly one economy slot: ${shop.join(',')}`
     );
   }
-  results.push({ name: 'regular opening shops always show Poisoner, Sawbones, Needler, and one economy pirate', ok: true, samples });
+  results.push({ name: 'pre-route regular opening shops still stage Poisoner, Sawbones, Needler, and one economy pirate', ok: true, samples });
 
   const getRandom = runtime.context.Phaser.Utils.Array.GetRandom;
   runtime.context.Phaser.Utils.Array.GetRandom = (arr) => (arr && arr.length ? arr[arr.length - 1] : undefined);
@@ -2355,99 +2401,74 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(!shellbackBattleShop.includes('poisoner'), `Battle Test starter shop unexpectedly forced Poisoner: ${shellbackBattleShop.join(',')}`);
 
     const powderShop = api.initialShop(4, 0, { map: makeScoutedCounterTestMap('powderBomber'), mode: 'run' });
-    requiredCounters.forEach((type) => {
-      assertOpeningRouteCounterShopCheck(powderShop.includes(type), `regular route starter shop lacks ${type}: ${powderShop.join(',')}`);
-    });
-    assertOpeningRouteCounterShopCheck(powderShop.includes('survivalist'), `regular route starter shop did not use sampled economy slot: ${powderShop.join(',')}`);
-    assertOpeningRouteCounterShopCheck(new Set(powderShop).size === powderShop.length, `non-Shellback shop has duplicate: ${powderShop.join(',')}`);
-    results.push({ name: 'Battle Test keeps old lane sampling while regular route shops pin all three counters', ok: true, shellbackBattleShop, powderShop });
+    assertRouteFocusedShop(powderShop, 'Powder Bomber route initialShop', 'sawbones');
+    results.push({ name: 'Battle Test keeps old lane sampling while route-known regular initial shops focus one counter', ok: true, shellbackBattleShop, powderShop });
   } finally {
     runtime.context.Phaser.Utils.Array.GetRandom = getRandom;
   }
 
-  runtime.setSeed(0x704501a1);
-  api.initState();
-  const G = api.getG();
-  const map = G.map;
-  const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-  const forestCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === 'shellback');
-  assertOpeningRouteCounterShopCheck(forestCache, 'missing Forest Shellback cache');
-  const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(forestCache.id));
-  assertOpeningRouteCounterShopCheck(firstIsland && firstIsland.type === 'island', 'missing first island setup');
-  assertOpeningRouteCounterShopCheck(scene.applyMapNodeSelection(firstIsland.id), 'first island selection failed');
-  assertOpeningRouteCounterShopCheck(G.phase === 'sending' && G.round === 1 && G.map.currentLayer === 0, `first round setup phase=${G.phase} round=${G.round} layer=${G.map.currentLayer}`);
-  assertOpeningRouteCounterShopCheck(map.layers[firstShipLayer][0].encounter.mainKey === 'shellback', 'Forest route did not scout Shellback');
-  assertOpeningRouteCounterShopCheck(G.shop.includes('poisoner'), `round-1 shop lacks Poisoner before full-send buy: ${G.shop.join(',')}`);
+  {
+    const unchanged = api.normalizeOpeningRouteShop(
+      ['poisoner', 'sawbones', 'needler', 'herald'],
+      2,
+      { map: makeScoutedCounterTestMap('shellback'), mode: 'run', boardingCount: 1 }
+    );
+    openingCounters.forEach((type) => {
+      assertOpeningRouteCounterShopCheck(unchanged.includes(type), `post-Boarding-1 normalize removed ${type}: ${unchanged.join(',')}`);
+    });
+    const laterScouted = api.applyScoutedCounterToShop(
+      ['herald', 'trainer', 'survivalist', 'drummer'],
+      2,
+      { map: makeScoutedCounterTestMap('shellback'), mode: 'run', boardingCount: 1, newSlotIndex: 3 }
+    );
+    assertOpeningRouteCounterShopCheck(
+      laterScouted.some(type => ['poisoner', 'needler', 'plagueCaptain'].includes(type)),
+      `post-Boarding-1 scouted counter shop no longer injected a Shellback counter: ${laterScouted.join(',')}`
+    );
+    results.push({ name: 'post-Boarding-1 shops skip route focus and keep existing scouted counter injection', ok: true, unchanged, laterScouted });
+  }
 
-  G.sent = Array.from({ length: scene.maxSend() }, (_, index) => index);
-  updateFullCrewDiscountForSim(scene, G);
-  applyShipWagesForSim(scene, G);
-  G.phase = 'shopping';
-  G.shopCreditUsed = false;
-  assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `full send wages left ${G.enthusiasm} enthusiasm`);
-  assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 1, `full send discount ${G.fullCrewDiscount}`);
-  assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `full send added Alert ${G.boardingAlert}`);
-
-  const poisonerIndex = G.shop.indexOf('poisoner');
-  const quote = scene.shopPurchaseQuote('poisoner');
-  const directQuote = shopPurchaseQuote(api, G, 'poisoner');
-  assertOpeningRouteCounterShopCheck(poisonerIndex >= 0, 'Poisoner not found in shop for buy');
-  assertOpeningRouteCounterShopCheck(quote.canBuy && !quote.credit, `Poisoner quote was not affordable without credit: ${JSON.stringify(quote)}`);
-  assertOpeningRouteCounterShopCheck(quote.counter && quote.topDeck && !quote.preparedCounter, `Poisoner should be a watched top-deck counter without pre-boarding discount preparation: ${JSON.stringify(quote)}`);
-  assertOpeningRouteCounterShopCheck(quote.cost === 2 && quote.discount === 1 && quote.effectiveCost === 1 && quote.spend === 1 && quote.missing === 0, `Poisoner economics mismatch: ${JSON.stringify(quote)}`);
-  assertOpeningRouteCounterShopCheck(quote.fullCrewCoverage === 0 && !quote.credit && quote.alert === 0, `Poisoner used coverage/credit/Alert: ${JSON.stringify(quote)}`);
-  assertOpeningRouteCounterShopCheck(directQuote.canBuy && !directQuote.credit && directQuote.fullCrewCoverage === 0 && !directQuote.preparedCounter, `sim policy quote mismatch: ${JSON.stringify(directQuote)}`);
-
-  const bought = scene.buyPirate(poisonerIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-  assertOpeningRouteCounterShopCheck(bought && bought.type === 'poisoner', 'Poisoner buy failed');
-  assertOpeningRouteCounterShopCheck(G.enthusiasm === 0, `Poisoner buy left enthusiasm ${G.enthusiasm}`);
-  assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `Poisoner buy added Alert ${G.boardingAlert}`);
-  assertOpeningRouteCounterShopCheck(G.shopCreditUsed === false, 'Poisoner buy used Dockside Credit');
-  assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 0, 'Poisoner buy did not consume Full Crew Discount');
-  assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought, 'Poisoner did not go to top of deck');
-  assertOpeningRouteCounterShopCheck((G.counterWatchIds || []).includes(bought.id), 'Poisoner did not gain Counter Watch');
-  assertOpeningRouteCounterShopCheck(!bought.weaponKey, `pre-boarding full-send Poisoner was Prepared with ${bought.weaponKey}`);
-  assertOpeningRouteCounterShopCheck(!G.discard.includes(bought), 'Poisoner also went to discard');
-  results.push({ name: 'round-1 full-send buys watched top-deck Poisoner for 1 without pre-boarding discount preparation', ok: true, quote });
-
-  [
-    { label: 'Rocky', mainKey: 'powderBomber', type: 'sawbones' },
-    { label: 'Port', mainKey: 'deckSniper', type: 'needler' },
-  ].forEach(({ label, mainKey, type }, routeIndex) => {
+  routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
     runtime.setSeed((0x704501b0 + routeIndex) >>> 0);
     api.initState();
     const G = api.getG();
     const map = G.map;
-    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
-    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const { firstShipLayer, routeCache, firstIsland } = routeFirstIsland(map, mainKey);
     assertOpeningRouteCounterShopCheck(routeCache, `missing ${label} ${mainKey} cache`);
-    const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && node.conns.includes(routeCache.id));
     assertOpeningRouteCounterShopCheck(firstIsland && firstIsland.type === 'island', `missing ${label} first island setup`);
     assertOpeningRouteCounterShopCheck(scene.applyMapNodeSelection(firstIsland.id), `${label} first island selection failed`);
+    assertOpeningRouteCounterShopCheck(G.phase === 'sending' && G.round === 1 && G.map.currentLayer === 0, `${label} first round setup phase=${G.phase} round=${G.round} layer=${G.map.currentLayer}`);
     assertOpeningRouteCounterShopCheck(map.layers[firstShipLayer][0].encounter.mainKey === mainKey, `${label} route did not scout ${mainKey}`);
-    assertOpeningRouteCounterShopCheck(G.shop.includes(type), `${label} round-1 shop lacks ${type}: ${G.shop.join(',')}`);
+    assertRouteFocusedShop(G.shop, `${label} route-selected shop`, primary);
 
     G.sent = Array.from({ length: scene.maxSend() }, (_, index) => index);
     updateFullCrewDiscountForSim(scene, G);
     applyShipWagesForSim(scene, G);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
+    if (typeof api.normalizeOpeningRouteShop === 'function') {
+      G.shop = api.normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    }
+    assertRouteFocusedShop(G.shop, `${label} shop entry`, primary);
     assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `${label} full send wages left ${G.enthusiasm} enthusiasm`);
     assertOpeningRouteCounterShopCheck(G.fullCrewDiscount === 1, `${label} full send discount ${G.fullCrewDiscount}`);
     assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `${label} full send added Alert ${G.boardingAlert}`);
 
-    const index = G.shop.indexOf(type);
-    const routeQuote = scene.shopPurchaseQuote(type);
-    const routeDirectQuote = shopPurchaseQuote(api, G, type);
-    assertOpeningRouteCounterShopCheck(index >= 0, `${label} ${type} not found in shop for buy`);
-    assertOpeningRouteCounterShopCheck(routeQuote.canBuy && !routeQuote.credit, `${label} ${type} quote was not covered without credit: ${JSON.stringify(routeQuote)}`);
-    assertOpeningRouteCounterShopCheck(routeQuote.counter && routeQuote.topDeck && !routeQuote.preparedCounter, `${label} ${type} should be a watched top-deck counter without preparation: ${JSON.stringify(routeQuote)}`);
-    assertOpeningRouteCounterShopCheck(routeQuote.discount === 1 && routeQuote.effectiveCost === 2 && routeQuote.spend === 1 && routeQuote.missing === 1, `${label} ${type} economics mismatch: ${JSON.stringify(routeQuote)}`);
-    assertOpeningRouteCounterShopCheck(routeQuote.fullCrewCoverage === 1 && !routeQuote.credit && routeQuote.alert === 0, `${label} ${type} missed route-agnostic Full Crew coverage: ${JSON.stringify(routeQuote)}`);
-    assertOpeningRouteCounterShopCheck(routeDirectQuote.canBuy && !routeDirectQuote.credit && routeDirectQuote.fullCrewCoverage === 1 && !routeDirectQuote.preparedCounter, `${label} sim policy quote mismatch: ${JSON.stringify(routeDirectQuote)}`);
+    const index = G.shop.indexOf(primary);
+    const routeQuote = scene.shopPurchaseQuote(primary);
+    const routeDirectQuote = shopPurchaseQuote(api, G, primary);
+    const expectedCoverage = primary === 'poisoner' ? 0 : 1;
+    const expectedEffective = Math.max(0, api.TYPES[primary].cost - 1);
+    const expectedMissing = Math.max(0, expectedEffective - 1);
+    assertOpeningRouteCounterShopCheck(index >= 0, `${label} ${primary} not found in shop for buy`);
+    assertOpeningRouteCounterShopCheck(routeQuote.canBuy && !routeQuote.credit, `${label} ${primary} quote was not covered without credit: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.counter && routeQuote.topDeck && !routeQuote.preparedCounter, `${label} ${primary} should be a watched top-deck counter without preparation: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.discount === 1 && routeQuote.effectiveCost === expectedEffective && routeQuote.spend === 1 && routeQuote.missing === expectedMissing, `${label} ${primary} economics mismatch: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.fullCrewCoverage === expectedCoverage && !routeQuote.credit && routeQuote.alert === 0, `${label} ${primary} coverage mismatch: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeDirectQuote.canBuy && !routeDirectQuote.credit && routeDirectQuote.fullCrewCoverage === expectedCoverage && !routeDirectQuote.preparedCounter, `${label} sim policy quote mismatch: ${JSON.stringify(routeDirectQuote)}`);
 
     const covered = scene.buyPirate(index, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertOpeningRouteCounterShopCheck(covered && covered.type === type, `${label} ${type} buy failed`);
+    assertOpeningRouteCounterShopCheck(covered && covered.type === primary, `${label} ${primary} buy failed`);
     assertOpeningRouteCounterShopCheck(G.enthusiasm === 0, `${label} covered buy left enthusiasm ${G.enthusiasm}`);
     assertOpeningRouteCounterShopCheck(G.boardingAlert === 0, `${label} covered buy added Alert ${G.boardingAlert}`);
     assertOpeningRouteCounterShopCheck(G.shopCreditUsed === false, `${label} covered buy used Dockside Credit`);
@@ -2456,7 +2477,42 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck((G.counterWatchIds || []).includes(covered.id), `${label} covered counter did not gain Counter Watch`);
     assertOpeningRouteCounterShopCheck(!covered.weaponKey && (covered.might || 0) === 0 && (covered.tempo || 0) === 0, `${label} pre-boarding covered counter gained upgrades: ${JSON.stringify(covered)}`);
     assertOpeningRouteCounterShopCheck(!G.discard.includes(covered), `${label} covered counter also went to discard`);
-    results.push({ name: `round-1 full-send ${label} route buys watched covered ${type} without credit`, ok: true, quote: routeQuote });
+    assertRouteFocusedShop(G.shop, `${label} purchase refill`, primary);
+
+    continueRefreshShopForTest(G);
+    assertRouteFocusedShop(G.shop, `${label} Continue refill`, primary);
+    results.push({ name: `round-1 full-send ${label} route buys watched focused ${primary} without credit`, ok: true, quote: routeQuote });
+  });
+
+  routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
+    runtime.setSeed((0x704502a0 + routeIndex) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    const { firstIsland } = routeFirstIsland(map, mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} prep route selection failed`);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = true;
+    G.enthusiasm = api.TYPES[primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(
+      [primary, ...openingCounters.filter(type => type !== primary), 'herald'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    assertRouteFocusedShop(G.shop, `${label} Opening Prep shop`, primary);
+    const quote = scene.shopPurchaseQuote(primary);
+    assertOpeningRouteCounterShopCheck(
+      quote.canBuy && quote.counter && quote.topDeck && quote.openingCounterPrepMight && quote.consumesOpeningCounterPlan,
+      `${label} Opening Counter Prep quote missed top-deck +Might: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(G.shop.indexOf(primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === primary, `${label} Opening Prep ${primary} buy failed`);
+    assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} Opening Prep was not consumed`);
+    assertOpeningRouteCounterShopCheck((bought.might || 0) === 1 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} Opening Prep ${primary} upgrades wrong: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), `${label} Opening Prep ${primary} missed top-deck Watch`);
+    results.push({ name: `${label} primary route counter consumes Opening Counter Prep for +1 Might, top deck, and Watch`, ok: true, quote });
   });
 
   return { ok: true, checks: results };
@@ -5176,6 +5232,14 @@ async function runShoppingPhase(
   if (G.shop.length) {
     G.shop.shift();
     G.shop.push(api.randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
+    if (typeof api.normalizeOpeningRouteShop === 'function') {
+      G.shop = api.normalizeOpeningRouteShop(G.shop, G.round + 1, {
+        map: G.map,
+        mode: G.mode,
+        boardingCount: G.boardingCount,
+        newSlotIndex: G.shop.length - 1,
+      });
+    }
   }
   prepareNextRoundForSim(api, scene);
 }

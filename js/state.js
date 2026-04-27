@@ -67,6 +67,15 @@ function baseScoutedCounterTypes(mainKey) {
   return Array.isArray(counters) ? counters.filter(t => !!TYPES[t]) : [];
 }
 
+const OPENING_ROUTE_PRIMARY_COUNTERS = {
+  shellback: 'poisoner',
+  powderBomber: 'sawbones',
+  deckSniper: 'needler',
+};
+
+const OPENING_ROUTE_COUNTER_CANDIDATES = ['poisoner', 'sawbones', 'needler'];
+const OPENING_ROUTE_SHOP_FILLERS = ['drummer', 'herald', 'trainer', 'survivalist'];
+
 function openingDeckhandCounterTypes(mainKey, boardingNo, opts = {}) {
   const state = shopGenerationState(opts);
   const mode = opts.mode || (state && state.mode);
@@ -148,6 +157,119 @@ function applyScoutedCounterToShop(shop, round, opts = {}) {
   return out;
 }
 
+function openingRouteShopState(opts = {}) {
+  const state = shopGenerationState(opts);
+  const mode = opts.mode || (state && state.mode);
+  if (mode === 'battleTest') return null;
+
+  const boardingCount = opts.boardingCount != null
+    ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+    : Math.max(0, Math.floor(Number(state && state.boardingCount) || 0));
+  if (boardingCount !== 0) return null;
+
+  const map = shopMapForGeneration(opts);
+  const info = nextScoutedShipNodeForMap(map, opts);
+  const node = info && info.node;
+  if (!node || node.type !== 'ship') return null;
+
+  const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(map) : info.layerIdx;
+  const boardingNo = info.layerIdx === firstLayer ? 1 : null;
+  if (info.layerIdx !== firstLayer || boardingNo !== 1) return null;
+
+  const mainKey = node.openingRouteMainKey || null;
+  const primaryCounterType = OPENING_ROUTE_PRIMARY_COUNTERS[mainKey];
+  if (!primaryCounterType || !TYPES[primaryCounterType]) return null;
+
+  return {
+    mainKey,
+    primaryCounterType,
+    shipNode: node,
+    layerIdx: info.layerIdx,
+  };
+}
+
+function openingRoutePrimaryCounterTypeForShop(opts = {}) {
+  const state = openingRouteShopState(opts);
+  return state ? state.primaryCounterType : null;
+}
+
+function fillOpeningRouteShopSlot(slots, slotIndex, type, seen, openingCandidates) {
+  if (!type || !TYPES[type] || seen.has(type) || openingCandidates.has(type)) return false;
+  if (slotIndex < 0 || slotIndex >= slots.length || slots[slotIndex]) return false;
+  slots[slotIndex] = type;
+  seen.add(type);
+  return true;
+}
+
+function normalizeOpeningRouteShop(shop, round, opts = {}) {
+  const out = Array.isArray(shop) ? [...shop] : [];
+  if (!out.length) return out;
+
+  const route = openingRouteShopState(opts);
+  if (!route) return out;
+
+  const primary = route.primaryCounterType;
+  const openingCandidates = new Set(OPENING_ROUTE_COUNTER_CANDIDATES);
+  const n = out.length;
+  const maxCost = shopMaxCostForRound(round);
+  const primaryCurrentIndex = out.findIndex(type => type === primary);
+  const firstOpeningIndex = out.findIndex(type => openingCandidates.has(type));
+  const rawPrimaryIndex = Number.isFinite(opts.primarySlotIndex)
+    ? Math.floor(opts.primarySlotIndex)
+    : (primaryCurrentIndex >= 0
+      ? primaryCurrentIndex
+      : (Number.isFinite(opts.newSlotIndex)
+        ? Math.floor(opts.newSlotIndex)
+        : (firstOpeningIndex >= 0 ? firstOpeningIndex : 0)));
+  const primaryIndex = Phaser.Math.Clamp(rawPrimaryIndex, 0, n - 1);
+
+  const slots = Array.from({ length: n }, () => null);
+  const seen = new Set([primary]);
+  slots[primaryIndex] = primary;
+
+  out.forEach((type, index) => {
+    if (index === primaryIndex) return;
+    if (!type || type === primary || openingCandidates.has(type)) return;
+    if (!TYPES[type] || seen.has(type)) return;
+    if (TYPES[type].cost != null && TYPES[type].cost > maxCost) return;
+    slots[index] = type;
+    seen.add(type);
+  });
+
+  const fillerPool = Phaser.Utils.Array.Shuffle(OPENING_ROUTE_SHOP_FILLERS
+    .filter(type =>
+      TYPES[type]
+      && TYPES[type].cost <= Math.min(3, maxCost)
+      && !seen.has(type)
+      && !openingCandidates.has(type)
+    ));
+  for (let i = 0; i < n; i++) {
+    if (slots[i]) continue;
+    const type = fillerPool.shift();
+    if (type) fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates);
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (slots[i]) continue;
+    const exclude = [...seen, ...openingCandidates];
+    const type = randomShopType(round, exclude, {
+      ...opts,
+      disableScoutedCounter: true,
+    });
+    if (fillOpeningRouteShopSlot(slots, i, type, seen, openingCandidates)) continue;
+
+    const fallback = shopEligiblePool(round)
+      .find(candidate =>
+        TYPES[candidate]
+        && !seen.has(candidate)
+        && !openingCandidates.has(candidate)
+      );
+    if (fallback) fillOpeningRouteShopSlot(slots, i, fallback, seen, openingCandidates);
+  }
+
+  return slots.map(type => type || primary);
+}
+
 function starterShopCounterSlotIndex(shop, round, opts = {}) {
   const visible = Array.isArray(shop) ? shop.filter(Boolean) : [];
   if (!visible.length) return 0;
@@ -190,14 +312,15 @@ function starterShop(opts = {}) {
 function initialShop(n, round, opts = {}) {
   if (round === 0 && n === STARTER_SHOP_LANES.length) {
     const shop = starterShop(opts);
-    return applyScoutedCounterToShop(shop, round, {
+    const counterShop = applyScoutedCounterToShop(shop, round, {
       ...opts,
       newSlotIndex: starterShopCounterSlotIndex(shop, round, opts),
     });
+    return normalizeOpeningRouteShop(counterShop, round, opts);
   }
   const arr = [];
   for (let i = 0; i < n; i++) arr.push(randomShopType(round, arr, opts));
-  return arr;
+  return normalizeOpeningRouteShop(arr, round, opts);
 }
 
 function battleTestTypePool() {
