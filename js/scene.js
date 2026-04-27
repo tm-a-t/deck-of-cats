@@ -1500,25 +1500,14 @@ class GameScene extends Phaser.Scene {
       : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
     const phase = source.phase != null ? source.phase : G.phase;
     const mode = source.mode != null ? source.mode : G.mode;
-    const openingCommissionReport = !!(openingCounterPrep && !counter && !scoutedCounterTopDeck);
-    const openingFullCrewReport = !!(
-      mode !== 'battleTest'
-      && !this.isBattleTest()
-      && (isProjection || phase === 'shopping')
-      && round >= 1
-      && round <= 2
-      && boardingCount === 0
-      && discount > 0
-      && !counter
-      && !scoutedCounterTopDeck
-      && !openingCommissionReport
-    );
-    const topDeck = !!(scoutedCounterTopDeck || openingCommissionReport || openingFullCrewReport);
+    const openingCommissionReport = false;
+    const openingFullCrewReport = false;
+    const topDeck = !!scoutedCounterTopDeck;
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
     const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
-    const consumesOpeningCounterPlan = !!(openingCounterPrepMight || openingCommissionReport);
+    const consumesOpeningCounterPlan = !!openingCounterPrepMight;
     const shared = {
       openingCounterPlan: openingCounterPrep,
       openingCounterPrep: openingCounterPrepMight,
@@ -1654,28 +1643,12 @@ class GameScene extends Phaser.Scene {
       : '';
     const label = quote.counter ? 'Counter ' : '';
     const prep = quote.openingCounterPrepMight ? ', Opening Prep +💪' : '';
-    const report = quote.openingCommissionReport ? ', Opening report' : (quote.openingFullCrewReport ? ', Full Crew report' : '');
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    const reportAlt = Array.isArray(G.shop)
-      ? G.shop
-          .map((type, index) => ({ type, index, def: TYPES[type], quote: this.shopPurchaseQuoteForState(type, state) }))
-          .filter(item => item.def && item.quote && item.quote.canBuy && item.quote.openingCommissionReport && item.type !== best.type)
-          .sort((a, b) => {
-            const creditA = a.quote.credit ? 1 : 0;
-            const creditB = b.quote.credit ? 1 : 0;
-            if (creditA !== creditB) return creditA - creditB;
-            const costA = Math.max(0, Number(a.quote.cost) || 0);
-            const costB = Math.max(0, Number(b.quote.cost) || 0);
-            if (costA !== costB) return costB - costA;
-            return a.index - b.index;
-          })[0]
-      : null;
-    const reportAltText = reportAlt ? ` · Or ${reportAlt.def.name} Opening report` : '';
-    return `Shop: ${label}${def.name} ${price}${prep}${report}${prepared}${topDeck}${covered}${credit}${payoffText}${reportAltText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -2494,13 +2467,12 @@ class GameScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ' Opening Prep' : (quote.openingCommissionReport ? ' Opening Report' : ' Prep spent'))
+        ? (quote.openingCounterPrepMight ? ' Opening Prep' : ' Prep spent')
         : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
-      const reportText = quote.openingCommissionReport ? ' Opening report' : (quote.openingFullCrewReport ? ' Full Crew report' : '');
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + reportText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
