@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-090115 — rev fb8cfd0
+
+- Gameplay: true - Made Boarding 1 route caches carry lane-specific stakes: Forest/Shellback now pays only `+1🪵`, Rocky/Powder Bomber pays `+1🪨 +1☠️ +1 Alert`, and Port/Deck Sniper pays `+1🪙 +2☠️ +2 Alert`, while Boarding 2+ caches keep the normal `+1` resource, `+1☠️`, `+1 Alert` package and Cache Drill refunds each cache's stored Alert amount. Validated with JS syntax checks, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-opening-route-captains --json`, `node sim/fast-sim.js --check-opening-deckhand-counters --json`, related opening route muster/shop/map checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-090115.log`.
+
 ## 2026-04-27 — run 20260427-084606 — rev a4b0991
 
 - Gameplay: true - Added Opening Route Muster: the first selected pre-Boarding-1 route now marks one matching starter counter (Forest/Rigger, Rocky/Ballaster, Port/Armsman) to return on the next Shop Continue below Cache/Short Crew reports but above Counter Watch and shop top-deck cards, without granting buffs, weapons, Alert refunds, discounts, or Battle Test behavior. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-muster --json`, related opening deckhand/route shop/scouted cache/counter recruit checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-084606.log`.
