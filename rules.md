@@ -36,12 +36,13 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
 - Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
 - In regular runs, Boarding 1 marks every non-`Infirmary Island` node in its immediately preceding normal island layer as a `Scouted Counter Cache` tied to that ship's main scouted enemy.
+- Boarding 1 cache resources are lane-specific while still using that ship's main scouted enemy for counter and `Cache Drill` rules: `Forest Island` grants `+1🪵`, `Rocky Island` grants `+1🪨`, and `Port Island` grants `+1🪙`. If an unexpected eligible opening island appears, it uses the normal cache resource map.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island immediately grants `+1` of the cache resource, `+1☠️`, and `+1 Boarding Alert` before island actions resolve, then marks that cache claimed.
 - The same selected cache island also arms `Cache Drill`: during that island round, the first sent pirate whose type counters the cache's main scouted enemy and remains in the crew after its island action gains `+1 💪 Might`, refunds that cache's own `+1 Boarding Alert`, and is marked to report early.
 - The cache `☠️` is normal round shop currency, is granted only once, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a `Top deck` counter in that round's Shop.
 - The `Cache Drill` Alert refund reduces pending `Boarding Alert` by the cache's stored Alert amount once, but never below the amount present before that cache was claimed and never removes the cache `☠️`.
-- Cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
+- Normal cache resource map for Boarding 2+ caches and `Ambush Bounty`: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
 - Boarding 2+ cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
 - `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.

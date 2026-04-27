@@ -1243,8 +1243,9 @@ function runFirstShellbackChecks(runtime) {
     );
     firstEligibleCacheNodes.forEach((node) => {
       const cache = node && node.scoutedCache;
+      const expectedRes = expectedOpeningScoutedCounterCacheResource(api, node, 'shellback');
       assertFirstShellbackCheck(cache && cache.mainKey === 'shellback', `sample ${sample} first cache main ${cache && cache.mainKey}`);
-      assertFirstShellbackCheck(cache.res === 'wood', `sample ${sample} first cache res ${cache.res}`);
+      assertFirstShellbackCheck(cache.res === expectedRes, `sample ${sample} first cache res ${cache.res} !== ${expectedRes}`);
       assertFirstShellbackCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} first cache values ${JSON.stringify(cache)}`);
       assertFirstShellbackCheck(cache.claimed === false, `sample ${sample} first cache starts claimed`);
     });
@@ -1260,7 +1261,7 @@ function runFirstShellbackChecks(runtime) {
   }
 
   results.push({
-    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and wood caches on every lane',
+    name: 'first regular ship always scouts Shellback with Bilge Rat, Cabin Boy, and lane-specific caches',
     ok: true,
     samples,
   });
@@ -1446,6 +1447,14 @@ function expectedScoutedCounterCacheNode(api, layer, res) {
   return port || candidates[0];
 }
 
+function expectedOpeningScoutedCounterCacheResource(api, node, mainKey) {
+  const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
+  if (!island) return api.SCOUTED_COUNTER_CACHE_RES[mainKey] || null;
+  if (island.bonus === 'wood' || island.bonus === 'stone') return island.bonus;
+  if (island.extraSend) return 'gold';
+  return api.SCOUTED_COUNTER_CACHE_RES[mainKey] || null;
+}
+
 function runScoutedCounterCacheChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -1491,8 +1500,11 @@ function runScoutedCounterCacheChecks(runtime) {
 
       for (const cacheNode of cacheNodes) {
         const cache = cacheNode.scoutedCache;
+        const expectedRes = shipNo === 1
+          ? expectedOpeningScoutedCounterCacheResource(api, cacheNode, mainKey)
+          : res;
         assertScoutedCounterCacheCheck(cache.mainKey === mainKey, `sample ${sample} cache main ${cache.mainKey} !== ${mainKey}`);
-        assertScoutedCounterCacheCheck(cache.res === res, `sample ${sample} cache res ${cache.res} !== ${res}`);
+        assertScoutedCounterCacheCheck(cache.res === expectedRes, `sample ${sample} cache res ${cache.res} !== ${expectedRes}`);
         assertScoutedCounterCacheCheck(cache.amount === 1 && cache.enthusiasm === 1 && cache.alert === 1, `sample ${sample} cache amount/enthusiasm/alert ${cache.amount}/${cache.enthusiasm}/${cache.alert}`);
         assertScoutedCounterCacheCheck(cache.claimed === false, `sample ${sample} cache starts claimed`);
       }
@@ -1515,7 +1527,11 @@ function runScoutedCounterCacheChecks(runtime) {
   }
   results.push({ name: 'generated regular maps mark every Boarding 1 lane and one preferred cache before later ships', ok: true, samples: 12, generatedCacheCount });
 
-  {
+  for (const cacheCase of [
+    { islandIdx: 0, res: 'wood', label: 'Forest' },
+    { islandIdx: 1, res: 'stone', label: 'Rocky' },
+    { islandIdx: 3, res: 'gold', label: 'Port' },
+  ]) {
     runtime.setSeed(0x5c0a7e11);
     api.initState();
     const G = api.getG();
@@ -1523,9 +1539,12 @@ function runScoutedCounterCacheChecks(runtime) {
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const cacheNodes = map.layers[firstShipLayer - 1].filter((node) => node && node.scoutedCache);
     assertScoutedCounterCacheCheck(cacheNodes.length > 1, `first cache selection sample has only ${cacheNodes.length} cache lane`);
-    const chosen = cacheNodes[0];
-    const untouched = cacheNodes.slice(1);
+    const chosen = cacheNodes.find((node) => node && node.islandIdx === cacheCase.islandIdx);
+    assertScoutedCounterCacheCheck(chosen, `first cache selection sample lacks ${cacheCase.label} lane`);
+    const untouched = cacheNodes.filter((node) => node !== chosen);
     const cache = chosen.scoutedCache;
+    assertScoutedCounterCacheCheck(cache.res === cacheCase.res, `${cacheCase.label} cache res ${cache.res} !== ${cacheCase.res}`);
+    assertScoutedCounterCacheCheck(cache.mainKey === 'shellback', `${cacheCase.label} cache main ${cache.mainKey} !== shellback`);
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.enthusiasm = 0;
     G.boardingAlert = 2;
@@ -1538,7 +1557,11 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.enthusiasm === 1, `generated first cache enthusiasm ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 3, `generated first cache alert ${G.boardingAlert} !== 3`);
     assertScoutedCounterCacheCheck(G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === cache.mainKey, 'generated first cache did not arm Cache Drill');
-    results.push({ name: 'selecting one Boarding 1 cache lane claims only that lane and grants the normal cache package', ok: true });
+    assertScoutedCounterCacheCheck(
+      Object.keys(G.res).every((res) => (res === cacheCase.res ? G.res[res] === 1 : G.res[res] === 0)),
+      `${cacheCase.label} cache changed wrong resources ${JSON.stringify(G.res)}`
+    );
+    results.push({ name: `${cacheCase.label} Boarding 1 cache grants ${cacheCase.res}, enthusiasm, Alert, and Shellback Cache Drill`, ok: true });
   }
 
   {

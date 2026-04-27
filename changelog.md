@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-065333 — rev ee8de63
+
+- Gameplay: true - Boarding 1 Shellback Scouted Counter Cache lanes now pay route-specific prep resources: Forest grants `+1🪵`, Rocky grants `+1🪨`, and Port grants `+1🪙`, while all three still keep Shellback as the cache enemy for counter-shop, Cache Drill, Alert refund, and Counter Watch behavior; Boarding 2+ cache resources and Ambush Bounty still use the normal scouted enemy resource map. Validated with JS syntax checks, targeted scouted-cache/first-Shellback/map-schedule/opening-Shellback checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-065333.log`.
+
 ## 2026-04-27 — run 20260427-064347 — rev c37deb3
 
 - Gameplay: true - Boarding 1 now marks every eligible pre-ship island lane as a Shellback Scouted Counter Cache while Boarding 2+ still marks exactly one preferred cache, so any opening route can claim the existing +1 resource, +1☠️, +1 Alert, and Cache Drill package. Validated with JS syntax checks, targeted scouted-cache/first-Shellback/map-schedule/opening-Shellback/shop checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-064347.log`.

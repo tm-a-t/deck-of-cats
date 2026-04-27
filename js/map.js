@@ -53,6 +53,14 @@ function scoutedCounterCacheResource(mainKey) {
   return (SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey]) || null;
 }
 
+function openingScoutedCounterCacheResource(node, mainKey) {
+  const island = node && node.type === 'island' ? ISLANDS[node.islandIdx] : null;
+  if (!island) return scoutedCounterCacheResource(mainKey);
+  if (island.bonus === 'wood' || island.bonus === 'stone') return island.bonus;
+  if (island.extraSend) return 'gold';
+  return scoutedCounterCacheResource(mainKey);
+}
+
 function scoutedCounterCacheNode(prevLayer, res) {
   const candidates = scoutedCounterCacheEligibleNodes(prevLayer);
   if (!candidates.length) return null;
@@ -104,7 +112,7 @@ function markScoutedCounterCaches(layers) {
 
     if (shipNo === 1) {
       scoutedCounterCacheEligibleNodes(layers[li - 1]).forEach((node) => {
-        assignScoutedCounterCache(node, mainKey, res);
+        assignScoutedCounterCache(node, mainKey, openingScoutedCounterCacheResource(node, mainKey));
       });
       continue;
     }
