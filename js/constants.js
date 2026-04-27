@@ -574,6 +574,18 @@ function personalGainText(gains) {
   return pirateDescJoin(personalGainDescParts(gains));
 }
 
+function pirateTypeDisplayName(type) {
+  return (type && TYPES[type] && TYPES[type].name) || type || 'Pirate';
+}
+
+function openingSidePrepSupportText(quote) {
+  if (!quote || !quote.openingSidePrep) return '';
+  const gainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+  const targetName = quote.openingSidePrepTargetName || pirateTypeDisplayName(quote.openingSidePrepTargetType);
+  const targetText = targetName ? ` ${targetName}` : '';
+  return `Support${targetText}${gainText ? ` +${gainText}` : ''}`;
+}
+
 function pirateBuffStatusText(pirate) {
   if (!pirate || typeof pirate !== 'object') return '';
   const might = Math.max(0, Math.floor(Number(pirate.might) || 0));

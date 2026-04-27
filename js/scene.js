@@ -1160,6 +1160,41 @@ class GameScene extends Phaser.Scene {
     return entry ? entry.pirate : null;
   }
 
+  openingSidePrepSupportTargetInfo(routeShopState, fallbackType, fallbackPirate = null) {
+    const mainKey = routeShopState && routeShopState.mainKey;
+    if (mainKey && G.openingRouteMuster && G.openingRouteMuster.mainKey === mainKey) {
+      const marker = G.openingRouteMuster;
+      const pirate = (G.allCrew || []).find(candidate =>
+        candidate
+        && candidate.id === marker.pirateId
+      );
+      const starterTypes = typeof openingDeckhandCounterTypes === 'function'
+        ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })
+        : [];
+      if (pirate
+        && this.pirateStillInCrew(pirate)
+        && starterTypes.includes(pirate.type)
+        && (!marker.type || marker.type === pirate.type)) {
+        return {
+          pirate,
+          pirateId: pirate.id,
+          type: pirate.type,
+          name: pirateTypeDisplayName(pirate.type),
+          targetsMuster: true,
+        };
+      }
+    }
+
+    const type = (fallbackPirate && fallbackPirate.type) || fallbackType || null;
+    return {
+      pirate: fallbackPirate || null,
+      pirateId: fallbackPirate && fallbackPirate.id != null ? fallbackPirate.id : null,
+      type,
+      name: pirateTypeDisplayName(type),
+      targetsMuster: false,
+    };
+  }
+
   moveOpeningRouteMusterPirateToHand(entry) {
     if (!entry || !entry.pirate || entry.pirate.id == null) return false;
     if (!this.pirateStillInCrew(entry.pirate)) return false;
@@ -2314,6 +2349,10 @@ class GameScene extends Phaser.Scene {
         openingCounterPrepDiscount: 0,
         openingSidePrep: false,
         openingSidePrepGain: null,
+        openingSidePrepTargetType: null,
+        openingSidePrepTargetName: '',
+        openingSidePrepTargetPirateId: null,
+        openingSidePrepTargetsMuster: false,
         openingRoutePrimary: false,
         alarmRushedRouteCounter: false,
         consumesOpeningCounterPlan: false,
@@ -2375,6 +2414,9 @@ class GameScene extends Phaser.Scene {
       && mode !== 'battleTest'
       && openingCounterPrep
       && openingSidePrepGain);
+    const openingSidePrepTarget = openingSidePrep
+      ? this.openingSidePrepSupportTargetInfo(routeShopState, type)
+      : null;
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
@@ -2413,6 +2455,10 @@ class GameScene extends Phaser.Scene {
       openingCounterPrepDiscount,
       openingSidePrep,
       openingSidePrepGain,
+      openingSidePrepTargetType: openingSidePrepTarget ? openingSidePrepTarget.type : null,
+      openingSidePrepTargetName: openingSidePrepTarget ? openingSidePrepTarget.name : '',
+      openingSidePrepTargetPirateId: openingSidePrepTarget ? openingSidePrepTarget.pirateId : null,
+      openingSidePrepTargetsMuster: !!(openingSidePrepTarget && openingSidePrepTarget.targetsMuster),
       openingRoutePrimary,
       openingCommissionReport,
       openingFullCrewReport,
@@ -2555,9 +2601,9 @@ class GameScene extends Phaser.Scene {
     const prep = quote.openingCounterPrepMight
       ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
       : '';
-    const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+    const sidePrepSupportText = openingSidePrepSupportText(quote);
     const sidePrep = quote.openingSidePrep
-      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? `, ${sidePrepSupportText}` : ''}`
       : '';
     const alarm = quote.alarmRushedRouteCounter ? ', Alarm rush' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
@@ -3382,8 +3428,11 @@ class GameScene extends Phaser.Scene {
     const prepMight = quote.openingCounterPrepMight
       ? this.applyPersonalGainsToPirate(p, [{ buff: 'might', count: 1 }])
       : null;
+    const sidePrepTarget = quote.openingSidePrep
+      ? this.openingSidePrepSupportTargetInfo(routeShopState, type, p)
+      : null;
     const sidePrepGain = quote.openingSidePrep && quote.openingSidePrepGain
-      ? this.applyPersonalGainsToPirate(p, [quote.openingSidePrepGain])
+      ? this.applyPersonalGainsToPirate((sidePrepTarget && sidePrepTarget.pirate) || p, [quote.openingSidePrepGain])
       : null;
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
@@ -3432,7 +3481,10 @@ class GameScene extends Phaser.Scene {
         : '';
       const alarmText = quote.alarmRushedRouteCounter ? ' Alarm rush' : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
-      const sidePrepText = sidePrepGain && sidePrepGain.applied ? ` +${sidePrepGain.text || ''}` : '';
+      const sidePrepTargetText = sidePrepTarget
+        ? { ...quote, openingSidePrepTargetName: sidePrepTarget.name, openingSidePrepTargetType: sidePrepTarget.type }
+        : quote;
+      const sidePrepText = sidePrepGain && sidePrepGain.applied ? ` ${openingSidePrepSupportText(sidePrepTargetText)}` : '';
       const passOffText = routePassOff ? ' Cache mark' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';

@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-200349 — rev 0e2fcbf — build 0.1.0
+
+- Gameplay: true - Changed Opening Side Prep so Forest/Rocky/Port side-offer buys still spend prep, discount, and top-deck as before, but now apply their support buff to the selected route's mustered starter counter when it is still owned, falling back to the bought side offer only if that starter is gone; shop and sending-plan text now names the support target. Validated with JS syntax checks, targeted Opening Side Prep, Opening Deckhand Counter, Opening Route Muster, Opening Cache Purse, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-200349.log`.
+
 ## 2026-04-27 — run 20260427-194935 — rev 0975161 — build 0.1.0
 
 - Gameplay: true - Made Boarding 5 a mixed breakpoint: generated and fallback Boarding 5 encounters now contain exactly 4 strong enemies plus 1 weak support while Flint Duelist remains eligible, and Boardings 6-8 stay at 5 all-strong enemies with their existing late scaling. Validated with JS syntax checks, `node sim/fast-sim.js --check-encounter-scaling --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-194935.log`.

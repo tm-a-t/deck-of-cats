@@ -336,7 +336,7 @@ class ShopScene extends Phaser.Scene {
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
       const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
-      const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+      const sidePrepSupportText = openingSidePrepSupportText(quote);
       const priceReduced = effectiveCost < Math.max(0, Math.floor(Number(def.cost) || 0));
       const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
@@ -345,7 +345,7 @@ class ShopScene extends Phaser.Scene {
       if (quote.alarmRushedRouteCounter) tags.push('Watch');
       if (prepDiscount > 0) tags.push(quote.openingSidePrep ? 'Side Prep -1☠️' : 'Opening Prep -1☠️');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
-      if (quote.openingSidePrep && sidePrepGainText) tags.push(`Support +${sidePrepGainText}`);
+      if (quote.openingSidePrep && sidePrepSupportText) tags.push(sidePrepSupportText);
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
       if (coverage > 0) tags.push('Full Crew cover');
@@ -358,7 +358,7 @@ class ShopScene extends Phaser.Scene {
       const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
         ? (quote.openingSidePrep
-          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? ` · ${sidePrepSupportText}` : ''}`
           : (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent'))
         : '';
       const priceText = [
@@ -661,10 +661,10 @@ class ShopScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
-      const sidePrepGainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+      const sidePrepSupportText = openingSidePrepSupportText(quote);
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingSidePrep
-          ? ` Side Prep${prepDiscountText}${sidePrepGainText ? ` +${sidePrepGainText}` : ''}`
+          ? ` Side Prep${prepDiscountText}${sidePrepSupportText ? ` ${sidePrepSupportText}` : ''}`
           : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent'))
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';

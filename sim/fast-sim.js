@@ -686,6 +686,49 @@ function nextScoutedShipMainKey(G) {
   return null;
 }
 
+function pirateTypeNameForQuote(api, type) {
+  return (type && api.TYPES[type] && api.TYPES[type].name) || type || 'Pirate';
+}
+
+function openingSidePrepTargetInfoForQuote(api, G, mainKey, fallbackType) {
+  const marker = G && G.openingRouteMuster;
+  if (marker && marker.mainKey === mainKey && marker.pirateId != null) {
+    const pirate = (G.allCrew || []).find(candidate =>
+      candidate
+      && candidate.id === marker.pirateId
+    );
+    const starterTypes = typeof api.openingDeckhandCounterTypes === 'function'
+      ? api.openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })
+      : [];
+    if (pirate
+      && starterTypes.includes(pirate.type)
+      && (!marker.type || marker.type === pirate.type)) {
+      return {
+        pirateId: pirate.id,
+        type: pirate.type,
+        name: pirateTypeNameForQuote(api, pirate.type),
+        targetsMuster: true,
+      };
+    }
+  }
+  return {
+    pirateId: null,
+    type: fallbackType || null,
+    name: pirateTypeNameForQuote(api, fallbackType),
+    targetsMuster: false,
+  };
+}
+
+function openingSidePrepSupportTextForQuote(api, quote) {
+  if (!quote || !quote.openingSidePrep) return '';
+  const gain = quote.openingSidePrepGain || null;
+  const gainText = gain && gain.buff === 'tempo'
+    ? '⚡'
+    : (gain && gain.buff === 'might' ? '💪' : '');
+  const targetName = quote.openingSidePrepTargetName || pirateTypeNameForQuote(api, quote.openingSidePrepTargetType);
+  return `Support${targetName ? ` ${targetName}` : ''}${gainText ? ` +${gainText}` : ''}`;
+}
+
 function preparedCounterGainsForQuote(api, type) {
   const gains = api.TYPES[type]
     && api.TYPES[type].ship
@@ -711,6 +754,7 @@ function shopPurchaseQuote(api, G, type) {
   const boardingCount = Math.max(0, Math.floor(Number(G && G.boardingCount) || 0));
   const openingCommissionReport = false;
   const openingFullCrewReport = false;
+  const openingRouteMainKey = nextScoutedShipMainKey(G);
   const openingRoutePrimaryType = G && typeof api.openingRoutePrimaryCounterTypeForShop === 'function'
     ? api.openingRoutePrimaryCounterTypeForShop({
       map: G.map,
@@ -737,9 +781,12 @@ function shopPurchaseQuote(api, G, type) {
     && G
     && G.mode !== 'battleTest'
     && boardingCount === 0
-    && G.openingRouteCounterBoughtMainKey !== nextScoutedShipMainKey(G)
+    && G.openingRouteCounterBoughtMainKey !== openingRouteMainKey
     && openingCounterPlan
     && openingSidePrepGain);
+  const openingSidePrepTarget = openingSidePrep
+    ? openingSidePrepTargetInfoForQuote(api, G, openingRouteMainKey, type)
+    : null;
   const discountPreparesCounter = discount > 0 && boardingCount > 0;
   const preparedCounter = !!(scoutedCounterTopDeck
     && preparedCounterGainsForQuote(api, type).length
@@ -753,13 +800,12 @@ function shopPurchaseQuote(api, G, type) {
     ? setupTopDeck
     : (openingSidePrep ? true : !!scoutedCounterTopDeck);
   const pendingAlert = Math.max(0, Math.floor(Number(G && G.boardingAlert) || 0));
-  const nextMainKey = nextScoutedShipMainKey(G);
   const claimedRouteCacheMainKey = G && G.openingRouteCacheClaimedMainKey != null
     ? G.openingRouteCacheClaimedMainKey
     : null;
   const claimedRouteCacheForAlarmRush = !!(openingRoutePrimary
     && claimedRouteCacheMainKey
-    && claimedRouteCacheMainKey === nextMainKey);
+    && claimedRouteCacheMainKey === openingRouteMainKey);
   const canAlarmRush = !!(openingRoutePrimary
     && scoutedCounterTopDeck
     && !setupTopDeck
@@ -773,6 +819,10 @@ function shopPurchaseQuote(api, G, type) {
     openingCounterPrepDiscount,
     openingSidePrep,
     openingSidePrepGain,
+    openingSidePrepTargetType: openingSidePrepTarget ? openingSidePrepTarget.type : null,
+    openingSidePrepTargetName: openingSidePrepTarget ? openingSidePrepTarget.name : '',
+    openingSidePrepTargetPirateId: openingSidePrepTarget ? openingSidePrepTarget.pirateId : null,
+    openingSidePrepTargetsMuster: !!(openingSidePrepTarget && openingSidePrepTarget.targetsMuster),
     openingRoutePrimary,
     openingCommissionReport,
     openingFullCrewReport,
@@ -801,6 +851,10 @@ function shopPurchaseQuote(api, G, type) {
       openingCounterPrepMight: false,
       openingSidePrep: false,
       openingSidePrepGain: null,
+      openingSidePrepTargetType: null,
+      openingSidePrepTargetName: '',
+      openingSidePrepTargetPirateId: null,
+      openingSidePrepTargetsMuster: false,
       openingRoutePrimary: false,
       alarmRushedRouteCounter: false,
       consumesOpeningCounterPlan: false,
@@ -837,7 +891,7 @@ function shopPurchaseQuote(api, G, type) {
     && !openingCounterPlan
     && counter
     && topDeckBeforeAlarm
-    && nextMainKey
+    && openingRouteMainKey
     && missing === 1
     ? 1
     : 0;
@@ -3732,9 +3786,9 @@ function runOpeningRouteCounterShopChecks(runtime) {
     needler: 'survivalist',
   };
   const routeCases = [
-    { label: 'Forest', mainKey: 'shellback', primary: 'poisoner', sideOffer: 'drummer' },
-    { label: 'Rocky', mainKey: 'powderBomber', primary: 'sawbones', sideOffer: 'trainer' },
-    { label: 'Port', mainKey: 'deckSniper', primary: 'needler', sideOffer: 'survivalist' },
+    { label: 'Forest', mainKey: 'shellback', starterType: 'lumberjack', primary: 'poisoner', sideOffer: 'drummer' },
+    { label: 'Rocky', mainKey: 'powderBomber', starterType: 'miner', primary: 'sawbones', sideOffer: 'trainer' },
+    { label: 'Port', mainKey: 'deckSniper', starterType: 'armsman', primary: 'needler', sideOffer: 'survivalist' },
   ];
 
   const assertBasicShop = (shop, label) => {
@@ -3920,12 +3974,16 @@ function runOpeningRouteCounterShopChecks(runtime) {
     return { might: 0, tempo: 0 };
   };
 
-  routeCases.forEach(({ label, mainKey, primary, sideOffer }, routeIndex) => {
+  routeCases.forEach(({ label, mainKey, starterType, primary, sideOffer }, routeIndex) => {
     runtime.setSeed((0x704501f0 + routeIndex) >>> 0);
     api.initState();
     const G = api.getG();
     const { firstIsland } = routeFirstIsland(G.map, mainKey);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} side-prep route selection failed`);
+    const musteredStarter = G.openingRouteMuster
+      ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
+      : null;
+    assertOpeningRouteCounterShopCheck(musteredStarter && musteredStarter.type === starterType, `${label} did not muster ${starterType} for side prep`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
     G.fullCrewDiscount = 0;
@@ -3957,8 +4015,25 @@ function runOpeningRouteCounterShopChecks(runtime) {
       `${label} side offer quote missed Opening Side Prep or gained counter perks: ${JSON.stringify(sideQuote)}`
     );
     assertOpeningRouteCounterShopCheck(
-      directQuote.canBuy && directQuote.openingSidePrep && directQuote.topDeck && !directQuote.counter,
+      sideQuote.openingSidePrepTargetsMuster
+        && sideQuote.openingSidePrepTargetPirateId === musteredStarter.id
+        && sideQuote.openingSidePrepTargetType === starterType
+        && sideQuote.openingSidePrepTargetName === api.TYPES[starterType].name,
+      `${label} side offer quote did not target mustered starter: ${JSON.stringify(sideQuote)}`
+    );
+    assertOpeningRouteCounterShopCheck(
+      directQuote.canBuy
+        && directQuote.openingSidePrep
+        && directQuote.topDeck
+        && !directQuote.counter
+        && directQuote.openingSidePrepTargetsMuster
+        && directQuote.openingSidePrepTargetType === starterType,
       `${label} sim helper missed Opening Side Prep: ${JSON.stringify(directQuote)}`
+    );
+    const supportText = openingSidePrepSupportTextForQuote(api, sideQuote);
+    assertOpeningRouteCounterShopCheck(
+      supportText.includes(api.TYPES[starterType].name) && supportText.includes(expectedGain.might ? '💪' : '⚡'),
+      `${label} side prep support text missed target/gain: ${supportText}`
     );
     const marksBefore = JSON.stringify(G.cacheDrillBountyMarks || []);
     const expectedEnthusiasm = api.TYPES[sideOffer].cost - sideQuote.spend;
@@ -3966,14 +4041,75 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(bought && bought.type === sideOffer, `${label} side offer first buy failed`);
     assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${label} side prep did not top-deck only`);
     assertOpeningRouteCounterShopCheck(!(G.counterWatchIds || []).includes(bought.id), `${label} side offer gained Counter Watch`);
-    assertOpeningRouteCounterShopCheck((bought.might || 0) === expectedGain.might && (bought.tempo || 0) === expectedGain.tempo && !bought.weaponKey, `${label} side prep upgrades wrong: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `${label} side prep upgraded bought side offer instead of starter: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck((musteredStarter.might || 0) === expectedGain.might && (musteredStarter.tempo || 0) === expectedGain.tempo && !musteredStarter.weaponKey, `${label} side prep upgrades wrong starter: ${JSON.stringify(musteredStarter)}`);
     assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} side prep did not consume Opening Counter Prep`);
     assertOpeningRouteCounterShopCheck(G.enthusiasm === expectedEnthusiasm, `${label} side prep spend ${G.enthusiasm} !== ${expectedEnthusiasm}`);
     assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, `${label} side offer marked route primary as bought`);
     assertOpeningRouteCounterShopCheck(JSON.stringify(G.cacheDrillBountyMarks || []) === marksBefore, `${label} side offer moved Cache Drill bounty marks`);
     assertRouteFocusedShop(G.shop, `${label} after side-prep buy`, primary);
-    results.push({ name: `${label} route side offer spends Opening Side Prep, top-decks support, and leaves primary unsecured`, ok: true, bought: sideOffer, quote: sideQuote });
+    results.push({ name: `${label} route side offer spends Opening Side Prep to support the mustered starter and leaves primary unsecured`, ok: true, bought: sideOffer, quote: sideQuote, supportText });
   });
+
+  {
+    const route = routeCases[1];
+    runtime.setSeed(0x70450208);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'fallback side-prep route selection failed');
+    const musteredStarter = G.openingRouteMuster
+      ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
+      : null;
+    assertOpeningRouteCounterShopCheck(musteredStarter, 'fallback side-prep did not create a starter marker');
+    removePirateById(G, musteredStarter.id);
+    G.hand = (G.hand || []).filter(pirate => pirate && pirate.id !== musteredStarter.id);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = true;
+    G.enthusiasm = api.TYPES[route.sideOffer].cost;
+    G.shop = [route.primary, route.sideOffer, 'herald', 'survivalist'];
+    const quote = scene.shopPurchaseQuote(route.sideOffer);
+    assertOpeningRouteCounterShopCheck(
+      quote.canBuy
+        && quote.openingSidePrep
+        && quote.topDeck
+        && !quote.counter
+        && !quote.openingSidePrepTargetsMuster
+        && quote.openingSidePrepTargetType === route.sideOffer,
+      `fallback side prep quote did not fall back to side offer: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(1, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    const expectedGain = sidePrepExpectedGain(route.sideOffer);
+    assertOpeningRouteCounterShopCheck(bought && bought.type === route.sideOffer, 'fallback side prep buy failed');
+    assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), 'fallback side prep did not top-deck bought side offer');
+    assertOpeningRouteCounterShopCheck((bought.might || 0) === expectedGain.might && (bought.tempo || 0) === expectedGain.tempo && !bought.weaponKey, `fallback side prep did not upgrade bought side offer: ${JSON.stringify(bought)}`);
+    assertOpeningRouteCounterShopCheck(!(G.counterWatchIds || []).includes(bought.id), 'fallback side prep side offer gained Counter Watch');
+    results.push({ name: 'Opening Side Prep falls back to the bought side offer when the mustered starter is gone', ok: true, quote });
+  }
+
+  {
+    const route = routeCases[1];
+    runtime.setSeed(0x7045020c);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'side-prep plan route selection failed');
+    const musteredStarter = G.openingRouteMuster
+      ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
+      : null;
+    assertOpeningRouteCounterShopCheck(musteredStarter && musteredStarter.type === route.starterType, 'side-prep plan did not muster route starter');
+    G.shop = [route.sideOffer];
+    G.enthusiasm = 0;
+    G.boardingAlert = 0;
+    const planLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
+    assertOpeningRouteCounterShopCheck(
+      planLine.includes(`Support ${api.TYPES[route.starterType].name} +💪`) && planLine.includes('Side Prep -1☠️'),
+      `side-prep sending plan did not expose target support: ${planLine}`
+    );
+    results.push({ name: 'sending plan exposes the Opening Side Prep support target by name', ok: true, planLine });
+  }
 
   {
     const route = routeCases[0];
@@ -8524,7 +8660,7 @@ async function runShoppingPhase(
       else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Alarm rush)`);
       else if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
       else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
-      else if (quote && quote.openingSidePrep) purchases.push(`${label} (Side Prep -${quote.openingCounterPrepDiscount || 0}☠️)`);
+      else if (quote && quote.openingSidePrep) purchases.push(`${label} (Side Prep -${quote.openingCounterPrepDiscount || 0}☠️, ${openingSidePrepSupportTextForQuote(api, quote)})`);
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);
