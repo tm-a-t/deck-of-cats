@@ -2512,36 +2512,48 @@ function runCounterAmbushChecks(runtime) {
     pirateUpgrades: [{ tempo: 1 }],
   });
 
-  const checkAlertGuardRemoval = (name, alert, enemies, expectedRemovedKey, expectedRes) => {
+  const checkAlertGuardRemoval = (name, alert, enemies, expectedRemovedKeys, expectedRes, opts = {}) => {
     const guardCount = scene.boardingAlertGuardCount(alert);
-    const { G, combat } = setupRegular({
+    const expectedKeys = Array.isArray(expectedRemovedKeys) ? expectedRemovedKeys : [expectedRemovedKeys];
+    const expectedDamage = opts.expectedDamage != null ? Math.max(0, Math.floor(Number(opts.expectedDamage) || 0)) : 3;
+    const { G, combat, enemies: builtEnemies } = setupRegular({
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],
       playerRows: [[0, 0, 0]],
       enemies,
+      pirateUpgrades: opts.pirateUpgrades,
       boardingAlert: alert,
       guardCount,
     });
+    const target = builtEnemies.find((fighter) => scene.combatEnemyArchetypeKey(fighter) === 'powderBomber');
     const result = scene.applyCounterAmbush(combat, { silent: true });
     const removed = (result && result.removedAlertGuards) || [];
     assertCounterAmbushCheck(result && result.applied, `${name} did not ambush`);
-    assertCounterAmbushCheck(removed.length === 1, `${name} removed ${removed.length} guards`);
-    assertCounterAmbushCheck(removed[0].key === expectedRemovedKey, `${name} removed ${removed[0].key} !== ${expectedRemovedKey}`);
-    assertCounterAmbushCheck(!scene.combatFindFighter(removed[0].id).alive, `${name} removed guard still alive`);
+    assertCounterAmbushCheck(result.damage === expectedDamage, `${name} damage ${result.damage} !== ${expectedDamage}`);
+    assertCounterAmbushCheck(target && target.hp === target.maxHp - expectedDamage, `${name} target hp ${target && target.hp} !== ${target && target.maxHp - expectedDamage}`);
+    assertCounterAmbushCheck(target && target.wounds === 1, `${name} target wounds ${target && target.wounds} !== 1`);
+    assertCounterAmbushCheck(removed.length === expectedKeys.length, `${name} removed ${removed.length} guards`);
+    expectedKeys.forEach((expectedKey, idx) => {
+      const guard = removed[idx];
+      assertCounterAmbushCheck(guard && guard.key === expectedKey, `${name} removed ${guard && guard.key} at ${idx} !== ${expectedKey}`);
+      assertCounterAmbushCheck(!scene.combatFindFighter(guard.id).alive, `${name} removed guard ${idx} still alive`);
+    });
     assertCounterAmbushCheck(
-      scene.combatLiving('enemy').filter((fighter) => scene.isBoardingAlertGuardFighter(fighter)).length === Math.max(0, guardCount - 1),
+      scene.combatLiving('enemy').filter((fighter) => scene.isBoardingAlertGuardFighter(fighter)).length === Math.max(0, guardCount - expectedKeys.length),
       `${name} living guard count mismatch`
     );
     const plunder = scene.grantBoardingAlertPlunder(combat);
     assertCounterAmbushCheck(G.res.wood === expectedRes.wood, `${name} wood ${G.res.wood} !== ${expectedRes.wood}`);
     assertCounterAmbushCheck(G.res.stone === expectedRes.stone, `${name} stone ${G.res.stone} !== ${expectedRes.stone}`);
-    assertCounterAmbushCheck((plunder.removedByCounterAmbush || []).includes(expectedRemovedKey), `${name} plunder did not record removed guard`);
+    expectedKeys.forEach((expectedKey) => {
+      assertCounterAmbushCheck((plunder.removedByCounterAmbush || []).includes(expectedKey), `${name} plunder did not record removed guard ${expectedKey}`);
+    });
     results.push({
       name,
       ok: true,
       alert,
       guardCount,
-      removed: removed[0].key,
+      removed: removed.map((guard) => guard.key),
       plunder: { wood: plunder.wood, stone: plunder.stone },
     });
   };
@@ -2554,18 +2566,28 @@ function runCounterAmbushChecks(runtime) {
     { wood: 1, stone: 0 }
   );
   checkAlertGuardRemoval(
-    'Alert 3 Counter Ambush removes the front-left Bilge Rat and still pays full guard plunder',
+    'Alert 3 unarmed Counter Ambush removes one front-left Bilge Rat and still pays full guard plunder',
     3,
     [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
     'bilgeRat',
-    { wood: 1, stone: 1 }
+    { wood: 1, stone: 1 },
+    { expectedDamage: 3 }
   );
   checkAlertGuardRemoval(
-    'Alert 6 Counter Ambush removes one front Cabin Boy and still pays full guard plunder',
+    'Alert 3 Armed Counter Ambush removes both Alert guards and still pays full guard plunder',
+    3,
+    [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+    ['bilgeRat', 'cabinBoy'],
+    { wood: 1, stone: 1 },
+    { expectedDamage: 5, pirateUpgrades: [{ might: 1 }] }
+  );
+  checkAlertGuardRemoval(
+    'Alert 6 Armed Counter Ambush removes two of three Alert guards and still pays full guard plunder',
     6,
     [['powderBomber', 0, 3], ['cabinBoy', 1, 0, 'alert'], ['bilgeRat', 0, 1, 'alert'], ['cabinBoy', 0, 0, 'alert']],
-    'cabinBoy',
-    { wood: 2, stone: 1 }
+    ['cabinBoy', 'bilgeRat'],
+    { wood: 2, stone: 1 },
+    { expectedDamage: 5, pirateUpgrades: [{ weaponKey: 'barbedBlade' }] }
   );
 
   {
@@ -2652,6 +2674,28 @@ function runCounterAmbushChecks(runtime) {
   }
 
   {
+    const { G, enemies, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      pirateUpgrades: [{ might: 1 }],
+      boardingAlert: 3,
+      guardCount: 2,
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'Battle Test armed counter removed guards');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'Battle Test armed counter changed target HP');
+    assertCounterAmbushCheck(
+      scene.combatLiving('enemy').filter((fighter) => scene.isBoardingAlertGuardFighter(fighter)).length === 2,
+      'Battle Test armed counter changed Alert guards'
+    );
+    assertCounterAmbushCheck(!combat.counterAmbush, 'Battle Test stored Counter Ambush data');
+    results.push({ name: 'Battle Test armed counters do not cut Alert guards', ok: true });
+  }
+
+  {
     const { G, enemies } = setupRegular({
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],
@@ -2663,6 +2707,28 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(!result, 'reinforcement hand ambushed');
     assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'reinforcement ambush changed target');
     results.push({ name: 'reinforcement hands do not trigger Counter Ambush', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      pirateUpgrades: [{ weaponKey: 'barbedBlade' }],
+      boardingAlert: 3,
+      guardCount: 2,
+      reinforcementCount: 1,
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'reinforcement armed counter removed guards');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'reinforcement armed counter changed target HP');
+    assertCounterAmbushCheck(
+      scene.combatLiving('enemy').filter((fighter) => scene.isBoardingAlertGuardFighter(fighter)).length === 2,
+      'reinforcement armed counter changed Alert guards'
+    );
+    assertCounterAmbushCheck(!combat.counterAmbush, 'reinforcement stored Counter Ambush data');
+    results.push({ name: 'reinforcement armed counters do not cut Alert guards', ok: true });
   }
 
   {

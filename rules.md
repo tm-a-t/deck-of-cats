@@ -193,8 +193,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
 - `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
 - `Armed Counter Ambush`: if the ambushing counter pirate has any permanent personal upgrade at fight start, meaning a weapon, `1+ 💪 Might`, or `1+ ⚡ Tempo`, that `Counter Ambush` deals `5` damage instead of `3`.
-- After damaging and wounding the main scouted enemy, `Counter Ambush` also removes the frontmost then leftmost living `Boarding Alert` guard if any are present.
-- A guard removed by `Counter Ambush` does not fight, but still counts for normal Alert guard plunder if the boarding is won.
+- After damaging and wounding the main scouted enemy, normal `Counter Ambush` also removes up to 1 frontmost then leftmost living `Boarding Alert` guard if any are present.
+- `Armed Counter Ambush` removes up to 2 frontmost then leftmost living `Boarding Alert` guards instead of 1.
+- Guards removed by `Counter Ambush` do not fight, but still count for normal Alert guard plunder if the boarding is won.
 - `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
 - `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.

@@ -2994,8 +2994,13 @@ class GameScene extends Phaser.Scene {
       defeatedTargets.push(target);
     }
     const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, this.time.now, deathPositions);
-    const removedAlertGuard = this.removeCounterAmbushAlertGuard(combat, deathPositions);
-    const removedAlertGuards = removedAlertGuard ? [removedAlertGuard] : [];
+    const removedAlertGuards = [];
+    const guardRemovalLimit = armedAmbush ? 2 : 1;
+    for (let i = 0; i < guardRemovalLimit; i++) {
+      const removedAlertGuard = this.removeCounterAmbushAlertGuard(combat, deathPositions);
+      if (!removedAlertGuard) break;
+      removedAlertGuards.push(removedAlertGuard);
+    }
 
     const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
     const enemy = this.combatArchetypeByKey(mainKey);
@@ -3016,6 +3021,7 @@ class GameScene extends Phaser.Scene {
       beforeHp,
       afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
       defeated: !target.alive,
+      alertGuardRemovalLimit: guardRemovalLimit,
       removedAlertGuardCount: removedAlertGuards.length,
       removedAlertGuards,
       blastEvents,
@@ -3034,10 +3040,12 @@ class GameScene extends Phaser.Scene {
     const label = result.armedAmbush ? 'Armed Ambush!' : 'Counter Ambush!';
     this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, label, '#ffd54f', 700);
     this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
-    const removedGuard = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards[0] : null;
-    if (removedGuard) {
+    const removedGuards = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards : [];
+    if (removedGuards.length) {
+      const removedGuard = removedGuards[0];
       const point = removedGuard.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
-      this.effectText(point.x, point.y - 64 * L.k, 'Alarm cut!', '#7bdff2', 620);
+      const guardLabel = removedGuards.length > 1 ? `Alarm cut x${removedGuards.length}!` : 'Alarm cut!';
+      this.effectText(point.x, point.y - 64 * L.k, guardLabel, '#7bdff2', 620);
     }
     this.showCombatAftermath(result.blastEvents || [], result.deathPositions || []);
   }
