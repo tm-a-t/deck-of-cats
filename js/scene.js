@@ -605,7 +605,7 @@ class GameScene extends Phaser.Scene {
 
     const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
     const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
-    if (firstLayer <= 0 || currentLayer !== firstLayer - 1) return false;
+    if (firstLayer !== 1 || currentLayer !== 0) return false;
 
     G.openingRouteCacheClaimedMainKey = drill.mainKey;
     return true;
@@ -653,13 +653,15 @@ class GameScene extends Phaser.Scene {
     const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
     if (cacheNode && cacheNode.scoutedCache) cacheNode.scoutedCache.claimed = true;
     this.markOpeningRouteCacheClaimedForAlarmRush(drill, cacheNode, pirate);
+    const openingCounterPrep = this.applyOpeningRouteCachePrep(drill, cacheNode);
 
     const drillReward = this.applyScoutedCacheDrill(pirate, {
       ...opts,
       silent: true,
       allowClaimedOpener: true,
+      openingCounterPrep,
     });
-    const result = { cacheGrant, drill: drillReward, openerId: drill.openerId };
+    const result = { cacheGrant, drill: drillReward, openingCounterPrep, openerId: drill.openerId };
     if (!opts.silent) {
       this.showScoutedCounterCacheResult(cacheGrant);
       if (drillReward) this.showScoutedCacheDrillResult(drillReward);
@@ -756,14 +758,14 @@ class GameScene extends Phaser.Scene {
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
     const passOffTarget = routeCounterType ? this.securedRouteCachePassOffTarget(drill.mainKey) : null;
-    const prepText = routeCounterType && this.openingRouteStarterCachePrepAvailable(drill.mainKey)
-      ? ', opens Opening Prep'
-      : (passOffTarget ? `, passes mark to ${passOffTarget.label}` : '');
+    const prepText = passOffTarget ? `, passes mark to ${passOffTarget.label}` : '';
     const payoff = alertPayoffText
       ? ` ${alertPayoffText}, gains +💪, reports next${prepText}${bountyText}`
       : ` gains +💪, reports next${prepText}${bountyText}`;
     const cacheText = this.scoutedCounterCacheRewardText(drill);
-    const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
+    const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
+    const cachePrepText = this.openingRouteCachePrepAvailable(drill.mainKey, cacheNode) ? ' + Opening Prep' : '';
+    const prefix = cacheText ? `Cache: first sent opens ${cacheText}${cachePrepText}; ` : `Cache: first sent opens${cachePrepText}; `;
     if (routeCounterType) {
       const suffix = shopLabel ? ` (or ${shopLabel})` : '';
       return `${prefix}route counter ${routeCounter.starterName}${suffix}${payoff}`;
@@ -772,13 +774,17 @@ class GameScene extends Phaser.Scene {
   }
 
   openingRouteStarterCachePrepAvailable(mainKey) {
+    return this.openingRouteCachePrepAvailable(mainKey);
+  }
+
+  openingRouteCachePrepAvailable(mainKey, cacheNode = null) {
     if (this.isBattleTest()
       || !mainKey
       || G.phase !== 'sending'
       || !G.island
       || G.island.healWounded
       || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
-      || typeof openingDeckhandCounterTypes !== 'function') {
+      || typeof openingRouteShopState !== 'function') {
       return false;
     }
 
@@ -788,14 +794,32 @@ class GameScene extends Phaser.Scene {
     if (!primary || !TYPES[primary]) return false;
     if (G.openingRouteCounterBoughtMainKey === mainKey) return false;
 
-    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
-    if (!starterTypes.length) return false;
+    const route = openingRouteShopState({
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    if (!route || route.mainKey !== mainKey) return false;
 
     const intel = this.nextShipIntel();
     const boardingNo = intel && intel.boardingNo != null
       ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
       : 0;
-    return !!(intel && intel.mainKey === mainKey && boardingNo === 1);
+    if (!intel || intel.mainKey !== mainKey || boardingNo !== 1) return false;
+
+    const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
+    const currentLayer = G.map && Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+    if (firstLayer !== 1 || currentLayer !== 0) return false;
+    if (cacheNode && (
+      !cacheNode.scoutedCache
+      || cacheNode.scoutedCache.mainKey !== mainKey
+      || !G.map
+      || cacheNode.id !== G.map.currentNodeId
+    )) {
+      return false;
+    }
+
+    return true;
   }
 
   openingRouteStarterCachePrepEligible(pirate, drill) {
@@ -817,6 +841,17 @@ class GameScene extends Phaser.Scene {
 
   applyOpeningRouteStarterCachePrep(pirate, drill) {
     if (!this.openingRouteStarterCachePrepEligible(pirate, drill)) return false;
+    G.openingCounterPlan = true;
+    return true;
+  }
+
+  applyOpeningRouteCachePrep(drill, cacheNode = null) {
+    if (!drill
+      || !drill.cacheClaimed
+      || !this.openingRouteCachePrepAvailable(drill.mainKey, cacheNode)
+      || G.openingCounterPlan) {
+      return false;
+    }
     G.openingCounterPlan = true;
     return true;
   }
@@ -1368,7 +1403,7 @@ class GameScene extends Phaser.Scene {
     this.markCacheDrillBounty(pirate, drill.mainKey);
     const securedRouteCachePassOff = this.transferSecuredRouteCacheDrillBountyToBoughtCounter(pirate, drill);
     const alertRefund = this.applyScoutedCacheAlertRefund(drill);
-    const openingCounterPrep = this.applyOpeningRouteStarterCachePrep(pirate, drill);
+    const openingCounterPrep = !!opts.openingCounterPrep;
 
     const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
     const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
