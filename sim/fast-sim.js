@@ -2451,9 +2451,11 @@ function runCounterAmbushChecks(runtime) {
     G.mode = opts.mode || 'run';
     G.phase = 'boarding';
     G.busy = false;
+    const encounterNo = Math.max(1, Math.floor(Number(opts.encounterNo) || 1));
+    G.boardingCount = Math.max(0, Math.floor(Number(opts.boardingCount != null ? opts.boardingCount : encounterNo) || 0));
     G.enemyShip = {
       strength: 6,
-      encounterNo: 1,
+      encounterNo,
       encounter: {
         mainKey: opts.mainKey || 'powderBomber',
         supportKeys: [],
@@ -2583,6 +2585,8 @@ function runCounterAmbushChecks(runtime) {
     assertCounterAmbushCheck(target.hp === target.maxHp - 3, `target hp ${target.hp} !== ${target.maxHp - 3}`);
     assertCounterAmbushCheck(target.wounds === 1, `target wounds ${target.wounds} !== 1`);
     assertCounterAmbushCheck((result.removedAlertGuardCount || 0) === 0, 'normal non-alert enemy was removed as an Alert guard');
+    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'unarmed ambush routed support');
+    assertCounterAmbushCheck(enemies[1].alive, 'unarmed ambush defeated non-alert support');
     const hpAfter = target.hp;
     const second = scene.applyCounterAmbush(G.combat, { silent: true });
     assertCounterAmbushCheck(!second && target.hp === hpAfter && target.wounds === 1, 'Counter Ambush repeated');
@@ -2638,6 +2642,96 @@ function runCounterAmbushChecks(runtime) {
     enemies: [['netter', 0, 0]],
     pirateUpgrades: [{ tempo: 1 }],
   });
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 2], ['cabinBoy', 0, 1], ['bilgeRat', 0, 0], ['cabinBoy', 1, 0]],
+      pirateUpgrades: [{ might: 1 }],
+      boardingAlert: 0,
+      guardCount: 0,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied && result.armedAmbush, 'Opening Counter Break setup did not Armed Ambush');
+    assertCounterAmbushCheck((result.removedAlertGuardCount || 0) === 0, 'Opening Counter Break removed Alert guards');
+    assertCounterAmbushCheck(result.openingCounterBreak && result.routedSupport, 'Opening Counter Break did not route support');
+    assertCounterAmbushCheck(result.routedSupport.key === 'bilgeRat', `Opening Counter Break routed ${result.routedSupport.key} instead of front-left Bilge Rat`);
+    assertCounterAmbushCheck(!scene.combatFindFighter(result.routedSupport.id).alive, 'Opening Counter Break routed support is still alive');
+    assertCounterAmbushCheck(enemies.filter((fighter) => fighter && !fighter.alertGuard && ['bilgeRat', 'cabinBoy'].includes(scene.combatEnemyArchetypeKey(fighter)) && !fighter.alive).length === 1, 'Opening Counter Break routed more than one weak support');
+    const plunder = scene.grantBoardingAlertPlunder(combat);
+    assertCounterAmbushCheck(plunder && plunder.total === 0, `Opening Counter Break created Alert plunder ${JSON.stringify(plunder)}`);
+    assertCounterAmbushCheck(G.res.wood === 0 && G.res.stone === 0, `Opening Counter Break changed resources ${JSON.stringify(G.res)}`);
+    results.push({ name: 'Boarding 1 Armed Counter Ambush with no Alert guards routes exactly one front-left weak support without plunder', ok: true });
+  }
+
+  {
+    const { enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 3], ['cabinBoy', 0, 2], ['cabinBoy', 0, 1, 'alert'], ['bilgeRat', 0, 0, 'alert']],
+      pirateUpgrades: [{ might: 1 }],
+      boardingAlert: 3,
+      guardCount: 2,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.armedAmbush, 'Armed Alert guard setup did not ambush');
+    assertCounterAmbushCheck((result.removedAlertGuards || []).length === 2, 'Armed Alert guard setup did not cut both guards');
+    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Armed Ambush with Alert guards also routed support');
+    const normalSupport = enemies.find((fighter) => fighter && !fighter.alertGuard && scene.combatEnemyArchetypeKey(fighter) === 'cabinBoy');
+    assertCounterAmbushCheck(normalSupport && normalSupport.alive, 'Armed Ambush with Alert guards defeated normal support');
+    results.push({ name: 'Armed Counter Ambush with Alert guards does not also trigger Opening Counter Break', ok: true });
+  }
+
+  {
+    const { enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 1], ['cabinBoy', 0, 0]],
+      pirateUpgrades: [{ weaponKey: 'barbedBlade' }],
+      encounterNo: 2,
+    });
+    const result = scene.applyCounterAmbush(combat, { silent: true });
+    assertCounterAmbushCheck(result && result.armedAmbush, 'Boarding 2 Armed Counter Ambush did not ambush');
+    assertCounterAmbushCheck(!result.openingCounterBreak && !result.routedSupport, 'Boarding 2 triggered Opening Counter Break');
+    assertCounterAmbushCheck(enemies[1].alive, 'Boarding 2 routed weak support');
+    results.push({ name: 'Boarding 2 Armed Counter Ambush does not trigger Opening Counter Break', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 1], ['cabinBoy', 0, 0]],
+      pirateUpgrades: [{ weaponKey: 'barbedBlade' }],
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'Battle Test triggered Opening Counter Break ambush');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && enemies[1].alive, 'Battle Test Opening Counter Break changed fighters');
+    assertCounterAmbushCheck(!combat.counterAmbush, 'Battle Test stored Opening Counter Break data');
+    results.push({ name: 'Battle Test never triggers Opening Counter Break', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 1], ['bilgeRat', 0, 0]],
+      pirateUpgrades: [{ might: 1 }],
+      reinforcementCount: 1,
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'reinforcement hand triggered Opening Counter Break ambush');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && enemies[1].alive, 'reinforcement Opening Counter Break changed fighters');
+    assertCounterAmbushCheck(!combat.counterAmbush, 'reinforcement stored Opening Counter Break data');
+    results.push({ name: 'reinforcement hands never trigger Opening Counter Break', ok: true });
+  }
 
   const checkAlertGuardRemoval = (name, alert, enemies, expectedRemovedKeys, expectedRes, opts = {}) => {
     const guardCount = scene.boardingAlertGuardCount(alert);

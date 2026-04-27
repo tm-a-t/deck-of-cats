@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-030600 — rev 7fe1851
+
+- Gameplay: true - Added Opening Counter Break: Boarding 1 Armed Counter Ambushes with no Alert guards now route one front-left non-Alert `Bilge Rat` or `Cabin Boy` support without creating Alert plunder, while Alert guards, Battle Test, reinforcement hands, and later boardings keep their existing behavior. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-030600.log`.
+
 ## 2026-04-27 — run 20260427-025208 — rev c9b5dba
 
 - Gameplay: true - Counter Short Crew now refunds the one unused-slot `Boarding Alert` when the drilled pirate counters the next scouted ship, with a three-row sending planner showing `End now`, `One short`, and `Fill crew` plus the conditional refund. Validated with local syntax checks, targeted Short Crew/scouted counter checks, `git diff --check`, and the 10-run fast sim smoke.

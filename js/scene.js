@@ -3112,6 +3112,32 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  findOpeningCounterBreakSupport(combat = G.combat) {
+    if (!combat) return null;
+    const weakSupportKeys = new Set(['bilgeRat', 'cabinBoy']);
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter
+      && fighter.alive
+      && !this.isBoardingAlertGuardFighter(fighter)
+      && weakSupportKeys.has(this.combatEnemyArchetypeKey(fighter))
+    ) || null;
+  }
+
+  removeOpeningCounterBreakSupport(combat = G.combat, deathPositions = []) {
+    const support = this.findOpeningCounterBreakSupport(combat);
+    if (!support) return null;
+
+    const key = this.combatEnemyArchetypeKey(support);
+    const point = this.combatWorldPoint(support);
+    if (!this.defeatCombatFighter(support, deathPositions)) return null;
+    return {
+      id: support.id,
+      key,
+      name: support.name || (this.combatArchetypeByKey(key) || {}).name || key,
+      point,
+    };
+  }
+
   applyCounterAmbush(combat = G.combat, opts = {}) {
     if (!combat || combat.counterAmbushResolved) return null;
     combat.counterAmbushResolved = true;
@@ -3145,6 +3171,11 @@ class GameScene extends Phaser.Scene {
       if (!removedAlertGuard) break;
       removedAlertGuards.push(removedAlertGuard);
     }
+    const routedSupport = armedAmbush
+      && this.currentBoardingNumber() === 1
+      && removedAlertGuards.length === 0
+      ? this.removeOpeningCounterBreakSupport(combat, deathPositions)
+      : null;
 
     const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
     const enemy = this.combatArchetypeByKey(mainKey);
@@ -3168,6 +3199,8 @@ class GameScene extends Phaser.Scene {
       alertGuardRemovalLimit: guardRemovalLimit,
       removedAlertGuardCount: removedAlertGuards.length,
       removedAlertGuards,
+      openingCounterBreak: !!routedSupport,
+      routedSupport,
       blastEvents,
       deathPositions,
     };
@@ -3190,6 +3223,10 @@ class GameScene extends Phaser.Scene {
       const point = removedGuard.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
       const guardLabel = removedGuards.length > 1 ? `Alarm cut x${removedGuards.length}!` : 'Alarm cut!';
       this.effectText(point.x, point.y - 64 * L.k, guardLabel, '#7bdff2', 620);
+    }
+    if (result.routedSupport) {
+      const point = result.routedSupport.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+      this.effectText(point.x, point.y - 64 * L.k, 'Opening break!', '#7bdff2', 620);
     }
     this.showCombatAftermath(result.blastEvents || [], result.deathPositions || []);
   }
