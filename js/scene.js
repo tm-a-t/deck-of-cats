@@ -1416,7 +1416,7 @@ class GameScene extends Phaser.Scene {
     const counter = !!(def && this.isScoutedCounterShopType(type));
     const topDeck = !!(def && this.counterRecruitReportsEarly(type));
     if (!def) {
-      return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0 };
+      return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0, openingCounterSubsidy: 0 };
     }
     const withPayoff = (quote) => {
       const payoff = this.counterPayoffPreviewForQuote(type, quote);
@@ -1433,10 +1433,46 @@ class GameScene extends Phaser.Scene {
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
     const preparedCounter = !!(topDeck && discount > 0 && this.preparedCounterGains(type).length);
     if (enthusiasm >= effectiveCost) {
-      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost });
+      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0 });
     }
     const missing = effectiveCost - enthusiasm;
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
+    const round = source.round != null
+      ? Math.max(0, Math.floor(Number(source.round) || 0))
+      : Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = source.boardingCount != null
+      ? Math.max(0, Math.floor(Number(source.boardingCount) || 0))
+      : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
+    const phase = source.phase != null ? source.phase : G.phase;
+    const mode = source.mode != null ? source.mode : G.mode;
+    const openingCounterSubsidy = mode !== 'battleTest'
+      && !this.isBattleTest()
+      && (isProjection || phase === 'shopping')
+      && round === 1
+      && boardingCount === 0
+      && !shopCreditUsed
+      && discount > 0
+      && counter
+      && topDeck
+      && missing === 1
+      ? 1
+      : 0;
+    if (openingCounterSubsidy > 0) {
+      return withPayoff({
+        canBuy: true,
+        credit: false,
+        counter,
+        topDeck,
+        preparedCounter,
+        cost,
+        effectiveCost,
+        discount,
+        missing,
+        alert: 0,
+        spend: Math.max(0, effectiveCost - openingCounterSubsidy),
+        openingCounterSubsidy,
+      });
+    }
     const allowCredit = source.allowCredit != null ? !!source.allowCredit : (isProjection ? !this.isBattleTest() : this.shopCreditAvailable());
     const canCredit = allowCredit
       && !shopCreditUsed
@@ -1454,6 +1490,7 @@ class GameScene extends Phaser.Scene {
       missing,
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
+      openingCounterSubsidy: 0,
     });
   }
 
@@ -1509,9 +1546,10 @@ class GameScene extends Phaser.Scene {
     const label = quote.counter ? 'Counter ' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
+    const covered = quote.openingCounterSubsidy > 0 ? `, covered -${quote.openingCounterSubsidy}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -2319,9 +2357,10 @@ class GameScene extends Phaser.Scene {
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const coveredText = quote.openingCounterSubsidy > 0 ? ` Covered ${quote.openingCounterSubsidy}☠️` : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? ' Top deck, Watch' : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

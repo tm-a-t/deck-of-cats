@@ -41,6 +41,7 @@ function parseArgs(argv) {
     checkAlertTiers: false,
     checkScoutedCounterShop: false,
     checkScoutedCounterCache: false,
+    checkOpeningCounterSubsidy: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
     checkBoardingTrophy: false,
@@ -138,6 +139,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-scouted-counter-cache') {
       out.checkScoutedCounterCache = true;
+      continue;
+    }
+    if (a === '--check-opening-counter-subsidy') {
+      out.checkOpeningCounterSubsidy = true;
       continue;
     }
     if (a === '--check-counter-recruits-report-early') {
@@ -544,6 +549,22 @@ function activeFullCrewDiscount(G) {
   return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
 }
 
+function counterRecruitReportsEarlyForQuote(api, G, type, counter) {
+  if (!G || G.mode === 'battleTest' || !counter) return false;
+  if (!type || !api.TYPES[type]) return false;
+  const turnsAway = nextShipTurnsAway(G);
+  return turnsAway >= 1 && turnsAway <= 3;
+}
+
+function preparedCounterGainsForQuote(api, type) {
+  const gains = api.TYPES[type]
+    && api.TYPES[type].ship
+    && Array.isArray(api.TYPES[type].ship.personalGains)
+    ? api.TYPES[type].ship.personalGains
+    : [];
+  return gains.filter(Boolean);
+}
+
 function shopPurchaseQuote(api, G, type) {
   const def = api.TYPES[type];
   const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
@@ -552,30 +573,62 @@ function shopPurchaseQuote(api, G, type) {
     && typeof api.isScoutedCounterShopType === 'function'
     && api.isScoutedCounterShopType(type, G && G.map, { mode: G && G.mode })
   );
+  const topDeck = counterRecruitReportsEarlyForQuote(api, G, type, counter);
   const discount = Math.min(cost, activeFullCrewDiscount(G));
   const effectiveCost = Math.max(0, cost - discount);
   const enthusiasm = Math.max(0, Math.floor(Number(G && G.enthusiasm) || 0));
+  const preparedCounter = !!(topDeck && discount > 0 && preparedCounterGainsForQuote(api, type).length);
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0 };
+    return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost, discount: 0, missing: 0, alert: 0, openingCounterSubsidy: 0 };
   }
   if (enthusiasm >= effectiveCost) {
-    return { canBuy: true, credit: false, counter, cost, effectiveCost, discount, missing: 0, alert: 0 };
+    return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, openingCounterSubsidy: 0 };
   }
   const missing = effectiveCost - enthusiasm;
+  const shopCreditUsed = !!G.shopCreditUsed;
+  const openingCounterSubsidy = G.mode !== 'battleTest'
+    && G.phase === 'shopping'
+    && Math.max(0, Math.floor(Number(G.round) || 0)) === 1
+    && Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0
+    && !shopCreditUsed
+    && discount > 0
+    && counter
+    && topDeck
+    && missing === 1
+    ? 1
+    : 0;
+  if (openingCounterSubsidy > 0) {
+    return {
+      canBuy: true,
+      credit: false,
+      counter,
+      topDeck,
+      preparedCounter,
+      cost,
+      effectiveCost,
+      discount,
+      missing,
+      alert: 0,
+      openingCounterSubsidy,
+    };
+  }
   const canCredit = G.mode !== 'battleTest'
     && G.phase === 'shopping'
-    && !G.shopCreditUsed
+    && !shopCreditUsed
     && missing >= 1
     && missing <= shopCreditMaxMissing(api);
   return {
     canBuy: canCredit,
     credit: canCredit,
     counter,
+    topDeck,
+    preparedCounter,
     cost,
     effectiveCost,
     discount,
     missing,
     alert: canCredit ? missing * shopCreditAlertPerMissing(api) : 0,
+    openingCounterSubsidy: 0,
   };
 }
 
@@ -1044,6 +1097,10 @@ function assertScoutedCounterShopCheck(condition, message) {
 
 function assertScoutedCounterCacheCheck(condition, message) {
   if (!condition) throw new Error(`scouted counter cache check failed: ${message}`);
+}
+
+function assertOpeningCounterSubsidyCheck(condition, message) {
+  if (!condition) throw new Error(`opening counter subsidy check failed: ${message}`);
 }
 
 function assertCounterRecruitsReportEarlyCheck(condition, message) {
@@ -1534,6 +1591,146 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(G.enemyShip && G.phase === 'boarding', 'ship node did not enter boarding');
     results.push({ name: 'ship nodes do not grant cache rewards', ok: true });
   }
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningCounterSubsidyChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const setupPurchase = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.map = opts.map === undefined
+      ? makeScoutedCounterTestMap(opts.mainKey || 'powderBomber')
+      : opts.map;
+    G.round = opts.round != null ? Math.max(0, Math.floor(Number(opts.round) || 0)) : 1;
+    G.boardingCount = opts.boardingCount != null
+      ? Math.max(0, Math.floor(Number(opts.boardingCount) || 0))
+      : 0;
+    G.phase = opts.phase || 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.enthusiasm = opts.enthusiasm != null ? Math.max(0, Math.floor(Number(opts.enthusiasm) || 0)) : 1;
+    G.boardingAlert = Math.max(0, Math.floor(Number(opts.boardingAlert) || 0));
+    G.fullCrewDiscount = Math.max(0, Math.floor(Number(opts.fullCrewDiscount) || 0));
+    G.shopCreditUsed = !!opts.shopCreditUsed;
+    G.shop = [opts.type || 'sawbones'];
+    G.hand = [];
+    G.sent = [];
+    G.discard = [];
+    G.deck = G.allCrew[0] ? [G.allCrew[0]] : [];
+    G.counterWatchIds = [];
+    return G;
+  };
+
+  {
+    const G = setupPurchase({ type: 'sawbones', enthusiasm: 1, fullCrewDiscount: 1 });
+    const quote = scene.shopPurchaseQuote('sawbones');
+    const directQuote = shopPurchaseQuote(api, G, 'sawbones');
+    assertOpeningCounterSubsidyCheck(quote.canBuy && !quote.credit, `eligible quote was not buyable without credit: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(quote.openingCounterSubsidy === 1, `eligible subsidy ${quote.openingCounterSubsidy} !== 1`);
+    assertOpeningCounterSubsidyCheck(quote.discount === 1 && quote.missing === 1 && quote.spend === 1 && quote.alert === 0, `eligible quote economics mismatch: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(quote.counter && quote.topDeck && quote.preparedCounter, `eligible quote was not prepared top-deck counter: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck(directQuote.canBuy && !directQuote.credit && directQuote.openingCounterSubsidy === 1, `sim policy quote missed subsidy: ${JSON.stringify(directQuote)}`);
+    const plan = scene.shopPlanText();
+    assertOpeningCounterSubsidyCheck(plan.includes('covered -1☠️') && !plan.includes('credit'), `eligible plan did not show covered non-credit buy: ${plan}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningCounterSubsidyCheck(bought && bought.type === 'sawbones', 'subsidized buy failed');
+    assertOpeningCounterSubsidyCheck(G.enthusiasm === 0, `subsidized buy left enthusiasm ${G.enthusiasm}`);
+    assertOpeningCounterSubsidyCheck(G.boardingAlert === 0, `subsidized buy added Alert ${G.boardingAlert}`);
+    assertOpeningCounterSubsidyCheck(G.shopCreditUsed === false, 'subsidized buy marked shopCreditUsed');
+    assertOpeningCounterSubsidyCheck(G.fullCrewDiscount === 0, 'subsidized buy did not consume Full Crew Discount');
+    assertOpeningCounterSubsidyCheck(G.deck[G.deck.length - 1] === bought, 'subsidized counter did not go to top of deck');
+    assertOpeningCounterSubsidyCheck((G.counterWatchIds || []).includes(bought.id), 'subsidized counter did not gain Counter Watch');
+    assertOpeningCounterSubsidyCheck(bought.weaponKey === 'barbedBlade', `subsidized counter was not Prepared: ${bought.weaponKey}`);
+    assertOpeningCounterSubsidyCheck(!G.discard.includes(bought), 'subsidized counter also went to discard');
+    results.push({ name: 'round-1 full-discount top-deck counter missing exactly one is covered without credit or Alert', ok: true, plan });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('powderBomber');
+    G.round = 1;
+    G.boardingCount = 0;
+    G.phase = 'sending';
+    G.island = scene.buildIslandState(api.ISLANDS[0]);
+    G.shop = ['sawbones'];
+    G.enthusiasm = 0;
+    G.boardingAlert = 0;
+    G.fullCrewDiscount = 0;
+    G.shopCreditUsed = false;
+    G.sent = [];
+    const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
+    assertOpeningCounterSubsidyCheck(fullLine.includes('Full Crew -1☠️'), `full-send line lacks discount: ${fullLine}`);
+    assertOpeningCounterSubsidyCheck(fullLine.includes('covered -1☠️') && !fullLine.includes('credit'), `full-send projection did not expose subsidy without credit: ${fullLine}`);
+    results.push({ name: 'round-1 full-send sending plan previews the covered prepared counter buy', ok: true, fullLine });
+  }
+
+  const cases = [
+    {
+      name: 'without Full Crew Discount uses Dockside Credit for missing two',
+      opts: { type: 'sawbones', enthusiasm: 1, fullCrewDiscount: 0 },
+      expect: { canBuy: true, credit: true, alert: 2, prepared: false },
+    },
+    {
+      name: 'round 2 keeps Dockside Credit for the one-missing discounted counter',
+      opts: { type: 'sawbones', round: 2, enthusiasm: 1, fullCrewDiscount: 1 },
+      expect: { canBuy: true, credit: true, alert: 1, prepared: true },
+    },
+    {
+      name: 'after first boarding keeps Dockside Credit for the one-missing discounted counter',
+      opts: { type: 'sawbones', boardingCount: 1, enthusiasm: 1, fullCrewDiscount: 1 },
+      expect: { canBuy: true, credit: true, alert: 1, prepared: true },
+    },
+    {
+      name: 'Battle Test stays blocked instead of receiving the subsidy',
+      opts: { type: 'sawbones', mode: 'battleTest', enthusiasm: 1, fullCrewDiscount: 1 },
+      expect: { canBuy: false, credit: false, alert: 0, prepared: false },
+    },
+    {
+      name: 'missing two after discount still uses Dockside Credit',
+      opts: { type: 'sawbones', enthusiasm: 0, fullCrewDiscount: 1 },
+      expect: { canBuy: true, credit: true, alert: 2, prepared: true },
+    },
+    {
+      name: 'non-counter one-missing discounted buys never receive the subsidy',
+      opts: { type: 'trainer', enthusiasm: 1, fullCrewDiscount: 1 },
+      expect: { canBuy: true, credit: true, alert: 1, prepared: false },
+    },
+    {
+      name: 'already-affordable discounted counters do not display the subsidy',
+      opts: { type: 'sawbones', enthusiasm: 2, fullCrewDiscount: 1 },
+      expect: { canBuy: true, credit: false, alert: 0, prepared: true, planNoCovered: true },
+    },
+    {
+      name: 'used Dockside Credit blocks the one-missing discounted counter instead of subsidizing it',
+      opts: { type: 'sawbones', enthusiasm: 1, fullCrewDiscount: 1, shopCreditUsed: true },
+      expect: { canBuy: false, credit: false, alert: 0, prepared: true },
+    },
+  ];
+
+  cases.forEach(({ name, opts, expect }) => {
+    const G = setupPurchase(opts);
+    const quote = scene.shopPurchaseQuote(opts.type || 'sawbones');
+    const directQuote = shopPurchaseQuote(api, G, opts.type || 'sawbones');
+    assertOpeningCounterSubsidyCheck((quote.openingCounterSubsidy || 0) === 0, `${name} scene quote received subsidy: ${JSON.stringify(quote)}`);
+    assertOpeningCounterSubsidyCheck((directQuote.openingCounterSubsidy || 0) === 0, `${name} sim quote received subsidy: ${JSON.stringify(directQuote)}`);
+    assertOpeningCounterSubsidyCheck(!!quote.canBuy === !!expect.canBuy, `${name} canBuy ${quote.canBuy} !== ${expect.canBuy}`);
+    assertOpeningCounterSubsidyCheck(!!quote.credit === !!expect.credit, `${name} credit ${quote.credit} !== ${expect.credit}`);
+    assertOpeningCounterSubsidyCheck(Math.max(0, quote.alert || 0) === expect.alert, `${name} alert ${quote.alert} !== ${expect.alert}`);
+    assertOpeningCounterSubsidyCheck(!!quote.preparedCounter === !!expect.prepared, `${name} prepared ${quote.preparedCounter} !== ${expect.prepared}`);
+    if (expect.planNoCovered) {
+      const plan = scene.shopPlanText();
+      assertOpeningCounterSubsidyCheck(!plan.includes('covered'), `${name} displayed subsidy: ${plan}`);
+    }
+    results.push({ name, ok: true, quote });
+  });
 
   return { ok: true, checks: results };
 }
@@ -3876,6 +4073,7 @@ async function runShoppingPhase(
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
       if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
+      else if (quote && quote.openingCounterSubsidy > 0) purchases.push(`${label} (Opening covered ${quote.openingCounterSubsidy}☠️)`);
       else if (quote && quote.discount > 0) purchases.push(`${label} (Full Crew -${quote.discount}☠️)`);
       else purchases.push(label);
     }
@@ -4453,6 +4651,11 @@ async function main() {
   }
   if (opts.checkScoutedCounterCache) {
     const result = runScoutedCounterCacheChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningCounterSubsidy) {
+    const result = runOpeningCounterSubsidyChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-042146 — rev 9da3b63
+
+- Gameplay: true - Added Opening Counter Subsidy: in the round-1 regular Shop before any boarding, a Full Crew Discount top-deck scouted counter that is short exactly `1☠️` after discount is covered without Dockside Credit, `shopCreditUsed`, or Boarding Alert while still becoming Prepared. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-counter-subsidy --json`, counter recruit/shop/cache/opening commission/Short Crew targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-042146.log`.
+
 ## 2026-04-27 — run 20260427-040929 — rev 4979701
 
 - Gameplay: false - Added Counter Payoff Preview copy for visible scouted-counter shop pirates and sending-plan best buys, showing the target enemy, 3/1 vs 5/2 ambush payoff, and the mapped surviving-ambusher bounty resource without changing combat math, prices, resources, or draw order. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, `node sim/fast-sim.js --check-short-crew-drill --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-040929.log`.

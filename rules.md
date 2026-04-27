@@ -142,6 +142,9 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The player may buy any number of pirates as long as enough `☠️` remains.
 - `Full Crew Discount`, if earned by filling every island send slot, reduces the effective cost of the first pirate bought in the next Shop by `1☠️`.
 - The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.
+- During the regular-run round-1 Shop, before any boarding, `Opening Counter Subsidy` covers exactly `1☠️` for a `Top deck` scouted-counter pirate if that purchase spends `Full Crew Discount` and is short exactly `1☠️` after the normal discount.
+- `Opening Counter Subsidy` is not spendable currency, does not use `Dockside Credit`, does not mark `shopCreditUsed`, and adds no `Boarding Alert`; the purchase spends the player's current `☠️`, consumes `Full Crew Discount`, and still counts as `Prepared` because that purchase spent the discount.
+- `Opening Counter Subsidy` does not apply without `Full Crew Discount`, to already-affordable purchases, non-counter purchases, purchases missing `2+☠️`, round `2+`, after the first boarding, after `Dockside Credit` was already used in that Shop, or in `Battle Test`.
 - `Full Crew Discount` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
 - Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
 - A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate using the normal purchase destination rules, and refills that shop slot normally.

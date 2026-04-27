@@ -335,23 +335,27 @@ class ShopScene extends Phaser.Scene {
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
+      const subsidy = Math.max(0, Math.floor(Number(quote.openingCounterSubsidy) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
+      if (subsidy > 0) tags.push('Covered');
       const payoffLines = quote.counterPayoff && Array.isArray(quote.counterPayoff.shopLines)
         ? quote.counterPayoff.shopLines
         : [];
       const priceLine = quote.discount > 0
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
+      const coveredLine = subsidy > 0 ? `Opening covers ${subsidy}☠️` : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
         ...payoffLines,
         priceLine,
+        coveredLine,
       ].filter(Boolean).join('\n');
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs(payoffLines.length ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
+        fontSize: L.fs((payoffLines.length || subsidy > 0) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
         align: 'center',
         lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
@@ -362,7 +366,7 @@ class ShopScene extends Phaser.Scene {
         ? Math.max(0, Math.floor(Number(quote.missing) || 0))
         : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (subsidy > 0 ? 'Buy covered' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy')))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -373,11 +377,11 @@ class ShopScene extends Phaser.Scene {
         y: footerY,
         label: actionLabel,
         L,
-        minW: (creditBuy ? 132 : (discountBuy ? 108 : 74)) * L.k,
+        minW: (creditBuy ? 132 : (subsidy > 0 ? 126 : (discountBuy ? 108 : 74))) * L.k,
         minH: 44 * L.k,
         fill: actionFill,
         textColor: actionTextColor,
-        textPx: (creditBuy || discountBuy) ? 14 : 16,
+        textPx: (creditBuy || discountBuy || subsidy > 0) ? 14 : 16,
       });
       this.panelLayer.add(action);
 
