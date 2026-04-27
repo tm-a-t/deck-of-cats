@@ -469,3 +469,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-210512 — rev d6dc0ae — build 0.1.0
 
 - Gameplay: true - Added Route Counter Cover: secured pre-Boarding-1 route-primary counter buys now reduce pending `Boarding Alert` by `1` when Alert is present, making the first counter commitment visibly soften the incoming boarding. Validated with JS syntax checks, `node sim/fast-sim.js --check-route-counter-cover --json`, `node sim/fast-sim.js --check-alarm-rushed-route-counter --json`, `node sim/fast-sim.js --check-opening-counter-plan --json`, related opening route/cache targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-210512.log`.
+
+## 2026-04-27 — run 20260427-225731 — rev e87aaa0 — build 0.1.0
+
+- Gameplay: true - Added Opening Route Victory Cache: winning Boarding 1 after opening the selected route cache grants a one-time `+2` route-resource payoff for Forest, Rocky, or Port, with reward text and targeted coverage for unclaimed caches, losses, Battle Test, Boarding 2+, duplicate grants, and reward stacking. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-victory-cache --json`, related opening route/report checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-225731.log`.

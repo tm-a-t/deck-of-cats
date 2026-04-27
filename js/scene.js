@@ -2196,9 +2196,10 @@ class GameScene extends Phaser.Scene {
     const island = ISLANDS[node.islandIdx];
     const cacheText = this.openingRouteCacheStakesText(stakes) || 'cache';
     const routeName = island && island.name ? island.name.replace(' Island', '') : 'Route';
+    const victoryText = info.bountyEmoji ? `; B1 win +2${info.bountyEmoji}` : '';
     return [
       `${routeName}: ${info.enemyName}`,
-      `${info.starterName} opens ${cacheText}`,
+      `${info.starterName} opens ${cacheText}${victoryText}`,
       `Shop ${info.primaryName}; one-short unlocks ${info.sideName}`,
     ];
   }
@@ -2310,7 +2311,7 @@ class GameScene extends Phaser.Scene {
     const cacheStatus = this.selectedOpeningRouteCacheStatusText(state);
     const setup = this.openingRouteSetupFlagText();
     const payoff = info.bountyEmoji
-      ? `B1 payoff: counter win +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
+      ? `B1 payoff: opened cache win +2${info.bountyEmoji}; counter +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
       : '';
     const routePrimarySecured = G.openingRouteCounterBoughtMainKey === info.mainKey;
     const sideUnlocked = !!G.openingCounterPlan && !routePrimarySecured;
@@ -2320,7 +2321,7 @@ class GameScene extends Phaser.Scene {
     const targets = `Targets: ${info.primaryName} primary; ${sideTarget}`;
     if (opts.context === 'shop') {
       const payoffShort = info.bountyEmoji
-        ? `B1 counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
+        ? `B1 cache +2${info.bountyEmoji}/counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
         : 'B1 counter payoff';
       const sideBuyText = sideUnlocked
         ? this.openingRouteBuyQuoteText(info.sideType)
@@ -2332,7 +2333,7 @@ class GameScene extends Phaser.Scene {
       ].filter(Boolean);
     }
     if (opts.context === 'sending') {
-      const bountyPair = info.bountyEmoji ? `B1 +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
+      const bountyPair = info.bountyEmoji ? `B1 cache +2${info.bountyEmoji}; counter +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
       return [
         `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
         `Full send = Full Crew ${info.primaryName}; one-short unlocks ${info.sideName} or +💪 primary; ${bountyPair}`,
@@ -4843,6 +4844,67 @@ class GameScene extends Phaser.Scene {
     return report;
   }
 
+  firstShipOpeningRouteMainKey() {
+    if (!G.map || !Array.isArray(G.map.layers) || typeof firstShipLayerIndex !== 'function') return null;
+    const firstShipLayer = firstShipLayerIndex(G.map);
+    const firstShip = firstShipLayer >= 0 && G.map.layers[firstShipLayer]
+      ? G.map.layers[firstShipLayer][0]
+      : null;
+    return firstShip && firstShip.openingRouteMainKey ? firstShip.openingRouteMainKey : null;
+  }
+
+  selectedOpeningRouteVictoryCacheNode(mainKey = this.firstShipOpeningRouteMainKey()) {
+    if (!G.map || !Array.isArray(G.map.layers) || !mainKey || typeof firstShipLayerIndex !== 'function') return null;
+    const firstShipLayer = firstShipLayerIndex(G.map);
+    const cacheLayerIdx = firstShipLayer - 1;
+    if (cacheLayerIdx !== 0) return null;
+    const cacheLayer = G.map.layers[cacheLayerIdx] || [];
+    const visited = new Set(Array.isArray(G.map.visited) ? G.map.visited : []);
+    return cacheLayer.find(node =>
+      node
+      && visited.has(node.id)
+      && node.scoutedCache
+      && node.scoutedCache.mainKey === mainKey
+    ) || null;
+  }
+
+  grantOpeningRouteVictoryCache(combat = G.combat, result = null) {
+    if (!combat) return null;
+    if (combat.openingRouteVictoryCache) return combat.openingRouteVictoryCache;
+
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+
+    const mainKey = this.firstShipOpeningRouteMainKey();
+    const node = this.selectedOpeningRouteVictoryCacheNode(mainKey);
+    const cache = node && node.scoutedCache;
+    if (!cache || !cache.claimed || cache.openingRouteVictoryCacheGranted) return null;
+
+    const resource = mainKey && SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    const count = 2;
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + count;
+    cache.openingRouteVictoryCacheGranted = true;
+
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.openingRouteVictoryCache = {
+      nodeId: node.id,
+      mainKey,
+      enemyName: enemy ? enemy.name : mainKey,
+      resource,
+      count,
+      wood: resource === 'wood' ? count : 0,
+      stone: resource === 'stone' ? count : 0,
+      gold: resource === 'gold' ? count : 0,
+      total: count,
+    };
+    return combat.openingRouteVictoryCache;
+  }
+
   consumeRouteSidekickReportPirates(combat = G.combat, skipIds = new Set()) {
     if (!combat) return [];
     if (!combat.routeSidekickReport) this.markRouteSidekickReport(combat, combat.result);
@@ -4873,6 +4935,21 @@ class GameScene extends Phaser.Scene {
     this.effectText(x, y, `${report.name} sidekick reports${reward}`, '#ffd166', 760);
     if (reward && typeof this.animateResourceGain === 'function') {
       this.animateResourceGain(x, y, [{ key: bounty.resource, emoji, count }]);
+    }
+  }
+
+  showOpeningRouteVictoryCache(reward) {
+    if (!reward || !this.L) return;
+    const emoji = RES_EMOJI[reward.resource] || '';
+    const count = Math.max(0, Math.floor(Number(reward.count) || 0));
+    if (!emoji || count <= 0) return;
+
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 364 * L.k;
+    this.effectText(x, y, `Route cache +${count}${emoji}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [{ key: reward.resource, emoji, count }]);
     }
   }
 
@@ -6535,6 +6612,7 @@ class GameScene extends Phaser.Scene {
     const routePromotion = result === 'win' ? this.grantOpeningRoutePromotion(combat, result) : null;
     const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
     const routeSidekickReport = result === 'win' ? this.markRouteSidekickReport(combat, result) : null;
+    const routeVictoryCache = result === 'win' ? this.grantOpeningRouteVictoryCache(combat, result) : null;
     this.clearCacheDrillBountyMarks();
     this.clearOpeningRouteSidekick();
     if (this.currentBoardingNumber() === 1) this.clearOpeningRouteCounterBought();
@@ -6551,6 +6629,7 @@ class GameScene extends Phaser.Scene {
     this.showOpeningRoutePromotion(routePromotion);
     this.showCounterAmbusherReport(ambusherReport);
     this.showRouteSidekickReport(routeSidekickReport);
+    this.showOpeningRouteVictoryCache(routeVictoryCache);
   }
 
   continueFromResolvedBoarding() {
@@ -7114,6 +7193,11 @@ class GameScene extends Phaser.Scene {
           const bounty = combat.routeSidekickBounty || combat.routeSidekickReport.bounty || null;
           const bountyEmoji = bounty && RES_EMOJI[bounty.resource] ? RES_EMOJI[bounty.resource] : '';
           rewardParts.push(`${combat.routeSidekickReport.name} sidekick reports${bountyEmoji ? ` +${bountyEmoji}` : ''}`);
+        }
+        if (combat.openingRouteVictoryCache) {
+          const reward = combat.openingRouteVictoryCache;
+          const emoji = RES_EMOJI[reward.resource] || '';
+          rewardParts.push(`Route cache +${reward.count}${emoji}`);
         }
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
@@ -8718,6 +8802,11 @@ class GameScene extends Phaser.Scene {
           if (ambushBountyItem) {
             const label = `+${ambushBountyItem.count > 1 ? ambushBountyItem.count : ''}${ambushBountyItem.emoji}`;
             rewardLines.push(`Ambush bounty ${label}`);
+          }
+          if (combat.openingRouteVictoryCache) {
+            const reward = combat.openingRouteVictoryCache;
+            const emoji = RES_EMOJI[reward.resource] || '';
+            rewardLines.push(`Route cache +${reward.count}${emoji}`);
           }
           rewardLines.forEach((line, i) => {
             const rewardText = this.add.text(

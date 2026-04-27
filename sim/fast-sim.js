@@ -49,6 +49,7 @@ function parseArgs(argv) {
     checkOpeningCachePurse: false,
     checkOpeningRouteMuster: false,
     checkOpeningRoutePrize: false,
+    checkOpeningRouteVictoryCache: false,
     checkOpeningRoutePromotion: false,
     checkRouteSidekickReport: false,
     checkNoAlarmRushRouteCounter: false,
@@ -200,6 +201,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-cache-drill-opening-payoff' || a === '--check-opening-route-prize' || a === '--check-opening-route-contract') {
       out.checkOpeningRoutePrize = true;
+      continue;
+    }
+    if (a === '--check-opening-route-victory-cache' || a === '--check-opening-victory-cache') {
+      out.checkOpeningRouteVictoryCache = true;
       continue;
     }
     if (a === '--check-opening-route-promotion') {
@@ -1477,6 +1482,10 @@ function assertOpeningRouteMusterCheck(condition, message) {
 
 function assertOpeningRoutePrizeCheck(condition, message) {
   if (!condition) throw new Error(`cache drill opening payoff check failed: ${message}`);
+}
+
+function assertOpeningRouteVictoryCacheCheck(condition, message) {
+  if (!condition) throw new Error(`opening route victory cache check failed: ${message}`);
 }
 
 function assertOpeningRoutePromotionCheck(condition, message) {
@@ -3180,6 +3189,162 @@ function runOpeningRoutePrizeChecks(runtime) {
     assertOpeningRoutePrizeCheck(G.res.gold === 0 && !combat.ambushBounty, `Battle Test granted bounty ${JSON.stringify(G.res)}`);
     results.push({ name: 'Battle Test ignores Cache Drill bounty markers', ok: true });
   }
+
+  return { ok: true, checks: results };
+}
+
+function runOpeningRouteVictoryCacheChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routes = [
+    { label: 'Forest/Shellback', mainKey: 'shellback', resource: 'wood', sideOffer: 'drummer' },
+    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', resource: 'stone', sideOffer: 'trainer' },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', resource: 'gold', sideOffer: 'survivalist' },
+  ];
+
+  const resourceCount = (G, res) => Math.max(0, Math.floor(Number(G.res && G.res[res]) || 0));
+  const makePirate = (id, type, opts = {}) => ({
+    id,
+    type,
+    weaponKey: opts.weaponKey || null,
+    might: Math.max(0, Math.floor(Number(opts.might) || 0)),
+    tempo: Math.max(0, Math.floor(Number(opts.tempo) || 0)),
+    wounded: !!opts.wounded,
+  });
+  const routeFirstIsland = (map, mainKey) => {
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const routeCache = map.layers[firstShipLayer - 1].find(node => node && node.scoutedCache && node.scoutedCache.mainKey === mainKey);
+    const firstIsland = routeCache && map.layers[0].includes(routeCache)
+      ? routeCache
+      : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
+    const ship = firstShipLayer >= 0 ? map.layers[firstShipLayer][0] : null;
+    return { firstShipLayer, routeCache, firstIsland, ship };
+  };
+
+  const setupBoarding = (route, opts = {}) => {
+    runtime.setSeed((opts.seed || 0x71c0ffee) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRouteVictoryCacheCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
+    assertOpeningRouteVictoryCacheCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+
+    let opener = (G.hand || []).find(Boolean) || (G.allCrew || []).find(Boolean);
+    assertOpeningRouteVictoryCacheCheck(opener, `${route.label} missing opener`);
+    G.hand = [opener];
+    G.sent = [0];
+
+    let claim = null;
+    if (opts.claimCache !== false) {
+      claim = scene.claimScoutedCounterCache(opener, { silent: true });
+      assertOpeningRouteVictoryCacheCheck(claim && claim.cacheGrant, `${route.label} cache claim failed`);
+      assertOpeningRouteVictoryCacheCheck(routeCache.scoutedCache.claimed === true, `${route.label} cache node not marked claimed`);
+    }
+
+    G.phase = 'map';
+    assertOpeningRouteVictoryCacheCheck(scene.applyMapNodeSelection(ship.id), `${route.label} ship selection failed`);
+    if (opts.mode) G.mode = opts.mode;
+    if (opts.boardingCount != null) {
+      G.boardingCount = Math.max(1, Math.floor(Number(opts.boardingCount) || 1));
+      if (G.enemyShip) G.enemyShip.encounterNo = G.boardingCount;
+    }
+
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: route.mainKey,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlert: 0,
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+    };
+    G.combat.playerFighters = [scene.buildPlayerCombatFighter(opener, 0, 0, G.combat)];
+    return { G, routeCache, opener, combat: G.combat, claim };
+  };
+
+  routes.forEach((route, index) => {
+    const { G, routeCache, combat } = setupBoarding(route, {
+      seed: 0x71c0a000 + index * 811,
+      reinforcementCount: index === 1 ? 1 : 0,
+    });
+    const before = resourceCount(G, route.resource);
+    scene.finishBoardingCombat('win');
+    assertOpeningRouteVictoryCacheCheck(combat.openingRouteVictoryCache, `${route.label} did not record Opening Route Victory Cache`);
+    assertOpeningRouteVictoryCacheCheck(combat.openingRouteVictoryCache.resource === route.resource, `${route.label} wrong victory resource ${JSON.stringify(combat.openingRouteVictoryCache)}`);
+    assertOpeningRouteVictoryCacheCheck(combat.openingRouteVictoryCache.count === 2, `${route.label} wrong victory count ${JSON.stringify(combat.openingRouteVictoryCache)}`);
+    assertOpeningRouteVictoryCacheCheck(resourceCount(G, route.resource) === before + 2, `${route.label} paid ${resourceCount(G, route.resource) - before} instead of +2 ${route.resource}`);
+    assertOpeningRouteVictoryCacheCheck(routeCache.scoutedCache.openingRouteVictoryCacheGranted === true, `${route.label} node did not record one-time victory cache`);
+    scene.grantOpeningRouteVictoryCache(combat, 'win');
+    assertOpeningRouteVictoryCacheCheck(resourceCount(G, route.resource) === before + 2, `${route.label} duplicated reward after direct grant`);
+    results.push({ name: `${route.label} claimed route cache pays exactly +2 ${route.resource} on Boarding 1 win`, ok: true });
+  });
+
+  {
+    const route = routes[0];
+    const { G, opener, combat } = setupBoarding(route, { seed: 0x71c0b001 });
+    const sidekick = makePirate(99001, route.sideOffer);
+    G.allCrew.push(sidekick);
+    G.hand = [opener, sidekick];
+    G.openingRouteSidekick = { pirateId: sidekick.id, mainKey: route.mainKey, type: sidekick.type };
+    combat.playerFighters = [
+      scene.buildPlayerCombatFighter(opener, 0, 0, combat),
+      scene.buildPlayerCombatFighter(sidekick, 0, 1, combat),
+    ];
+    combat.boardingAlertGuards = 1;
+    combat.counterAmbush = {
+      applied: true,
+      pirateId: opener.id,
+      type: opener.type,
+      name: api.TYPES[opener.type].name,
+      mainKey: route.mainKey,
+    };
+    const before = resourceCount(G, route.resource);
+    scene.finishBoardingCombat('win');
+    assertOpeningRouteVictoryCacheCheck(combat.alertGuardPlunder && combat.alertGuardPlunder.total === 1, 'stack check missed Alert plunder');
+    assertOpeningRouteVictoryCacheCheck(combat.ambushBounty && combat.ambushBounty.count >= 1, 'stack check missed Ambush Bounty');
+    assertOpeningRouteVictoryCacheCheck(combat.routeSidekickBounty && combat.routeSidekickBounty.count === 1, 'stack check missed Route Sidekick Bounty');
+    assertOpeningRouteVictoryCacheCheck(combat.openingRouteVictoryCache && combat.openingRouteVictoryCache.count === 2, 'stack check missed Opening Route Victory Cache');
+    const expected = before
+      + combat.alertGuardPlunder.total
+      + combat.ambushBounty.count
+      + combat.routeSidekickBounty.count
+      + combat.openingRouteVictoryCache.count;
+    assertOpeningRouteVictoryCacheCheck(resourceCount(G, route.resource) === expected, `stack check resource total ${resourceCount(G, route.resource)} !== ${expected}`);
+    results.push({ name: 'Opening Route Victory Cache stacks with Alert plunder, Ambush Bounty, and Route Sidekick Bounty', ok: true });
+  }
+
+  [
+    {
+      name: 'unclaimed route caches',
+      setup: () => setupBoarding(routes[1], { seed: 0x71c0c001, claimCache: false }),
+      result: 'win',
+    },
+    {
+      name: 'Boarding 1 losses',
+      setup: () => setupBoarding(routes[1], { seed: 0x71c0c002 }),
+      result: 'loss',
+    },
+    {
+      name: 'Battle Test',
+      setup: () => setupBoarding(routes[1], { seed: 0x71c0c003, mode: 'battleTest' }),
+      result: 'win',
+    },
+    {
+      name: 'Boarding 2+',
+      setup: () => setupBoarding(routes[1], { seed: 0x71c0c004, boardingCount: 2 }),
+      result: 'win',
+    },
+  ].forEach((negative) => {
+    const setup = negative.setup();
+    const before = resourceCount(setup.G, routes[1].resource);
+    scene.finishBoardingCombat(negative.result);
+    assertOpeningRouteVictoryCacheCheck(!setup.combat.openingRouteVictoryCache, `${negative.name} recorded victory cache`);
+    assertOpeningRouteVictoryCacheCheck(resourceCount(setup.G, routes[1].resource) === before, `${negative.name} paid victory cache`);
+    results.push({ name: `${negative.name} do not pay Opening Route Victory Cache`, ok: true });
+  });
 
   return { ok: true, checks: results };
 }
@@ -10139,6 +10304,11 @@ async function main() {
   }
   if (opts.checkOpeningRoutePrize) {
     const result = runOpeningRoutePrizeChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningRouteVictoryCache) {
+    const result = runOpeningRouteVictoryCacheChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
