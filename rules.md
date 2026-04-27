@@ -180,6 +180,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.
 - Wounded pirates in hand sit out and do not become combat fighters.
 - Default player setup puts armed ranged pirates in the deepest occupied row behind any melee front and everyone else in the front row.
+- In regular-run boarding with a scouted main enemy, the first ready pirate in hand whose type counters that main enemy is placed at the front of the front row by default, even if that pirate has a ranged weapon.
+- The player may still move that defaulted counter before `Fight!`; `Counter Ambush` only triggers if a matching counter is still in the compacted front row when the fight starts.
 - Occupied player setup rows compact toward the front whenever the formation is normalized; no ready pirate remains behind an empty row at fight start.
 - Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.
 - `Fight!` starts autoplay combat using the chosen player formation.

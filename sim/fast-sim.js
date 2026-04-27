@@ -2377,6 +2377,70 @@ function runCounterAmbushChecks(runtime) {
   };
 
   {
+    const { G, pirates, enemies, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['lumberjack', 'needler', 'miner'],
+      playerRows: [],
+      enemies: [['deckSniper', 0, 0], ['bilgeRat', 1, 0]],
+      pirateUpgrades: [{}, { weaponKey: 'toxinPistol' }, {}],
+    });
+    combat.playerSetupRows = scene.combatDefaultPlayerSetupRows(combat);
+    assertCounterAmbushCheck(combat.playerSetupRows[0][0] === pirates[1].id, 'ranged Needler counter was not defaulted to front row');
+    assertCounterAmbushCheck(combat.playerSetupRows[0][1] === pirates[0].id, 'first melee pirate did not remain behind defaulted counter');
+    combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
+    const target = enemies[0];
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'defaulted Needler did not ambush on Fight');
+    assertCounterAmbushCheck(result.pirateId === pirates[1].id, `default ambusher ${result.pirateId} !== ${pirates[1].id}`);
+    assertCounterAmbushCheck(result.armedAmbush && result.damage === 5, 'defaulted prepared Needler did not Armed Ambush');
+    assertCounterAmbushCheck(target.hp === target.maxHp - 5 && target.wounds === 1, 'defaulted ambush did not wound Deck Sniper');
+    results.push({ name: 'regular Deck Sniper boarding defaults prepared ranged Needler to front row and Armed Ambushes', ok: true });
+  }
+
+  {
+    const { G, pirates, enemies, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['lumberjack', 'needler', 'miner'],
+      playerRows: [],
+      enemies: [['deckSniper', 0, 0]],
+      pirateUpgrades: [{}, { weaponKey: 'toxinPistol' }, {}],
+    });
+    combat.playerSetupRows = [[pirates[0].id, pirates[2].id], [pirates[1].id], []];
+    combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'moved-back Needler still ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && !enemies[0].wounds, 'moved-back Needler changed Deck Sniper');
+    results.push({ name: 'moving defaulted counter out of front row prevents Counter Ambush', ok: true });
+  }
+
+  {
+    const { pirates, combat } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'deckSniper',
+      types: ['lumberjack', 'needler', 'miner'],
+      playerRows: [],
+      pirateUpgrades: [{}, { weaponKey: 'toxinPistol' }, {}],
+    });
+    const rows = scene.combatDefaultPlayerSetupRows(combat);
+    assertCounterAmbushCheck(rows[0][0] === pirates[0].id && rows[0][1] === pirates[2].id, 'Battle Test did not keep melee front default');
+    assertCounterAmbushCheck(rows[1][0] === pirates[1].id, 'Battle Test did not keep ranged Needler behind melee');
+    results.push({ name: 'Battle Test keeps ordinary ranged default placement', ok: true });
+  }
+
+  {
+    const { pirates, combat } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['lumberjack', 'sawbones', 'miner'],
+      playerRows: [],
+      pirateUpgrades: [{}, { weaponKey: 'toxinPistol' }, {}],
+    });
+    const rows = scene.combatDefaultPlayerSetupRows(combat);
+    assertCounterAmbushCheck(rows[0][0] === pirates[0].id && rows[0][1] === pirates[2].id, 'no-counter setup changed melee front default');
+    assertCounterAmbushCheck(rows[1][0] === pirates[1].id, 'no-counter setup changed ranged back default');
+    results.push({ name: 'boarding with no ready matching counter keeps ordinary ranged default placement', ok: true });
+  }
+
+  {
     const { G, pirates, enemies } = setupRegular({
       mainKey: 'powderBomber',
       types: ['sawbones', 'poisoner', 'trainer'],

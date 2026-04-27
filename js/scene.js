@@ -2292,15 +2292,27 @@ class GameScene extends Phaser.Scene {
 
   combatDefaultPlayerSetupRows(combat = G.combat) {
     const rows = this.combatEmptySetupRows();
+    const frontCounterId = this.combatDefaultFrontCounterPirateId(combat);
+    if (frontCounterId != null) rows[0].push(frontCounterId);
     (G.hand || []).forEach((pirate) => {
       if (!pirate) return;
       if (this.pirateWounded(pirate)) return;
+      if (frontCounterId != null && pirate.id === frontCounterId) return;
       const weaponKey = this.pirateWeaponKey(pirate);
       const weapon = weaponKey ? WEAPON_TYPES[weaponKey] : null;
       const rowIndex = weapon && weapon.range === 'ranged' ? 2 : 0;
       rows[rowIndex].push(pirate.id);
     });
     return this.combatCompactSetupRows(rows);
+  }
+
+  combatDefaultFrontCounterPirateId(combat = G.combat) {
+    const counterSet = new Set(this.counterAmbushTypes(combat));
+    if (!counterSet.size) return null;
+    const pirate = (G.hand || []).find((entry) =>
+      entry && !this.pirateWounded(entry) && counterSet.has(entry.type)
+    );
+    return pirate ? pirate.id : null;
   }
 
   combatCompactSetupRows(rows) {

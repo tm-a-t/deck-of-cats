@@ -157,3 +157,7 @@ This file records gameplay and loop-driven changes. Future loop Developer steps 
 ## 2026-04-27 — run 20260427-013652 — rev 493ba39
 
 - Gameplay: true - Added Armed Counter Ambush: front-row counters with a permanent weapon, Might, or Tempo now ambush the scouted main enemy for `5` damage instead of `3`, without triggering weapon on-hit effects, Counter Edge damage, or enemy hit reactions. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-counter-edge --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-013652.log`.
+
+## 2026-04-27 — run 20260427-015807 — rev 9a1ab29
+
+- Gameplay: true - Regular-run boarding setup now defaults the first ready pirate that counters the scouted main enemy to the front row, so prepared ranged counters like Needler visibly trigger Counter Ambush unless the player moves them back. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-counter-edge --json`, `node sim/fast-sim.js --check-counter-trophy --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-015807.log`.
