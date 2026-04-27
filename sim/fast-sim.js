@@ -45,6 +45,7 @@ function parseArgs(argv) {
     checkMapSchedule: false,
     checkBoardingTrophy: false,
     checkCounterTrophy: false,
+    checkCounterEdge: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -152,6 +153,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-counter-trophy') {
       out.checkCounterTrophy = true;
+      continue;
+    }
+    if (a === '--check-counter-edge') {
+      out.checkCounterEdge = true;
     }
   }
 
@@ -2069,6 +2074,179 @@ function runCounterTrophyChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertCounterEdgeCheck(condition, message) {
+  if (!condition) throw new Error(`counter edge check failed: ${message}`);
+}
+
+function runCounterEdgeChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const setupRegular = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: 1,
+      encounter: {
+        mainKey: opts.mainKey || 'deckSniper',
+        supportKeys: ['bilgeRat', 'cabinBoy'],
+        totalCount: 3,
+      },
+    };
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.discard = [];
+    G.deck = [];
+    G.sent = [];
+    const pirates = G.allCrew.slice(0, 5);
+    const types = opts.types || ['needler', 'sawbones', 'bandmaster', 'poisoner', 'trainer'];
+    pirates.forEach((pirate, i) => {
+      pirate.type = types[i] || pirate.type;
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, opts.handCount || 3);
+    G.combat = {
+      mode: opts.combatMode || 'setup',
+      encounterMainKey: opts.combatMainKey || null,
+      enemyParty: [],
+      playerSetupRows: [G.hand.map((pirate) => pirate.id), [], []],
+      enemySetupRows: [],
+      playerFighters: null,
+      enemyFighters: [],
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+    };
+    return { G, pirates, combat: G.combat };
+  };
+
+  const normalDamageFor = (pirate) => {
+    const weapon = scene.combatWeaponByKey(pirate && pirate.weaponKey);
+    const baseDamage = Number(api.COMBAT.pirateDamage) || 0;
+    const might = Math.max(0, Math.floor(Number(pirate && pirate.might) || 0));
+    const tempo = Math.max(0, Math.floor(Number(pirate && pirate.tempo) || 0));
+    const buffCount = might + tempo;
+    let damage = scene.combatWeaponBaseDamage(baseDamage, weapon) + might;
+    if (weapon && weapon.damagePerBuff) damage += buffCount * weapon.damagePerBuff;
+    return Math.max(0, Math.floor(damage));
+  };
+
+  {
+    const { pirates, combat } = setupRegular();
+    const needler = pirates[0];
+    needler.weaponKey = 'officerSabre';
+    needler.might = 2;
+    needler.tempo = 1;
+    const normalDamage = normalDamageFor(needler);
+    const stats = scene.combatPirateStats(needler, combat);
+    assertCounterEdgeCheck(stats.counterEdgeDamage === 1, `Needler edge ${stats.counterEdgeDamage} !== 1`);
+    assertCounterEdgeCheck(stats.damage === normalDamage + 1, `Needler damage ${stats.damage} !== ${normalDamage + 1}`);
+    assertCounterEdgeCheck(stats.might === 2 && stats.tempo === 1 && stats.buffCount === 3, `Needler buffs mutated in stats ${JSON.stringify(stats)}`);
+    assertCounterEdgeCheck(needler.might === 2 && needler.tempo === 1, 'Needler stored buffs changed');
+    const fighter = scene.buildPlayerCombatFighter(needler, 0, 0, combat);
+    assertCounterEdgeCheck(fighter.counterEdgeDamage === 1, `fighter edge ${fighter.counterEdgeDamage} !== 1`);
+    assertCounterEdgeCheck(scene.combatFighterDescription(fighter).includes('Counter Edge +1 damage'), 'fighter detail lacks Counter Edge text');
+    results.push({ name: 'regular Deck Sniper boarding gives Needler exactly +1 combat damage without mutating buffs', ok: true, normalDamage, edgeDamage: stats.damage });
+  }
+
+  {
+    const { pirates, combat } = setupRegular();
+    const sawbones = pirates[1];
+    sawbones.weaponKey = 'barbedBlade';
+    sawbones.might = 1;
+    sawbones.tempo = 1;
+    const normalDamage = normalDamageFor(sawbones);
+    const stats = scene.combatPirateStats(sawbones, combat);
+    assertCounterEdgeCheck(stats.counterEdgeDamage === 0, `non-counter edge ${stats.counterEdgeDamage} !== 0`);
+    assertCounterEdgeCheck(stats.damage === normalDamage, `non-counter damage ${stats.damage} !== ${normalDamage}`);
+    assertCounterEdgeCheck(!scene.combatFighterDescription({ ...stats, id: 'x', side: 'player', type: sawbones.type }).includes('Counter Edge'), 'non-counter detail shows Counter Edge');
+    results.push({ name: 'non-counter in the same boarding receives no Counter Edge', ok: true, damage: stats.damage });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular({ mode: 'battleTest' });
+    const needler = pirates[0];
+    needler.weaponKey = 'toxinPistol';
+    needler.might = 2;
+    const normalDamage = normalDamageFor(needler);
+    const stats = scene.combatPirateStats(needler, combat);
+    assertCounterEdgeCheck(G.mode === 'battleTest', 'Battle Test setup mode mismatch');
+    assertCounterEdgeCheck(stats.counterEdgeDamage === 0, `Battle Test edge ${stats.counterEdgeDamage} !== 0`);
+    assertCounterEdgeCheck(stats.damage === normalDamage, `Battle Test damage ${stats.damage} !== ${normalDamage}`);
+    results.push({ name: 'Battle Test excludes Counter Edge even for matching counters', ok: true, damage: stats.damage });
+  }
+
+  {
+    const { pirates, combat } = setupRegular();
+    const needler = pirates[0];
+    needler.weaponKey = 'bannerAxe';
+    needler.might = 1;
+    needler.tempo = 1;
+    const stats = scene.combatPirateStats(needler, combat);
+    assertCounterEdgeCheck(stats.counterEdgeDamage === 1, 'Banner Axe counter did not get edge damage');
+    assertCounterEdgeCheck(stats.buffCount === 2, `edge changed buff count to ${stats.buffCount}`);
+    assertCounterEdgeCheck(stats.targetMode === 'frontBand', `edge counted toward Banner Axe threshold: ${stats.targetMode}`);
+    assertCounterEdgeCheck(stats.damage === normalDamageFor(needler) + 1, `Banner Axe damage ${stats.damage} did not stack normally`);
+    results.push({ name: 'Counter Edge stacks with weapon/Might damage but not buff-count thresholds', ok: true, damage: stats.damage, targetMode: stats.targetMode });
+  }
+
+  {
+    const { pirates, combat } = setupRegular();
+    const needler = pirates[0];
+    needler.weaponKey = 'toxinPistol';
+    needler.wounded = true;
+    const stats = scene.combatPirateStats(needler, combat);
+    const fighters = scene.buildPlayerCombatFighters([[needler.id], [], []], combat);
+    assertCounterEdgeCheck(stats.counterEdgeDamage === 0, `wounded edge ${stats.counterEdgeDamage} !== 0`);
+    assertCounterEdgeCheck(fighters.length === 0, `wounded pirate built ${fighters.length} fighters`);
+    results.push({ name: 'wounded matching counters sit out and receive no Counter Edge fighter', ok: true });
+  }
+
+  {
+    const { G, pirates, combat } = setupRegular({ combatMode: 'fighting', handCount: 1 });
+    const oldPirate = pirates[1];
+    const reinforcement = pirates[0];
+    oldPirate.type = 'sawbones';
+    oldPirate.wounded = true;
+    reinforcement.type = 'needler';
+    reinforcement.weaponKey = 'toxinPistol';
+    reinforcement.might = 1;
+    assertCounterEdgeCheck(reinforcement.might === 1, `reinforcement setup Might ${reinforcement.might} !== 1`);
+    G.hand = [oldPirate];
+    G.deck = [reinforcement];
+    G.discard = [];
+    combat.playerSetupRows = [[oldPirate.id], [], []];
+    combat.playerFighters = [];
+    combat.enemyFighters = [{
+      id: 'dummy_enemy',
+      side: 'enemy',
+      row: 0,
+      rowOrder: 0,
+      alive: true,
+      hp: 99,
+      maxHp: 99,
+      damage: 0,
+      attackMs: 999999,
+      attackRange: 'melee',
+    }];
+    assertCounterEdgeCheck(scene.drawBoardingReinforcements(combat), 'failed to draw reinforcement hand');
+    const fighter = (combat.playerFighters || []).find((candidate) => candidate && candidate.pirateId === reinforcement.id);
+    assertCounterEdgeCheck(!!fighter, 'reinforcement Needler was not built as a fighter');
+    assertCounterEdgeCheck(fighter.counterEdgeDamage === 1, `reinforcement edge ${fighter.counterEdgeDamage} !== 1`);
+    assertCounterEdgeCheck(reinforcement.might === 1, `reinforcement stored Might changed to ${reinforcement.might}`);
+    assertCounterEdgeCheck(fighter.damage === 5, `reinforcement damage ${fighter.damage} !== 5`);
+    results.push({ name: 'reinforcement hands keep the same boarding Counter Edge', ok: true, damage: fighter.damage });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function runPortDrillChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -3089,6 +3267,11 @@ async function main() {
   }
   if (opts.checkCounterTrophy) {
     const result = runCounterTrophyChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkCounterEdge) {
+    const result = runCounterEdgeChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

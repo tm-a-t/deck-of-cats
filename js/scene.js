@@ -2731,6 +2731,23 @@ class GameScene extends Phaser.Scene {
       || null;
   }
 
+  counterEdgeMainKey(combat = G.combat) {
+    return this.counterTrophyMainKey(combat);
+  }
+
+  counterEdgeTypes(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    if (typeof SCOUTED_SHIP_COUNTERS !== 'object' || !SCOUTED_SHIP_COUNTERS) return [];
+    const mainKey = this.counterEdgeMainKey(combat);
+    const counters = mainKey ? SCOUTED_SHIP_COUNTERS[mainKey] : null;
+    return Array.isArray(counters) ? counters.filter((type) => !!TYPES[type]) : [];
+  }
+
+  combatCounterEdgeDamageForPirate(pirate, combat = G.combat) {
+    if (!pirate || this.pirateWounded(pirate)) return 0;
+    return this.counterEdgeTypes(combat).includes(pirate.type) ? 1 : 0;
+  }
+
   grantCounterTrophy(combat = G.combat) {
     if (!combat || combat.counterTrophyGranted) return null;
     combat.counterTrophyGranted = true;
@@ -3005,6 +3022,8 @@ class GameScene extends Phaser.Scene {
     if (might > 0) buffs.push(`${BUFF_EMOJI.might}${might}`);
     if (tempo > 0) buffs.push(`${BUFF_EMOJI.tempo}${tempo}`);
     if (buffs.length) parts.push(`Buffs: ${buffs.join(' ')}.`);
+    const counterEdgeDamage = Math.max(0, Math.floor(Number(fighter.counterEdgeDamage) || 0));
+    if (counterEdgeDamage > 0) parts.push(`Counter Edge +${counterEdgeDamage} damage.`);
     const statuses = [];
     const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
     const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
@@ -3117,8 +3136,10 @@ class GameScene extends Phaser.Scene {
     const might = this.pirateMight(pirate);
     const tempo = this.pirateTempo(pirate);
     const buffCount = might + tempo;
+    const counterEdgeDamage = this.combatCounterEdgeDamageForPirate(pirate, combat);
     let damage = this.combatWeaponBaseDamage(baseDamage, weapon) + might;
     if (weapon && weapon.damagePerBuff) damage += buffCount * weapon.damagePerBuff;
+    damage += counterEdgeDamage;
     let attackMultiplier = weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1;
     if (tempo > 0) attackMultiplier *= Math.pow(0.8, tempo);
     if (weapon && weapon.attackMsMultiplierPerBuff) {
@@ -3139,6 +3160,7 @@ class GameScene extends Phaser.Scene {
       might,
       tempo,
       buffCount,
+      counterEdgeDamage,
     };
   }
 
@@ -3164,6 +3186,7 @@ class GameScene extends Phaser.Scene {
       might: stats.might,
       tempo: stats.tempo,
       buffCount: stats.buffCount,
+      counterEdgeDamage: stats.counterEdgeDamage,
       poison: 0,
       wounds: 0,
     };
@@ -5331,6 +5354,7 @@ class GameScene extends Phaser.Scene {
       const buffParts = [];
       const might = Math.max(0, Math.floor(Number(opts.might) || 0));
       const tempo = Math.max(0, Math.floor(Number(opts.tempo) || 0));
+      const counterEdgeDamage = Math.max(0, Math.floor(Number(opts.counterEdgeDamage) || 0));
       if (might > 0) buffParts.push(`${BUFF_EMOJI.might}${might}`);
       if (tempo > 0) buffParts.push(`${BUFF_EMOJI.tempo}${tempo}`);
       if (buffParts.length) {
@@ -5359,6 +5383,32 @@ class GameScene extends Phaser.Scene {
           Math.max(2, Math.round(4 * L.k * scale))
         );
         ct.add([buffBg, buffLabel]);
+      }
+      if (counterEdgeDamage > 0) {
+        const edgeLabel = this.add.text(w / 2 - 5 * L.k * scale, -h / 2 + 5 * L.k * scale, `Edge +${counterEdgeDamage}`, uiBodyStyle(L, UI_THEME.colors.ink, {
+          fontSize: L.fs(Math.max(8, 8 * scale)),
+          fontStyle: 'bold',
+        })).setOrigin(1, 0);
+        const padX = 3 * L.k * scale;
+        const padY = 2 * L.k * scale;
+        const edgeBg = this.add.graphics();
+        edgeBg.fillStyle(uiColorInt('#7bdff2'), 0.96);
+        edgeBg.lineStyle(Math.max(1, Math.round(1 * L.k * scale)), uiColorInt('#246a7a'), 1);
+        edgeBg.fillRoundedRect(
+          edgeLabel.x - edgeLabel.width - padX,
+          edgeLabel.y - padY,
+          edgeLabel.width + padX * 2,
+          edgeLabel.height + padY * 2,
+          Math.max(2, Math.round(3 * L.k * scale))
+        );
+        edgeBg.strokeRoundedRect(
+          edgeLabel.x - edgeLabel.width - padX,
+          edgeLabel.y - padY,
+          edgeLabel.width + padX * 2,
+          edgeLabel.height + padY * 2,
+          Math.max(2, Math.round(3 * L.k * scale))
+        );
+        ct.add([edgeBg, edgeLabel]);
       }
     }
 
@@ -5575,6 +5625,7 @@ class GameScene extends Phaser.Scene {
             might: preview.might,
             tempo: preview.tempo,
             buffCount: preview.buffCount,
+            counterEdgeDamage: preview.counterEdgeDamage,
             poison: 0,
             wounds: 0,
           };
@@ -5591,6 +5642,7 @@ class GameScene extends Phaser.Scene {
             weaponKey: preview.weaponKey,
             might: preview.might,
             tempo: preview.tempo,
+            counterEdgeDamage: preview.counterEdgeDamage,
             alive: true,
             scale: playerVisuals.scale,
             interactive: true,
@@ -5735,6 +5787,7 @@ class GameScene extends Phaser.Scene {
         weaponKey: fighter.weaponKey,
         might: fighter.might,
         tempo: fighter.tempo,
+        counterEdgeDamage: fighter.counterEdgeDamage,
         alive: fighter.alive,
         scale: playerVisuals.scale,
         interactive: true,

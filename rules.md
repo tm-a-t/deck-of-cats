@@ -183,6 +183,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.
 - `Fight!` starts autoplay combat using the chosen player formation.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
+- During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.
+- `Counter Edge` uses the same scouted counter map as the Shop and `Counter Trophy`, applies to reinforcement hands during the same boarding, and does not apply to wounded pirates sitting out.
+- `Counter Edge` is not `Might`, is not a permanent buff, does not change stored `Might` or `Tempo`, does not count toward buff count, and does not affect Officer Sabre, Cadence Pistols, or Banner Axe buff-count thresholds.
+- `Counter Edge` never applies in `Battle Test`.
 - In regular runs, defeated player pirates become `🩹 Wounded`.
 - If all current player fighters fall while enemies remain, the run does not immediately end.
 - The defeated current hand goes to discard and a new combat hand is drawn from the deck/discard using only pirates that are not `🩹 Wounded`.
