@@ -182,6 +182,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Occupied player setup rows compact toward the front whenever the formation is normalized; no ready pirate remains behind an empty row at fight start.
 - Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.
 - `Fight!` starts autoplay combat using the chosen player formation.
+- In regular-run boarding only, `Counter Ambush` checks once when `Fight!` starts for the opening combat hand.
+- If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
+- `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
+- `Counter Ambush` does not count as an attack, does not trigger weapon on-hit effects, does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.
 - `Counter Edge` uses the same scouted counter map as the Shop and `Counter Trophy`, applies to reinforcement hands during the same boarding, and does not apply to wounded pirates sitting out.

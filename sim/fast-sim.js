@@ -46,6 +46,7 @@ function parseArgs(argv) {
     checkBoardingTrophy: false,
     checkCounterTrophy: false,
     checkCounterEdge: false,
+    checkCounterAmbush: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -157,6 +158,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-counter-edge') {
       out.checkCounterEdge = true;
+      continue;
+    }
+    if (a === '--check-counter-ambush') {
+      out.checkCounterAmbush = true;
     }
   }
 
@@ -2247,6 +2252,200 @@ function runCounterEdgeChecks(runtime) {
   return { ok: true, checks: results };
 }
 
+function assertCounterAmbushCheck(condition, message) {
+  if (!condition) throw new Error(`counter ambush check failed: ${message}`);
+}
+
+function runCounterAmbushChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+
+  const enemyFor = (key, row, rowOrder, idSuffix = 0) => {
+    const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
+    assertCounterAmbushCheck(!!archetype, `missing archetype ${key}`);
+    const member = scene.buildCombatEnemyMember(archetype, `${key}_ambush_${idSuffix}`);
+    return scene.buildEnemyCombatFighter(member, row, rowOrder);
+  };
+
+  const fighterFor = (pirate, row, rowOrder, combat) =>
+    scene.buildPlayerCombatFighter(pirate, row, rowOrder, combat);
+
+  const setupRegular = (opts = {}) => {
+    api.initState();
+    const G = api.getG();
+    G.mode = opts.mode || 'run';
+    G.phase = 'boarding';
+    G.busy = false;
+    G.enemyShip = {
+      strength: 6,
+      encounterNo: 1,
+      encounter: {
+        mainKey: opts.mainKey || 'powderBomber',
+        supportKeys: [],
+        totalCount: 1,
+      },
+    };
+    const pirates = G.allCrew.slice(0, 5);
+    const types = opts.types || ['sawbones', 'needler', 'bandmaster', 'poisoner', 'trainer'];
+    pirates.forEach((pirate, i) => {
+      pirate.type = types[i] || pirate.type;
+      pirate.weaponKey = null;
+      pirate.might = 0;
+      pirate.tempo = 0;
+      pirate.wounded = false;
+    });
+    G.hand = pirates.slice(0, opts.handCount || 3);
+    G.deck = [];
+    G.discard = [];
+    G.combat = {
+      mode: 'fighting',
+      encounterMainKey: opts.combatMainKey || null,
+      enemyParty: [],
+      playerFighters: [],
+      enemyFighters: [],
+      boardingAlertGuards: 0,
+      returnedPirateIds: [],
+      reinforcementCount: Math.max(0, Math.floor(Number(opts.reinforcementCount) || 0)),
+    };
+    const playerRows = opts.playerRows || [[0, 0], [1, 1], [2, 2]];
+    G.combat.playerFighters = playerRows
+      .map(([pirateIdx, row, rowOrder]) => {
+        const pirate = pirates[pirateIdx];
+        return pirate ? fighterFor(pirate, row, rowOrder, G.combat) : null;
+      })
+      .filter(Boolean);
+    G.combat.enemyFighters = (opts.enemies || [['powderBomber', 0, 0]])
+      .map(([key, row, rowOrder], idx) => enemyFor(key, row, rowOrder, idx));
+    return { G, pirates, enemies: G.combat.enemyFighters, combat: G.combat };
+  };
+
+  {
+    const { G, pirates, enemies } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 1, 0]],
+      enemies: [['powderBomber', 0, 0], ['bilgeRat', 0, 1]],
+    });
+    const target = enemies[0];
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(result && result.applied, 'front-row matching counter did not ambush');
+    assertCounterAmbushCheck(result.pirateId === pirates[0].id, `ambusher ${result.pirateId} !== ${pirates[0].id}`);
+    assertCounterAmbushCheck(target.hp === target.maxHp - 3, `target hp ${target.hp} !== ${target.maxHp - 3}`);
+    assertCounterAmbushCheck(target.wounds === 1, `target wounds ${target.wounds} !== 1`);
+    const hpAfter = target.hp;
+    const second = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!second && target.hp === hpAfter && target.wounds === 1, 'Counter Ambush repeated');
+    results.push({ name: 'front-row matching counter ambushes once for 3 damage and 1 Wound', ok: true });
+  }
+
+  {
+    const { G, enemies } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['sawbones', 'needler', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 1, 0]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    const target = enemies[0];
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'middle-row-only counter ambushed');
+    assertCounterAmbushCheck(target.hp === target.maxHp && !target.wounds, 'middle-row-only counter changed target');
+    results.push({ name: 'counters outside the front row do not ambush', ok: true });
+  }
+
+  {
+    const { G, enemies } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 0, 1]],
+      enemies: [['deckSniper', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'non-counter front row ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'non-counter changed target HP');
+    results.push({ name: 'front row without a matching counter does not ambush', ok: true });
+  }
+
+  {
+    const { G, enemies } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['shellback', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'ambushed without a living main enemy target');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp && !enemies[0].wounds, 'non-main enemy was hit');
+    results.push({ name: 'no living main-archetype enemy means no ambush', ok: true });
+  }
+
+  {
+    const { G, enemies } = setupRegular({
+      mode: 'battleTest',
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 0]],
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'Battle Test ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'Battle Test ambush changed target');
+    results.push({ name: 'Battle Test excludes Counter Ambush', ok: true });
+  }
+
+  {
+    const { G, enemies } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 0]],
+      reinforcementCount: 1,
+    });
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(!result, 'reinforcement hand ambushed');
+    assertCounterAmbushCheck(enemies[0].hp === enemies[0].maxHp, 'reinforcement ambush changed target');
+    results.push({ name: 'reinforcement hands do not trigger Counter Ambush', ok: true });
+  }
+
+  {
+    const { G, pirates, enemies } = setupRegular({
+      mainKey: 'deckSniper',
+      types: ['bandmaster', 'needler', 'trainer'],
+      playerRows: [[0, 0, 0], [1, 0, 1], [2, 1, 0]],
+      enemies: [['deckSniper', 0, 1], ['deckSniper', 0, 0], ['bilgeRat', 1, 0]],
+    });
+    const target = enemies[1];
+    const otherMain = enemies[0];
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(result && result.pirateId === pirates[0].id, `leftmost ambusher ${result && result.pirateId} !== ${pirates[0].id}`);
+    assertCounterAmbushCheck(result.targetId === target.id, `front-left target ${result.targetId} !== ${target.id}`);
+    assertCounterAmbushCheck(target.hp === target.maxHp - 3 && target.wounds === 1, 'front-left main target was not hit correctly');
+    assertCounterAmbushCheck(otherMain.hp === otherMain.maxHp && !otherMain.wounds, 'later main target was hit');
+    results.push({ name: 'multiple qualifiers use front-left counter and front-left main enemy', ok: true });
+  }
+
+  {
+    const { G, enemies, combat } = setupRegular({
+      mainKey: 'powderBomber',
+      types: ['sawbones', 'poisoner', 'trainer'],
+      playerRows: [[0, 0, 0]],
+      enemies: [['powderBomber', 0, 0]],
+    });
+    const bomber = enemies[0];
+    const player = combat.playerFighters[0];
+    bomber.hp = 3;
+    const beforePlayerHp = player.hp;
+    const result = scene.applyCounterAmbush(G.combat, { silent: true });
+    assertCounterAmbushCheck(result && result.defeated, 'lethal ambush did not defeat Powder Bomber');
+    assertCounterAmbushCheck(bomber.wounds === 1, `lethal bomber wounds ${bomber.wounds} !== 1`);
+    assertCounterAmbushCheck(player.hp === beforePlayerHp, `wounded bomber blast changed player HP ${player.hp} !== ${beforePlayerHp}`);
+    assertCounterAmbushCheck((result.blastEvents || []).some((event) => event && event.disarmed), 'wounded bomber did not fizzle');
+    results.push({ name: 'ambush-wounded Powder Bomber fizzles on death', ok: true });
+  }
+
+  return { ok: true, checks: results };
+}
+
 function runPortDrillChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
@@ -2815,6 +3014,15 @@ function runBoardingPhase(runtime, api, scene) {
   combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
   combat.enemyFighters = scene.buildEnemyCombatFighters(combat.enemySetupRows, combat);
   combat.nextAttackStartAt = 0;
+  if (scene && typeof scene.applyCounterAmbush === 'function') {
+    scene.applyCounterAmbush(combat, { silent: true });
+    const ambushResult = scene.combatResultFromLiving();
+    if (ambushResult === 'win') return finishSimBoardingWin(api, scene);
+    if (ambushResult === 'loss') return { state: 'loss' };
+    if (ambushResult === 'reinforce' && !drawSimBoardingReinforcements(runtime, api, scene, combat, 0)) {
+      return { state: 'loss' };
+    }
+  }
 
   let now = 0;
   initializeSimCombatTimings(runtime, api, [
@@ -3272,6 +3480,11 @@ async function main() {
   }
   if (opts.checkCounterEdge) {
     const result = runCounterEdgeChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkCounterAmbush) {
+    const result = runCounterAmbushChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

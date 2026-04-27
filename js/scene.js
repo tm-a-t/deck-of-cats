@@ -2520,6 +2520,7 @@ class GameScene extends Phaser.Scene {
     if (!archetype) return null;
     const enemy = {
       id,
+      key: archetype.key,
       name: archetype.name,
       emoji: archetype.emoji,
       hp: archetype.hp,
@@ -2783,6 +2784,116 @@ class GameScene extends Phaser.Scene {
     }
 
     return null;
+  }
+
+  counterAmbushMainKey(combat = G.combat) {
+    return this.counterTrophyMainKey(combat);
+  }
+
+  counterAmbushTypes(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    if (typeof SCOUTED_SHIP_COUNTERS !== 'object' || !SCOUTED_SHIP_COUNTERS) return [];
+    const mainKey = this.counterAmbushMainKey(combat);
+    const counters = mainKey ? SCOUTED_SHIP_COUNTERS[mainKey] : null;
+    return Array.isArray(counters) ? counters.filter((type) => !!TYPES[type]) : [];
+  }
+
+  combatEnemyArchetypeKey(fighter) {
+    if (!fighter) return null;
+    if (fighter.key) return fighter.key;
+    if (fighter.archetypeKey) return fighter.archetypeKey;
+    const id = String(fighter.id || '');
+    const archetype = (COMBAT.enemyArchetypes || []).find((entry) => {
+      if (!entry || !entry.key) return false;
+      return id === entry.key || id.startsWith(`${entry.key}_`) || id.includes(`_${entry.key}_`);
+    });
+    return archetype ? archetype.key : null;
+  }
+
+  counterAmbushPirateForFighter(fighter) {
+    if (!fighter || fighter.pirateId == null) return null;
+    return (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || null;
+  }
+
+  findCounterAmbushAmbusher(combat = G.combat) {
+    const counterSet = new Set(this.counterAmbushTypes(combat));
+    if (!counterSet.size) return null;
+    return this.combatFrontRow('player').find((fighter) => {
+      if (!fighter || !fighter.alive) return false;
+      const pirate = this.counterAmbushPirateForFighter(fighter);
+      const type = pirate ? pirate.type : fighter.type;
+      return counterSet.has(type);
+    }) || null;
+  }
+
+  findCounterAmbushTarget(mainKey) {
+    if (!mainKey) return null;
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter && fighter.alive && this.combatEnemyArchetypeKey(fighter) === mainKey
+    ) || null;
+  }
+
+  applyCounterAmbush(combat = G.combat, opts = {}) {
+    if (!combat || combat.counterAmbushResolved) return null;
+    combat.counterAmbushResolved = true;
+    combat.counterAmbush = null;
+
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const mainKey = this.counterAmbushMainKey(combat);
+    const ambusher = this.findCounterAmbushAmbusher(combat);
+    const target = this.findCounterAmbushTarget(mainKey);
+    if (!mainKey || !ambusher || !target) return null;
+
+    const damage = 3;
+    const beforeHp = Math.max(0, Math.floor(Number(target.hp) || 0));
+    const woundResult = this.combatApplyWounds(target, 1);
+    target.hp = Math.max(0, beforeHp - damage);
+
+    const deathPositions = [];
+    const defeatedTargets = [];
+    if (target.hp <= 0 && this.defeatCombatFighter(target, deathPositions)) {
+      defeatedTargets.push(target);
+    }
+    const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, this.time.now, deathPositions);
+
+    const pirate = this.counterAmbushPirateForFighter(ambusher);
+    const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.counterAmbush = {
+      applied: true,
+      ambusherId: ambusher.id,
+      pirateId: pirate ? pirate.id : ambusher.pirateId,
+      type: pirate ? pirate.type : ambusher.type,
+      name: def.name || ambusher.type || 'Pirate',
+      targetId: target.id,
+      targetKey: this.combatEnemyArchetypeKey(target),
+      targetName: target.name || (enemy && enemy.name) || mainKey,
+      mainKey,
+      damage,
+      wounds: Math.max(0, Math.floor(Number(woundResult.added) || 0)),
+      beforeHp,
+      afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
+      defeated: !target.alive,
+      blastEvents,
+      deathPositions,
+    };
+
+    if (!opts.silent) this.showCounterAmbush(combat.counterAmbush);
+    return combat.counterAmbush;
+  }
+
+  showCounterAmbush(result) {
+    if (!result || !this.L) return;
+    const L = this.L;
+    const target = this.combatFindFighter(result.targetId);
+    const targetPoint = target ? this.combatWorldPoint(target) : { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+    this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, 'Counter Ambush!', '#ffd54f', 700);
+    this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
+    this.showCombatAftermath(result.blastEvents || [], result.deathPositions || []);
   }
 
   showBoardingTrophy(trophy) {
@@ -3206,6 +3317,7 @@ class GameScene extends Phaser.Scene {
       damage: enemy.damage,
       attackMs: enemy.attackMs,
       attacksMade: 0,
+      key: enemy.key || this.combatEnemyArchetypeKey(enemy),
       color: enemy.color,
       attackRange: enemy.attackRange || 'melee',
       targetMode: enemy.targetMode || 'frontBand',
@@ -4170,6 +4282,11 @@ class GameScene extends Phaser.Scene {
     combat.playerFighters = this.buildPlayerCombatFighters(playerRows, combat);
     combat.enemyFighters = this.buildEnemyCombatFighters(enemyRows, combat);
     this.renderAll();
+    const ambush = this.applyCounterAmbush(combat);
+    if (ambush) {
+      this.renderAll();
+      if (this.handleCombatResult(this.combatResultFromLiving())) return;
+    }
     this.startCombatAutoplay();
   }
 
