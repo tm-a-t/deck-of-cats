@@ -3111,9 +3111,17 @@ class GameScene extends Phaser.Scene {
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
     const routePassOff = this.transferRouteStarterCacheDrillBountyToBoughtCounter(p, type, quote, routeShopState);
-    if (routeShopState
+    const securesOpeningRouteCounter = !!(routeShopState
       && type === routeShopState.primaryCounterType
-      && routeShopState.mainKey) {
+      && routeShopState.mainKey
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight
+        || quote.alarmRushedRouteCounter));
+    if (securesOpeningRouteCounter) {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
       G.openingRouteCounterBoughtPirateId = p.id;
     }

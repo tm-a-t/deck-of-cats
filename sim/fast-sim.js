@@ -2420,6 +2420,7 @@ function runOpeningRoutePrizeChecks(runtime) {
     { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones' },
     { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler' },
   ];
+  const openingCounters = ['poisoner', 'sawbones', 'needler'];
 
   const makePirate = (id, type, opts = {}) => ({
     id,
@@ -2436,6 +2437,13 @@ function runOpeningRoutePrizeChecks(runtime) {
     const firstIsland = map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     const ship = map.layers[firstShipLayer][0];
     return { firstShipLayer, routeCache, firstIsland, ship };
+  };
+  const assertOnlyRoutePrimaryOpeningCounter = (shop, label, primary) => {
+    const visible = (shop || []).filter(type => openingCounters.includes(type));
+    assertOpeningRoutePrizeCheck(
+      visible.length === 1 && visible[0] === primary,
+      `${label} expected only ${primary} as opening counter, got ${(shop || []).join(',')}`
+    );
   };
   const enemyFor = (key, row, rowOrder, idSuffix = 0) => {
     const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
@@ -2628,13 +2636,13 @@ function runOpeningRoutePrizeChecks(runtime) {
     assertOpeningRoutePrizeCheck(quote.counterPayoff && quote.counterPayoff.bountyCount === 1, `${route.label} cash primary previewed doubled bounty: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRoutePrizeCheck(bought && bought.type === route.primary, `${route.label} cash primary buy failed`);
-    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} cash buy did not secure route primary`);
-    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} cash buy did not record bought pirate`);
+    assertOpeningRoutePrizeCheck(!G.openingRouteCounterBoughtMainKey, `${route.label} cash buy secured route primary`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null, `${route.label} cash buy recorded bought pirate`);
     assertOpeningRoutePrizeCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${route.label} cash primary did not go only to discard`);
     assertOpeningRoutePrizeCheck(!(G.counterWatchIds || []).includes(bought.id), `${route.label} cash primary gained Counter Watch`);
     assertOpeningRoutePrizeCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} cash primary gained upgrades: ${JSON.stringify(bought)}`);
-    assertOpeningRoutePrizeCheck(!G.shop.some(type => ['poisoner', 'sawbones', 'needler'].includes(type)), `${route.label} cash buy did not suppress opening counters: ${G.shop.join(',')}`);
-    results.push({ name: `${route.label} cash-only primary secures the route but discards without Watch or prep Might`, ok: true, quote });
+    assertOnlyRoutePrimaryOpeningCounter(G.shop, `${route.label} cash-buy refill`, route.primary);
+    results.push({ name: `${route.label} cash-only primary stays unsecured and keeps the route counter guaranteed`, ok: true, quote });
   });
 
   routeCases.forEach((route, routeIndex) => {
@@ -2780,9 +2788,9 @@ function runOpeningRoutePrizeChecks(runtime) {
     const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler' });
     scene.applyCounterAmbush(combat, { silent: true });
     scene.finishBoardingCombat('win');
-    assertOpeningRoutePrizeCheck(G.res.gold === 1, `cash-only secured primary doubled bounty ${JSON.stringify(G.res)}`);
-    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1, `cash-only secured payload ${JSON.stringify(combat.ambushBounty)}`);
-    results.push({ name: 'cash-only secured route primary receives only normal Ambush Bounty', ok: true });
+    assertOpeningRoutePrizeCheck(G.res.gold === 1, `unmarked route primary doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1, `unmarked route primary payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'route primary without Cache Drill receives only normal Ambush Bounty', ok: true });
   }
 
   {
@@ -2956,8 +2964,8 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'Port high-Alert cash buy gained Counter Watch');
     assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port high-Alert cash buy gained prep/Prepared upgrades: ${JSON.stringify(bought)}`);
     assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port high-Alert cash buy created Cache Drill marks');
-    assertAlarmRushedRouteCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, 'Port high-Alert cash buy did not secure route counter');
-    results.push({ name: 'Port route primary bought with cash at 4 pending Alert secures the route but discards without Watch', ok: true, quote, plan });
+    assertAlarmRushedRouteCounterCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'Port high-Alert cash buy secured route counter');
+    results.push({ name: 'Port route primary bought with cash at 4 pending Alert stays unsecured and discards without Watch', ok: true, quote, plan });
   }
 
   {
@@ -2976,6 +2984,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck(G.discard.includes(bought) && !G.deck.includes(bought), 'below-threshold cash primary did not discard');
     assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'below-threshold cash primary gained Counter Watch');
+    assertAlarmRushedRouteCounterCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'below-threshold cash primary secured route counter');
     results.push({ name: 'Port zero-send leaves 3 projected Alert below the Dockside rush threshold and discards the cash route primary', ok: true, quote, wagePreview });
   }
 
@@ -2991,6 +3000,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     assertAlarmRushedRouteCounterCheck(G.boardingAlert === 4 && G.shopCreditUsed === true, `credit alarm Alert/shopCredit mismatch: ${G.boardingAlert}/${G.shopCreditUsed}`);
     assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), 'credit alarm buy missed draw pile or Watch');
     assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `credit alarm gained excluded upgrades: ${JSON.stringify(bought)}`);
+    assertAlarmRushedRouteCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, 'credit alarm buy did not secure route counter');
     results.push({ name: 'Dockside Credit route rush counts same-purchase Alert toward the 4 Alert threshold', ok: true, quote, plan });
   }
 
@@ -3002,6 +3012,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck(G.boardingAlert === 3 && G.discard.includes(bought) && !G.deck.includes(bought), 'credit below threshold did not discard with +2 Alert');
     assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'credit below threshold gained Counter Watch');
+    assertAlarmRushedRouteCounterCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, 'credit below threshold secured route counter');
     results.push({ name: 'Dockside Credit route-primary buys at 3 projected Alert still discard', ok: true, quote });
   }
 
@@ -3670,6 +3681,35 @@ function runOpeningRouteCounterShopChecks(runtime) {
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
+    runtime.setSeed((0x70450240 + routeIndex) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { firstIsland } = routeFirstIsland(G.map, mainKey);
+    assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} discard-primary route selection failed`);
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES[primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(
+      [primary, ...openingCounters.filter(type => type !== primary), 'herald'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    assertRouteFocusedShop(G.shop, `${label} discard-primary setup`, primary);
+    const quote = scene.shopPurchaseQuote(primary);
+    assertOpeningRouteCounterShopCheck(quote.canBuy && quote.counter && !quote.topDeck && !quote.credit, `${label} discard-primary quote mismatch: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(G.shop.indexOf(primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteCounterShopCheck(bought && bought.type === primary, `${label} discard-primary buy failed`);
+    assertOpeningRouteCounterShopCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${label} discard-primary did not go to discard`);
+    assertOpeningRouteCounterShopCheck(!G.openingRouteCounterBoughtMainKey && G.openingRouteCounterBoughtPirateId == null, `${label} discard-primary secured route marker`);
+    assertRouteFocusedShop(G.shop, `${label} after discard-primary buy`, primary);
+    continueRefreshShopForTest(G);
+    assertRouteFocusedShop(G.shop, `${label} Continue after discard-primary buy`, primary);
+    results.push({ name: `${label} discard-only route-primary buys keep exactly one guaranteed primary counter in refills`, ok: true, quote });
+  });
+
+  routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
     runtime.setSeed((0x704502a0 + routeIndex) >>> 0);
     api.initState();
     const G = api.getG();
@@ -3988,6 +4028,51 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 1, `${route.label} starter normal bounty resource wrong: ${JSON.stringify(G.res)}`);
     results.push({ name: `${route.label} route primary spends starter Cache Drill Opening Prep, takes the bounty mark, defaults front-left, and pays doubled Ambush Bounty`, ok: true });
   });
+
+  {
+    const route = routes[1];
+    const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
+    const earlierPrimary = {
+      id: 9400,
+      type: route.primary,
+      weaponKey: null,
+      might: 0,
+      tempo: 0,
+      wounded: false,
+    };
+    G.allCrew.push(earlierPrimary);
+    G.discard.push(earlierPrimary);
+    G.openingRouteCounterBoughtMainKey = null;
+    G.openingRouteCounterBoughtPirateId = null;
+    const reward = applyScoutedCacheDrillForSim(scene, pirate);
+    assertOpeningDeckhandCounterCheck(reward && reward.openingCounterPrep, 'discard-only prior primary blocked starter Cache Prep');
+    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'starter did not retain bounty mark after prior discard primary');
+    G.counterWatchIds = [pirate.id];
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(
+      [route.primary, 'drummer', 'herald', 'trainer'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningDeckhandCounterCheck(
+      quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && quote.openingCounterPrepDiscount === 1,
+      `prior discard primary blocked prep quote: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningDeckhandCounterCheck(bought && bought.type === route.primary && bought.id !== earlierPrimary.id, 'prep buy after prior discard primary failed');
+    assertOpeningDeckhandCounterCheck(G.deck[G.deck.length - 1] === bought && !G.deck.includes(earlierPrimary), 'prep buy after prior discard primary did not top-deck only the new counter');
+    assertOpeningDeckhandCounterCheck(G.discard.includes(earlierPrimary), 'prior discard primary was moved by later prep purchase');
+    assertOpeningDeckhandCounterCheck((bought.might || 0) === 1 && (G.counterWatchIds || []).includes(bought.id), 'prep buy after prior discard primary missed Might or Watch');
+    assertOpeningDeckhandCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, 'prep buy after prior discard primary did not secure route');
+    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === bought.id, 'Route Starter Pass-Off did not move mark after prior discard primary');
+    results.push({ name: 'discard-only route-primary investment does not block later Route Starter Cache Prep or Pass-Off', ok: true, quote });
+  }
 
   {
     const route = routes[0];
