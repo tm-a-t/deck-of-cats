@@ -339,6 +339,7 @@ class ShopScene extends Phaser.Scene {
       const tags = [];
       if (quote.counter) tags.push('Counter');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
+      if (quote.openingCommissionReport) tags.push('Opening report');
       if (quote.openingFullCrewReport) tags.push('Full Crew report');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
@@ -351,7 +352,7 @@ class ShopScene extends Phaser.Scene {
         : `${def.cost}☠️`;
       const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
-        ? (quote.openingCounterPrepMight ? 'Opening Prep +💪' : 'Opening Prep spent')
+        ? (quote.openingCounterPrepMight ? 'Opening Prep +💪' : (quote.openingCommissionReport ? 'Opening Report' : 'Opening Prep spent'))
         : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
@@ -372,7 +373,7 @@ class ShopScene extends Phaser.Scene {
         ? Math.max(0, Math.floor(Number(quote.missing) || 0))
         : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingCounterPrepMight ? 'Buy prep' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))))
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingCounterPrepMight ? 'Buy prep' : (quote.openingCommissionReport ? 'Buy report' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy')))))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -383,11 +384,11 @@ class ShopScene extends Phaser.Scene {
         y: footerY,
         label: actionLabel,
         L,
-        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (discountBuy ? 108 : 74))) * L.k,
+        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (quote.openingCommissionReport ? 112 : (discountBuy ? 108 : 74)))) * L.k,
         minH: 44 * L.k,
         fill: actionFill,
         textColor: actionTextColor,
-        textPx: (creditBuy || discountBuy || coverage > 0) ? 14 : 16,
+        textPx: (creditBuy || discountBuy || coverage > 0 || quote.openingCommissionReport) ? 14 : 16,
       });
       this.panelLayer.add(action);
 
@@ -653,9 +654,9 @@ class ShopScene extends Phaser.Scene {
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.openingCounterPrepMight ? ' Opening Prep +💪' : ' Prep spent')
+        ? (quote.openingCounterPrepMight ? ' Opening Prep +💪' : (quote.openingCommissionReport ? ' Opening Report' : ' Prep spent'))
         : '';
-      const reportText = quote.openingFullCrewReport ? ' Full Crew report' : '';
+      const reportText = quote.openingCommissionReport ? ' Opening report' : (quote.openingFullCrewReport ? ' Full Crew report' : '');
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
       game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + reportText + alertText + preparedText + deckText, '#66bb6a');
