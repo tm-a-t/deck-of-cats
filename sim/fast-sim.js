@@ -187,7 +187,7 @@ function parseArgs(argv) {
       out.checkOpeningRoutePrize = true;
       continue;
     }
-    if (a === '--check-alarm-rushed-route-counter') {
+    if (a === '--check-alarm-rushed-route-counter' || a === '--check-dockside-rush-route-counter') {
       out.checkAlarmRushedRouteCounter = true;
       continue;
     }
@@ -750,12 +750,11 @@ function shopPurchaseQuote(api, G, type) {
     };
   }
   if (enthusiasm >= effectiveCost) {
-    const alarmRushedRouteCounter = alarmRushesWithAlert(0);
     return {
       canBuy: true,
       credit: false,
       counter,
-      topDeck: topDeckBeforeAlarm || alarmRushedRouteCounter,
+      topDeck: topDeckBeforeAlarm,
       preparedCounter,
       cost,
       effectiveCost,
@@ -765,7 +764,7 @@ function shopPurchaseQuote(api, G, type) {
       spend: effectiveCost,
       fullCrewCoverage: 0,
       ...shared,
-      alarmRushedRouteCounter,
+      alarmRushedRouteCounter: false,
     };
   }
   const missing = effectiveCost - enthusiasm;
@@ -2939,19 +2938,20 @@ function runAlarmRushedRouteCounterChecks(runtime) {
   {
     const route = routeCases[2];
     const G = setupRouteShop(route, { boardingAlert: 4 });
-    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port cash alarm');
+    const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port cash high Alert');
     assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.counter && quote.openingRoutePrimary, `Port quote not buyable primary counter: ${JSON.stringify(quote)}`);
-    assertAlarmRushedRouteCounterCheck(quote.alarmRushedRouteCounter && quote.topDeck && !quote.credit && quote.alert === 0, `Port cash alarm did not top-deck without credit: ${JSON.stringify(quote)}`);
-    assertAlarmRushedRouteCounterCheck(!quote.openingCounterPrepMight && !quote.preparedCounter && quote.fullCrewCoverage === 0, `Port cash alarm gained setup perks: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(!quote.alarmRushedRouteCounter && !quote.topDeck && !quote.credit && quote.alert === 0, `Port cash high Alert became a rush: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(!quote.openingCounterPrepMight && !quote.preparedCounter && quote.fullCrewCoverage === 0, `Port cash high Alert gained setup perks: ${JSON.stringify(quote)}`);
     const plan = scene.shopPlanText();
-    assertAlarmRushedRouteCounterCheck(plan.includes('Alarm-rushed') && plan.includes('top deck') && plan.includes('Watch'), `Port shop plan missing alarm top-deck Watch text: ${plan}`);
+    assertAlarmRushedRouteCounterCheck(!plan.includes('Dockside rush') && !plan.includes('Alarm-rushed') && !plan.includes('top deck, Watch'), `Port shop plan mislabeled cash high Alert rush: ${plan}`);
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertAlarmRushedRouteCounterCheck(bought && bought.type === route.primary, 'Port alarm buy failed');
-    assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), 'Port alarm buy did not go to draw pile only');
-    assertAlarmRushedRouteCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Port alarm buy did not gain Counter Watch');
-    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port alarm buy gained prep/Prepared upgrades: ${JSON.stringify(bought)}`);
-    assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port alarm buy created Cache Drill marks');
-    results.push({ name: 'Port route primary can be alarm-rushed at 4 pending Alert without prep or Prepared gains', ok: true, quote, plan });
+    assertAlarmRushedRouteCounterCheck(bought && bought.type === route.primary, 'Port high-Alert cash buy failed');
+    assertAlarmRushedRouteCounterCheck(G.discard.includes(bought) && !G.deck.includes(bought), 'Port high-Alert cash buy did not discard');
+    assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'Port high-Alert cash buy gained Counter Watch');
+    assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port high-Alert cash buy gained prep/Prepared upgrades: ${JSON.stringify(bought)}`);
+    assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port high-Alert cash buy created Cache Drill marks');
+    assertAlarmRushedRouteCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, 'Port high-Alert cash buy did not secure route counter');
+    results.push({ name: 'Port route primary bought with cash at 4 pending Alert secures the route but discards without Watch', ok: true, quote, plan });
   }
 
   {
@@ -2970,7 +2970,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck(G.discard.includes(bought) && !G.deck.includes(bought), 'below-threshold cash primary did not discard');
     assertAlarmRushedRouteCounterCheck(!(G.counterWatchIds || []).includes(bought.id), 'below-threshold cash primary gained Counter Watch');
-    results.push({ name: 'Port zero-send leaves 3 projected Alert below the alarm-rushed threshold and discards the cash route primary', ok: true, quote, wagePreview });
+    results.push({ name: 'Port zero-send leaves 3 projected Alert below the Dockside rush threshold and discards the cash route primary', ok: true, quote, wagePreview });
   }
 
   {
@@ -2980,12 +2980,12 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.credit && quote.alert === 2, `credit alarm did not expose +2 Alert: ${JSON.stringify(quote)}`);
     assertAlarmRushedRouteCounterCheck(quote.alarmRushedRouteCounter && quote.topDeck, `credit alarm did not top-deck: ${JSON.stringify(quote)}`);
     const plan = scene.shopPlanText();
-    assertAlarmRushedRouteCounterCheck(plan.includes('Alarm-rushed') && plan.includes('credit +2 Alert') && plan.includes('top deck') && plan.includes('Watch'), `credit plan missing alarm/credit/top-deck Watch: ${plan}`);
+    assertAlarmRushedRouteCounterCheck(plan.includes('Dockside rush') && plan.includes('credit +2 Alert') && plan.includes('top deck') && plan.includes('Watch'), `credit plan missing Dockside rush/credit/top-deck Watch: ${plan}`);
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck(G.boardingAlert === 4 && G.shopCreditUsed === true, `credit alarm Alert/shopCredit mismatch: ${G.boardingAlert}/${G.shopCreditUsed}`);
     assertAlarmRushedRouteCounterCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), 'credit alarm buy missed draw pile or Watch');
     assertAlarmRushedRouteCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `credit alarm gained excluded upgrades: ${JSON.stringify(bought)}`);
-    results.push({ name: 'Dockside Credit alarm-rush counts same-purchase Alert toward the 4 Alert threshold', ok: true, quote, plan });
+    results.push({ name: 'Dockside Credit route rush counts same-purchase Alert toward the 4 Alert threshold', ok: true, quote, plan });
   }
 
   {
@@ -3007,15 +3007,15 @@ function runAlarmRushedRouteCounterChecks(runtime) {
       enthusiasm: api.TYPES[route.primary].cost - 1,
     });
     const quote = assertSceneAndPolicyMatch(G, route.primary, 'Full Crew setup owns top-deck');
-    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && !quote.alarmRushedRouteCounter && quote.discount === 1, `Full Crew setup was mislabeled alarm-rushed: ${JSON.stringify(quote)}`);
-    results.push({ name: 'Full Crew setup remains separate from Alarm-rushed labeling', ok: true, quote });
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && !quote.alarmRushedRouteCounter && quote.discount === 1, `Full Crew setup was mislabeled Dockside rush: ${JSON.stringify(quote)}`);
+    results.push({ name: 'Full Crew setup remains separate from Dockside rush labeling', ok: true, quote });
   }
 
   {
     const route = routeCases[0];
     const G = setupRouteShop(route, { boardingAlert: 4, openingCounterPlan: true });
     const quote = assertSceneAndPolicyMatch(G, route.primary, 'Opening Prep setup owns top-deck');
-    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && !quote.alarmRushedRouteCounter, `Opening Prep setup was mislabeled alarm-rushed: ${JSON.stringify(quote)}`);
+    assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.topDeck && quote.openingCounterPrepMight && !quote.alarmRushedRouteCounter, `Opening Prep setup was mislabeled Dockside rush: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertAlarmRushedRouteCounterCheck((bought.might || 0) === 1, 'Opening Prep no longer granted prep Might');
     results.push({ name: 'Opening Counter Prep remains the only opening route-primary prep Might path', ok: true, quote });
@@ -3025,8 +3025,8 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const route = routeCases[2];
     const G = setupRouteShop(route, { boardingAlert: 4 });
     const quote = assertSceneAndPolicyMatch(G, 'drummer', 'non-counter alarm exclusion');
-    assertAlarmRushedRouteCounterCheck(!quote.counter && !quote.alarmRushedRouteCounter && !quote.topDeck, `non-counter received alarm-rushed route setup: ${JSON.stringify(quote)}`);
-    results.push({ name: 'non-counter buys never become Alarm-rushed route counters', ok: true, quote });
+    assertAlarmRushedRouteCounterCheck(!quote.counter && !quote.alarmRushedRouteCounter && !quote.topDeck, `non-counter received Dockside rush route setup: ${JSON.stringify(quote)}`);
+    results.push({ name: 'non-counter buys never become Dockside rush route counters', ok: true, quote });
   }
 
   {
@@ -3034,7 +3034,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const G = setupRouteShop(route, { boardingAlert: 4, boardingCount: 1 });
     const quote = assertSceneAndPolicyMatch(G, route.primary, 'Boarding 2+ alarm exclusion');
     assertAlarmRushedRouteCounterCheck(!quote.openingRoutePrimary && !quote.alarmRushedRouteCounter, `Boarding 2+ received alarm route setup: ${JSON.stringify(quote)}`);
-    results.push({ name: 'Boarding 2+ route-primary buys cannot use Alarm-rushed setup', ok: true, quote });
+    results.push({ name: 'Boarding 2+ route-primary buys cannot use Dockside rush setup', ok: true, quote });
   }
 
   {
@@ -3042,7 +3042,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     const G = setupRouteShop(route, { mode: 'battleTest', boardingAlert: 4 });
     const quote = assertSceneAndPolicyMatch(G, route.primary, 'Battle Test alarm exclusion');
     assertAlarmRushedRouteCounterCheck(!quote.openingRoutePrimary && !quote.alarmRushedRouteCounter && !quote.topDeck, `Battle Test received alarm route setup: ${JSON.stringify(quote)}`);
-    results.push({ name: 'Battle Test purchases cannot use Alarm-rushed setup', ok: true, quote });
+    results.push({ name: 'Battle Test purchases cannot use Dockside rush setup', ok: true, quote });
   }
 
   return { ok: true, checks: results };
@@ -7497,8 +7497,8 @@ async function runShoppingPhase(
     if (!bought) break;
     if (boughtType) {
       const label = api.TYPES[boughtType].name || boughtType;
-      if (quote && quote.alarmRushedRouteCounter && quote.credit) purchases.push(`${label} (Alarm-rushed Credit +${quote.alert} Alert)`);
-      else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Alarm-rushed)`);
+      if (quote && quote.alarmRushedRouteCounter && quote.credit) purchases.push(`${label} (Dockside rush +${quote.alert} Alert)`);
+      else if (quote && quote.alarmRushedRouteCounter) purchases.push(`${label} (Dockside rush)`);
       else if (quote && quote.credit) purchases.push(`${label} (Credit +${quote.alert} Alert)`);
       else if (quote && quote.openingCounterPrepMight) purchases.push(`${label} (Opening Prep -${quote.openingCounterPrepDiscount || 0}☠️ +💪)`);
       else if (quote && quote.fullCrewCoverage > 0) purchases.push(`${label} (Full Crew covers ${quote.fullCrewCoverage}☠️)`);

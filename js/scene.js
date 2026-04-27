@@ -2151,12 +2151,11 @@ class GameScene extends Phaser.Scene {
       consumesOpeningCounterPrep: consumesOpeningCounterPlan,
     };
     if (enthusiasm >= effectiveCost) {
-      const alarmRushedRouteCounter = alarmRushesWithAlert(0);
       return withPayoff({
         canBuy: true,
         credit: false,
         counter,
-        topDeck: topDeckBeforeAlarm || alarmRushedRouteCounter,
+        topDeck: topDeckBeforeAlarm,
         preparedCounter,
         cost,
         effectiveCost,
@@ -2166,7 +2165,7 @@ class GameScene extends Phaser.Scene {
         spend: effectiveCost,
         fullCrewCoverage: 0,
         ...shared,
-        alarmRushedRouteCounter,
+        alarmRushedRouteCounter: false,
       });
     }
     const missing = effectiveCost - enthusiasm;
@@ -2286,7 +2285,7 @@ class GameScene extends Phaser.Scene {
     const prep = quote.openingCounterPrepMight
       ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
       : '';
-    const alarm = quote.alarmRushedRouteCounter ? ', Alarm-rushed' : '';
+    const alarm = quote.alarmRushedRouteCounter ? ', Dockside rush' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? (quote.alarmRushedRouteCounter ? ', top deck, Watch' : ', top deck') : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
@@ -3145,7 +3144,7 @@ class GameScene extends Phaser.Scene {
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent')
         : '';
-      const alarmText = quote.alarmRushedRouteCounter ? ' Alarm-rushed' : '';
+      const alarmText = quote.alarmRushedRouteCounter ? ' Dockside rush' : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
       const passOffText = routePassOff ? ' Cache mark' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';

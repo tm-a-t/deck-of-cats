@@ -340,7 +340,7 @@ class ShopScene extends Phaser.Scene {
       const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
-      if (quote.alarmRushedRouteCounter) tags.push('Alarm-rushed');
+      if (quote.alarmRushedRouteCounter) tags.push('Dockside rush');
       if (quote.alarmRushedRouteCounter) tags.push('Watch');
       if (prepDiscount > 0) tags.push('Opening Prep -1☠️');
       if (quote.openingCounterPrepMight) tags.push('Prep +💪');
