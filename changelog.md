@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-181422 — rev c3c454b — build 0.1.0
+
+- Gameplay: true - Replaced the credit-only Dockside rush gate with Cache-Claimed Alarm Rush: a pre-Boarding-1 route-primary counter now top-decks, gains Counter Watch, and secures the route when its route cache was claimed this Shop round and post-purchase pending Alert is 4+, including affordable cash buys and Dockside Credit buys, while unclaimed/zero-send caches, below-threshold Alert, setup-owned Full Crew/Opening Prep paths, non-primary buys, Battle Test, and Boarding 2+ stay unchanged. Validated with JS syntax checks, targeted alarm-rushed route counter, opening route shop, opening deckhand, scouted cache, Opening Counter Prep, Full Crew coverage, opening route prize, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-181422.log`.
+
 ## 2026-04-27 — run 20260427-180152 — rev 826468b — build 0.1.0
 
 - Gameplay: true - Capped `Cache Drill` Alert refunds at `1`, so Forest and Rocky/Boarding 2+ `+1 Alert` caches still clear while the Port `+2 Alert` greed route keeps `+1` pending after a successful starter or Needler drill; route/cache text now calls out the partial Port cut. Validated with JS syntax checks, targeted scouted cache, opening deckhand/pass-off, opening route prize, scout-pay, route shop, Opening Prep, drilled bounty, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-180152.log`.

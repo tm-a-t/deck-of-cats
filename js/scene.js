@@ -580,6 +580,37 @@ class GameScene extends Phaser.Scene {
     };
   }
 
+  markOpeningRouteCacheClaimedForAlarmRush(drill, cacheNode, pirate) {
+    if (this.isBattleTest()
+      || !drill
+      || !drill.mainKey
+      || !cacheNode
+      || !cacheNode.scoutedCache
+      || cacheNode.scoutedCache.mainKey !== drill.mainKey
+      || !pirate
+      || pirate.id == null
+      || !G.map
+      || cacheNode.id !== G.map.currentNodeId
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingRouteShopState !== 'function') {
+      return false;
+    }
+
+    const route = openingRouteShopState({
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    if (!route || route.mainKey !== drill.mainKey) return false;
+
+    const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
+    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+    if (firstLayer <= 0 || currentLayer !== firstLayer - 1) return false;
+
+    G.openingRouteCacheClaimedMainKey = drill.mainKey;
+    return true;
+  }
+
   pendingScoutedCounterCacheState() {
     if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
     const drill = G.island.scoutedCacheDrill;
@@ -621,6 +652,7 @@ class GameScene extends Phaser.Scene {
     drill.alertRefunded = false;
     const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
     if (cacheNode && cacheNode.scoutedCache) cacheNode.scoutedCache.claimed = true;
+    this.markOpeningRouteCacheClaimedForAlarmRush(drill, cacheNode, pirate);
 
     const drillReward = this.applyScoutedCacheDrill(pirate, {
       ...opts,
@@ -1499,6 +1531,7 @@ class GameScene extends Phaser.Scene {
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
     if (node.type === 'ship') {
+      G.openingRouteCacheClaimedMainKey = null;
       const alert = this.consumeBoardingAlertForBoarding();
       const cacheDrillBountyMarks = this.activateCacheDrillBountyMarksForBoarding(node);
       this.clearCounterWatch();
@@ -2327,7 +2360,17 @@ class GameScene extends Phaser.Scene {
     const alarmThreshold = Math.max(1, Math.floor(Number(
       (typeof ALARM_RUSHED_ROUTE_COUNTER_ALERT !== 'undefined' && ALARM_RUSHED_ROUTE_COUNTER_ALERT) || 4
     ) || 4));
-    const canAlarmRush = !!(openingRoutePrimary && scoutedCounterTopDeck && !setupTopDeck);
+    const claimedRouteCacheMainKey = source.openingRouteCacheClaimedMainKey != null
+      ? source.openingRouteCacheClaimedMainKey
+      : (G.openingRouteCacheClaimedMainKey || null);
+    const claimedRouteCacheForAlarmRush = !!(openingRoutePrimary
+      && routeShopState
+      && routeShopState.mainKey
+      && claimedRouteCacheMainKey === routeShopState.mainKey);
+    const canAlarmRush = !!(openingRoutePrimary
+      && scoutedCounterTopDeck
+      && !setupTopDeck
+      && claimedRouteCacheForAlarmRush);
     const alarmRushesWithAlert = (extraAlert = 0) => canAlarmRush
       && pendingAlert + Math.max(0, Math.floor(Number(extraAlert) || 0)) >= alarmThreshold;
     const shared = {
@@ -2342,11 +2385,12 @@ class GameScene extends Phaser.Scene {
       consumesOpeningCounterPrep: consumesOpeningCounterPlan,
     };
     if (enthusiasm >= effectiveCost) {
+      const alarmRushedRouteCounter = alarmRushesWithAlert(0);
       return withPayoff({
         canBuy: true,
         credit: false,
         counter,
-        topDeck: topDeckBeforeAlarm,
+        topDeck: topDeckBeforeAlarm || alarmRushedRouteCounter,
         preparedCounter,
         cost,
         effectiveCost,
@@ -2356,7 +2400,7 @@ class GameScene extends Phaser.Scene {
         spend: effectiveCost,
         fullCrewCoverage: 0,
         ...shared,
-        alarmRushedRouteCounter: false,
+        alarmRushedRouteCounter,
       });
     }
     const missing = effectiveCost - enthusiasm;
@@ -2476,7 +2520,7 @@ class GameScene extends Phaser.Scene {
     const prep = quote.openingCounterPrepMight
       ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
       : '';
-    const alarm = quote.alarmRushedRouteCounter ? ', Dockside rush' : '';
+    const alarm = quote.alarmRushedRouteCounter ? ', Alarm rush' : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? (quote.alarmRushedRouteCounter ? ', top deck, Watch' : ', top deck') : '';
     const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
@@ -3348,7 +3392,7 @@ class GameScene extends Phaser.Scene {
       const planText = quote.consumesOpeningCounterPlan
         ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent')
         : '';
-      const alarmText = quote.alarmRushedRouteCounter ? ' Dockside rush' : '';
+      const alarmText = quote.alarmRushedRouteCounter ? ' Alarm rush' : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
       const passOffText = routePassOff ? ' Cache mark' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
@@ -3414,6 +3458,7 @@ class GameScene extends Phaser.Scene {
     G.enthusiasm = 0;
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
+    G.openingRouteCacheClaimedMainKey = null;
     this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
