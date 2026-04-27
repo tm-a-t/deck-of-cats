@@ -652,11 +652,38 @@ class GameScene extends Phaser.Scene {
       mainKey,
       type: pirate.type,
     };
+    this.markCounterWatch(pirate);
     return pirate;
   }
 
   clearOpeningRouteMuster() {
     G.openingRouteMuster = null;
+  }
+
+  openingRouteCounterWatchText(intel = null) {
+    if (this.isBattleTest()
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return '';
+    }
+    const info = intel || this.nextShipIntel();
+    const marker = G.openingRouteMuster || null;
+    const mainKey = (info && info.mainKey) || (marker && marker.mainKey);
+    if (!mainKey) return '';
+
+    const watchIds = Array.isArray(G.counterWatchIds) ? G.counterWatchIds : [];
+    if (!watchIds.length) return '';
+
+    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
+    const watchedStarter = (G.allCrew || []).find(pirate =>
+      pirate
+      && watchIds.includes(pirate.id)
+      && starterTypes.includes(pirate.type)
+    );
+    if (!watchedStarter) return '';
+
+    const def = TYPES[watchedStarter.type];
+    return `Route counter: ${(def && def.name) || watchedStarter.type} · Watch`;
   }
 
   consumeOpeningRouteMusterPirates(skipIds = new Set()) {
@@ -1340,6 +1367,7 @@ class GameScene extends Phaser.Scene {
 
     const sent = new Set(Array.isArray(G.sent) ? G.sent : []);
     const sending = this._sendingToIsland || new Set();
+    const watchedIds = new Set(Array.isArray(G.counterWatchIds) ? G.counterWatchIds : []);
     const entries = [];
     const availableEntries = [];
     (G.hand || []).forEach((pirate, handIdx) => {
@@ -1350,6 +1378,7 @@ class GameScene extends Phaser.Scene {
         handIdx,
         sent: sent.has(handIdx),
         available: !sent.has(handIdx) && !sending.has(handIdx),
+        watched: watchedIds.has(pirate.id),
       };
       entries.push(entry);
       if (entry.available) availableEntries.push(entry);
@@ -1372,14 +1401,16 @@ class GameScene extends Phaser.Scene {
       present: entries.length > 0,
       available: availableEntries.length > 0,
       active: !!activeEntry,
+      watched: entries.some(entry => entry.watched),
     };
   }
 
   routeCounterBadgeForCard(pirate) {
     const state = this.openingRouteCounterState();
     if (!state || !pirate || pirate.type !== state.starterType) return null;
+    const watchedIds = new Set(Array.isArray(G.counterWatchIds) ? G.counterWatchIds : []);
     return {
-      label: 'Route counter',
+      label: watchedIds.has(pirate.id) ? 'Route Watch' : 'Route counter',
       fill: '#f6d28a',
       stroke: '#ffca28',
       textColor: UI_THEME.colors.ink,
@@ -1407,6 +1438,7 @@ class GameScene extends Phaser.Scene {
       active,
       available,
       conditional: available && !active,
+      watched: state.watched,
       showCounterPayoff: !!shortCrewDrill.reportsEarly,
     };
   }
@@ -2752,7 +2784,11 @@ class GameScene extends Phaser.Scene {
     const reportIds = reports.ids;
     const openingRouteMuster = this.consumeOpeningRouteMusterPirates(reportIds);
     const shortCrewReportIds = new Set((reports.shortCrew || []).map(pirate => pirate && pirate.id));
-    const counterWatch = this.consumeCounterWatchPirates(reportIds, { preserveSentIds: shortCrewReportIds });
+    const watchSkipIds = new Set(reportIds);
+    openingRouteMuster.forEach((pirate) => {
+      if (pirate && pirate.id != null) watchSkipIds.add(pirate.id);
+    });
+    const counterWatch = this.consumeCounterWatchPirates(watchSkipIds, { preserveSentIds: shortCrewReportIds });
     const topDeckReturnIds = new Set(reportIds);
     openingRouteMuster.forEach(pirate => topDeckReturnIds.add(pirate.id));
     counterWatch.forEach(pirate => topDeckReturnIds.add(pirate.id));
@@ -5719,7 +5755,10 @@ class GameScene extends Phaser.Scene {
     const alertLine = opts.includeAlert === false
       ? ''
       : this.boardingAlertIntelText(alertAmount, alertGuardCount, opts);
-    return [rosterLine, alertLine].filter(Boolean).join(' · ');
+    const routeWatchLine = opts.includeRouteWatch === false
+      ? ''
+      : this.openingRouteCounterWatchText(info);
+    return [rosterLine, routeWatchLine, alertLine].filter(Boolean).join(' · ');
   }
 
   isLandingRoundPhase() {
@@ -7256,11 +7295,12 @@ class GameScene extends Phaser.Scene {
       const refund = shortCrew.counterAlertRefund || {};
       const routeCounterPlan = shortCrew.routeCounterPlan;
       if (routeCounterPlan && routeCounterPlan.name) {
+        const routeWatchText = routeCounterPlan.watched ? ' · Watch' : '';
         const refundText = routeCounterPlan.showCounterPayoff
           ? (routeCounterPlan.conditional ? ', counter refunds Alert if sent' : ', counter refunds Alert')
           : '';
-        const watchText = routeCounterPlan.showCounterPayoff ? ', Watch' : '';
-        shortCrewText = `Route counter: ${routeCounterPlan.name} · Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+        const watchText = !routeCounterPlan.watched && routeCounterPlan.showCounterPayoff ? ', Watch' : '';
+        shortCrewText = `Route counter: ${routeCounterPlan.name}${routeWatchText} · Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
       } else {
         let refundText = '';
         if (refund.eligible) refundText = ', counter refunds Alert';

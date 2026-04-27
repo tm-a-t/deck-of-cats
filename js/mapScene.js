@@ -539,7 +539,21 @@ class MapScene extends Phaser.Scene {
     if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
     if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
     if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    const routeWatch = this.openingRouteWatchBadgeText(cache);
+    if (routeWatch) parts.push(routeWatch);
     return parts.join(' ');
+  }
+
+  openingRouteWatchBadgeText(cache) {
+    if (!cache
+      || G.mode === 'battleTest'
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return '';
+    }
+    const starterType = openingDeckhandCounterTypes(cache.mainKey, 1, { mode: G.mode })[0];
+    const def = starterType && TYPES[starterType];
+    return def && def.name ? `${def.name} Watch` : '';
   }
 
   uiTxt(x, y, str, style) {

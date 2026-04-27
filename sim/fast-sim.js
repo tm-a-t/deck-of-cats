@@ -2890,6 +2890,7 @@ function runOpeningRouteMusterChecks(runtime) {
     { label: 'Rocky/Powder Bomber', islandIdx: 1, mainKey: 'powderBomber', starterType: 'miner', nonmatchingType: 'lumberjack', res: 'stone' },
     { label: 'Port/Deck Sniper', islandIdx: 3, mainKey: 'deckSniper', starterType: 'armsman', nonmatchingType: 'miner', res: 'gold' },
   ];
+  const starterName = (type) => (api.TYPES[type] && api.TYPES[type].name) || type;
 
   const makeRouteMap = (route) => ({
     layers: [
@@ -2978,6 +2979,8 @@ function runOpeningRouteMusterChecks(runtime) {
     assertOpeningRouteMusterCheck(marker && marker.pirateId === starter.id, `${route.label} did not mark the visible starter: ${JSON.stringify(marker)}`);
     assertOpeningRouteMusterCheck(marker.mainKey === route.mainKey && marker.type === route.starterType, `${route.label} marker mismatch: ${JSON.stringify(marker)}`);
     assertOpeningRouteMusterCheck((starter.might || 0) === 0 && !starter.weaponKey && (starter.tempo || 0) === 0, `${route.label} starter was upgraded on mark`);
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 1 && G.counterWatchIds[0] === starter.id, `${route.label} did not grant exactly one starter Watch: ${JSON.stringify(G.counterWatchIds)}`);
+    assertOpeningRouteMusterCheck(scene.nextShipIntelText().includes(`Route counter: ${starterName(route.starterType)} · Watch`), `${route.label} intel did not expose route Watch: ${scene.nextShipIntelText()}`);
     results.push({ name: `${route.label} marks one visible matching starter for Opening Route Muster`, ok: true, marker });
   });
 
@@ -2985,6 +2988,7 @@ function runOpeningRouteMusterChecks(runtime) {
     const route = routes[0];
     const { G, deckStarter } = setupRouteSelection(route, { handHasStarter: false });
     assertOpeningRouteMusterCheck(G.openingRouteMuster && G.openingRouteMuster.pirateId === deckStarter.id, `deck fallback marker ${JSON.stringify(G.openingRouteMuster)}`);
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 1 && G.counterWatchIds[0] === deckStarter.id, `deck fallback Watch ${JSON.stringify(G.counterWatchIds)}`);
     G.phase = 'shopping';
     prepareNextRoundForSim(api, scene);
     assertOpeningRouteMusterCheck(G.hand[0] === deckStarter, 'deck fallback starter was not drawn first');
@@ -3072,8 +3076,37 @@ function runOpeningRouteMusterChecks(runtime) {
     prepareNextRoundForSim(api, scene);
     assertOpeningRouteMusterCheck(G.hand[0] === starter, 'upgraded starter did not muster');
     assertOpeningRouteMusterCheck(starter.might === 2 && starter.tempo === 1 && starter.weaponKey === 'rustyPistol', `muster mutated upgrades: ${JSON.stringify(starter)}`);
-    assertOpeningRouteMusterCheck(!(G.counterWatchIds || []).includes(starter.id), 'muster granted Counter Watch');
-    results.push({ name: 'Opening Route Muster changes only draw order, not weapons, buffs, or Counter Watch', ok: true });
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(starter.id), 'muster did not keep starter Counter Watch');
+    results.push({ name: 'Opening Route Muster grants Counter Watch without changing weapons or buffs', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const { G, starter } = setupRouteSelection(route);
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, 'watched held starter did not muster into hand');
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(starter.id), 'watched held starter lost Counter Watch before Boarding 1');
+    const shipSelected = scene.applyMapNodeSelection(2);
+    assertOpeningRouteMusterCheck(shipSelected && G.phase === 'boarding', 'watched held starter Boarding 1 selection failed');
+    assertOpeningRouteMusterCheck((G.enemyShip.watchReadyCounterIds || []).includes(starter.id), 'held watched starter did not become Watch Ready');
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 0, 'Boarding 1 did not clear route Counter Watch');
+    results.push({ name: 'held Opening Route Muster starter becomes Watch Ready at Boarding 1', ok: true });
+  }
+
+  {
+    const route = routes[0];
+    const { G, starter } = setupRouteSelection(route);
+    G.sent = [0];
+    scene.spendCounterWatch(starter);
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, 'sent starter did not still muster back to hand');
+    assertOpeningRouteMusterCheck(!(G.counterWatchIds || []).includes(starter.id), 'sent starter kept original muster Watch');
+    const shipSelected = scene.applyMapNodeSelection(2);
+    assertOpeningRouteMusterCheck(shipSelected && G.phase === 'boarding', 'sent starter Boarding 1 selection failed');
+    assertOpeningRouteMusterCheck(!(G.enemyShip.watchReadyCounterIds || []).includes(starter.id), 'sent starter became Watch Ready from spent muster Watch');
+    results.push({ name: 'sending the mustered starter spends the original route Watch before Boarding 1', ok: true });
   }
 
   {
@@ -3096,7 +3129,7 @@ function runOpeningRouteMusterChecks(runtime) {
     G.cacheDrillMusterIds = [cachePirate.id];
     G.shortCrewReportIds = [shortPirate.id];
     G.openingRouteMuster = { pirateId: routePirate.id, mainKey: 'shellback', type: 'lumberjack' };
-    G.counterWatchIds = [watchedPirate.id];
+    G.counterWatchIds = [routePirate.id, watchedPirate.id];
     prepareNextRoundForSim(api, scene);
     assertOpeningRouteMusterCheck(G.hand[0] === cachePirate, 'Cache Drill report did not draw first');
     assertOpeningRouteMusterCheck(G.hand[1] === shortPirate, 'Short Crew report did not draw second');
@@ -3106,7 +3139,8 @@ function runOpeningRouteMusterChecks(runtime) {
     [cachePirate, shortPirate, routePirate, watchedPirate, shopTop].forEach((pirate) => {
       assertOpeningRouteMusterCheck(zoneCount(G, pirate) === 1, `priority card ${pirate.id} duplicated ${zoneCount(G, pirate)} times`);
     });
-    results.push({ name: 'draw priority is Cache Drill, Short Crew, Opening Route Muster, Counter Watch, then shop top-deck', ok: true });
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(routePirate.id), 'Opening Route Muster overlap spent the route Watch');
+    results.push({ name: 'draw priority keeps a mustered watched starter above other Counter Watch cards without duplication', ok: true });
   }
 
   {
@@ -3149,6 +3183,7 @@ function runOpeningRouteMusterChecks(runtime) {
     const G = api.getG();
     const marked = scene.markOpeningRouteMuster('shellback');
     assertOpeningRouteMusterCheck(!marked && !G.openingRouteMuster, 'Battle Test created an Opening Route Muster marker');
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 0, 'Battle Test created an Opening Route Muster Watch');
     results.push({ name: 'Opening Route Muster does not apply in Battle Test', ok: true });
   }
 
@@ -5321,8 +5356,12 @@ function prepareNextRoundForSim(api, scene) {
   const openingRouteMuster = scene && typeof scene.consumeOpeningRouteMusterPirates === 'function'
     ? scene.consumeOpeningRouteMusterPirates(reports.ids)
     : [];
+  const watchSkipIds = new Set(reports.ids);
+  (openingRouteMuster || []).forEach(p => {
+    if (p && p.id != null) watchSkipIds.add(p.id);
+  });
   const counterWatch = scene && typeof scene.consumeCounterWatchPirates === 'function'
-    ? scene.consumeCounterWatchPirates(reports.ids, {
+    ? scene.consumeCounterWatchPirates(watchSkipIds, {
       preserveSentIds: new Set((reports.shortCrew || []).map(p => p && p.id)),
     })
     : [];
