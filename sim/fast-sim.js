@@ -59,6 +59,7 @@ function parseArgs(argv) {
     checkCounterTrophy: false,
     checkCounterEdge: false,
     checkCounterAmbush: false,
+    checkEncounterScaling: false,
     checkOpeningRouteCaptains: false,
     checkFirstShellback: false,
   };
@@ -239,6 +240,10 @@ function parseArgs(argv) {
       out.checkCounterAmbush = true;
       continue;
     }
+    if (a === '--check-encounter-scaling') {
+      out.checkEncounterScaling = true;
+      continue;
+    }
     if (a === '--check-first-shellback') {
       out.checkFirstShellback = true;
       out.checkOpeningRouteCaptains = true;
@@ -355,6 +360,7 @@ function buildRuntime() {
       firstShipLayerIndex,
       openingRouteCacheNodeForSelection,
       applyOpeningRouteToFirstShip,
+      generateEncounterBlueprint,
       drawCards,
       getAvailableNodes,
       mapNodeById,
@@ -1404,6 +1410,10 @@ function assertMapScheduleCheck(condition, message) {
   if (!condition) throw new Error(`map schedule check failed: ${message}`);
 }
 
+function assertEncounterScalingCheck(condition, message) {
+  if (!condition) throw new Error(`encounter scaling check failed: ${message}`);
+}
+
 function assertOpeningRouteCaptainsCheck(condition, message) {
   if (!condition) throw new Error(`opening route captains check failed: ${message}`);
 }
@@ -1610,6 +1620,85 @@ function runMapScheduleChecks(runtime) {
     samples: 12,
     shipLayers: expectedShipLayers,
     earlyIslandLayers,
+  });
+  return { ok: true, checks: results };
+}
+
+function encounterTierCounts(api, keys) {
+  const archetypeMap = new Map(api.COMBAT.enemyArchetypes.map((a) => [a.key, a]));
+  const counts = { weak: 0, strong: 0, unknown: 0 };
+  keys.forEach((key) => {
+    const arch = archetypeMap.get(key);
+    if (!arch || !counts.hasOwnProperty(arch.tier)) counts.unknown++;
+    else counts[arch.tier]++;
+  });
+  return counts;
+}
+
+function runEncounterScalingChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  let sawFlintAtBoarding5 = false;
+
+  for (let sample = 0; sample < 160; sample++) {
+    runtime.setSeed((0x47c6b7d3 + sample * 2654435761) >>> 0);
+    const boarding5 = api.generateEncounterBlueprint(5);
+    const keys5 = [boarding5.mainKey, ...(boarding5.supportKeys || [])];
+    const counts5 = encounterTierCounts(api, keys5);
+    assertEncounterScalingCheck(boarding5.totalCount === 5, `Boarding 5 total ${boarding5.totalCount} !== 5`);
+    assertEncounterScalingCheck(keys5.length === 5, `Boarding 5 keys ${keys5.join(',')} length !== 5`);
+    assertEncounterScalingCheck(counts5.strong === 4, `Boarding 5 strong count ${counts5.strong} !== 4: ${keys5.join(',')}`);
+    assertEncounterScalingCheck(counts5.weak === 1, `Boarding 5 weak count ${counts5.weak} !== 1: ${keys5.join(',')}`);
+    assertEncounterScalingCheck(counts5.unknown === 0, `Boarding 5 unknown keys: ${keys5.join(',')}`);
+    if (keys5.includes('flintDuelist')) sawFlintAtBoarding5 = true;
+
+    const fallback5 = scene.combatEncounterArchetypesFallback(5);
+    const fallbackCounts5 = fallback5.reduce((counts, arch) => {
+      if (arch && arch.tier === 'strong') counts.strong++;
+      else if (arch && arch.tier === 'weak') counts.weak++;
+      else counts.unknown++;
+      return counts;
+    }, { weak: 0, strong: 0, unknown: 0 });
+    assertEncounterScalingCheck(fallback5.length === 5, `fallback Boarding 5 count ${fallback5.length} !== 5`);
+    assertEncounterScalingCheck(fallbackCounts5.strong === 4, `fallback Boarding 5 strong ${fallbackCounts5.strong} !== 4`);
+    assertEncounterScalingCheck(fallbackCounts5.weak === 1, `fallback Boarding 5 weak ${fallbackCounts5.weak} !== 1`);
+    assertEncounterScalingCheck(fallbackCounts5.unknown === 0, 'fallback Boarding 5 contains unknown tier');
+
+    const boarding6 = api.generateEncounterBlueprint(6);
+    const keys6 = [boarding6.mainKey, ...(boarding6.supportKeys || [])];
+    const counts6 = encounterTierCounts(api, keys6);
+    assertEncounterScalingCheck(boarding6.totalCount === 5, `Boarding 6 total ${boarding6.totalCount} !== 5`);
+    assertEncounterScalingCheck(keys6.length === 5, `Boarding 6 keys ${keys6.join(',')} length !== 5`);
+    assertEncounterScalingCheck(counts6.strong === 5, `Boarding 6 strong count ${counts6.strong} !== 5: ${keys6.join(',')}`);
+    assertEncounterScalingCheck(counts6.weak === 0, `Boarding 6 weak count ${counts6.weak} !== 0: ${keys6.join(',')}`);
+    assertEncounterScalingCheck(counts6.unknown === 0, `Boarding 6 unknown keys: ${keys6.join(',')}`);
+    const fallback6 = scene.combatEncounterArchetypesFallback(6);
+    assertEncounterScalingCheck(fallback6.length === 5, `fallback Boarding 6 count ${fallback6.length} !== 5`);
+    assertEncounterScalingCheck(
+      fallback6.every(arch => arch && arch.tier === 'strong'),
+      `fallback Boarding 6 is not all strong: ${fallback6.map(arch => arch && arch.key).join(',')}`
+    );
+
+    const boarding7 = api.generateEncounterBlueprint(7);
+    const keys7 = [boarding7.mainKey, ...(boarding7.supportKeys || [])];
+    const counts7 = encounterTierCounts(api, keys7);
+    assertEncounterScalingCheck(boarding7.totalCount === 5, `Boarding 7 total ${boarding7.totalCount} !== 5`);
+    assertEncounterScalingCheck(counts7.strong === 5 && counts7.weak === 0, `Boarding 7 changed: ${keys7.join(',')}`);
+
+    const boarding8 = api.generateEncounterBlueprint(8);
+    const keys8 = [boarding8.mainKey, ...(boarding8.supportKeys || [])];
+    const counts8 = encounterTierCounts(api, keys8);
+    assertEncounterScalingCheck(boarding8.totalCount === 5, `Boarding 8 total ${boarding8.totalCount} !== 5`);
+    assertEncounterScalingCheck(counts8.strong === 5 && counts8.weak === 0, `Boarding 8 changed: ${keys8.join(',')}`);
+  }
+
+  assertEncounterScalingCheck(sawFlintAtBoarding5, 'Boarding 5 samples never included Flint Duelist');
+  results.push({
+    name: 'Boarding 5 is 4 strong plus 1 weak while Boardings 6-8 stay all-strong',
+    ok: true,
+    samples: 160,
+    sawFlintAtBoarding5,
   });
   return { ok: true, checks: results };
 }
@@ -9127,6 +9216,11 @@ async function main() {
   }
   if (opts.checkCounterAmbush) {
     const result = runCounterAmbushChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkEncounterScaling) {
+    const result = runEncounterScalingChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

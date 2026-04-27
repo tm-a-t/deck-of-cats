@@ -4115,6 +4115,9 @@ class GameScene extends Phaser.Scene {
     } else if (boardingNo <= 4) {
       strongCount = Math.min(count - 1, 1 + Math.floor(boardingNo / 2));
       weakCount = count - strongCount;
+    } else if (boardingNo === 5) {
+      strongCount = Math.min(count, 4);
+      weakCount = count - strongCount;
     } else {
       strongCount = count;
       weakCount = 0;

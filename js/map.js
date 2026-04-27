@@ -275,6 +275,25 @@ function generateEncounterBlueprint(boardingNo) {
     for (let i = 0; i < weakCount; i++) {
       supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
     }
+  } else if (boardingNo === 5) {
+    totalCount = 5;
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : strong[Math.floor(Math.random() * strong.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    supportKeys = [];
+    const otherStrong = eligibleStrong.filter(a => a.key !== mainKey);
+    const secondaryCount = Math.random() < 0.5 && otherStrong.length ? 1 : 0;
+    const secondaryArch = otherStrong.length
+      ? otherStrong[Math.floor(Math.random() * otherStrong.length)]
+      : null;
+    const strongFill = 4 - 1 - secondaryCount;
+    for (let i = 0; i < strongFill; i++) supportKeys.push(mainKey);
+    if (secondaryArch) {
+      for (let i = 0; i < secondaryCount; i++) supportKeys.push(secondaryArch.key);
+    }
+    supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
   } else {
     totalCount = Math.min(COMBAT.enemyCountMax, 3 + Math.floor(boardingNo / 2));
     const mainArch = eligibleStrong.length

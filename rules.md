@@ -442,7 +442,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Boarding 2`: exactly 3 enemies, 2 strong and 1 weak.
 - `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
 - `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
-- `Boarding 5` and `Boarding 6`: exactly 5 enemies, all strong. `Flint Duelist` unlocks at `Boarding 5`.
+- `Boarding 5`: exactly 5 enemies, 4 strong and 1 weak support. `Flint Duelist` unlocks here and can appear as the main or strong support.
+- `Boarding 6`: exactly 5 enemies, all strong.
 - `Boarding 7`: exactly 5 enemies, all strong, upgraded to `Veteran`: `+4 HP`, `+1 damage`, and `6%` faster attacks.
 - `Boarding 8`: exactly 5 enemies, all strong, upgraded to `Elite`: `+8 HP`, `+1 damage`, and `12%` faster attacks.
 - Boardings `2+` continue to use the normal random blueprint rules and unlock timing.
