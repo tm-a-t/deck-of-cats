@@ -1161,15 +1161,28 @@ class GameScene extends Phaser.Scene {
     return this.pendingFullCrewDiscount();
   }
 
-  openingCounterPlanActiveForState(source = null, isProjection = false) {
+  openingCounterPrepActiveForState(source = null, isProjection = false) {
     const state = source || {};
     const mode = state.mode != null ? state.mode : G.mode;
     const phase = state.phase != null ? state.phase : G.phase;
-    const plan = state.openingCounterPlan != null ? state.openingCounterPlan : G.openingCounterPlan;
+    const prep = state.openingCounterPlan != null ? state.openingCounterPlan : G.openingCounterPlan;
+    const round = state.round != null
+      ? Math.max(0, Math.floor(Number(state.round) || 0))
+      : Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = state.boardingCount != null
+      ? Math.max(0, Math.floor(Number(state.boardingCount) || 0))
+      : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
     return mode !== 'battleTest'
       && !this.isBattleTest()
       && (isProjection || phase === 'shopping')
-      && !!plan;
+      && round >= 1
+      && round <= 2
+      && boardingCount === 0
+      && !!prep;
+  }
+
+  openingCounterPlanActiveForState(source = null, isProjection = false) {
+    return this.openingCounterPrepActiveForState(source, isProjection);
   }
 
   scoutedCounterTypes() {
@@ -1246,7 +1259,7 @@ class GameScene extends Phaser.Scene {
     if (!quote || !quote.counter) return null;
     return this.counterPayoffPreview(type, {
       ...opts,
-      prepared: !!quote.preparedCounter,
+      prepared: !!(quote.preparedCounter || quote.openingCounterPrepMight),
     });
   }
 
@@ -1442,7 +1455,25 @@ class GameScene extends Phaser.Scene {
     const counter = !!(def && this.isScoutedCounterShopType(type));
     const topDeck = !!(def && this.counterRecruitReportsEarly(type));
     if (!def) {
-      return { canBuy: false, credit: false, counter: false, topDeck: false, preparedCounter: false, cost, effectiveCost: cost, discount: 0, missing: 0, alert: 0, spend: 0, openingCounterSubsidy: 0 };
+      return {
+        canBuy: false,
+        credit: false,
+        counter: false,
+        topDeck: false,
+        preparedCounter: false,
+        cost,
+        effectiveCost: cost,
+        discount: 0,
+        missing: 0,
+        alert: 0,
+        spend: 0,
+        fullCrewCoverage: 0,
+        openingCounterPlan: false,
+        openingCounterPrep: false,
+        openingCounterPrepMight: false,
+        consumesOpeningCounterPlan: false,
+        consumesOpeningCounterPrep: false,
+      };
     }
     const withPayoff = (quote) => {
       const payoff = this.counterPayoffPreviewForQuote(type, quote);
@@ -1457,7 +1488,7 @@ class GameScene extends Phaser.Scene {
     const effectiveCost = Math.max(0, cost - discount);
     const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
     const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
-    const openingCounterPlan = this.openingCounterPlanActiveForState(source, isProjection);
+    const openingCounterPrep = this.openingCounterPrepActiveForState(source, isProjection);
     const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
     const round = source.round != null
       ? Math.max(0, Math.floor(Number(source.round) || 0))
@@ -1469,27 +1500,51 @@ class GameScene extends Phaser.Scene {
     const mode = source.mode != null ? source.mode : G.mode;
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
-    const preparedCounter = !!(topDeck && hasPreparedGains && (discountPreparesCounter || openingCounterPlan));
-    const preparedByOpeningCounterPlan = !!(preparedCounter && openingCounterPlan && !discountPreparesCounter);
-    const consumesOpeningCounterPlan = !!openingCounterPlan;
+    const preparedCounter = !!(topDeck && hasPreparedGains && discountPreparesCounter);
+    const openingCounterPrepMight = !!(topDeck && counter && openingCounterPrep);
+    const consumesOpeningCounterPlan = !!openingCounterPrep;
+    const shared = {
+      openingCounterPlan: openingCounterPrep,
+      openingCounterPrep,
+      openingCounterPrepMight,
+      consumesOpeningCounterPlan,
+      consumesOpeningCounterPrep: consumesOpeningCounterPlan,
+    };
     if (enthusiasm >= effectiveCost) {
-      return withPayoff({ canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, openingCounterSubsidy: 0, openingCounterPlan, preparedByOpeningCounterPlan, consumesOpeningCounterPlan });
+      return withPayoff({
+        canBuy: true,
+        credit: false,
+        counter,
+        topDeck,
+        preparedCounter,
+        cost,
+        effectiveCost,
+        discount,
+        missing: 0,
+        alert: 0,
+        spend: effectiveCost,
+        fullCrewCoverage: 0,
+        ...shared,
+      });
     }
     const missing = effectiveCost - enthusiasm;
-    const openingCounterSubsidy = mode !== 'battleTest'
+    const intel = this.nextShipIntel();
+    const fullCrewCoverage = mode !== 'battleTest'
       && !this.isBattleTest()
       && (isProjection || phase === 'shopping')
       && round === 1
       && boardingCount === 0
       && !shopCreditUsed
       && discount > 0
-      && !openingCounterPlan
+      && !openingCounterPrep
       && counter
       && topDeck
+      && intel
+      && intel.mainKey === 'shellback'
       && missing === 1
       ? 1
       : 0;
-    if (openingCounterSubsidy > 0) {
+    if (fullCrewCoverage > 0) {
       return withPayoff({
         canBuy: true,
         credit: false,
@@ -1501,11 +1556,9 @@ class GameScene extends Phaser.Scene {
         discount,
         missing,
         alert: 0,
-        spend: Math.max(0, effectiveCost - openingCounterSubsidy),
-        openingCounterSubsidy,
-        openingCounterPlan,
-        preparedByOpeningCounterPlan,
-        consumesOpeningCounterPlan,
+        spend: Math.max(0, effectiveCost - fullCrewCoverage),
+        fullCrewCoverage,
+        ...shared,
       });
     }
     const allowCredit = source.allowCredit != null ? !!source.allowCredit : (isProjection ? !this.isBattleTest() : this.shopCreditAvailable());
@@ -1525,10 +1578,10 @@ class GameScene extends Phaser.Scene {
       missing,
       alert: canCredit ? missing * this.shopCreditAlertPerMissing() : 0,
       spend: canCredit ? enthusiasm : 0,
-      openingCounterSubsidy: 0,
-      openingCounterPlan,
-      preparedByOpeningCounterPlan,
-      consumesOpeningCounterPlan: !!(openingCounterPlan && canCredit),
+      fullCrewCoverage: 0,
+      ...shared,
+      consumesOpeningCounterPlan: !!(openingCounterPrep && canCredit),
+      consumesOpeningCounterPrep: !!(openingCounterPrep && canCredit),
     });
   }
 
@@ -1582,15 +1635,15 @@ class GameScene extends Phaser.Scene {
       ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
       : '';
     const label = quote.counter ? 'Counter ' : '';
-    const plan = quote.openingCounterPlan
-      ? (quote.preparedByOpeningCounterPlan ? ', Opening Plan' : ', spends Opening Plan')
+    const prep = quote.openingCounterPrep
+      ? (quote.openingCounterPrepMight ? ', Opening Prep +💪' : ', spends Opening Prep')
       : '';
     const prepared = quote.preparedCounter ? ', prepared' : '';
     const topDeck = quote.topDeck ? ', top deck' : '';
-    const covered = quote.openingCounterSubsidy > 0 ? `, covered -${quote.openingCounterSubsidy}☠️` : '';
+    const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
     const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
     const payoffText = payoff ? ` · ${payoff.text}` : '';
-    return `Shop: ${label}${def.name} ${price}${plan}${prepared}${topDeck}${covered}${credit}${payoffText}`;
+    return `Shop: ${label}${def.name} ${price}${prep}${prepared}${topDeck}${covered}${credit}${payoffText}`;
   }
 
   sendingPlanProjection(sentCount, opts = {}) {
@@ -2386,6 +2439,9 @@ class GameScene extends Phaser.Scene {
     const p = mkP(type);
     G.allCrew.push(p);
     const toTopDeck = !!quote.topDeck;
+    const prepMight = quote.openingCounterPrepMight
+      ? this.applyPersonalGainsToPirate(p, [{ buff: 'might', count: 1 }])
+      : null;
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
@@ -2403,13 +2459,14 @@ class GameScene extends Phaser.Scene {
     if (!opts.silent) {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
-      const coveredText = quote.openingCounterSubsidy > 0 ? ` Covered ${quote.openingCounterSubsidy}☠️` : '';
+      const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.preparedByOpeningCounterPlan ? ' Opening Plan' : ' Plan spent')
+        ? (quote.openingCounterPrepMight ? ' Opening Prep' : ' Prep spent')
         : '';
+      const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? ' Top deck, Watch' : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
@@ -5491,10 +5548,11 @@ class GameScene extends Phaser.Scene {
       const alertLine = this.boardingAlertSummary(this.pendingBoardingAlert());
       const discount = this.activeFullCrewDiscount();
       const discountLine = discount > 0 ? `Full Crew Discount -${discount}☠️` : null;
+      const prepLine = this.openingCounterPrepActiveForState() ? 'Opening Counter Prep' : null;
       return {
         icon: '🛒',
         line1: 'Visit the shop.',
-        line2: [discountLine, alertLine].filter(Boolean).join(' · ') || 'Buy crew or continue sailing',
+        line2: [discountLine, prepLine, alertLine].filter(Boolean).join(' · ') || 'Buy crew or continue sailing',
       };
     }
 
@@ -6924,7 +6982,7 @@ class GameScene extends Phaser.Scene {
       ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
       : '';
     const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
-    const openingPlanText = plan.openingCounterPlan ? 'Opening Counter Plan' : null;
+    const openingPlanText = plan.openingCounterPlan ? 'Opening Counter Prep' : null;
     const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
     const shortCrew = plan.shortCrewDrill;
     let shortCrewText = null;

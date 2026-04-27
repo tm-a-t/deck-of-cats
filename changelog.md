@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-052011 — rev d2795af
+
+- Gameplay: true - Replaced the opening counter setup with `Opening Counter Prep`: eligible round-1/2 one-short pre-boarding Shops now spend the prep on the first successful purchase, giving a first `Top deck` scouted counter `+1💪`, `Counter Watch`, and top-deck placement without `Prepared` ship gains, while non-counter first buys consume it with no benefit; round-1 `Full Crew Discount` coverage now covers a one-short Shellback counter without Dockside Credit, Alert, Might, or `Prepared`, and post-Boarding-1 `Full Crew Discount` preparation is unchanged. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-counter-prep --json`, `node sim/fast-sim.js --check-full-crew-coverage --json`, `node sim/fast-sim.js --check-opening-shellback-counter --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, related counter/cache/shop/Short Crew/ambush checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-052011.log`.
+
 ## 2026-04-27 — run 20260427-050754 — rev 3691074
 
 - Gameplay: true - Before Boarding 1, `Full Crew Discount` and `Opening Counter Subsidy` no longer make `Top deck` scouted-counter buys `Prepared`; they still apply discount/subsidy affordability, top-deck placement, and `Counter Watch`, while `Opening Counter Plan` remains the pre-Boarding-1 `Prepared` route and post-boarding `Full Crew Discount` preparation is unchanged. Validated with JS syntax checks, opening counter subsidy/plan/Shellback targeted checks, scouted counter recruit/cache/shop targeted checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-050754.log`.

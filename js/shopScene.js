@@ -335,22 +335,23 @@ class ShopScene extends Phaser.Scene {
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
       const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
-      const subsidy = Math.max(0, Math.floor(Number(quote.openingCounterSubsidy) || 0));
+      const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
       const tags = [];
       if (quote.counter) tags.push('Counter');
-      if (quote.preparedByOpeningCounterPlan) tags.push('Opening Plan');
+      if (quote.openingCounterPrepMight) tags.push('Prep +💪');
+      else if (quote.openingCounterPrep) tags.push('Opening Prep');
       if (quote.preparedCounter) tags.push('Prepared');
       if (quote.topDeck) tags.push('Top deck');
-      if (subsidy > 0) tags.push('Covered');
+      if (coverage > 0) tags.push('Full Crew cover');
       const payoffLines = quote.counterPayoff && Array.isArray(quote.counterPayoff.shopLines)
         ? quote.counterPayoff.shopLines
         : [];
       const priceLine = quote.discount > 0
         ? `${def.cost}☠️ -> ${effectiveCost}☠️`
         : `${def.cost}☠️`;
-      const coveredLine = subsidy > 0 ? `Opening covers ${subsidy}☠️` : '';
+      const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
       const planLine = quote.consumesOpeningCounterPlan && canBuy
-        ? (quote.preparedByOpeningCounterPlan ? 'Opening Plan prepares' : 'Opening Plan spent')
+        ? (quote.openingCounterPrepMight ? 'Opening Prep +💪' : 'Opening Prep spent')
         : '';
       const priceText = [
         tags.length ? tags.join(' · ') : '',
@@ -360,7 +361,7 @@ class ShopScene extends Phaser.Scene {
         planLine,
       ].filter(Boolean).join('\n');
       const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, quote.discount > 0 ? '#177C05' : UI_THEME.colors.ink, {
-        fontSize: L.fs((payoffLines.length || subsidy > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
+        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((quote.discount > 0 || quote.counter) ? 13 : 14)))),
         align: 'center',
         lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
       }))
@@ -371,7 +372,7 @@ class ShopScene extends Phaser.Scene {
         ? Math.max(0, Math.floor(Number(quote.missing) || 0))
         : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
       const actionLabel = canBuy
-        ? (creditBuy ? `Buy +${quote.alert} Alert` : (subsidy > 0 ? 'Buy covered' : (quote.preparedByOpeningCounterPlan ? 'Buy plan' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))))
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingCounterPrepMight ? 'Buy prep' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy'))))
         : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
       const actionFill = canBuy
         ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
@@ -382,11 +383,11 @@ class ShopScene extends Phaser.Scene {
         y: footerY,
         label: actionLabel,
         L,
-        minW: (creditBuy ? 132 : (subsidy > 0 ? 126 : (discountBuy ? 108 : 74))) * L.k,
+        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (discountBuy ? 108 : 74))) * L.k,
         minH: 44 * L.k,
         fill: actionFill,
         textColor: actionTextColor,
-        textPx: (creditBuy || discountBuy || subsidy > 0) ? 14 : 16,
+        textPx: (creditBuy || discountBuy || coverage > 0) ? 14 : 16,
       });
       this.panelLayer.add(action);
 
@@ -650,12 +651,13 @@ class ShopScene extends Phaser.Scene {
       G.shopAnimating = false;
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
       const planText = quote.consumesOpeningCounterPlan
-        ? (quote.preparedByOpeningCounterPlan ? ' Opening Plan' : ' Plan spent')
+        ? (quote.openingCounterPrepMight ? ' Opening Prep +💪' : ' Prep spent')
         : '';
       const preparedText = quote.preparedCounter ? ' Prepared' : '';
       const deckText = quote.topDeck ? ' Top deck' : '';
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + planText + alertText + preparedText + deckText, '#66bb6a');
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + alertText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });
