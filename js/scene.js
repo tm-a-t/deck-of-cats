@@ -816,6 +816,55 @@ class GameScene extends Phaser.Scene {
     return true;
   }
 
+  transferRouteStarterCacheDrillBountyToBoughtCounter(pirate, type, quote, routeShopState) {
+    if (this.isBattleTest()
+      || G.phase !== 'shopping'
+      || !pirate
+      || pirate.id == null
+      || !type
+      || !quote
+      || !quote.openingCounterPrepMight
+      || !quote.consumesOpeningCounterPlan
+      || !routeShopState
+      || type !== routeShopState.primaryCounterType
+      || !routeShopState.mainKey
+      || G.openingRouteCounterBoughtMainKey === routeShopState.mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function'
+      || !this.pirateStillInCrew(pirate)) {
+      return false;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(routeShopState.mainKey, 1, { mode: G.mode });
+    if (!starterTypes.length) return false;
+
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(candidate => [candidate.id, candidate]));
+    let transferred = false;
+    const next = this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .map((mark) => {
+        if (transferred || mark.mainKey !== routeShopState.mainKey || mark.pirateId === pirate.id) return mark;
+        const owner = ownedById.get(mark.pirateId);
+        if (!owner || !starterTypes.includes(owner.type)) return mark;
+        transferred = true;
+        return { pirateId: pirate.id, mainKey: mark.mainKey };
+      });
+
+    if (!transferred) return false;
+
+    const seen = new Set();
+    G.cacheDrillBountyMarks = next.filter((mark) => {
+      const key = `${mark.pirateId}:${mark.mainKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return true;
+  }
+
   activeCacheDrillBountyMarksForMain(mainKey) {
     if (this.isBattleTest() || !mainKey) return [];
     const owned = new Set((G.allCrew || [])
@@ -3045,6 +3094,7 @@ class GameScene extends Phaser.Scene {
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
+    const routePassOff = this.transferRouteStarterCacheDrillBountyToBoughtCounter(p, type, quote, routeShopState);
     if (routeShopState
       && type === routeShopState.primaryCounterType
       && routeShopState.mainKey) {
@@ -3079,9 +3129,10 @@ class GameScene extends Phaser.Scene {
         ? (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent')
         : '';
       const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
+      const passOffText = routePassOff ? ' Cache mark' : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
       const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
-      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + alertText + preparedText + deckText, '#66bb6a');
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + passOffText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
     if (opts.deferRender) return p;

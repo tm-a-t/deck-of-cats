@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-124532 — rev 5c30cc3 — build 0.1.0
+
+- Gameplay: true - Added Route Starter Pass-Off: when a Boarding 1 starter counter opens its route cache and the resulting Route Starter Cache Prep buys the matching route-primary counter, the active Cache Drill bounty mark moves from the starter to that bought specialist while the starter keeps Might, Alert refund, early report, and Counter Watch. Validated with JS syntax checks, targeted opening deckhand/pass-off, opening route shop, Opening Counter Prep, and drilled Ambush Bounty sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-124532.log`.
+
 ## 2026-04-27 — run 20260427-122922 — rev 4596c5b — build 0.1.0
 
 - Gameplay: true - Added Route Starter Cache Prep: a successful Boarding 1 first-opener Cache Drill by the selected route's starter counter now arms the next Shop's normal Opening Counter Prep if the route primary has not been bought, giving full-send and skipped-buy openings a recoverable discounted top-deck counter path while preserving the stronger one-short setup. Validated with targeted opening deckhand/cache/prep/shop sim checks, JS syntax checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-122922.log`.
