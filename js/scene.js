@@ -589,6 +589,10 @@ class GameScene extends Phaser.Scene {
     return this.placePiratesOnDeckTop(pirates);
   }
 
+  placeCounterWatchPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
   placePiratesOnDeckTop(pirates) {
     const mustered = Array.isArray(pirates) ? pirates.filter(Boolean) : [];
     if (!mustered.length) return { pirates: [], ids: new Set() };
@@ -597,6 +601,68 @@ class GameScene extends Phaser.Scene {
     G.discard = (G.discard || []).filter(pirate => pirate && !ids.has(pirate.id));
     mustered.forEach((pirate) => G.deck.push(pirate));
     return { pirates: mustered, ids };
+  }
+
+  counterWatchIds() {
+    if (!Array.isArray(G.counterWatchIds)) G.counterWatchIds = [];
+    return G.counterWatchIds;
+  }
+
+  markCounterWatch(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    const ids = this.counterWatchIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  clearCounterWatch(pirateId = null) {
+    if (pirateId == null) {
+      G.counterWatchIds = [];
+      return;
+    }
+    if (!Array.isArray(G.counterWatchIds)) {
+      G.counterWatchIds = [];
+      return;
+    }
+    G.counterWatchIds = G.counterWatchIds.filter(id => id !== pirateId);
+  }
+
+  spendCounterWatch(pirate) {
+    if (!pirate || pirate.id == null) return;
+    this.clearCounterWatch(pirate.id);
+  }
+
+  consumeCounterWatchPirates(skipIds = new Set()) {
+    const ids = Array.isArray(G.counterWatchIds) ? [...G.counterWatchIds] : [];
+    G.counterWatchIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const skip = skipIds && typeof skipIds.has === 'function' ? skipIds : new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const handById = new Map((G.hand || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const sentIds = new Set((Array.isArray(G.sent) ? G.sent : [])
+      .map(handIdx => G.hand && G.hand[handIdx])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+
+    const keep = [];
+    const pirates = [];
+    const seen = new Set();
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (!pirate || sentIds.has(id)) return;
+      keep.push(id);
+      const handPirate = handById.get(id);
+      if (handPirate && !skip.has(id)) pirates.push(handPirate);
+    });
+    G.counterWatchIds = keep;
+    return pirates;
   }
 
   applyScoutedCacheDrill(pirate, opts = {}) {
@@ -749,6 +815,7 @@ class GameScene extends Phaser.Scene {
     let cacheGrant = null;
     if (node.type === 'ship') {
       const alert = this.consumeBoardingAlertForBoarding();
+      this.clearCounterWatch();
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
@@ -1468,6 +1535,7 @@ class GameScene extends Phaser.Scene {
     }
 
     G.sent.push(idx);
+    this.spendCounterWatch(p);
     this._sendingToIsland.add(idx);
     this.renderAll();
 
@@ -1568,6 +1636,7 @@ class GameScene extends Phaser.Scene {
         G.allCrew = G.allCrew.filter(p => p.id !== target.id);
         G.deck = G.deck.filter(p => p.id !== target.id);
         G.discard = G.discard.filter(p => p.id !== target.id);
+        this.spendCounterWatch(target);
         this._sacrificedIds.add(target.id);
         return { ok: true, exileSent: true, name: TYPES[target.type].name };
       }
@@ -1615,6 +1684,7 @@ class GameScene extends Phaser.Scene {
     G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
     G.deck = G.deck.filter(p => p.id !== pirate.id);
     G.discard = G.discard.filter(p => p.id !== pirate.id);
+    this.spendCounterWatch(pirate);
     this._sacrificedIds.add(pirate.id);
     this.time.delayedCall(400, () => {
       this.float(x, y, '💀 Lost!', '#c060ff');
@@ -1861,6 +1931,7 @@ class GameScene extends Phaser.Scene {
       G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
       G.deck = G.deck.filter(p => p.id !== pirate.id);
       G.discard = G.discard.filter(p => p.id !== pirate.id);
+      this.spendCounterWatch(pirate);
       this._cardHand.showShipEffectOverlay(hi, shipEffectSuccessColor);
       resolveAndContinue(600);
       return;
@@ -1969,6 +2040,7 @@ class GameScene extends Phaser.Scene {
   }
 
   completeRemoval(pirateId) {
+    this.clearCounterWatch(pirateId);
     G.allCrew = G.allCrew.filter(p => p.id !== pirateId);
     G.deck = G.deck.filter(p => p.id !== pirateId);
     G.discard = G.discard.filter(p => p.id !== pirateId);
@@ -2058,8 +2130,12 @@ class GameScene extends Phaser.Scene {
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
-    if (toTopDeck) G.deck.push(p);
-    else G.discard.push(p);
+    if (toTopDeck) {
+      G.deck.push(p);
+      this.markCounterWatch(p);
+    } else {
+      G.discard.push(p);
+    }
 
     G.shop.splice(si, 1);
     if (G.shop.length) {
@@ -2069,7 +2145,7 @@ class GameScene extends Phaser.Scene {
       const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
       const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
       const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
-      const deckText = toTopDeck ? ' Top deck' : '';
+      const deckText = toTopDeck ? ' Top deck, Watch' : '';
       this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + alertText + preparedText + deckText, '#66bb6a');
     }
     G.shopAnimating = false;
@@ -2099,11 +2175,15 @@ class GameScene extends Phaser.Scene {
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
     const reports = this.consumeEarlyReportPirates();
     const reportIds = reports.ids;
+    const counterWatch = this.consumeCounterWatchPirates(reportIds);
+    const topDeckReturnIds = new Set(reportIds);
+    counterWatch.forEach(pirate => topDeckReturnIds.add(pirate.id));
     const handCards = this.snapshotHandCardsForDiscard();
-    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !reportIds.has(card.id)));
-    const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => reportIds.has(card.id)));
+    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !topDeckReturnIds.has(card.id)));
+    const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => topDeckReturnIds.has(card.id)));
     const nextTurnDelay = Math.max(discardAnimEnd, reportAnimEnd) + CARD_MOTION.betweenTurnsDelay;
-    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !reportIds.has(p.id)));
+    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !topDeckReturnIds.has(p.id)));
+    this.placeCounterWatchPiratesOnDeck(counterWatch);
     this.placeShortCrewReportPiratesOnDeck(reports.shortCrew);
     this.placeCacheDrillMusterPiratesOnDeck(reports.cache);
     G.hand = [];

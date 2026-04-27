@@ -45,7 +45,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Cache Drill` uses the same scouted counter map as the Shop, triggers at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
 - A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
-- If both Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, the Cache Drill pirate is placed above those purchases and is drawn first.
+- If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning or top-deck card.
 - Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes, `Infirmary Island`, claimed caches, or unmarked islands, and a claimed cache cannot grant its resource, `☠️`, Alert, or drill reward again.
 
 ### 2. Island Round
@@ -62,7 +62,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - In regular runs only, if `Short Crew Drill` triggers while the next unreached ship is `1` to `3` map turns away, that same pirate is marked to report early.
 - A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
-- If Cache Drill early report, Short Crew early report, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, and Shop `Top deck` purchases are drawn after both report groups.
+- If Cache Drill early report, Short Crew early report, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, watched counters are drawn third, and ordinary Shop `Top deck` purchases are drawn after all returning pirates.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
 - The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
@@ -119,6 +119,10 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
 - Bought pirates normally go straight to discard, not to hand.
 - Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
+- A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
+- On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
+- Sending a watched pirate spends `Counter Watch`; if that sent pirate independently gained a Cache Drill or Short Crew early-report marker, that report marker still works normally.
+- `Counter Watch` clears when the next boarding starts, never applies in `Battle Test`, and does not change `Prepared`, `Counter Edge`, `Counter Ambush`, `Boarding Trophy`, or `Counter Trophy`.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
 - A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
 - `Top deck` scouted counter purchases without `Full Crew Discount` still go on top of the draw pile, but are not `Prepared`.
@@ -144,6 +148,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - On `Continue`:
   - the current hand goes to discard only for pirates still present in `allCrew`;
   - any still-owned Cache Drill or Short Crew early-report pirate is separated from that discard step and placed on top of the draw pile, with Cache Drill reports above Short Crew reports;
+  - any still-owned, held Counter Watch pirate is separated from that discard step and placed below Cache Drill and Short Crew reports but above ordinary Shop `Top deck` purchases;
   - exiled and `get lost` pirates do not return;
   - `☠️` resets to `0`;
   - a new hand is drawn up to 5;

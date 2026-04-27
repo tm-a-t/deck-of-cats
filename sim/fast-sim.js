@@ -1591,12 +1591,118 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'eligible top-deck counter did not gain Counter Watch');
     assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-discount Sawbones was prepared with ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'eligible counter also appeared in discard');
     const drawn = api.drawCards(1)[0];
     assertCounterRecruitsReportEarlyCheck(drawn === bought, 'next draw did not return the bought counter');
     assertCounterRecruitsReportEarlyCheck(!oldTop || G.deck[G.deck.length - 1] === oldTop, 'older deck card did not remain below bought counter');
     results.push({ name: 'eligible nearby scouted counter top-decks and draws first without discount preparation', ok: true });
+  }
+
+  {
+    const { G } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'Counter Watch setup did not mark bought counter');
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === bought, 'watched top-deck counter was not drawn next round');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'Counter Watch did not persist after first draw');
+    G.phase = 'shopping';
+    G.sent = [];
+    G.deck = [];
+    G.discard = [];
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === bought, 'held watched counter was not returned to next hand');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'held watched counter lost watch before boarding');
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === bought.id);
+    assertCounterRecruitsReportEarlyCheck(zones.length === 1, `held watched counter duplicated across zones ${zones.length} times`);
+    results.push({ name: 'Counter Watch keeps a held top-deck counter in the next hand without duplication', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = powderMap;
+    G.phase = 'shopping';
+    const cachePirate = { id: 9201, type: 'poisoner', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    const shortPirate = { id: 9202, type: 'trainer', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    const watchedPirate = { id: 9203, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    const shopTop = { id: 9204, type: 'needler', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew = [cachePirate, shortPirate, watchedPirate, shopTop];
+    G.hand = [cachePirate, shortPirate, watchedPirate];
+    G.deck = [shopTop];
+    G.discard = [];
+    G.sent = [0, 1];
+    G.cacheDrillMusterIds = [cachePirate.id];
+    G.shortCrewReportIds = [shortPirate.id];
+    G.counterWatchIds = [watchedPirate.id];
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === cachePirate, 'Cache Drill report was not drawn before Counter Watch');
+    assertCounterRecruitsReportEarlyCheck(G.hand[1] === shortPirate, 'Short Crew report was not drawn before Counter Watch');
+    assertCounterRecruitsReportEarlyCheck(G.hand[2] === watchedPirate, 'Counter Watch was not drawn after report groups');
+    assertCounterRecruitsReportEarlyCheck(G.hand[3] === shopTop, 'ordinary shop top-deck card was not drawn after Counter Watch');
+    const ids = [cachePirate.id, shortPirate.id, watchedPirate.id, shopTop.id];
+    ids.forEach((id) => {
+      const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === id);
+      assertCounterRecruitsReportEarlyCheck(zones.length === 1, `draw-priority card ${id} duplicated across zones ${zones.length} times`);
+    });
+    results.push({ name: 'draw priority is Cache Drill, Short Crew, Counter Watch, then shop top-deck', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = powderMap;
+    G.phase = 'shopping';
+    const watchedPirate = { id: 9211, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    const fillers = [0, 1, 2, 3, 4].map(i => ({
+      id: 9212 + i,
+      type: i % 2 === 0 ? 'lumberjack' : 'miner',
+      weaponKey: null,
+      might: 0,
+      tempo: 0,
+      wounded: false,
+    }));
+    G.allCrew = [watchedPirate, ...fillers];
+    G.hand = [watchedPirate];
+    G.deck = fillers.slice();
+    G.discard = [];
+    G.sent = [0];
+    G.cacheDrillMusterIds = [];
+    G.shortCrewReportIds = [];
+    G.counterWatchIds = [watchedPirate.id];
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(!(G.counterWatchIds || []).includes(watchedPirate.id), 'sent watched counter kept Counter Watch');
+    assertCounterRecruitsReportEarlyCheck(G.discard.includes(watchedPirate), 'sent watched counter without report did not go to discard');
+    assertCounterRecruitsReportEarlyCheck(!G.hand.includes(watchedPirate), 'sent watched counter without report was drawn as a priority return');
+    results.push({ name: 'sending a watched counter spends Counter Watch and discards normally without a report', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = powderMap;
+    G.phase = 'shopping';
+    const watchedPirate = { id: 9221, type: 'sawbones', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    const shopTop = { id: 9222, type: 'needler', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew = [watchedPirate, shopTop];
+    G.hand = [watchedPirate];
+    G.deck = [shopTop];
+    G.discard = [];
+    G.sent = [0];
+    G.cacheDrillMusterIds = [];
+    G.shortCrewReportIds = [watchedPirate.id];
+    G.counterWatchIds = [watchedPirate.id];
+    prepareNextRoundForSim(api, scene);
+    assertCounterRecruitsReportEarlyCheck(G.hand[0] === watchedPirate, 'sent watched counter with Short Crew report did not report early');
+    assertCounterRecruitsReportEarlyCheck(G.hand[1] === shopTop, 'reported watched counter did not stay above normal top deck');
+    assertCounterRecruitsReportEarlyCheck(!(G.counterWatchIds || []).includes(watchedPirate.id), 'reported sent counter kept stale Counter Watch');
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === watchedPirate.id);
+    assertCounterRecruitsReportEarlyCheck(zones.length === 1, `reported watched counter duplicated across zones ${zones.length} times`);
+    results.push({ name: 'sent watched counters can still report early through existing drill markers', ok: true });
   }
 
   {
@@ -1696,6 +1802,7 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.discard.includes(bought), 'Battle Test purchase did not go to discard');
     assertCounterRecruitsReportEarlyCheck(!G.deck.includes(bought), 'Battle Test purchase went to deck');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).length === 0, 'Battle Test purchase created Counter Watch');
     assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `Battle Test purchase was prepared with ${bought.weaponKey}`);
     results.push({ name: 'Battle Test purchases still go to discard', ok: true });
   }
@@ -1772,6 +1879,19 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'post-discount counter was not placed on top of deck');
     assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `post-discount counter was prepared: ${bought.weaponKey}`);
     results.push({ name: 'spending Full Crew Discount on a non-counter prevents later top-deck preparation', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('powderBomber');
+    G.phase = 'map';
+    G.counterWatchIds = [G.allCrew[0].id];
+    scene.applyMapNodeSelection(2);
+    assertCounterRecruitsReportEarlyCheck(G.phase === 'boarding', 'ship selection did not start boarding');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).length === 0, 'boarding start did not clear Counter Watch');
+    results.push({ name: 'boarding start clears stale Counter Watch markers', ok: true });
   }
 
   return { ok: true, checks: results };
@@ -3011,7 +3131,22 @@ function prepareNextRoundForSim(api, scene) {
   if (!reports.ids || typeof reports.ids.has !== 'function') {
     reports.ids = new Set([...(reports.cache || []), ...(reports.shortCrew || [])].map(p => p && p.id));
   }
-  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !reports.ids.has(p.id)));
+  const counterWatch = scene && typeof scene.consumeCounterWatchPirates === 'function'
+    ? scene.consumeCounterWatchPirates(reports.ids)
+    : [];
+  const topDeckReturnIds = new Set(reports.ids);
+  (counterWatch || []).forEach(p => {
+    if (p && p.id != null) topDeckReturnIds.add(p.id);
+  });
+  G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !topDeckReturnIds.has(p.id)));
+  if (scene && typeof scene.placeCounterWatchPiratesOnDeck === 'function') {
+    scene.placeCounterWatchPiratesOnDeck(counterWatch || []);
+  } else if (counterWatch && counterWatch.length) {
+    const watchIds = new Set(counterWatch.map(p => p.id));
+    G.deck = (G.deck || []).filter(p => p && !watchIds.has(p.id));
+    G.discard = (G.discard || []).filter(p => p && !watchIds.has(p.id));
+    counterWatch.forEach(p => G.deck.push(p));
+  }
   if (scene && typeof scene.placeShortCrewReportPiratesOnDeck === 'function') {
     scene.placeShortCrewReportPiratesOnDeck(reports.shortCrew || []);
   } else if (reports.shortCrew && reports.shortCrew.length) {
