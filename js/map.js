@@ -66,14 +66,23 @@ function openingRouteMainKeyForIslandIdx(islandIdx) {
   return null;
 }
 
+const FIRST_BOARDING_FALLBACK_SUPPORT_KEYS = ['bilgeRat', 'cabinBoy'];
+const FIRST_BOARDING_ROUTE_SUPPORT_KEYS = {
+  shellback: ['bilgeRat', 'cabinBoy'],
+  powderBomber: ['bilgeRat', 'bilgeRat'],
+  deckSniper: ['cabinBoy', 'cabinBoy'],
+};
+
 function firstBoardingEncounterBlueprint(mainKey = 'shellback') {
   const fallback = combatArchetypeForMap('shellback')
     || COMBAT.enemyArchetypes.find(a => a && a.tier === 'strong')
     || COMBAT.enemyArchetypes[0];
   const mainArch = combatArchetypeForMap(mainKey) || fallback;
+  const supportKeys = FIRST_BOARDING_ROUTE_SUPPORT_KEYS[mainArch.key]
+    || FIRST_BOARDING_FALLBACK_SUPPORT_KEYS;
   return {
     mainKey: mainArch.key,
-    supportKeys: ['bilgeRat', 'cabinBoy'],
+    supportKeys: supportKeys.slice(),
     totalCount: 3,
     encounterDesc: mainArch.encounterDesc || mainArch.summary || null,
   };

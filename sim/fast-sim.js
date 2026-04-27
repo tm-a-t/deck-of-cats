@@ -1516,14 +1516,20 @@ function runOpeningRouteCaptainsChecks(runtime) {
   const results = [];
   const samples = 24;
   const routeCases = [
-    { islandIdx: 0, mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 0, counter: 'poisoner', label: 'Forest' },
-    { islandIdx: 1, mainKey: 'powderBomber', res: 'stone', amount: 1, enthusiasm: 2, alert: 1, counter: 'sawbones', label: 'Rocky' },
-    { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', amount: 1, enthusiasm: 3, alert: 3, counter: 'needler', label: 'Port' },
+    { islandIdx: 0, mainKey: 'shellback', supportKeys: ['bilgeRat', 'cabinBoy'], res: 'wood', amount: 1, enthusiasm: 1, alert: 0, counter: 'poisoner', label: 'Forest' },
+    { islandIdx: 1, mainKey: 'powderBomber', supportKeys: ['bilgeRat', 'bilgeRat'], res: 'stone', amount: 1, enthusiasm: 2, alert: 1, counter: 'sawbones', label: 'Rocky' },
+    { islandIdx: 3, mainKey: 'deckSniper', supportKeys: ['cabinBoy', 'cabinBoy'], res: 'gold', amount: 1, enthusiasm: 3, alert: 3, counter: 'needler', label: 'Port' },
   ];
   const routeByIslandIdx = new Map(routeCases.map(route => [route.islandIdx, route]));
   routeCases.forEach((route) => {
     const enemy = api.COMBAT.enemyArchetypes.find(a => a.key === route.mainKey);
     assertOpeningRouteCaptainsCheck(enemy, `${route.mainKey} archetype is missing`);
+    const blueprint = api.firstBoardingEncounterBlueprint(route.mainKey);
+    assertOpeningRouteCaptainsCheck(blueprint.mainKey === route.mainKey, `${route.label} blueprint main ${blueprint.mainKey} !== ${route.mainKey}`);
+    assertOpeningRouteCaptainsCheck(
+      JSON.stringify(blueprint.supportKeys) === JSON.stringify(route.supportKeys),
+      `${route.label} blueprint support ${JSON.stringify(blueprint.supportKeys)} !== ${JSON.stringify(route.supportKeys)}`
+    );
   });
 
   for (let sample = 0; sample < samples; sample++) {
@@ -1577,7 +1583,7 @@ function runOpeningRouteCaptainsChecks(runtime) {
   }
 
   results.push({
-    name: 'generated regular maps mark Forest/Rocky/Port Boarding 1 caches with distinct route enemies',
+    name: 'generated regular maps mark Forest/Rocky/Port Boarding 1 caches with distinct route enemies and support',
     ok: true,
     samples,
   });
@@ -1613,8 +1619,8 @@ function runOpeningRouteCaptainsChecks(runtime) {
     assertOpeningRouteCaptainsCheck(ship.encounter && ship.encounter.mainKey === route.mainKey, `${route.label} route selected ${ship.encounter && ship.encounter.mainKey}`);
     assertOpeningRouteCaptainsCheck(ship.encounter.totalCount === 3, `${route.label} route total ${ship.encounter.totalCount}`);
     assertOpeningRouteCaptainsCheck(
-      JSON.stringify(ship.encounter.supportKeys) === JSON.stringify(['bilgeRat', 'cabinBoy']),
-      `${route.label} route support ${JSON.stringify(ship.encounter.supportKeys)}`
+      JSON.stringify(ship.encounter.supportKeys) === JSON.stringify(route.supportKeys),
+      `${route.label} route support ${JSON.stringify(ship.encounter.supportKeys)} !== ${JSON.stringify(route.supportKeys)}`
     );
     const enemy = api.COMBAT.enemyArchetypes.find(a => a.key === route.mainKey);
     assertOpeningRouteCaptainsCheck(
