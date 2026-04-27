@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-202558 — rev 99a3876 — build 0.1.0
+
+- Gameplay: true - Raised the Port/Deck Sniper Boarding 1 route cache to `+3 Boarding Alert` while keeping its `+1🪙` and `+3☠️` purse, so non-counter Port openers now cross the two-guard Alert breakpoint and successful Armsman/Needler Cache Drill cuts only 1 Alert, leaving +2 pending. Validated with JS syntax checks, targeted Opening Route Captains, Scouted Counter Cache, Opening Cache Purse, Opening Deckhand Counter, Alarm Rush, Opening Route Prize, Opening Route Counter Shop, and map schedule sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-202558.log`.
+
 ## 2026-04-27 — run 20260427-200349 — rev 0e2fcbf — build 0.1.0
 
 - Gameplay: true - Changed Opening Side Prep so Forest/Rocky/Port side-offer buys still spend prep, discount, and top-deck as before, but now apply their support buff to the selected route's mustered starter counter when it is still owned, falling back to the bought side offer only if that starter is gone; shop and sending-plan text now names the support target. Validated with JS syntax checks, targeted Opening Side Prep, Opening Deckhand Counter, Opening Route Muster, Opening Cache Purse, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-200349.log`.

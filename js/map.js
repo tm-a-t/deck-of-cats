@@ -96,7 +96,7 @@ function openingScoutedCounterCacheStakes(node, mainKey) {
     return { res: 'stone', amount: 1, enthusiasm: 2, alert: 1 };
   }
   if (island && island.extraSend) {
-    return { res: 'gold', amount: 1, enthusiasm: 3, alert: 2 };
+    return { res: 'gold', amount: 1, enthusiasm: 3, alert: 3 };
   }
   return {
     res: openingScoutedCounterCacheResource(node, mainKey),

@@ -1480,7 +1480,7 @@ function runOpeningRouteCaptainsChecks(runtime) {
   const routeCases = [
     { islandIdx: 0, mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 0, counter: 'poisoner', label: 'Forest' },
     { islandIdx: 1, mainKey: 'powderBomber', res: 'stone', amount: 1, enthusiasm: 2, alert: 1, counter: 'sawbones', label: 'Rocky' },
-    { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', amount: 1, enthusiasm: 3, alert: 2, counter: 'needler', label: 'Port' },
+    { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', amount: 1, enthusiasm: 3, alert: 3, counter: 'needler', label: 'Port' },
   ];
   const routeByIslandIdx = new Map(routeCases.map(route => [route.islandIdx, route]));
   routeCases.forEach((route) => {
@@ -1876,7 +1876,7 @@ function expectedOpeningScoutedCounterCacheStakes(api, node, mainKey) {
   const island = node && node.type === 'island' ? api.ISLANDS[node.islandIdx] : null;
   if (island && island.bonus === 'wood') return { res: 'wood', amount: 1, enthusiasm: 1, alert: 0 };
   if (island && island.bonus === 'stone') return { res: 'stone', amount: 1, enthusiasm: 2, alert: 1 };
-  if (island && island.extraSend) return { res: 'gold', amount: 1, enthusiasm: 3, alert: 2 };
+  if (island && island.extraSend) return { res: 'gold', amount: 1, enthusiasm: 3, alert: 3 };
   return {
     res: expectedOpeningScoutedCounterCacheResource(api, node, mainKey),
     amount: 1,
@@ -1903,7 +1903,7 @@ function runScoutedCounterCacheChecks(runtime) {
   const openingRouteByIslandIdx = new Map([
     [0, { islandIdx: 0, mainKey: 'shellback', res: 'wood', amount: 1, enthusiasm: 1, alert: 0, label: 'Forest', counterType: 'poisoner' }],
     [1, { islandIdx: 1, mainKey: 'powderBomber', res: 'stone', amount: 1, enthusiasm: 2, alert: 1, label: 'Rocky', counterType: 'sawbones' }],
-    [3, { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', amount: 1, enthusiasm: 3, alert: 2, label: 'Port', counterType: 'needler' }],
+    [3, { islandIdx: 3, mainKey: 'deckSniper', res: 'gold', amount: 1, enthusiasm: 3, alert: 3, label: 'Port', counterType: 'needler' }],
   ]);
 
   for (let sample = 0; sample < 12; sample++) {
@@ -2031,6 +2031,38 @@ function runScoutedCounterCacheChecks(runtime) {
       `${cacheCase.label} cache changed wrong resources ${JSON.stringify(G.res)}`
     );
     results.push({ name: `${cacheCase.label} Boarding 1 cache pays only when first sent counter opens and drills`, ok: true });
+  }
+
+  {
+    const cacheCase = openingRouteByIslandIdx.get(3);
+    runtime.setSeed(0x5c0a7e11);
+    api.initState();
+    const G = api.getG();
+    const map = G.map;
+    const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+    const firstShip = map.layers[firstShipLayer][0];
+    const chosen = map.layers[firstShipLayer - 1].find((node) => node && node.islandIdx === cacheCase.islandIdx);
+    assertScoutedCounterCacheCheck(chosen && chosen.scoutedCache, 'Port non-counter cache route missing');
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    G.enthusiasm = 0;
+    G.boardingAlert = 0;
+    G.phase = 'map';
+    assertScoutedCounterCacheCheck(scene.applyMapNodeSelection(chosen.id), 'Port non-counter cache selection failed');
+    const opener = G.hand[0];
+    opener.type = 'miner';
+    opener.might = 0;
+    G.sent = [0];
+    const claim = scene.claimScoutedCounterCache(opener, { silent: true });
+    assertScoutedCounterCacheCheck(claim && claim.cacheGrant && !claim.drill, `Port non-counter claim mismatch: ${JSON.stringify(claim)}`);
+    assertScoutedCounterCacheCheck(G.res.gold === 1, `Port non-counter cache gold ${G.res.gold} !== 1`);
+    assertScoutedCounterCacheCheck(G.enthusiasm === 3, `Port non-counter cache skulls ${G.enthusiasm} !== 3`);
+    assertScoutedCounterCacheCheck(G.boardingAlert === 3, `Port non-counter cache Alert ${G.boardingAlert} !== 3`);
+    assertScoutedCounterCacheCheck(scene.boardingAlertGuardCount(G.boardingAlert) === 2, 'Port non-counter cache Alert did not reach the two-guard tier');
+    G.phase = 'map';
+    assertScoutedCounterCacheCheck(scene.applyMapNodeSelection(firstShip.id), 'Port non-counter first boarding selection failed');
+    assertScoutedCounterCacheCheck(G.phase === 'boarding' && G.enemyShip && G.enemyShip.boardingAlert === 3, `Port boarding Alert snapshot mismatch: ${JSON.stringify(G.enemyShip)}`);
+    assertScoutedCounterCacheCheck(G.enemyShip.boardingAlertGuards === 2, `Port boarding guard tier ${G.enemyShip.boardingAlertGuards} !== 2`);
+    results.push({ name: 'Port non-counter opener keeps +3 cache Alert into Boarding 1 for the two-guard tier', ok: true });
   }
 
   {
@@ -3208,7 +3240,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     assertAlarmRushedRouteCounterCheck(G.openingRouteCacheClaimedMainKey === route.mainKey, `Port cache claim marker ${G.openingRouteCacheClaimedMainKey} !== ${route.mainKey}`);
     assertAlarmRushedRouteCounterCheck(claim.openingCounterPrep && G.openingCounterPlan === true, 'non-counter Port cache claim did not grant Opening Counter Prep');
     const wagePreview = finishIslandForShop(G, [openerIndex]);
-    assertAlarmRushedRouteCounterCheck(G.enthusiasm >= api.TYPES[route.primary].cost && G.boardingAlert === 4, `Port claimed-cache state mismatch: ${JSON.stringify({ enthusiasm: G.enthusiasm, alert: G.boardingAlert, wagePreview })}`);
+    assertAlarmRushedRouteCounterCheck(G.enthusiasm >= api.TYPES[route.primary].cost && G.boardingAlert === 5, `Port claimed-cache state mismatch: ${JSON.stringify({ enthusiasm: G.enthusiasm, alert: G.boardingAlert, wagePreview })}`);
     const quote = assertSceneAndPolicyMatch(G, route.primary, 'Port claimed-cache Opening Prep');
     assertAlarmRushedRouteCounterCheck(quote.canBuy && quote.counter && quote.openingRoutePrimary && !quote.credit, `Port claimed-cache quote not cash-buyable primary: ${JSON.stringify(quote)}`);
     assertAlarmRushedRouteCounterCheck(quote.openingCounterPrepMight && quote.topDeck && !quote.alarmRushedRouteCounter, `Port claimed-cache primary did not use Opening Prep before Alarm rush: ${JSON.stringify(quote)}`);
@@ -3221,7 +3253,7 @@ function runAlarmRushedRouteCounterChecks(runtime) {
     assertAlarmRushedRouteCounterCheck((G.counterWatchIds || []).includes(bought.id), 'Port claimed-cache cash buy missed Counter Watch');
     assertAlarmRushedRouteCounterCheck((bought.might || 0) === 1 && (bought.tempo || 0) === 0 && !bought.weaponKey, `Port claimed-cache Opening Prep buy missed prep Might or gained extras: ${JSON.stringify(bought)}`);
     assertAlarmRushedRouteCounterCheck((G.cacheDrillBountyMarks || []).length === 0, 'Port claimed-cache cash buy created Cache Drill marks');
-    assertAlarmRushedRouteCounterCheck(G.boardingAlert === 4, `Port claimed-cache cash buy changed Alert ${G.boardingAlert}`);
+    assertAlarmRushedRouteCounterCheck(G.boardingAlert === 5, `Port claimed-cache cash buy changed Alert ${G.boardingAlert}`);
     assertAlarmRushedRouteCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, 'Port claimed-cache cash buy did not secure route counter');
     results.push({ name: 'claimed Port cache non-counter opener buys Needler with cache Opening Prep before Alarm rush', ok: true, quote, plan, wagePreview });
   }
@@ -4245,7 +4277,7 @@ function runOpeningCachePurseChecks(runtime) {
   const routes = [
     { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0, cacheRes: 'wood', cacheEnthusiasm: 1, cacheAlert: 0 },
     { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1, cacheRes: 'stone', cacheEnthusiasm: 2, cacheAlert: 1 },
-    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, cacheRes: 'gold', cacheEnthusiasm: 3, cacheAlert: 2 },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, cacheRes: 'gold', cacheEnthusiasm: 3, cacheAlert: 3 },
   ];
 
   const routeCacheMap = (route) => ({
@@ -4553,7 +4585,7 @@ function runOpeningDeckhandCounterChecks(runtime) {
   const routes = [
     { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0, sentCount: 1, bountyRes: 'wood', cacheAlert: 0 },
     { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1, sentCount: 1, bountyRes: 'stone', cacheAlert: 1 },
-    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, sentCount: 2, bountyRes: 'gold', cacheAlert: 2 },
+    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, sentCount: 2, bountyRes: 'gold', cacheAlert: 3 },
   ];
 
   const starterName = (type) => (api.TYPES[type] && api.TYPES[type].name) || type;
@@ -4739,7 +4771,8 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(drillDesc.includes('first sent opens') && drillDesc.includes(starterName(route.starterType)), `${route.label} Cache Drill did not name route starter first: ${drillDesc}`);
     assertOpeningDeckhandCounterCheck(!firstShopName || drillDesc.includes(firstShopName), `${route.label} Cache Drill hid shop counters: ${drillDesc}`);
     if (route.cacheAlert > 1) {
-      assertOpeningDeckhandCounterCheck(drillDesc.includes('cuts 1 Alert') && drillDesc.includes('leaves +1 pending') && !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill partial Alert copy mismatch: ${drillDesc}`);
+      const remainingAlert = route.cacheAlert - cacheDrillAlertRefundCap(route.cacheAlert);
+      assertOpeningDeckhandCounterCheck(drillDesc.includes('cuts 1 Alert') && drillDesc.includes(`leaves +${remainingAlert} pending`) && !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill partial Alert copy mismatch: ${drillDesc}`);
     } else {
       assertOpeningDeckhandCounterCheck(route.cacheAlert > 0 ? drillDesc.includes('disarms cache Alert') : !drillDesc.includes('disarms cache Alert'), `${route.label} Cache Drill Alert copy mismatch: ${drillDesc}`);
     }
