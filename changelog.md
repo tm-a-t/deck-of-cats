@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-134558 — rev 0927b54 — build 0.1.0
+
+- Gameplay: true - Generalized `Opening Ambusher Report` into `Counter Ambusher Report`: any non-final regular boarding now returns the surviving opening-hand `Counter Ambush` pirate on top of the next draw, while losses, Battle Test, reinforcement wins, defeated/removed ambushers, missing ambushes, and final victory boardings remain excluded. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambusher-report --json`, legacy `--check-opening-ambusher-report`, related counter ambush/drilled bounty/opening deckhand/counter recruit checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-134558.log`.
+
 ## 2026-04-27 — run 20260427-132807 — rev a8e70e5 — build 0.1.0
 
 - Gameplay: true - Replaced passive high-Alert route rushing with credit-only `Dockside Rush Route Counter`: pre-Boarding-1 route primaries now top-deck and gain `Counter Watch` from the rush only when the same purchase uses `Dockside Credit` and reaches 4+ pending Alert, while affordable cash buys at 4+ Alert still secure the route slot but discard without Watch, prep Might, Prepared gains, Full Crew coverage, Route Starter Pass-Off, Cache Drill marks, Alert refunds, or doubled bounty. Validated with JS syntax checks, targeted Dockside rush, opening route shop, Opening Counter Prep, and Full Crew coverage sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-132807.log`.

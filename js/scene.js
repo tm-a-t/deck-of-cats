@@ -4054,11 +4054,18 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  openingAmbusherReportEligibility(combat = G.combat, result = null) {
+  isFinalBoardingNode() {
+    if (!G.map || !Array.isArray(G.map.layers)) return false;
+    const layerIdx = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+    if (layerIdx < 0) return false;
+    return layerIdx >= G.map.layers.length - 1;
+  }
+
+  counterAmbusherReportEligibility(combat = G.combat, result = null) {
     if (!combat || this.isBattleTest() || G.phase !== 'boarding') return null;
     const resolvedResult = result != null ? result : combat.result;
     if (resolvedResult !== 'win') return null;
-    if (this.currentBoardingNumber() !== 1) return null;
+    if (this.isFinalBoardingNode()) return null;
     if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
 
     const ambush = combat.counterAmbush;
@@ -4083,19 +4090,28 @@ class GameScene extends Phaser.Scene {
     };
   }
 
-  markOpeningAmbusherReport(combat = G.combat, result = null) {
+  markCounterAmbusherReport(combat = G.combat, result = null) {
     if (!combat) return null;
-    if (combat.openingAmbusherReport) return combat.openingAmbusherReport;
-    const report = this.openingAmbusherReportEligibility(combat, result);
+    if (combat.counterAmbusherReport || combat.openingAmbusherReport) {
+      const existing = combat.counterAmbusherReport || combat.openingAmbusherReport;
+      combat.counterAmbusherReport = existing;
+      combat.openingAmbusherReport = existing;
+      return existing;
+    }
+    const report = this.counterAmbusherReportEligibility(combat, result);
     if (!report) return null;
+    combat.counterAmbusherReport = report;
     combat.openingAmbusherReport = report;
     return report;
   }
 
-  consumeOpeningAmbusherReportPirates(combat = G.combat) {
+  consumeCounterAmbusherReportPirates(combat = G.combat) {
     if (!combat) return [];
-    if (!combat.openingAmbusherReport) this.markOpeningAmbusherReport(combat, combat.result);
-    const marker = combat.openingAmbusherReport || null;
+    if (!combat.counterAmbusherReport && !combat.openingAmbusherReport) {
+      this.markCounterAmbusherReport(combat, combat.result);
+    }
+    const marker = combat.counterAmbusherReport || combat.openingAmbusherReport || null;
+    combat.counterAmbusherReportConsumed = true;
     combat.openingAmbusherReportConsumed = true;
     if (!marker || this.isBattleTest() || marker.pirateId == null) return [];
 
@@ -4104,14 +4120,34 @@ class GameScene extends Phaser.Scene {
     return [pirate];
   }
 
-  placeOpeningAmbusherReportPiratesOnDeck(pirates) {
+  placeCounterAmbusherReportPiratesOnDeck(pirates) {
     return this.placePiratesOnDeckTop(pirates);
   }
 
-  showOpeningAmbusherReport(report) {
+  showCounterAmbusherReport(report) {
     if (!report || !this.L) return;
     const L = this.L;
     this.effectText(L.cx, this.islandContinueY() - 284 * L.k, `${report.name} reports next`, '#ffd166', 760);
+  }
+
+  openingAmbusherReportEligibility(combat = G.combat, result = null) {
+    return this.counterAmbusherReportEligibility(combat, result);
+  }
+
+  markOpeningAmbusherReport(combat = G.combat, result = null) {
+    return this.markCounterAmbusherReport(combat, result);
+  }
+
+  consumeOpeningAmbusherReportPirates(combat = G.combat) {
+    return this.consumeCounterAmbusherReportPirates(combat);
+  }
+
+  placeOpeningAmbusherReportPiratesOnDeck(pirates) {
+    return this.placeCounterAmbusherReportPiratesOnDeck(pirates);
+  }
+
+  showOpeningAmbusherReport(report) {
+    return this.showCounterAmbusherReport(report);
   }
 
   grantBoardingTrophy(combat = G.combat) {
@@ -5770,7 +5806,7 @@ class GameScene extends Phaser.Scene {
     const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
     const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
     const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
-    const ambusherReport = result === 'win' ? this.markOpeningAmbusherReport(combat, result) : null;
+    const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
     this.clearCacheDrillBountyMarks();
     if (this.currentBoardingNumber() === 1) this.clearOpeningRouteCounterBought();
     combat.mode = 'resolved';
@@ -5783,7 +5819,7 @@ class GameScene extends Phaser.Scene {
     this.showBoardingAlertPlunder(plunder);
     this.showOpeningBreakPlunder(openingPlunder);
     this.showAmbushBounty(ambushBounty);
-    this.showOpeningAmbusherReport(ambusherReport);
+    this.showCounterAmbusherReport(ambusherReport);
   }
 
   continueFromResolvedBoarding() {
@@ -5800,7 +5836,7 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const reportPirates = this.consumeOpeningAmbusherReportPirates(combat);
+    const reportPirates = this.consumeCounterAmbusherReportPirates(combat);
     const reportIds = new Set(reportPirates.map((pirate) => pirate.id));
     const handCards = this.snapshotHandCardsForDiscard();
     const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !reportIds.has(card.id)));
@@ -5810,7 +5846,7 @@ class GameScene extends Phaser.Scene {
     G.discard.push(...(G.hand || []).filter(pirate =>
       pirate && allCrewIds.has(pirate.id) && !reportIds.has(pirate.id)
     ));
-    this.placeOpeningAmbusherReportPiratesOnDeck(reportPirates);
+    this.placeCounterAmbusherReportPiratesOnDeck(reportPirates);
     G.hand = [];
     G.sent = [];
     this._sendingToIsland.clear();
@@ -6335,7 +6371,8 @@ class GameScene extends Phaser.Scene {
         const rewardParts = [];
         if (trophy) rewardParts.push(`${trophy.name} +💪`);
         if (counterTrophy) rewardParts.push(`${counterTrophy.name} +⚡`);
-        if (combat.openingAmbusherReport) rewardParts.push(`${combat.openingAmbusherReport.name} reports next`);
+        const ambusherReport = combat.counterAmbusherReport || combat.openingAmbusherReport;
+        if (ambusherReport) rewardParts.push(`${ambusherReport.name} reports next`);
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
           line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',

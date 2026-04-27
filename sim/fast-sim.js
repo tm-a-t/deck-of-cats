@@ -49,6 +49,7 @@ function parseArgs(argv) {
     checkOpeningRoutePrize: false,
     checkAlarmRushedRouteCounter: false,
     checkOpeningAmbusherReport: false,
+    checkCounterAmbusherReport: false,
     checkDrilledAmbusherBounty: false,
     checkCounterRecruitsReportEarly: false,
     checkMapSchedule: false,
@@ -193,6 +194,11 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-ambusher-report') {
       out.checkOpeningAmbusherReport = true;
+      out.checkCounterAmbusherReport = true;
+      continue;
+    }
+    if (a === '--check-counter-ambusher-report') {
+      out.checkCounterAmbusherReport = true;
       continue;
     }
     if (a === '--check-drilled-ambusher-bounty') {
@@ -6633,18 +6639,18 @@ function runDrilledAmbusherBountyChecks(runtime) {
   return { ok: true, checks: results };
 }
 
-function assertOpeningAmbusherReportCheck(condition, message) {
-  if (!condition) throw new Error(`opening ambusher report check failed: ${message}`);
+function assertCounterAmbusherReportCheck(condition, message) {
+  if (!condition) throw new Error(`counter ambusher report check failed: ${message}`);
 }
 
-function runOpeningAmbusherReportChecks(runtime) {
+function runCounterAmbusherReportChecks(runtime) {
   const api = runtime.api;
   const scene = makeSimScene(api);
   const results = [];
 
   const enemyFor = (key, row, rowOrder, idx = 0) => {
     const archetype = api.COMBAT.enemyArchetypes.find((entry) => entry && entry.key === key);
-    assertOpeningAmbusherReportCheck(!!archetype, `missing enemy archetype ${key}`);
+    assertCounterAmbusherReportCheck(!!archetype, `missing enemy archetype ${key}`);
     const member = scene.buildCombatEnemyMember(archetype, `${key}_report_${idx}`);
     return scene.buildEnemyCombatFighter(member, row, rowOrder);
   };
@@ -6670,8 +6676,15 @@ function runOpeningAmbusherReportChecks(runtime) {
       encounter: { mainKey, supportKeys: [], totalCount: 1 },
     };
     if (G.map) {
-      G.map.currentLayer = Math.min(2, (api.MAP_LAYERS || 40) - 2);
-      G.map.currentNodeId = G.map.currentNodeId || 'report-test-ship';
+      const finalLayer = Math.max(0, ((api.MAP_LAYERS || (G.map.layers && G.map.layers.length) || 40) - 1));
+      if (opts.finalBoarding) {
+        const finalNodes = (G.map.layers && G.map.layers[finalLayer]) || [];
+        G.map.currentLayer = finalLayer;
+        G.map.currentNodeId = (finalNodes[0] && finalNodes[0].id) || 'report-final-ship';
+      } else {
+        G.map.currentLayer = Math.min(2, Math.max(0, finalLayer - 1));
+        G.map.currentNodeId = G.map.currentNodeId || 'report-test-ship';
+      }
     }
 
     const pirates = G.allCrew.slice(0, 5);
@@ -6744,22 +6757,24 @@ function runOpeningAmbusherReportChecks(runtime) {
   {
     const { G, pirates, combat } = setupRegular({
       mainKey: 'deckSniper',
+      encounterNo: 2,
+      boardingCount: 2,
       types: ['needler', 'sawbones', 'trainer', 'lumberjack', 'miner'],
       playerRows: [[0, 0, 0], [1, 1, 0]],
       pirateUpgrades: [{ weaponKey: 'toxinPistol', might: 1, tempo: 1 }],
     });
     const ambusher = pirates[0];
     const result = scene.applyCounterAmbush(combat, { silent: true });
-    assertOpeningAmbusherReportCheck(result && result.pirateId === ambusher.id, 'positive setup did not ambush with the expected pirate');
+    assertCounterAmbusherReportCheck(result && result.pirateId === ambusher.id, 'positive setup did not ambush with the expected pirate');
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(combat.openingAmbusherReport && combat.openingAmbusherReport.pirateId === ambusher.id, 'winning Boarding 1 did not mark ambusher report');
-    assertOpeningAmbusherReportCheck((ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'ambusher did not keep trophy buffs before report');
+    assertCounterAmbusherReportCheck(combat.counterAmbusherReport && combat.counterAmbusherReport.pirateId === ambusher.id, 'winning Boarding 2 did not mark ambusher report');
+    assertCounterAmbusherReportCheck((ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'ambusher did not keep trophy buffs before report');
     continueBoardingImmediately(G);
-    assertOpeningAmbusherReportCheck(G.hand[0] === ambusher, 'reported ambusher was not drawn first next hand');
-    assertOpeningAmbusherReportCheck(!G.deck.includes(ambusher) && !G.discard.includes(ambusher), 'reported ambusher remained in deck or discard');
-    assertOpeningAmbusherReportCheck(countRefs(G, ambusher) === 1, 'reported ambusher duplicated across piles');
-    assertOpeningAmbusherReportCheck((ambusher.weaponKey || null) === 'toxinPistol' && (ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'reported ambusher lost weapon or buffs');
-    results.push({ name: 'Boarding 1 surviving ambusher reports next, draws first, and keeps upgrades', ok: true });
+    assertCounterAmbusherReportCheck(G.hand[0] === ambusher, 'reported ambusher was not drawn first next hand');
+    assertCounterAmbusherReportCheck(!G.deck.includes(ambusher) && !G.discard.includes(ambusher), 'reported ambusher remained in deck or discard');
+    assertCounterAmbusherReportCheck(countRefs(G, ambusher) === 1, 'reported ambusher duplicated across piles');
+    assertCounterAmbusherReportCheck((ambusher.weaponKey || null) === 'toxinPistol' && (ambusher.might || 0) === 2 && (ambusher.tempo || 0) === 2, 'reported ambusher lost weapon or buffs');
+    results.push({ name: 'Boarding 2 surviving ambusher reports next, draws first, and keeps upgrades', ok: true });
   }
 
   {
@@ -6770,9 +6785,9 @@ function runOpeningAmbusherReportChecks(runtime) {
     });
     const starter = pirates[0];
     const result = scene.applyCounterAmbush(combat, { silent: true });
-    assertOpeningAmbusherReportCheck(result && result.pirateId === starter.id, 'Opening Deckhand Counter starter did not ambush');
+    assertCounterAmbusherReportCheck(result && result.pirateId === starter.id, 'Opening Deckhand Counter starter did not ambush');
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(combat.openingAmbusherReport && combat.openingAmbusherReport.pirateId === starter.id, 'Opening Deckhand Counter starter did not mark report');
+    assertCounterAmbusherReportCheck(combat.counterAmbusherReport && combat.counterAmbusherReport.pirateId === starter.id, 'Opening Deckhand Counter starter did not mark report');
     results.push({ name: 'Opening Deckhand Counter starters can be the reporting ambusher', ok: true });
   }
 
@@ -6780,8 +6795,8 @@ function runOpeningAmbusherReportChecks(runtime) {
     const { G, combat } = setupRegular();
     scene.applyCounterAmbush(combat, { silent: true });
     scene.finishBoardingCombat('loss');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'loss marked ambusher report');
-    assertOpeningAmbusherReportCheck(G.res.gold === 0, 'loss granted ambush bounty while checking report exclusion');
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'loss marked ambusher report');
+    assertCounterAmbusherReportCheck(G.res.gold === 0, 'loss granted ambush bounty while checking report exclusion');
     results.push({ name: 'losses do not mark ambusher report', ok: true });
   }
 
@@ -6790,7 +6805,7 @@ function runOpeningAmbusherReportChecks(runtime) {
     scene.applyCounterAmbush(combat, { silent: true });
     scene.defeatCombatFighter(combat.playerFighters[0], []);
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'defeated ambusher marked report');
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'defeated ambusher marked report');
     results.push({ name: 'defeated ambushers do not report next', ok: true });
   }
 
@@ -6801,8 +6816,8 @@ function runOpeningAmbusherReportChecks(runtime) {
     combat.playerFighters = [fighterFor(pirates[1], 0, 0, combat)];
     combat.reinforcementCount = 1;
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'reinforcement win marked ambusher report');
-    results.push({ name: 'reinforcement-hand wins do not report the opening ambusher', ok: true });
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'reinforcement win marked ambusher report');
+    results.push({ name: 'reinforcement-hand wins do not report the opening-hand ambusher', ok: true });
   }
 
   {
@@ -6819,23 +6834,24 @@ function runOpeningAmbusherReportChecks(runtime) {
       mainKey: 'deckSniper',
     };
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'Battle Test marked ambusher report');
-    assertOpeningAmbusherReportCheck(G.phase === 'boarding', 'Battle Test report check unexpectedly left boarding');
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'Battle Test marked ambusher report');
+    assertCounterAmbusherReportCheck(G.phase === 'boarding', 'Battle Test report check unexpectedly left boarding');
     results.push({ name: 'Battle Test never marks ambusher report', ok: true });
   }
 
   {
     const { combat } = setupRegular({
       mainKey: 'deckSniper',
-      encounterNo: 2,
-      boardingCount: 2,
+      encounterNo: 8,
+      boardingCount: 8,
+      finalBoarding: true,
       types: ['needler', 'sawbones', 'trainer'],
       playerRows: [[0, 0, 0]],
     });
     scene.applyCounterAmbush(combat, { silent: true });
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'Boarding 2 marked ambusher report');
-    results.push({ name: 'Boarding 2 wins do not report the ambusher', ok: true });
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'final boarding marked ambusher report');
+    results.push({ name: 'final victory boardings do not mark a useless ambusher report', ok: true });
   }
 
   {
@@ -6845,9 +6861,9 @@ function runOpeningAmbusherReportChecks(runtime) {
       playerRows: [[0, 0, 0]],
     });
     const result = scene.applyCounterAmbush(combat, { silent: true });
-    assertOpeningAmbusherReportCheck(!result, 'missing-ambush setup unexpectedly ambushed');
+    assertCounterAmbusherReportCheck(!result, 'missing-ambush setup unexpectedly ambushed');
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'missing ambush marked report');
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'missing ambush marked report');
     results.push({ name: 'wins without Counter Ambush do not report a pirate', ok: true });
   }
 
@@ -6856,7 +6872,7 @@ function runOpeningAmbusherReportChecks(runtime) {
     scene.applyCounterAmbush(combat, { silent: true });
     G.allCrew = G.allCrew.filter((pirate) => pirate && pirate.id !== pirates[0].id);
     scene.finishBoardingCombat('win');
-    assertOpeningAmbusherReportCheck(!combat.openingAmbusherReport, 'removed ambusher marked report');
+    assertCounterAmbusherReportCheck(!combat.counterAmbusherReport, 'removed ambusher marked report');
     results.push({ name: 'ambushers no longer in crew do not report next', ok: true });
   }
 
@@ -7554,16 +7570,22 @@ function finishSimBoardingWin(api, scene) {
   if (scene && typeof scene.grantAmbushBounty === 'function') {
     scene.grantAmbushBounty(G.combat);
   }
-  if (scene && typeof scene.markOpeningAmbusherReport === 'function') {
+  if (scene && typeof scene.markCounterAmbusherReport === 'function') {
+    scene.markCounterAmbusherReport(G.combat, 'win');
+  } else if (scene && typeof scene.markOpeningAmbusherReport === 'function') {
     scene.markOpeningAmbusherReport(G.combat, 'win');
   }
-  const reportPirates = scene && typeof scene.consumeOpeningAmbusherReportPirates === 'function'
-    ? scene.consumeOpeningAmbusherReportPirates(G.combat)
-    : [];
+  const reportPirates = scene && typeof scene.consumeCounterAmbusherReportPirates === 'function'
+    ? scene.consumeCounterAmbusherReportPirates(G.combat)
+    : scene && typeof scene.consumeOpeningAmbusherReportPirates === 'function'
+      ? scene.consumeOpeningAmbusherReportPirates(G.combat)
+      : [];
   const reportIds = new Set(reportPirates.map((pirate) => pirate && pirate.id));
   const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(p => p.id));
   G.discard.push(...(G.hand || []).filter(p => p && allCrewIds.has(p.id) && !reportIds.has(p.id)));
-  if (scene && typeof scene.placeOpeningAmbusherReportPiratesOnDeck === 'function') {
+  if (scene && typeof scene.placeCounterAmbusherReportPiratesOnDeck === 'function') {
+    scene.placeCounterAmbusherReportPiratesOnDeck(reportPirates);
+  } else if (scene && typeof scene.placeOpeningAmbusherReportPiratesOnDeck === 'function') {
     scene.placeOpeningAmbusherReportPiratesOnDeck(reportPirates);
   }
   G.hand = [];
@@ -8139,8 +8161,8 @@ async function main() {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
-  if (opts.checkOpeningAmbusherReport) {
-    const result = runOpeningAmbusherReportChecks(runtime);
+  if (opts.checkCounterAmbusherReport || opts.checkOpeningAmbusherReport) {
+    const result = runCounterAmbusherReportChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }
