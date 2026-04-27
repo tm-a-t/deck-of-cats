@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-034521 — rev 4c3a11b
+
+- Gameplay: true - Counter Short Crew Drill now grants `Counter Watch` when the drilled pirate reports early and counters the next scouted ship, so the first report top-decks it once and the watch keeps returning it on later Shop Continues until it is sent without a refreshed eligible drill or the boarding starts. Validated with JS syntax checks, `node sim/fast-sim.js --check-short-crew-drill --json`, `node sim/fast-sim.js --check-counter-recruits-report-early --json`, `node sim/fast-sim.js --check-scouted-counter-cache --json`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-034521.log`.
+
 ## 2026-04-27 — run 20260427-033639 — rev 12766f8
 
 - Gameplay: true - Moved Opening Commission from full sends to exactly-one-short early island sends: normal 1-of-2 and Port 2-of-3 sends now get the `+1☠️` commission, while full sends keep `Full Crew Discount` without the extra wage. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-commission --json`, counter recruit/cache/Short Crew targeted checks, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-033639.log`.

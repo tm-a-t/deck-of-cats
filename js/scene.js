@@ -632,12 +632,15 @@ class GameScene extends Phaser.Scene {
     this.clearCounterWatch(pirate.id);
   }
 
-  consumeCounterWatchPirates(skipIds = new Set()) {
+  consumeCounterWatchPirates(skipIds = new Set(), opts = {}) {
     const ids = Array.isArray(G.counterWatchIds) ? [...G.counterWatchIds] : [];
     G.counterWatchIds = [];
     if (this.isBattleTest() || !ids.length) return [];
 
     const skip = skipIds && typeof skipIds.has === 'function' ? skipIds : new Set();
+    const preserveSent = opts && opts.preserveSentIds && typeof opts.preserveSentIds.has === 'function'
+      ? opts.preserveSentIds
+      : new Set();
     const ownedById = new Map((G.allCrew || [])
       .filter(Boolean)
       .map(pirate => [pirate.id, pirate]));
@@ -656,7 +659,7 @@ class GameScene extends Phaser.Scene {
       if (seen.has(id)) return;
       seen.add(id);
       const pirate = ownedById.get(id);
-      if (!pirate || sentIds.has(id)) return;
+      if (!pirate || (sentIds.has(id) && !preserveSent.has(id))) return;
       keep.push(id);
       const handPirate = handById.get(id);
       if (handPirate && !skip.has(id)) pirates.push(handPirate);
@@ -1211,14 +1214,18 @@ class GameScene extends Phaser.Scene {
     const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
     const target = this.leftmostIslandPirateEntry();
     if (sent === currentSent && !target) return null;
+    const targetPirate = target && target.pirate ? target.pirate : null;
+    const reportsEarly = this.shortCrewReportsEarly();
+    const counterAlertRefund = this.shortCrewCounterAlertRefundState(targetPirate);
     const gain = { buff: 'might', count: 1 };
     return {
       gain,
       text: personalGainText([gain]),
-      reportsEarly: this.shortCrewReportsEarly(),
+      reportsEarly,
       targetKnown: !!target,
-      targetType: target && target.pirate ? target.pirate.type : null,
-      counterAlertRefund: this.shortCrewCounterAlertRefundState(target && target.pirate ? target.pirate : null),
+      targetType: targetPirate ? targetPirate.type : null,
+      counterAlertRefund,
+      counterWatch: !!(reportsEarly && counterAlertRefund.eligible),
     };
   }
 
@@ -1257,12 +1264,13 @@ class GameScene extends Phaser.Scene {
     if (!applied.applied) return null;
     const reportEarly = this.markShortCrewReport(target.pirate);
     const counterAlertRefund = this.shortCrewCounterAlertRefundState(target.pirate);
+    const counterWatch = !!(reportEarly && counterAlertRefund.eligible && this.markCounterWatch(target.pirate));
 
     if (!opts.silent && this.L) {
       const point = this.islandPirateEffectPoint(target.sentSlot);
       const x = point ? point.x : this.L.cx;
       const y = point ? point.y : this.endActionY() - 54 * this.L.k;
-      const reportText = reportEarly ? ' Reports next' : '';
+      const reportText = reportEarly ? ` Reports next${counterWatch ? ', Watch' : ''}` : '';
       this.effectText(x, y, `Short Crew +${applied.text || drill.text}${reportText}`, '#ffca28');
       this.renderIsland();
     }
@@ -1273,6 +1281,7 @@ class GameScene extends Phaser.Scene {
       sentSlot: target.sentSlot,
       reportEarly,
       counterAlertRefund,
+      counterWatch,
     };
   }
 
@@ -2241,7 +2250,8 @@ class GameScene extends Phaser.Scene {
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
     const reports = this.consumeEarlyReportPirates();
     const reportIds = reports.ids;
-    const counterWatch = this.consumeCounterWatchPirates(reportIds);
+    const shortCrewReportIds = new Set((reports.shortCrew || []).map(pirate => pirate && pirate.id));
+    const counterWatch = this.consumeCounterWatchPirates(reportIds, { preserveSentIds: shortCrewReportIds });
     const topDeckReturnIds = new Set(reportIds);
     counterWatch.forEach(pirate => topDeckReturnIds.add(pirate.id));
     const handCards = this.snapshotHandCardsForDiscard();
@@ -6697,7 +6707,8 @@ class GameScene extends Phaser.Scene {
       if (refund.eligible) refundText = ', counter refunds Alert';
       else if (refund.possible && !shortCrew.targetKnown) refundText = ', counter refunds Alert';
       else if (refund.possible) refundText = ', leftmost counter refunds Alert';
-      shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${refundText}`;
+      const watchText = shortCrew.counterWatch ? ', Watch' : '';
+      shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
     }
     return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
   }

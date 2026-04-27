@@ -1712,10 +1712,10 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     prepareNextRoundForSim(api, scene);
     assertCounterRecruitsReportEarlyCheck(G.hand[0] === watchedPirate, 'sent watched counter with Short Crew report did not report early');
     assertCounterRecruitsReportEarlyCheck(G.hand[1] === shopTop, 'reported watched counter did not stay above normal top deck');
-    assertCounterRecruitsReportEarlyCheck(!(G.counterWatchIds || []).includes(watchedPirate.id), 'reported sent counter kept stale Counter Watch');
+    assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(watchedPirate.id), 'eligible Counter Short Crew report did not keep Counter Watch');
     const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === watchedPirate.id);
     assertCounterRecruitsReportEarlyCheck(zones.length === 1, `reported watched counter duplicated across zones ${zones.length} times`);
-    results.push({ name: 'sent watched counters can still report early through existing drill markers', ok: true });
+    results.push({ name: 'sent watched counters with an eligible Short Crew report stay watched without duplicating', ok: true });
   }
 
   {
@@ -3214,6 +3214,7 @@ function runShortCrewDrillChecks(runtime) {
     G.boardingAlert = Math.max(0, Math.floor(Number(opts.alert) || 0));
     G.fullCrewDiscount = 0;
     G.shortCrewReportIds = [];
+    G.counterWatchIds = [];
     scene._sendingToIsland.clear();
     scene._sacrificedIds.clear();
     G.hand.forEach((pirate, index) => {
@@ -3238,8 +3239,12 @@ function runShortCrewDrillChecks(runtime) {
     assertShortCrewDrillCheck(!!(result && result.applied) === expectedApplied, `${name} applied ${!!(result && result.applied)} !== ${expectedApplied}`);
     const expectedReport = opts.expectedReport != null ? !!opts.expectedReport : !!(expectedApplied && scene.shortCrewReportsEarly && scene.shortCrewReportsEarly());
     assertShortCrewDrillCheck(!!(result && result.reportEarly) === expectedReport, `${name} reportEarly ${!!(result && result.reportEarly)} !== ${expectedReport}`);
+    const expectedWatch = opts.expectedWatch != null ? !!opts.expectedWatch : false;
+    assertShortCrewDrillCheck(!!(result && result.counterWatch) === expectedWatch, `${name} counterWatch ${!!(result && result.counterWatch)} !== ${expectedWatch}`);
     const reportIds = Array.isArray(G.shortCrewReportIds) ? G.shortCrewReportIds : [];
     assertShortCrewDrillCheck(reportIds.length === (expectedReport ? 1 : 0), `${name} report ids ${reportIds.length} !== ${expectedReport ? 1 : 0}`);
+    const watchIds = Array.isArray(G.counterWatchIds) ? G.counterWatchIds : [];
+    assertShortCrewDrillCheck(watchIds.length === (expectedWatch ? 1 : 0), `${name} watch ids ${watchIds.length} !== ${expectedWatch ? 1 : 0}`);
     expectedMights.forEach((might, index) => {
       assertShortCrewDrillCheck((G.hand[index].might || 0) === might, `${name} hand ${index} might ${G.hand[index].might || 0} !== ${might}`);
     });
@@ -3291,12 +3296,33 @@ function runShortCrewDrillChecks(runtime) {
     assertShortCrewDrillCheck(result && result.applied && result.reportEarly, 'counter 1-of-2 did not gain Might and report early');
     assertShortCrewDrillCheck((G.hand[0].might || 0) === 3, `counter 1-of-2 might ${G.hand[0].might || 0} !== 3`);
     assertShortCrewDrillCheck(result.counterAlertRefund && result.counterAlertRefund.eligible, 'counter 1-of-2 did not qualify for Alert refund');
+    assertShortCrewDrillCheck(result.counterWatch, 'counter 1-of-2 did not gain Counter Watch');
+    assertShortCrewDrillCheck((G.counterWatchIds || []).includes(G.hand[0].id), 'counter 1-of-2 did not keep Counter Watch marker');
     const refund = settleShipWagesWithShortCrewRefund(G, result);
     assertShortCrewDrillCheck(G.enthusiasm === 2, `counter 1-of-2 wages ${G.enthusiasm} !== 2`);
     assertShortCrewDrillCheck(G.boardingAlert === 2, `counter 1-of-2 alert ${G.boardingAlert} did not return to pre-wage floor 2`);
     assertShortCrewDrillCheck(refund && refund.amount === 1 && refund.floor === 2, `counter 1-of-2 refund ${JSON.stringify(refund)}`);
     assertShortCrewDrillCheck((G.shortCrewReportIds || []).includes(G.hand[0].id), 'counter 1-of-2 did not keep report marker');
-    results.push({ name: 'counter 1-of-2 refunds only the Ship Wages slot Alert after wages', ok: true, refund, boardingAlert: G.boardingAlert });
+    const drilled = G.hand[0];
+    const shopTop = { id: 9102, type: 'needler', weaponKey: null, might: 0, tempo: 0, wounded: false };
+    G.allCrew.push(shopTop);
+    G.deck = [shopTop];
+    G.discard = [];
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertShortCrewDrillCheck(G.hand[0] === drilled, 'counter Short Crew report did not draw drilled pirate first');
+    assertShortCrewDrillCheck(G.hand[1] === shopTop, 'counter Short Crew report duplicated or skipped the existing top-deck card');
+    assertShortCrewDrillCheck((G.counterWatchIds || []).includes(drilled.id), 'counter Short Crew Watch did not persist after report draw');
+    G.phase = 'shopping';
+    G.sent = [];
+    G.deck = [];
+    G.discard = [];
+    prepareNextRoundForSim(api, scene);
+    assertShortCrewDrillCheck(G.hand[0] === drilled, 'held Counter Short Crew Watch did not return drilled pirate first on later Continue');
+    assertShortCrewDrillCheck((G.counterWatchIds || []).includes(drilled.id), 'Counter Short Crew Watch did not persist while held before boarding');
+    const zones = [...(G.hand || []), ...(G.deck || []), ...(G.discard || [])].filter(p => p && p.id === drilled.id);
+    assertShortCrewDrillCheck(zones.length === 1, `counter Short Crew watched pirate duplicated across zones ${zones.length} times`);
+    results.push({ name: 'counter 1-of-2 refunds Alert, reports once, and keeps Counter Watch for later Shop Continues', ok: true, refund, boardingAlert: G.boardingAlert });
   }
 
   checkMight('port 2-of-3 grants Short Crew Might', { islandIdx: 3, sent: 2 }, [3, 0, 0], true);
@@ -3352,6 +3378,7 @@ function runShortCrewDrillChecks(runtime) {
     const counterLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     assertShortCrewDrillCheck(counterLine.includes('Alert +1->+0'), `counter partial line does not show net Alert refund: ${counterLine}`);
     assertShortCrewDrillCheck(counterLine.includes('counter refunds Alert'), `counter partial line does not show active counter refund: ${counterLine}`);
+    assertShortCrewDrillCheck(counterLine.includes('Watch'), `counter partial line does not expose Counter Watch: ${counterLine}`);
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
     assertShortCrewDrillCheck(!fullLine.includes('Short Crew'), 'full-send line mentions Short Crew');
     setup({ islandIdx: 3, sent: 2 });
@@ -3418,7 +3445,9 @@ function prepareNextRoundForSim(api, scene) {
     reports.ids = new Set([...(reports.cache || []), ...(reports.shortCrew || [])].map(p => p && p.id));
   }
   const counterWatch = scene && typeof scene.consumeCounterWatchPirates === 'function'
-    ? scene.consumeCounterWatchPirates(reports.ids)
+    ? scene.consumeCounterWatchPirates(reports.ids, {
+      preserveSentIds: new Set((reports.shortCrew || []).map(p => p && p.id)),
+    })
     : [];
   const topDeckReturnIds = new Set(reports.ids);
   (counterWatch || []).forEach(p => {

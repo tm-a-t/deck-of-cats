@@ -61,10 +61,12 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Short Crew Drill` adds no `Boarding Alert` by itself, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
 - In regular runs only, if `Short Crew Drill` triggers while the next unreached ship is `1` to `3` map turns away, that same pirate is marked to report early.
 - In regular runs only, if that drilled pirate's type counters the next scouted ship's main enemy, `Short Crew Drill` refunds `1 Boarding Alert` after `Ship Wages` are paid.
+- If `Short Crew Drill` both reports early and refunds Alert because the drilled pirate counters the next scouted ship's main enemy, that drilled pirate also gains `Counter Watch` until the next boarding.
 - The `Short Crew Drill` counter refund is clamped to the pending `Boarding Alert` present immediately before that `End`/`Work on Ship` action paid `Ship Wages`, so it refunds only the Alert from the one unused send slot and cannot remove cache Alert, `Dockside Credit` Alert, earlier pending Alert, or Alert already snapshotted onto boarding.
-- The `Short Crew Drill` counter refund never applies in `Battle Test`.
+- The `Short Crew Drill` counter refund and `Counter Watch` never apply in `Battle Test`.
 - A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
 - Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
+- If a pirate has both a Short Crew early-report marker and `Counter Watch`, the Short Crew report places it on top once on the next `Continue`, and `Counter Watch` remains active for later Shop `Continue`s before the next boarding.
 - If Cache Drill early report, Short Crew early report, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, watched counters are drawn third, and ordinary Shop `Top deck` purchases are drawn after all returning pirates.
 - Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
 - Each sent pirate resolves its island action as soon as it lands.
@@ -124,7 +126,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
 - On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
-- Sending a watched pirate spends `Counter Watch`; if that sent pirate independently gained a Cache Drill or Short Crew early-report marker, that report marker still works normally.
+- Sending a watched pirate spends `Counter Watch` unless that same sent pirate earns a new eligible counter `Short Crew Drill` that re-marks `Counter Watch`; Cache Drill and non-counter Short Crew report markers still work normally but do not preserve the watch.
 - `Counter Watch` clears when the next boarding starts, never applies in `Battle Test`, and does not change `Prepared`, `Counter Edge`, `Counter Ambush`, `Boarding Trophy`, `Counter Trophy`, or `Ambush Bounty`.
 - A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
 - A `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after the discount is applied.
