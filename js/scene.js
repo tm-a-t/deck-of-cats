@@ -1974,7 +1974,7 @@ class GameScene extends Phaser.Scene {
       : (Array.isArray(G.sent) && Array.isArray(G.hand)
         ? G.sent.indexOf(G.hand.findIndex(candidate => candidate && candidate.id === pirate.id))
         : -1);
-    if (sentSlot !== 0) return null;
+    if (sentSlot < 0) return null;
 
     const intel = this.nextShipIntel();
     const boardingNo = intel && intel.boardingNo != null
