@@ -695,9 +695,10 @@ class GameScene extends Phaser.Scene {
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[drill.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
+    const passOffTarget = routeCounterType ? this.securedRouteCachePassOffTarget(drill.mainKey) : null;
     const prepText = routeCounterType && this.openingRouteStarterCachePrepAvailable(drill.mainKey)
       ? ', opens Opening Prep'
-      : '';
+      : (passOffTarget ? `, passes mark to ${passOffTarget.label}` : '');
     const payoff = refundsAlert
       ? ` disarms cache Alert, gains +💪, reports next${prepText}${bountyText}`
       : ` gains +💪, reports next${prepText}${bountyText}`;
@@ -814,6 +815,89 @@ class GameScene extends Phaser.Scene {
     marks.push({ pirateId: pirate.id, mainKey });
     G.cacheDrillBountyMarks = marks;
     return true;
+  }
+
+  securedRouteCachePassOffTarget(mainKey) {
+    if (this.isBattleTest()
+      || !mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || G.openingRouteCounterBoughtMainKey !== mainKey
+      || G.openingRouteCounterBoughtPirateId == null
+      || typeof OPENING_ROUTE_PRIMARY_COUNTERS === 'undefined') {
+      return null;
+    }
+
+    const primaryType = OPENING_ROUTE_PRIMARY_COUNTERS[mainKey];
+    const target = (G.allCrew || []).find(pirate =>
+      pirate
+      && pirate.id === G.openingRouteCounterBoughtPirateId
+      && pirate.type === primaryType
+    );
+    if (!target || !this.pirateStillInCrew(target)) return null;
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    if (!intel || intel.mainKey !== mainKey || boardingNo !== 1) return null;
+
+    return {
+      pirate: target,
+      pirateId: target.id,
+      type: primaryType,
+      label: (TYPES[primaryType] && TYPES[primaryType].name) || 'Counter',
+      mainKey,
+    };
+  }
+
+  transferSecuredRouteCacheDrillBountyToBoughtCounter(pirate, drill) {
+    if (this.isBattleTest()
+      || !pirate
+      || pirate.id == null
+      || !pirate.type
+      || !drill
+      || !drill.mainKey
+      || !drill.granted
+      || drill.pirateId !== pirate.id
+      || drill.openerId !== pirate.id
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(drill.mainKey, 1, { mode: G.mode });
+    if (!starterTypes.includes(pirate.type)) return null;
+
+    const target = this.securedRouteCachePassOffTarget(drill.mainKey);
+    if (!target || target.pirateId === pirate.id) return null;
+
+    let transferred = false;
+    const next = this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .map((mark) => {
+        if (transferred || mark.mainKey !== drill.mainKey || mark.pirateId !== pirate.id) return mark;
+        transferred = true;
+        return { pirateId: target.pirateId, mainKey: mark.mainKey };
+      });
+    if (!transferred) return null;
+
+    const seen = new Set();
+    G.cacheDrillBountyMarks = next.filter((mark) => {
+      const key = `${mark.pirateId}:${mark.mainKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return {
+      applied: true,
+      fromPirateId: pirate.id,
+      toPirateId: target.pirateId,
+      mainKey: drill.mainKey,
+      type: target.type,
+      label: target.label,
+    };
   }
 
   transferRouteStarterCacheDrillBountyToBoughtCounter(pirate, type, quote, routeShopState) {
@@ -1183,6 +1267,7 @@ class GameScene extends Phaser.Scene {
     drill.type = pirate.type;
     this.markCacheDrillMuster(pirate);
     this.markCacheDrillBounty(pirate, drill.mainKey);
+    const securedRouteCachePassOff = this.transferSecuredRouteCacheDrillBountyToBoughtCounter(pirate, drill);
     const alertRefund = this.applyScoutedCacheAlertRefund(drill);
     const openingCounterPrep = this.applyOpeningRouteStarterCachePrep(pirate, drill);
 
@@ -1196,6 +1281,7 @@ class GameScene extends Phaser.Scene {
       label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
       alertRefund,
       cacheDrillBounty: true,
+      securedRouteCachePassOff,
       openingCounterPrep,
     };
     if (!opts.silent) this.showScoutedCacheDrillResult(reward);
@@ -1310,8 +1396,11 @@ class GameScene extends Phaser.Scene {
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[reward.mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
     const bountyText = bountyEmoji ? ` +2${bountyEmoji} Ambush` : '';
+    const passOffText = reward.securedRouteCachePassOff
+      ? ` -> ${reward.securedRouteCachePassOff.label}`
+      : '';
     const prepText = reward.openingCounterPrep ? ' Opening Prep' : '';
-    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next${prepText}${bountyText}`, '#ffca28', 760);
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next${prepText}${bountyText}${passOffText}`, '#ffca28', 760);
     this.renderIsland();
   }
 
