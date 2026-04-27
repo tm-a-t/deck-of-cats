@@ -581,10 +581,30 @@ class GameScene extends Phaser.Scene {
 
   clearOpeningRouteCounterBought(pirateId = null) {
     if (!G) return false;
-    if (pirateId != null && G.openingRouteCounterBoughtPirateId !== pirateId) return false;
-    const hadMarker = !!G.openingRouteCounterBoughtMainKey || G.openingRouteCounterBoughtPirateId != null;
+    if (pirateId != null) {
+      const hadBoughtPirate = G.openingRouteCounterBoughtPirateId === pirateId;
+      const hadPrize = this.clearOpeningRouteCounterPrize(pirateId);
+      if (hadBoughtPirate) G.openingRouteCounterBoughtPirateId = null;
+      return hadBoughtPirate || hadPrize;
+    }
+
+    const hadMarker = !!G.openingRouteCounterBoughtMainKey
+      || G.openingRouteCounterBoughtPirateId != null
+      || !!G.openingRouteCounterPrizeMainKey
+      || G.openingRouteCounterPrizePirateId != null;
     G.openingRouteCounterBoughtMainKey = null;
     G.openingRouteCounterBoughtPirateId = null;
+    G.openingRouteCounterPrizeMainKey = null;
+    G.openingRouteCounterPrizePirateId = null;
+    return hadMarker;
+  }
+
+  clearOpeningRouteCounterPrize(pirateId = null) {
+    if (!G) return false;
+    if (pirateId != null && G.openingRouteCounterPrizePirateId !== pirateId) return false;
+    const hadMarker = !!G.openingRouteCounterPrizeMainKey || G.openingRouteCounterPrizePirateId != null;
+    G.openingRouteCounterPrizeMainKey = null;
+    G.openingRouteCounterPrizePirateId = null;
     return hadMarker;
   }
 
@@ -593,13 +613,13 @@ class GameScene extends Phaser.Scene {
       || G.phase !== 'boarding'
       || this.currentBoardingNumber() !== 1
       || !mainKey
-      || G.openingRouteCounterBoughtMainKey !== mainKey
-      || G.openingRouteCounterBoughtPirateId == null) {
+      || G.openingRouteCounterPrizeMainKey !== mainKey
+      || G.openingRouteCounterPrizePirateId == null) {
       return null;
     }
-    if (pirateId != null && G.openingRouteCounterBoughtPirateId !== pirateId) return null;
+    if (pirateId != null && G.openingRouteCounterPrizePirateId !== pirateId) return null;
 
-    const markerPirateId = G.openingRouteCounterBoughtPirateId;
+    const markerPirateId = G.openingRouteCounterPrizePirateId;
     const pirate = (G.allCrew || []).find(candidate => candidate && candidate.id === markerPirateId);
     if (!pirate) {
       this.clearOpeningRouteCounterBought(markerPirateId);
@@ -1649,6 +1669,7 @@ class GameScene extends Phaser.Scene {
       : null;
     const openingRoutePrize = !!(route
       && route.primaryCounterType === type
+      && quote.openingCounterPrepMight
       && (!opts.mainKey || route.mainKey === opts.mainKey));
     return this.counterPayoffPreview(type, {
       ...opts,
@@ -1868,6 +1889,8 @@ class GameScene extends Phaser.Scene {
         openingCounterPrep: false,
         openingCounterPrepMight: false,
         openingCounterPrepDiscount: 0,
+        openingRoutePrimary: false,
+        openingRoutePrizeEligible: false,
         consumesOpeningCounterPlan: false,
         consumesOpeningCounterPrep: false,
       };
@@ -1897,7 +1920,19 @@ class GameScene extends Phaser.Scene {
     const mode = source.mode != null ? source.mode : G.mode;
     const openingCommissionReport = false;
     const openingFullCrewReport = false;
-    const topDeck = !!scoutedCounterTopDeck;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({
+        map: source.map || G.map,
+        mode,
+        boardingCount,
+        currentLayer: source.currentLayer,
+      })
+      : null;
+    const openingRoutePrimary = !!(routeShopState
+      && routeShopState.primaryCounterType === type
+      && routeShopState.mainKey
+      && boardingCount === 0
+      && mode !== 'battleTest');
     const hasPreparedGains = this.preparedCounterGains(type).length > 0;
     const discountPreparesCounter = discount > 0 && boardingCount > 0;
     const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
@@ -1905,11 +1940,16 @@ class GameScene extends Phaser.Scene {
     const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
     const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
     const consumesOpeningCounterPlan = !!openingCounterPrepMight;
+    const topDeck = openingRoutePrimary
+      ? !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight))
+      : !!scoutedCounterTopDeck;
     const shared = {
       openingCounterPlan: openingCounterPrep,
       openingCounterPrep: openingCounterPrepMight,
       openingCounterPrepMight,
       openingCounterPrepDiscount,
+      openingRoutePrimary,
+      openingRoutePrizeEligible: !!(openingRoutePrimary && openingCounterPrepMight),
       openingCommissionReport,
       openingFullCrewReport,
       consumesOpeningCounterPlan,
@@ -2871,6 +2911,10 @@ class GameScene extends Phaser.Scene {
       && routeShopState.mainKey) {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
       G.openingRouteCounterBoughtPirateId = p.id;
+      if (quote.openingRoutePrizeEligible || quote.openingCounterPrepMight) {
+        G.openingRouteCounterPrizeMainKey = routeShopState.mainKey;
+        G.openingRouteCounterPrizePirateId = p.id;
+      }
     }
     if (toTopDeck) {
       G.deck.push(p);

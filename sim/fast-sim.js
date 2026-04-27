@@ -374,8 +374,11 @@ function removePirateById(G, pirateId) {
   G.deck = G.deck.filter(p => p.id !== pirateId);
   G.discard = G.discard.filter(p => p.id !== pirateId);
   if (G.openingRouteCounterBoughtPirateId === pirateId) {
-    G.openingRouteCounterBoughtMainKey = null;
     G.openingRouteCounterBoughtPirateId = null;
+  }
+  if (G.openingRouteCounterPrizePirateId === pirateId) {
+    G.openingRouteCounterPrizeMainKey = null;
+    G.openingRouteCounterPrizePirateId = null;
   }
 }
 
@@ -676,7 +679,17 @@ function shopPurchaseQuote(api, G, type) {
   const boardingCount = Math.max(0, Math.floor(Number(G && G.boardingCount) || 0));
   const openingCommissionReport = false;
   const openingFullCrewReport = false;
-  const topDeck = !!scoutedCounterTopDeck;
+  const openingRoutePrimaryType = G && typeof api.openingRoutePrimaryCounterTypeForShop === 'function'
+    ? api.openingRoutePrimaryCounterTypeForShop({
+      map: G.map,
+      mode: G.mode,
+      boardingCount,
+    })
+    : null;
+  const openingRoutePrimary = !!(openingRoutePrimaryType
+    && openingRoutePrimaryType === type
+    && boardingCount === 0
+    && (!G || G.mode !== 'battleTest'));
   const discountPreparesCounter = discount > 0 && boardingCount > 0;
   const preparedCounter = !!(scoutedCounterTopDeck
     && preparedCounterGainsForQuote(api, type).length
@@ -685,18 +698,23 @@ function shopPurchaseQuote(api, G, type) {
   const openingCounterPrepDiscount = openingCounterPrepMight ? Math.min(1, costAfterDiscount) : 0;
   const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
   const consumesOpeningCounterPlan = !!openingCounterPrepMight;
+  const topDeck = openingRoutePrimary
+    ? !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight))
+    : !!scoutedCounterTopDeck;
   const shared = {
     openingCounterPlan,
     openingCounterPrep: openingCounterPrepMight,
     openingCounterPrepMight,
     openingCounterPrepDiscount,
+    openingRoutePrimary,
+    openingRoutePrizeEligible: !!(openingRoutePrimary && openingCounterPrepMight),
     openingCommissionReport,
     openingFullCrewReport,
     consumesOpeningCounterPlan,
     consumesOpeningCounterPrep: consumesOpeningCounterPlan,
   };
   if (!G || !def) {
-    return { canBuy: false, credit: false, counter: false, topDeck: false, openingCommissionReport: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, openingCounterPrepDiscount: 0, missing: 0, alert: 0, spend: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
+    return { canBuy: false, credit: false, counter: false, topDeck: false, openingCommissionReport: false, openingFullCrewReport: false, preparedCounter: false, cost, effectiveCost, discount: 0, openingCounterPrepDiscount: 0, missing: 0, alert: 0, spend: 0, fullCrewCoverage: 0, openingCounterPlan: false, openingCounterPrep: false, openingCounterPrepMight: false, openingRoutePrimary: false, openingRoutePrizeEligible: false, consumesOpeningCounterPlan: false, consumesOpeningCounterPrep: false };
   }
   if (enthusiasm >= effectiveCost) {
     return { canBuy: true, credit: false, counter, topDeck, preparedCounter, cost, effectiveCost, discount, missing: 0, alert: 0, spend: effectiveCost, fullCrewCoverage: 0, ...shared };
@@ -2325,12 +2343,20 @@ function runOpeningRoutePrizeChecks(runtime) {
     G.discard = [];
     G.sent = [];
     G.res = { wood: 0, stone: 0, gold: 0 };
-    G.openingRouteCounterBoughtMainKey = Object.prototype.hasOwnProperty.call(opts, 'markerMainKey')
+    const markerMainKey = Object.prototype.hasOwnProperty.call(opts, 'markerMainKey')
       ? opts.markerMainKey
       : mainKey;
-    G.openingRouteCounterBoughtPirateId = Object.prototype.hasOwnProperty.call(opts, 'markerPirateId')
+    const markerPirateId = Object.prototype.hasOwnProperty.call(opts, 'markerPirateId')
       ? opts.markerPirateId
       : pirate.id;
+    G.openingRouteCounterBoughtMainKey = markerMainKey;
+    G.openingRouteCounterBoughtPirateId = markerPirateId;
+    G.openingRouteCounterPrizeMainKey = Object.prototype.hasOwnProperty.call(opts, 'prizeMainKey')
+      ? opts.prizeMainKey
+      : markerMainKey;
+    G.openingRouteCounterPrizePirateId = Object.prototype.hasOwnProperty.call(opts, 'prizePirateId')
+      ? opts.prizePirateId
+      : (markerMainKey ? markerPirateId : null);
     G.cacheDrillBountyMarks = opts.cacheMarker ? [{ pirateId: pirate.id, mainKey }] : [];
     G.enemyShip.cacheDrillBountyMarks = G.cacheDrillBountyMarks.slice();
     G.combat = {
@@ -2352,9 +2378,8 @@ function runOpeningRoutePrizeChecks(runtime) {
     runtime.setSeed((0x61c05700 + routeIndex * 8191) >>> 0);
     api.initState();
     const G = api.getG();
-    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
-    assertOpeningRoutePrizeCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
-    assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} cash route selection failed`);
 
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -2368,12 +2393,52 @@ function runOpeningRoutePrizeChecks(runtime) {
     });
     const primaryIndex = G.shop.indexOf(route.primary);
     const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningRoutePrizeCheck(primaryIndex >= 0, `${route.label} cash primary ${route.primary} missing from shop ${G.shop.join(',')}`);
+    assertOpeningRoutePrizeCheck(quote.canBuy && quote.counter && !quote.credit, `${route.label} cash primary was not buyable as a counter: ${JSON.stringify(quote)}`);
+    assertOpeningRoutePrizeCheck(!quote.topDeck && !quote.openingCounterPrepMight && !quote.openingRoutePrizeEligible, `${route.label} cash primary received setup perks: ${JSON.stringify(quote)}`);
+    assertOpeningRoutePrizeCheck(quote.counterPayoff && !quote.counterPayoff.openingRoutePrize && quote.counterPayoff.bountyCount === 1, `${route.label} cash primary previewed prize: ${JSON.stringify(quote.counterPayoff)}`);
+    const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRoutePrizeCheck(bought && bought.type === route.primary, `${route.label} cash primary buy failed`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} cash buy did not secure route primary`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} cash buy did not record bought pirate`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterPrizeMainKey == null && G.openingRouteCounterPrizePirateId == null, `${route.label} cash buy recorded a prize marker`);
+    assertOpeningRoutePrizeCheck(G.discard.includes(bought) && !G.deck.includes(bought), `${route.label} cash primary did not go only to discard`);
+    assertOpeningRoutePrizeCheck(!(G.counterWatchIds || []).includes(bought.id), `${route.label} cash primary gained Counter Watch`);
+    assertOpeningRoutePrizeCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} cash primary gained upgrades: ${JSON.stringify(bought)}`);
+    assertOpeningRoutePrizeCheck(!G.shop.some(type => ['poisoner', 'sawbones', 'needler'].includes(type)), `${route.label} cash buy did not suppress opening counters: ${G.shop.join(',')}`);
+    results.push({ name: `${route.label} cash-only primary secures the route but discards without Watch or Opening Route Prize`, ok: true, quote });
+  });
+
+  routeCases.forEach((route, routeIndex) => {
+    runtime.setSeed((0x61c09700 + routeIndex * 8191) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
+    assertOpeningRoutePrizeCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
+    assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
+
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = true;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(fillerShop(route.primary), G.round, {
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    const primaryIndex = G.shop.indexOf(route.primary);
+    const quote = scene.shopPurchaseQuote(route.primary);
     assertOpeningRoutePrizeCheck(primaryIndex >= 0, `${route.label} primary ${route.primary} missing from shop ${G.shop.join(',')}`);
-    assertOpeningRoutePrizeCheck(quote.counterPayoff && quote.counterPayoff.openingRoutePrize && quote.counterPayoff.bountyCount === 2, `${route.label} shop did not preview +2 route prize: ${JSON.stringify(quote.counterPayoff)}`);
+    assertOpeningRoutePrizeCheck(quote.counter && quote.topDeck && quote.openingCounterPrepMight && quote.openingRoutePrizeEligible, `${route.label} prep primary missed setup-gated quote perks: ${JSON.stringify(quote)}`);
+    assertOpeningRoutePrizeCheck(quote.counterPayoff && quote.counterPayoff.openingRoutePrize && quote.counterPayoff.bountyCount === 2, `${route.label} prep shop did not preview +2 route prize: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(primaryIndex, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningRoutePrizeCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
     assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtMainKey === route.mainKey, `${route.label} primary buy did not mark ${route.mainKey}`);
     assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} primary buy did not record bought pirate id`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterPrizeMainKey === route.mainKey && G.openingRouteCounterPrizePirateId === bought.id, `${route.label} prep buy did not record prize marker`);
+    assertOpeningRoutePrizeCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), `${route.label} prep buy missed Top deck Watch`);
+    assertOpeningRoutePrizeCheck((bought.might || 0) === 1 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} prep buy upgrades wrong: ${JSON.stringify(bought)}`);
 
     const cache = routeCache.scoutedCache;
     const baseEnthusiasm = Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
@@ -2399,12 +2464,54 @@ function runOpeningRoutePrizeChecks(runtime) {
     G.phase = 'map';
     assertOpeningRoutePrizeCheck(scene.applyMapNodeSelection(ship.id), `${route.label} ship selection failed`);
     assertOpeningRoutePrizeCheck(G.phase === 'boarding' && G.boardingCount === 1, `${route.label} did not enter Boarding 1`);
-    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} prize marker did not persist into Boarding 1`);
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterPrizePirateId === bought.id, `${route.label} prize marker did not persist into Boarding 1`);
     scene.ensureBoardingCombat();
     scene.finishBoardingCombat('loss');
-    assertOpeningRoutePrizeCheck(G.openingRouteCounterBoughtPirateId == null && G.openingRouteCounterBoughtMainKey == null, `${route.label} prize marker did not clear after Boarding 1 resolution`);
-    results.push({ name: `${route.label} bought primary records Opening Route Prize without Cache Drill skulls`, ok: true });
+    assertOpeningRoutePrizeCheck(G.openingRouteCounterPrizePirateId == null && G.openingRouteCounterPrizeMainKey == null && G.openingRouteCounterBoughtMainKey == null, `${route.label} prize marker did not clear after Boarding 1 resolution`);
+    results.push({ name: `${route.label} Opening Prep primary records Opening Route Prize without Cache Drill skulls`, ok: true });
   });
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('deckSniper');
+    G.round = 3;
+    G.boardingCount = 1;
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES.needler.cost;
+    G.shop = ['needler'];
+    const quote = scene.shopPurchaseQuote('needler');
+    assertOpeningRoutePrizeCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.openingRoutePrimary && !quote.openingRoutePrizeEligible, `post-Boarding-1 cash counter lost Top deck: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRoutePrizeCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), 'post-Boarding-1 cash scouted counter did not top-deck with Watch');
+    assertOpeningRoutePrizeCheck(!G.discard.includes(bought), 'post-Boarding-1 cash scouted counter went to discard');
+    results.push({ name: 'post-Boarding-1 cash scouted counters still Top deck and Watch', ok: true });
+  }
+
+  {
+    api.initState();
+    const G = api.getG();
+    G.mode = 'run';
+    G.map = makeScoutedCounterTestMap('deckSniper');
+    G.round = 3;
+    G.boardingCount = 1;
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 1;
+    G.openingCounterPlan = false;
+    G.enthusiasm = api.TYPES.needler.cost - 1;
+    G.shop = ['needler'];
+    const quote = scene.shopPurchaseQuote('needler');
+    assertOpeningRoutePrizeCheck(quote.canBuy && quote.counter && quote.topDeck && quote.preparedCounter && !quote.openingRoutePrimary, `post-Boarding-1 discounted counter lost Prepared Top deck: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRoutePrizeCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), 'post-Boarding-1 prepared counter did not top-deck with Watch');
+    assertOpeningRoutePrizeCheck(bought.weaponKey === 'toxinPistol', `post-Boarding-1 prepared counter missed weapon: ${JSON.stringify(bought)}`);
+    results.push({ name: 'post-Boarding-1 Full Crew scouted counters still become Prepared', ok: true });
+  }
 
   {
     const { G, pirate, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler' });
@@ -2424,6 +2531,15 @@ function runOpeningRoutePrizeChecks(runtime) {
     assertOpeningRoutePrizeCheck(G.res.gold === 2, `overlap bounty stacked above +2: ${JSON.stringify(G.res)}`);
     assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 2 && combat.ambushBounty.openingRoutePrize && combat.ambushBounty.drilled, `overlap bounty payload ${JSON.stringify(combat.ambushBounty)}`);
     results.push({ name: 'Cache Drill and Opening Route Prize overlap still pays only +2 total', ok: true });
+  }
+
+  {
+    const { G, combat } = setupBoarding({ mainKey: 'deckSniper', type: 'needler', prizeMainKey: null, prizePirateId: null });
+    scene.applyCounterAmbush(combat, { silent: true });
+    scene.finishBoardingCombat('win');
+    assertOpeningRoutePrizeCheck(G.res.gold === 1, `cash-only secured primary doubled bounty ${JSON.stringify(G.res)}`);
+    assertOpeningRoutePrizeCheck(combat.ambushBounty && combat.ambushBounty.count === 1 && !combat.ambushBounty.openingRoutePrize, `cash-only secured payload ${JSON.stringify(combat.ambushBounty)}`);
+    results.push({ name: 'cash-only secured route primary receives only normal Ambush Bounty', ok: true });
   }
 
   {
@@ -3073,6 +3189,8 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(index >= 0, `${label} ${primary} not found in shop for buy`);
     assertOpeningRouteCounterShopCheck(routeQuote.canBuy && !routeQuote.credit, `${label} ${primary} quote was not covered without credit: ${JSON.stringify(routeQuote)}`);
     assertOpeningRouteCounterShopCheck(routeQuote.counter && routeQuote.topDeck && !routeQuote.preparedCounter, `${label} ${primary} should be a watched top-deck counter without preparation: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(!routeQuote.openingCounterPrepMight && !routeQuote.openingRoutePrizeEligible, `${label} Full Crew ${primary} should not qualify for Opening Route Prize: ${JSON.stringify(routeQuote)}`);
+    assertOpeningRouteCounterShopCheck(routeQuote.counterPayoff && !routeQuote.counterPayoff.openingRoutePrize && routeQuote.counterPayoff.bountyCount === 1, `${label} Full Crew ${primary} previewed prize bounty: ${JSON.stringify(routeQuote.counterPayoff)}`);
     assertOpeningRouteCounterShopCheck(routeQuote.discount === 1 && routeQuote.effectiveCost === expectedEffective && routeQuote.spend === 1 && routeQuote.missing === expectedMissing, `${label} ${primary} economics mismatch: ${JSON.stringify(routeQuote)}`);
     assertOpeningRouteCounterShopCheck(routeQuote.fullCrewCoverage === expectedCoverage && !routeQuote.credit && routeQuote.alert === 0, `${label} ${primary} coverage mismatch: ${JSON.stringify(routeQuote)}`);
     assertOpeningRouteCounterShopCheck(routeDirectQuote.canBuy && !routeDirectQuote.credit && routeDirectQuote.fullCrewCoverage === expectedCoverage && !routeDirectQuote.preparedCounter, `${label} sim policy quote mismatch: ${JSON.stringify(routeDirectQuote)}`);
@@ -3088,6 +3206,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
     assertOpeningRouteCounterShopCheck(!covered.weaponKey && (covered.might || 0) === 0 && (covered.tempo || 0) === 0, `${label} pre-boarding covered counter gained upgrades: ${JSON.stringify(covered)}`);
     assertOpeningRouteCounterShopCheck(!G.discard.includes(covered), `${label} covered counter also went to discard`);
     assertOpeningRouteCounterShopCheck(G.openingRouteCounterBoughtMainKey === mainKey, `${label} primary buy did not mark route counter as bought`);
+    assertOpeningRouteCounterShopCheck(G.openingRouteCounterPrizeMainKey == null && G.openingRouteCounterPrizePirateId == null, `${label} Full Crew primary buy recorded Opening Route Prize`);
     assertPostPrimaryShop(G.shop, `${label} purchase refill`);
 
     continueRefreshShopForTest(G);
@@ -3156,6 +3275,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
       assertOpeningRouteCounterShopCheck(G.enthusiasm === 1, `${label} Opening Prep ${primary} did not leave the discounted 1☠️: ${G.enthusiasm}`);
     assertOpeningRouteCounterShopCheck(G.openingCounterPlan === false, `${label} Opening Prep was not consumed`);
     assertOpeningRouteCounterShopCheck(G.openingRouteCounterBoughtMainKey === mainKey, `${label} Opening Prep primary buy did not mark route counter as bought`);
+    assertOpeningRouteCounterShopCheck(G.openingRouteCounterPrizeMainKey === mainKey && G.openingRouteCounterPrizePirateId === bought.id, `${label} Opening Prep primary buy did not mark Opening Route Prize`);
     assertOpeningRouteCounterShopCheck((bought.might || 0) === 1 && !bought.weaponKey && (bought.tempo || 0) === 0, `${label} Opening Prep ${primary} upgrades wrong: ${JSON.stringify(bought)}`);
     assertOpeningRouteCounterShopCheck(G.deck[G.deck.length - 1] === bought && (G.counterWatchIds || []).includes(bought.id), `${label} Opening Prep ${primary} missed top-deck Watch`);
     results.push({ name: `${label} primary route counter consumes Opening Counter Prep for +1 Might, top deck, and Watch`, ok: true, quote });
@@ -3819,13 +3939,13 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
     const endLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(0));
     const partialLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(1));
     const fullLine = scene.formatSendingPlanLine(scene.sendingPlanProjection(2, { includePortDrill: true }));
-    assertCounterRecruitsReportEarlyCheck(endLine.includes('top deck') && !endLine.includes('prepared'), `End-now plan should top-deck without prepared: ${endLine}`);
-      assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Prep') && partialLine.includes('Opening Prep -1☠️ +💪') && partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should expose Opening Counter Prep discount and Might: ${partialLine}`);
+    assertCounterRecruitsReportEarlyCheck(!endLine.includes('top deck') && !endLine.includes('Opening Prep') && !endLine.includes('prepared'), `End-now cash plan should discard without setup perks: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(partialLine.includes('Opening Counter Prep') && partialLine.includes('Opening Prep -1☠️ +💪') && partialLine.includes('top deck') && !partialLine.includes('prepared'), `partial plan should expose Opening Counter Prep discount and Might: ${partialLine}`);
     assertCounterRecruitsReportEarlyCheck(fullLine.includes('Full Crew -1☠️') && !fullLine.includes('prepared') && fullLine.includes('top deck'), `pre-boarding full-send plan should top-deck without preparation: ${fullLine}`);
-    assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+2🪨'), `End-now plan missing unprepared route-prize payoff: ${endLine}`);
+    assertCounterRecruitsReportEarlyCheck(endLine.includes('Vs Powder Bomber') && endLine.includes('Ambush 3') && endLine.includes('cut 1 guard') && endLine.includes('+🪨') && !endLine.includes('+2🪨'), `End-now cash plan should show normal bounty only: ${endLine}`);
     assertCounterRecruitsReportEarlyCheck(partialLine.includes('Vs Powder Bomber') && partialLine.includes('Ambush 5') && partialLine.includes('cut 2 guards') && partialLine.includes('+2🪨'), `partial plan missing Opening Prep route-prize payoff: ${partialLine}`);
-    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 3') && fullLine.includes('cut 1 guard') && fullLine.includes('+2🪨'), `full-send plan should show route-prize payoff before Boarding 1: ${fullLine}`);
-    results.push({ name: 'sending plan separates end-now and full-send watched counters from Opening Counter Prep Might before Boarding 1', ok: true, endLine, partialLine, fullLine });
+    assertCounterRecruitsReportEarlyCheck(fullLine.includes('Vs Powder Bomber') && fullLine.includes('Ambush 3') && fullLine.includes('cut 1 guard') && fullLine.includes('+🪨') && !fullLine.includes('+2🪨'), `full-send plan should show normal watched bounty before Boarding 1: ${fullLine}`);
+    results.push({ name: 'sending plan separates cash discard, Opening Prep prize, and Full Crew watched counters before Boarding 1', ok: true, endLine, partialLine, fullLine });
   }
 
   {
@@ -3874,24 +3994,24 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
   }
 
   {
-    const { G, oldTop } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
-    const quote = scene.shopPurchaseQuote('sawbones');
+    const { G, oldTop } = setupPurchase({ type: 'needler', enthusiasm: 3, map: makeScoutedCounterTestMap('shellback') });
+    const quote = scene.shopPurchaseQuote('needler');
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.counter && quote.topDeck && !quote.openingFullCrewReport && !quote.preparedCounter, `eligible quote was ${JSON.stringify(quote)}`);
-    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 3 && quote.counterPayoff.guardsRemoved === 1 && quote.counterPayoff.bountyRes === 'stone', `eligible quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
+    assertCounterRecruitsReportEarlyCheck(quote.counterPayoff && quote.counterPayoff.damage === 3 && quote.counterPayoff.guardsRemoved === 1 && quote.counterPayoff.bountyRes === 'wood', `eligible quote payoff mismatch: ${JSON.stringify(quote.counterPayoff)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
-    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'sawbones', 'eligible counter buy failed');
+    assertCounterRecruitsReportEarlyCheck(bought && bought.type === 'needler', 'eligible counter buy failed');
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'eligible counter was not placed on top of deck');
     assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'eligible top-deck counter did not gain Counter Watch');
-    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-discount Sawbones was prepared with ${bought.weaponKey}`);
+    assertCounterRecruitsReportEarlyCheck(!bought.weaponKey, `no-discount Needler was prepared with ${bought.weaponKey}`);
     assertCounterRecruitsReportEarlyCheck(!G.discard.includes(bought), 'eligible counter also appeared in discard');
     const drawn = api.drawCards(1)[0];
     assertCounterRecruitsReportEarlyCheck(drawn === bought, 'next draw did not return the bought counter');
     assertCounterRecruitsReportEarlyCheck(!oldTop || G.deck[G.deck.length - 1] === oldTop, 'older deck card did not remain below bought counter');
-    results.push({ name: 'eligible nearby scouted counter top-decks and draws first without discount preparation', ok: true });
+    results.push({ name: 'eligible nearby non-primary scouted counter top-decks and draws first without discount preparation', ok: true });
   }
 
   {
-    const { G } = setupPurchase({ type: 'sawbones', enthusiasm: 3 });
+    const { G } = setupPurchase({ type: 'needler', enthusiasm: 3, map: makeScoutedCounterTestMap('shellback') });
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck((G.counterWatchIds || []).includes(bought.id), 'Counter Watch setup did not mark bought counter');
     prepareNextRoundForSim(api, scene);
@@ -4107,11 +4227,12 @@ function runCounterRecruitsReportEarlyChecks(runtime) {
 
   {
     const { G } = setupPurchase({
-      type: 'sawbones',
+      type: 'needler',
+      map: makeScoutedCounterTestMap('shellback'),
       enthusiasm: 1,
       boardingAlert: 1,
     });
-    const quote = scene.shopPurchaseQuote('sawbones');
+    const quote = scene.shopPurchaseQuote('needler');
     assertCounterRecruitsReportEarlyCheck(quote.canBuy && quote.credit && quote.topDeck && !quote.preparedCounter && quote.alert === 2, `credit quote was ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertCounterRecruitsReportEarlyCheck(G.deck[G.deck.length - 1] === bought, 'credit counter was not placed on top of deck');
