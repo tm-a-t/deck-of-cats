@@ -2544,6 +2544,7 @@ class GameScene extends Phaser.Scene {
     if (merged.maxHp == null || ((overrides || {}).hp != null && (overrides || {}).maxHp == null)) {
       merged.maxHp = merged.hp;
     }
+    merged.alertGuard = !!(merged.alertGuard || String(merged.id || '').startsWith('alertGuard_'));
     return merged;
   }
 
@@ -2645,10 +2646,18 @@ class GameScene extends Phaser.Scene {
       .filter(Boolean);
   }
 
-  boardingAlertGuardPlunder(guardCount) {
+  boardingAlertGuardPlunder(guardCount, opts = {}) {
     const plunder = { wood: 0, stone: 0, gold: 0 };
+    const removedKeys = Array.isArray(opts.removedKeys)
+      ? opts.removedKeys.map((key) => String(key || '')).filter(Boolean)
+      : [];
     this.boardingAlertGuardArchetypes(guardCount).forEach((archetype) => {
       if (!archetype) return;
+      const removedIdx = removedKeys.indexOf(archetype.key);
+      if (removedIdx >= 0) {
+        removedKeys.splice(removedIdx, 1);
+        return;
+      }
       if (archetype.key === 'cabinBoy') plunder.wood += 1;
       if (archetype.key === 'bilgeRat') plunder.stone += 1;
     });
@@ -2673,7 +2682,9 @@ class GameScene extends Phaser.Scene {
     if (this.isBattleTest()) return null;
 
     const guardCount = Math.max(0, Math.min(3, Math.floor(Number(combat.boardingAlertGuards) || 0)));
-    const plunder = this.boardingAlertGuardPlunder(guardCount);
+    const removedKeys = this.counterAmbushRemovedAlertGuardKeys(combat);
+    const plunder = this.boardingAlertGuardPlunder(guardCount, { removedKeys });
+    if (removedKeys.length) plunder.removedByCounterAmbush = removedKeys;
     combat.alertGuardPlunder = plunder;
     if (!plunder.total) return plunder;
 
@@ -2835,6 +2846,43 @@ class GameScene extends Phaser.Scene {
     ) || null;
   }
 
+  isBoardingAlertGuardFighter(fighter) {
+    if (!fighter || fighter.side !== 'enemy') return false;
+    return !!fighter.alertGuard || String(fighter.id || '').startsWith('alertGuard_');
+  }
+
+  findCounterAmbushAlertGuard(combat = G.combat) {
+    if (!combat) return null;
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter && fighter.alive && this.isBoardingAlertGuardFighter(fighter)
+    ) || null;
+  }
+
+  counterAmbushRemovedAlertGuardKeys(combat = G.combat) {
+    const removed = combat && combat.counterAmbush && Array.isArray(combat.counterAmbush.removedAlertGuards)
+      ? combat.counterAmbush.removedAlertGuards
+      : [];
+    return removed
+      .map((guard) => guard && (guard.key || guard.targetKey || this.combatEnemyArchetypeKey(guard)))
+      .map((key) => String(key || ''))
+      .filter(Boolean);
+  }
+
+  removeCounterAmbushAlertGuard(combat = G.combat, deathPositions = []) {
+    const guard = this.findCounterAmbushAlertGuard(combat);
+    if (!guard) return null;
+
+    const key = this.combatEnemyArchetypeKey(guard);
+    const point = this.combatWorldPoint(guard);
+    if (!this.defeatCombatFighter(guard, deathPositions)) return null;
+    return {
+      id: guard.id,
+      key,
+      name: guard.name || (this.combatArchetypeByKey(key) || {}).name || key,
+      point,
+    };
+  }
+
   applyCounterAmbush(combat = G.combat, opts = {}) {
     if (!combat || combat.counterAmbushResolved) return null;
     combat.counterAmbushResolved = true;
@@ -2859,6 +2907,8 @@ class GameScene extends Phaser.Scene {
       defeatedTargets.push(target);
     }
     const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, this.time.now, deathPositions);
+    const removedAlertGuard = this.removeCounterAmbushAlertGuard(combat, deathPositions);
+    const removedAlertGuards = removedAlertGuard ? [removedAlertGuard] : [];
 
     const pirate = this.counterAmbushPirateForFighter(ambusher);
     const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
@@ -2878,6 +2928,8 @@ class GameScene extends Phaser.Scene {
       beforeHp,
       afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
       defeated: !target.alive,
+      removedAlertGuardCount: removedAlertGuards.length,
+      removedAlertGuards,
       blastEvents,
       deathPositions,
     };
@@ -2893,6 +2945,11 @@ class GameScene extends Phaser.Scene {
     const targetPoint = target ? this.combatWorldPoint(target) : { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
     this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, 'Counter Ambush!', '#ffd54f', 700);
     this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
+    const removedGuard = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards[0] : null;
+    if (removedGuard) {
+      const point = removedGuard.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+      this.effectText(point.x, point.y - 64 * L.k, 'Alarm cut!', '#7bdff2', 620);
+    }
     this.showCombatAftermath(result.blastEvents || [], result.deathPositions || []);
   }
 
@@ -3330,6 +3387,7 @@ class GameScene extends Phaser.Scene {
       triggerKey: enemy.triggerKey || null,
       triggerValue: enemy.triggerValue ? { ...enemy.triggerValue } : null,
       summary: enemy.summary || null,
+      alertGuard: !!(enemy.alertGuard || String(enemy.id || '').startsWith('alertGuard_')),
       poison: 0,
       wounds: 0,
     };

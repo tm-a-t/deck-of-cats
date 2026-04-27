@@ -166,7 +166,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - Alert `1–2` therefore pays `+1🪵`;
   - Alert `3–5` pays `+1🪵 +1🪨`;
   - Alert `6+` pays `+2🪵 +1🪨`.
-- Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved.
+- Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved. Alert guards removed by `Counter Ambush` grant no plunder.
 - After a regular-run boarding is won, before the winning hand is discarded, the frontmost then leftmost surviving player fighter in the final combat hand gains `+1 💪 Might` as a `Boarding Trophy`.
 - `Boarding Trophy` triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no player fighter survives.
 - If a boarding is won by a reinforcement hand, only a survivor from that final winning combat hand can receive the `Boarding Trophy`.
@@ -185,6 +185,8 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - In regular-run boarding only, `Counter Ambush` checks once when `Fight!` starts for the opening combat hand.
 - If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
 - `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
+- After damaging and wounding the main scouted enemy, `Counter Ambush` also removes the frontmost then leftmost living `Boarding Alert` guard if any are present.
+- A guard removed by `Counter Ambush` does not fight and is excluded from Alert guard plunder on a win; remaining Alert guards still grant their normal plunder.
 - `Counter Ambush` does not count as an attack, does not trigger weapon on-hit effects, does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
 - All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
 - During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.

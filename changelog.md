@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-012701 — rev 14f48e0
+
+- Gameplay: true - Counter Ambush now cuts the alarm: after a front-row matching counter wounds and damages the scouted main enemy, it removes the frontmost then leftmost living Boarding Alert guard before combat starts, and that removed guard is excluded from win plunder while remaining guards still pay normally. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-alert-tiers --json`, `node sim/fast-sim.js --check-boarding-trophy --json`, `node sim/fast-sim.js --check-counter-trophy --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-012701.log`.
+
 ## 2026-04-27 — run 20260427-005931 — rev 5d598df
 
 - Gameplay: true - Added Counter Edge for scouted boardings: during regular-run boarding combat, ready pirate fighters whose type counters the ship's main scouted enemy get `+1` temporary damage for that boarding, including reinforcement hands, without mutating Might/Tempo or buff-count weapon thresholds; matching fighters show the edge in combat details and on their combat mini-card. Validated with JS syntax checks, `node sim/fast-sim.js --check-counter-edge --json`, `node sim/fast-sim.js --check-counter-trophy --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-005931.log`.
