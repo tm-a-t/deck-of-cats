@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-182719 — rev 36c6581 — build 0.1.0
+
+- Gameplay: true - Made Opening Route Muster immediate: selecting a layer-0 opening route now swaps the matching starter counter into hand slot 0 from hand, draw pile, or discard while preserving card counts, keeping the existing next-Shop return marker and Counter Watch, and leaving Scout Pay, Cache Drill, Full Crew, Opening Prep, Battle Test, and Boarding 2+ behavior unchanged. Validated with JS syntax checks, targeted opening route muster, opening deckhand, scout-pay, route shop, scouted cache, Opening Counter Prep, Full Crew coverage, Alarm Rush, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-182719.log`.
+
 ## 2026-04-27 — run 20260427-181422 — rev c3c454b — build 0.1.0
 
 - Gameplay: true - Replaced the credit-only Dockside rush gate with Cache-Claimed Alarm Rush: a pre-Boarding-1 route-primary counter now top-decks, gains Counter Watch, and secures the route when its route cache was claimed this Shop round and post-purchase pending Alert is 4+, including affordable cash buys and Dockside Credit buys, while unclaimed/zero-send caches, below-threshold Alert, setup-owned Full Crew/Opening Prep paths, non-primary buys, Battle Test, and Boarding 2+ stay unchanged. Validated with JS syntax checks, targeted alarm-rushed route counter, opening route shop, opening deckhand, scouted cache, Opening Counter Prep, Full Crew coverage, opening route prize, and Counter Ambush sim checks, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-181422.log`.

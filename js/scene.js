@@ -1094,7 +1094,7 @@ class GameScene extends Phaser.Scene {
       && Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0;
   }
 
-  findOpeningRouteMusterPirate(mainKey) {
+  findOpeningRouteMusterEntry(mainKey) {
     if (!this.openingRouteMusterStillEligible()
       || !mainKey
       || typeof openingDeckhandCounterTypes !== 'function') {
@@ -1107,14 +1107,51 @@ class GameScene extends Phaser.Scene {
     const ownedIds = new Set((G.allCrew || [])
       .filter(Boolean)
       .map(pirate => pirate.id));
-    const pick = (pirates) => (Array.isArray(pirates) ? pirates : [])
-      .find(pirate =>
+    const pick = (pirates, zone) => {
+      const list = Array.isArray(pirates) ? pirates : [];
+      const index = list.findIndex(pirate =>
         pirate
         && ownedIds.has(pirate.id)
         && starterSet.has(pirate.type)
-      ) || null;
+      );
+      return index >= 0 ? { pirate: list[index], zone, index } : null;
+    };
 
-    return pick(G.hand) || pick(G.deck) || pick(G.discard) || pick(G.allCrew);
+    return pick(G.hand, 'hand') || pick(G.deck, 'deck') || pick(G.discard, 'discard');
+  }
+
+  findOpeningRouteMusterPirate(mainKey) {
+    const entry = this.findOpeningRouteMusterEntry(mainKey);
+    return entry ? entry.pirate : null;
+  }
+
+  moveOpeningRouteMusterPirateToHand(entry) {
+    if (!entry || !entry.pirate || entry.pirate.id == null) return false;
+    if (!this.pirateStillInCrew(entry.pirate)) return false;
+    if (!Array.isArray(G.hand) || G.hand.length === 0 || !G.hand[0]) return false;
+
+    const pirateId = entry.pirate.id;
+    const handIndex = G.hand.findIndex(pirate => pirate && pirate.id === pirateId);
+    if (handIndex >= 0) {
+      if (handIndex !== 0) {
+        const displaced = G.hand[0];
+        G.hand[0] = G.hand[handIndex];
+        G.hand[handIndex] = displaced;
+      }
+      return true;
+    }
+
+    const source = entry.zone === 'deck'
+      ? G.deck
+      : (entry.zone === 'discard' ? G.discard : null);
+    if (!Array.isArray(source)) return false;
+    const sourceIndex = source.findIndex(pirate => pirate && pirate.id === pirateId);
+    if (sourceIndex < 0) return false;
+
+    const displaced = G.hand[0];
+    G.hand[0] = source[sourceIndex];
+    source[sourceIndex] = displaced;
+    return true;
   }
 
   markOpeningRouteMuster(mainKey) {
@@ -1125,8 +1162,10 @@ class GameScene extends Phaser.Scene {
       return null;
     }
     G.openingRouteMusterUsed = true;
-    const pirate = this.findOpeningRouteMusterPirate(mainKey);
+    const entry = this.findOpeningRouteMusterEntry(mainKey);
+    const pirate = entry && entry.pirate;
     if (!pirate || pirate.id == null) return null;
+    this.moveOpeningRouteMusterPirateToHand(entry);
     G.openingRouteMuster = {
       pirateId: pirate.id,
       mainKey,
@@ -1502,6 +1541,7 @@ class GameScene extends Phaser.Scene {
 
     if (!this.isBattleTest()
       && G.boardingCount === 0
+      && layerIdx === 0
       && typeof applyOpeningRouteToFirstShip === 'function') {
       const route = applyOpeningRouteToFirstShip(map, node, layerIdx);
       if (route && route.mainKey) this.markOpeningRouteMuster(route.mainKey);

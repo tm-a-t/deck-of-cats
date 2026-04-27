@@ -4878,9 +4878,9 @@ function runOpeningRouteMusterChecks(runtime) {
   const scene = makeSimScene(api);
   const results = [];
   const routes = [
-    { label: 'Forest/Shellback', islandIdx: 0, mainKey: 'shellback', starterType: 'lumberjack', nonmatchingType: 'miner', res: 'wood' },
-    { label: 'Rocky/Powder Bomber', islandIdx: 1, mainKey: 'powderBomber', starterType: 'miner', nonmatchingType: 'lumberjack', res: 'stone' },
-    { label: 'Port/Deck Sniper', islandIdx: 3, mainKey: 'deckSniper', starterType: 'armsman', nonmatchingType: 'miner', res: 'gold' },
+    { label: 'Forest/Shellback', islandIdx: 0, mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', res: 'wood' },
+    { label: 'Rocky/Powder Bomber', islandIdx: 1, mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', res: 'stone' },
+    { label: 'Port/Deck Sniper', islandIdx: 3, mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', res: 'gold' },
   ];
   const starterName = (type) => (api.TYPES[type] && api.TYPES[type].name) || type;
 
@@ -4928,12 +4928,19 @@ function runOpeningRouteMusterChecks(runtime) {
     const starter = makePirate(9300, route.starterType, opts.starter || {});
     const deckStarter = makePirate(9301, route.starterType);
     const fillerA = makePirate(9302, route.nonmatchingType);
-    const fillerB = makePirate(9303, 'armsman');
+    const fillerB = makePirate(9303, route.starterType === 'armsman' ? 'lumberjack' : 'armsman');
     const fillerC = makePirate(9304, 'herald');
     const fillerD = makePirate(9305, 'trainer');
-    const hand = opts.handHasStarter === false
+    let hand = opts.handHasStarter === false
       ? [fillerA, fillerB, fillerC]
       : [starter, fillerA, fillerB];
+    if (opts.handHasStarter !== false && opts.starterHandIndex != null) {
+      const fillers = [fillerA, fillerB, fillerC];
+      const starterIndex = Math.max(0, Math.min(fillers.length, Math.floor(Number(opts.starterHandIndex) || 0)));
+      hand = fillers.slice();
+      hand.splice(starterIndex, 0, starter);
+      hand = hand.slice(0, 3);
+    }
     const deck = opts.deckHasStarter === false ? [fillerD] : [deckStarter, fillerD];
     const discard = opts.discardHasStarter ? [starter] : [];
     const all = [starter, deckStarter, fillerA, fillerB, fillerC, fillerD];
@@ -4970,17 +4977,40 @@ function runOpeningRouteMusterChecks(runtime) {
     assertOpeningRouteMusterCheck(selected, `${route.label} route selection failed`);
     assertOpeningRouteMusterCheck(marker && marker.pirateId === starter.id, `${route.label} did not mark the visible starter: ${JSON.stringify(marker)}`);
     assertOpeningRouteMusterCheck(marker.mainKey === route.mainKey && marker.type === route.starterType, `${route.label} marker mismatch: ${JSON.stringify(marker)}`);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, `${route.label} did not immediately muster starter to hand[0]`);
+    assertOpeningRouteMusterCheck(zoneCount(G, starter) === 1, `${route.label} immediate muster duplicated starter ${zoneCount(G, starter)} times`);
     assertOpeningRouteMusterCheck((starter.might || 0) === 0 && !starter.weaponKey && (starter.tempo || 0) === 0, `${route.label} starter was upgraded on mark`);
     assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 1 && G.counterWatchIds[0] === starter.id, `${route.label} did not grant exactly one starter Watch: ${JSON.stringify(G.counterWatchIds)}`);
     assertOpeningRouteMusterCheck(scene.nextShipIntelText().includes(`Route counter: ${starterName(route.starterType)} · Watch`), `${route.label} intel did not expose route Watch: ${scene.nextShipIntelText()}`);
-    results.push({ name: `${route.label} marks one visible matching starter for Opening Route Muster`, ok: true, marker });
+    G.phase = 'shopping';
+    prepareNextRoundForSim(api, scene);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, `${route.label} mustered starter did not return first after Shop Continue`);
+    assertOpeningRouteMusterCheck(zoneCount(G, starter) === 1, `${route.label} starter duplicated after Shop Continue ${zoneCount(G, starter)} times`);
+    assertOpeningRouteMusterCheck(!G.openingRouteMuster, `${route.label} marker did not clear after Shop Continue`);
+    results.push({ name: `${route.label} immediately musters one visible matching starter to hand[0]`, ok: true, marker });
   });
 
   {
+    const route = routes[2];
+    const { G, starter, fillerA } = setupRouteSelection(route, { starterHandIndex: 2 });
+    assertOpeningRouteMusterCheck(G.openingRouteMuster && G.openingRouteMuster.pirateId === starter.id, `hand reorder marker ${JSON.stringify(G.openingRouteMuster)}`);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, 'in-hand starter was not swapped to hand[0]');
+    assertOpeningRouteMusterCheck(G.hand[2] === fillerA, 'slot-0 pirate was not swapped into the starter hand slot');
+    [starter, fillerA].forEach((pirate) => {
+      assertOpeningRouteMusterCheck(zoneCount(G, pirate) === 1, `hand swap duplicated ${pirate.id}: ${zoneCount(G, pirate)}`);
+    });
+    results.push({ name: 'Opening Route Muster swaps an in-hand matching starter to hand[0] without duplication', ok: true });
+  }
+
+  {
     const route = routes[0];
-    const { G, deckStarter } = setupRouteSelection(route, { handHasStarter: false });
+    const { G, deckStarter, fillerA } = setupRouteSelection(route, { handHasStarter: false });
     assertOpeningRouteMusterCheck(G.openingRouteMuster && G.openingRouteMuster.pirateId === deckStarter.id, `deck fallback marker ${JSON.stringify(G.openingRouteMuster)}`);
     assertOpeningRouteMusterCheck((G.counterWatchIds || []).length === 1 && G.counterWatchIds[0] === deckStarter.id, `deck fallback Watch ${JSON.stringify(G.counterWatchIds)}`);
+    assertOpeningRouteMusterCheck(G.hand[0] === deckStarter, 'deck fallback starter was not mustered immediately to hand[0]');
+    assertOpeningRouteMusterCheck(G.deck[0] === fillerA, 'displaced hand[0] pirate was not placed into the starter deck slot');
+    assertOpeningRouteMusterCheck(zoneCount(G, deckStarter) === 1, `deck fallback immediate starter duplicated ${zoneCount(G, deckStarter)} times`);
+    assertOpeningRouteMusterCheck(zoneCount(G, fillerA) === 1, `deck fallback displaced pirate duplicated ${zoneCount(G, fillerA)} times`);
     G.phase = 'shopping';
     prepareNextRoundForSim(api, scene);
     assertOpeningRouteMusterCheck(G.hand[0] === deckStarter, 'deck fallback starter was not drawn first');
@@ -4988,6 +5018,53 @@ function runOpeningRouteMusterChecks(runtime) {
     assertOpeningRouteMusterCheck((G.openingRouteMuster || null) === null, 'deck fallback marker was not cleared');
     results.push({ name: 'Opening Route Muster can pull the matching starter from the draw pile without duplication', ok: true });
   }
+
+  routes.forEach((route) => {
+    const { G } = setupRouteSelection(route, { handHasStarter: false });
+    const starter = G.hand[0];
+    const maxSend = scene.maxSend();
+    assertOpeningRouteMusterCheck(starter && starter.type === route.starterType, `${route.label} did not muster deck starter for full-send line`);
+    assertOpeningRouteMusterCheck(maxSend > 0 && G.hand.length >= maxSend, `${route.label} full-send setup lacks hand size ${G.hand.length}/${maxSend}`);
+    for (let handIdx = 0; handIdx < maxSend; handIdx++) {
+      const pirate = G.hand[handIdx];
+      G.sent.push(handIdx);
+      scene.resolveIsland(pirate);
+      const scoutPay = applyOpeningDeckhandScoutPayForSim(scene, pirate, { sentSlot: handIdx });
+      const cacheClaim = handIdx === 0 ? scene.claimScoutedCounterCache(pirate, { silent: true }) : null;
+      if (handIdx === 0) {
+        assertOpeningRouteMusterCheck(scoutPay && scoutPay.applied, `${route.label} mustered starter missed Scout Pay`);
+        assertOpeningRouteMusterCheck(cacheClaim && cacheClaim.drill && cacheClaim.drill.applied, `${route.label} mustered starter missed Cache Drill`);
+      } else {
+        assertOpeningRouteMusterCheck(!scoutPay, `${route.label} non-first pirate received Scout Pay`);
+      }
+    }
+    applyPortDrillForSim(scene);
+    updateFullCrewDiscountForSim(scene, G);
+    updateOpeningCounterPlanForSim(scene, G);
+    applyShipWagesForSim(scene, G);
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shopCreditUsed = false;
+    G.shop = api.normalizeOpeningRouteShop(
+      [route.primary, 'drummer', 'herald', 'trainer'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningRouteMusterCheck(G.fullCrewDiscount === 1, `${route.label} full-send did not earn Full Crew Discount`);
+    assertOpeningRouteMusterCheck(G.openingCounterPlan === true, `${route.label} starter Cache Drill did not arm Opening Counter Prep`);
+    assertOpeningRouteMusterCheck(quote.canBuy && !quote.credit && quote.topDeck && quote.openingCounterPrepMight, `${route.label} route primary not affordable as prepped top-deck counter: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningRouteMusterCheck(bought && bought.type === route.primary, `${route.label} route primary buy failed`);
+    assertOpeningRouteMusterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} route primary did not top-deck`);
+    assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} route primary did not gain Counter Watch`);
+    assertOpeningRouteMusterCheck((bought.might || 0) === 1, `${route.label} prepped route primary missed +Might`);
+    [starter, bought].forEach((pirate) => {
+      assertOpeningRouteMusterCheck(zoneCount(G, pirate) === 1, `${route.label} full-send line duplicated ${pirate.id}: ${zoneCount(G, pirate)}`);
+    });
+    results.push({ name: `${route.label} mustered-starter full-send affords a prepped watched route-primary counter`, ok: true, quote });
+  });
 
   {
     const route = routes[0];
@@ -5037,12 +5114,16 @@ function runOpeningRouteMusterChecks(runtime) {
 
   {
     const route = routes[1];
-    const { G, starter } = setupRouteSelection(route, {
+    const { G, starter, fillerA } = setupRouteSelection(route, {
       handHasStarter: false,
       deckHasStarter: false,
       discardHasStarter: true,
     });
     assertOpeningRouteMusterCheck(G.openingRouteMuster && G.openingRouteMuster.pirateId === starter.id, `discard fallback marker ${JSON.stringify(G.openingRouteMuster)}`);
+    assertOpeningRouteMusterCheck(G.hand[0] === starter, 'discard fallback starter was not mustered immediately to hand[0]');
+    assertOpeningRouteMusterCheck(G.discard[0] === fillerA, 'displaced hand[0] pirate was not placed into the starter discard slot');
+    assertOpeningRouteMusterCheck(zoneCount(G, starter) === 1, `discard fallback immediate starter duplicated ${zoneCount(G, starter)} times`);
+    assertOpeningRouteMusterCheck(zoneCount(G, fillerA) === 1, `discard fallback displaced pirate duplicated ${zoneCount(G, fillerA)} times`);
     G.phase = 'shopping';
     prepareNextRoundForSim(api, scene);
     assertOpeningRouteMusterCheck(G.hand[0] === starter, 'discard fallback starter was not drawn first');
