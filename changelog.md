@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-212947 — rev 2149bca — build 0.1.0
+
+- Gameplay: true - Added Route Sidekick Report: Opening Side Prep side-offer buys now mark the bought pirate as the Route Sidekick, and a surviving, unwounded sidekick in the winning Boarding 1 opening hand reports into the next draw below any Counter Ambusher Report pirate. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-side-prep --json`, `node sim/fast-sim.js --check-route-sidekick-report --json`, `node sim/fast-sim.js --check-counter-ambusher-report --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-212947.log`.
+
 ## 2026-04-27 — run 20260427-212102 — rev d1bb77c — build 0.1.0
 
 - Gameplay: true - Made Boarding 1 weak support route-specific: Forest/Shellback keeps 1 `Bilge Rat` + 1 `Cabin Boy`, Rocky/Powder Bomber now brings 2 `Bilge Rat`s, and Port/Deck Sniper now brings 2 `Cabin Boy`s before any Alert guards while keeping route cache, shop, counter, and Alert rules unchanged. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-captains --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `node sim/fast-sim.js --check-opening-route-promotion --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-212102.log`.

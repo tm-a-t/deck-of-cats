@@ -876,6 +876,30 @@ class GameScene extends Phaser.Scene {
     return hadMarker;
   }
 
+  markOpeningRouteSidekick(pirate, mainKey) {
+    if (this.isBattleTest()
+      || !pirate
+      || pirate.id == null
+      || !mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || !this.pirateStillInCrew(pirate)) {
+      return false;
+    }
+    G.openingRouteSidekick = {
+      pirateId: pirate.id,
+      mainKey,
+      type: pirate.type,
+    };
+    return true;
+  }
+
+  clearOpeningRouteSidekick(pirateId = null) {
+    if (!G || !G.openingRouteSidekick) return false;
+    if (pirateId != null && G.openingRouteSidekick.pirateId !== pirateId) return false;
+    G.openingRouteSidekick = null;
+    return true;
+  }
+
   cacheDrillMusterIds() {
     if (!Array.isArray(G.cacheDrillMusterIds)) G.cacheDrillMusterIds = [];
     return G.cacheDrillMusterIds;
@@ -2969,6 +2993,7 @@ class GameScene extends Phaser.Scene {
         G.discard = G.discard.filter(p => p.id !== target.id);
         this.spendCounterWatch(target);
         this.clearOpeningRouteCounterBought(target.id);
+        this.clearOpeningRouteSidekick(target.id);
         this._sacrificedIds.add(target.id);
         return { ok: true, exileSent: true, name: TYPES[target.type].name };
       }
@@ -3018,6 +3043,7 @@ class GameScene extends Phaser.Scene {
     G.discard = G.discard.filter(p => p.id !== pirate.id);
     this.spendCounterWatch(pirate);
     this.clearOpeningRouteCounterBought(pirate.id);
+    this.clearOpeningRouteSidekick(pirate.id);
     this._sacrificedIds.add(pirate.id);
     this.time.delayedCall(400, () => {
       this.float(x, y, '💀 Lost!', '#c060ff');
@@ -3269,6 +3295,7 @@ class GameScene extends Phaser.Scene {
       G.discard = G.discard.filter(p => p.id !== pirate.id);
       this.spendCounterWatch(pirate);
       this.clearOpeningRouteCounterBought(pirate.id);
+      this.clearOpeningRouteSidekick(pirate.id);
       this._cardHand.showShipEffectOverlay(hi, shipEffectSuccessColor);
       resolveAndContinue(600);
       return;
@@ -3379,6 +3406,7 @@ class GameScene extends Phaser.Scene {
   completeRemoval(pirateId) {
     this.clearCounterWatch(pirateId);
     this.clearOpeningRouteCounterBought(pirateId);
+    this.clearOpeningRouteSidekick(pirateId);
     G.allCrew = G.allCrew.filter(p => p.id !== pirateId);
     G.deck = G.deck.filter(p => p.id !== pirateId);
     G.discard = G.discard.filter(p => p.id !== pirateId);
@@ -3479,6 +3507,9 @@ class GameScene extends Phaser.Scene {
     const sidePrepGain = quote.openingSidePrep && quote.openingSidePrepGain
       ? this.applyPersonalGainsToPirate((sidePrepTarget && sidePrepTarget.pirate) || p, [quote.openingSidePrepGain])
       : null;
+    if (quote.openingSidePrep && routeShopState && routeShopState.mainKey) {
+      this.markOpeningRouteSidekick(p, routeShopState.mainKey);
+    }
     const prepared = quote.preparedCounter
       ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
       : null;
@@ -4599,6 +4630,70 @@ class GameScene extends Phaser.Scene {
 
   showOpeningAmbusherReport(report) {
     return this.showCounterAmbusherReport(report);
+  }
+
+  routeSidekickReportEligibility(combat = G.combat, result = null) {
+    if (!combat || this.isBattleTest() || G.phase !== 'boarding') return null;
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const marker = G.openingRouteSidekick || null;
+    if (!marker || marker.pirateId == null || !marker.mainKey) return null;
+
+    const pirate = (G.allCrew || []).find((entry) => entry && entry.id === marker.pirateId);
+    if (!pirate || !this.pirateStillInCrew(pirate) || this.pirateWounded(pirate)) return null;
+    if (marker.type && pirate.type !== marker.type) return null;
+
+    const inFinalHand = (G.hand || []).some((entry) => entry && entry.id === pirate.id);
+    if (!inFinalHand) return null;
+
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === pirate.id
+    );
+    if (!survivor) return null;
+
+    const def = TYPES[pirate.type] || {};
+    return {
+      pirateId: pirate.id,
+      type: pirate.type,
+      name: def.name || pirate.type || 'Pirate',
+      mainKey: marker.mainKey,
+    };
+  }
+
+  markRouteSidekickReport(combat = G.combat, result = null) {
+    if (!combat) return null;
+    if (combat.routeSidekickReport) return combat.routeSidekickReport;
+    const report = this.routeSidekickReportEligibility(combat, result);
+    if (!report) return null;
+    combat.routeSidekickReport = report;
+    return report;
+  }
+
+  consumeRouteSidekickReportPirates(combat = G.combat, skipIds = new Set()) {
+    if (!combat) return [];
+    if (!combat.routeSidekickReport) this.markRouteSidekickReport(combat, combat.result);
+    const marker = combat.routeSidekickReport || null;
+    combat.routeSidekickReportConsumed = true;
+    if (!marker || this.isBattleTest() || marker.pirateId == null) return [];
+    if (skipIds && typeof skipIds.has === 'function' && skipIds.has(marker.pirateId)) return [];
+
+    const pirate = (G.allCrew || []).find((entry) => entry && entry.id === marker.pirateId);
+    if (!pirate || !this.pirateStillInCrew(pirate) || this.pirateWounded(pirate)) return [];
+    if (!(G.hand || []).some((entry) => entry && entry.id === pirate.id)) return [];
+    return [pirate];
+  }
+
+  placeRouteSidekickReportPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  showRouteSidekickReport(report) {
+    if (!report || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 244 * L.k, `${report.name} sidekick reports`, '#ffd166', 760);
   }
 
   grantBoardingTrophy(combat = G.combat) {
@@ -6259,7 +6354,9 @@ class GameScene extends Phaser.Scene {
     const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
     const routePromotion = result === 'win' ? this.grantOpeningRoutePromotion(combat, result) : null;
     const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
+    const routeSidekickReport = result === 'win' ? this.markRouteSidekickReport(combat, result) : null;
     this.clearCacheDrillBountyMarks();
+    this.clearOpeningRouteSidekick();
     if (this.currentBoardingNumber() === 1) this.clearOpeningRouteCounterBought();
     combat.mode = 'resolved';
     combat.result = result;
@@ -6273,6 +6370,7 @@ class GameScene extends Phaser.Scene {
     this.showAmbushBounty(ambushBounty);
     this.showOpeningRoutePromotion(routePromotion);
     this.showCounterAmbusherReport(ambusherReport);
+    this.showRouteSidekickReport(routeSidekickReport);
   }
 
   continueFromResolvedBoarding() {
@@ -6289,8 +6387,13 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const reportPirates = this.consumeCounterAmbusherReportPirates(combat);
-    const reportIds = new Set(reportPirates.map((pirate) => pirate.id));
+    const ambusherReportPirates = this.consumeCounterAmbusherReportPirates(combat);
+    const ambusherReportIds = new Set(ambusherReportPirates.map((pirate) => pirate.id));
+    const sidekickReportPirates = this.consumeRouteSidekickReportPirates(combat, ambusherReportIds);
+    const reportIds = new Set([
+      ...ambusherReportPirates.map((pirate) => pirate.id),
+      ...sidekickReportPirates.map((pirate) => pirate.id),
+    ]);
     const handCards = this.snapshotHandCardsForDiscard();
     const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !reportIds.has(card.id)));
     const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => reportIds.has(card.id)));
@@ -6299,7 +6402,8 @@ class GameScene extends Phaser.Scene {
     G.discard.push(...(G.hand || []).filter(pirate =>
       pirate && allCrewIds.has(pirate.id) && !reportIds.has(pirate.id)
     ));
-    this.placeCounterAmbusherReportPiratesOnDeck(reportPirates);
+    this.placeRouteSidekickReportPiratesOnDeck(sidekickReportPirates);
+    this.placeCounterAmbusherReportPiratesOnDeck(ambusherReportPirates);
     G.hand = [];
     G.sent = [];
     this._sendingToIsland.clear();
@@ -6826,6 +6930,7 @@ class GameScene extends Phaser.Scene {
         if (counterTrophy) rewardParts.push(`${counterTrophy.name} +⚡`);
         const ambusherReport = combat.counterAmbusherReport || combat.openingAmbusherReport;
         if (ambusherReport) rewardParts.push(`${ambusherReport.name} reports next`);
+        if (combat.routeSidekickReport) rewardParts.push(`${combat.routeSidekickReport.name} sidekick reports`);
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
           line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',
