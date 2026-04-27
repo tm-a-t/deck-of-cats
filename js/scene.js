@@ -583,61 +583,15 @@ class GameScene extends Phaser.Scene {
     if (!G) return false;
     if (pirateId != null) {
       const hadBoughtPirate = G.openingRouteCounterBoughtPirateId === pirateId;
-      const hadPrize = this.clearOpeningRouteCounterPrize(pirateId);
       if (hadBoughtPirate) G.openingRouteCounterBoughtPirateId = null;
-      return hadBoughtPirate || hadPrize;
+      return hadBoughtPirate;
     }
 
     const hadMarker = !!G.openingRouteCounterBoughtMainKey
-      || G.openingRouteCounterBoughtPirateId != null
-      || !!G.openingRouteCounterPrizeMainKey
-      || G.openingRouteCounterPrizePirateId != null;
+      || G.openingRouteCounterBoughtPirateId != null;
     G.openingRouteCounterBoughtMainKey = null;
     G.openingRouteCounterBoughtPirateId = null;
-    G.openingRouteCounterPrizeMainKey = null;
-    G.openingRouteCounterPrizePirateId = null;
     return hadMarker;
-  }
-
-  clearOpeningRouteCounterPrize(pirateId = null) {
-    if (!G) return false;
-    if (pirateId != null && G.openingRouteCounterPrizePirateId !== pirateId) return false;
-    const hadMarker = !!G.openingRouteCounterPrizeMainKey || G.openingRouteCounterPrizePirateId != null;
-    G.openingRouteCounterPrizeMainKey = null;
-    G.openingRouteCounterPrizePirateId = null;
-    return hadMarker;
-  }
-
-  openingRouteBoughtPrimaryPrize(mainKey, pirateId = null) {
-    if (this.isBattleTest()
-      || G.phase !== 'boarding'
-      || this.currentBoardingNumber() !== 1
-      || !mainKey
-      || G.openingRouteCounterPrizeMainKey !== mainKey
-      || G.openingRouteCounterPrizePirateId == null) {
-      return null;
-    }
-    if (pirateId != null && G.openingRouteCounterPrizePirateId !== pirateId) return null;
-
-    const markerPirateId = G.openingRouteCounterPrizePirateId;
-    const pirate = (G.allCrew || []).find(candidate => candidate && candidate.id === markerPirateId);
-    if (!pirate) {
-      this.clearOpeningRouteCounterBought(markerPirateId);
-      return null;
-    }
-
-    const expectedType = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
-      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
-      : null;
-    if (expectedType && pirate.type !== expectedType) return null;
-
-    const def = TYPES[pirate.type] || {};
-    return {
-      pirateId: markerPirateId,
-      mainKey,
-      type: pirate.type,
-      name: def.name || pirate.type || 'Pirate',
-    };
   }
 
   cacheDrillMusterIds() {
@@ -1637,8 +1591,8 @@ class GameScene extends Phaser.Scene {
     const guardText = `${guardsRemoved} guard${guardsRemoved === 1 ? '' : 's'}`;
     const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
     const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
-    const bountyCount = opts.openingRoutePrize ? 2 : 1;
-    const bountyText = bountyEmoji ? `survive win +${bountyCount > 1 ? bountyCount : ''}${bountyEmoji}` : '';
+    const bountyCount = 1;
+    const bountyText = bountyEmoji ? `survive win +${bountyEmoji}` : '';
     const line1 = `Vs ${enemyName}: Ambush ${damage}`;
     const line2 = [`cut ${guardText}`, bountyText].filter(Boolean).join(', ');
     const text = [line1, line2].filter(Boolean).join(', ');
@@ -1653,7 +1607,6 @@ class GameScene extends Phaser.Scene {
       bountyRes: bountyRes || null,
       bountyEmoji: bountyEmoji || '',
       bountyCount,
-      openingRoutePrize: !!opts.openingRoutePrize,
       armed,
       line1,
       line2,
@@ -1664,17 +1617,9 @@ class GameScene extends Phaser.Scene {
 
   counterPayoffPreviewForQuote(type, quote, opts = {}) {
     if (!quote || !quote.counter) return null;
-    const route = typeof openingRouteShopState === 'function'
-      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
-      : null;
-    const openingRoutePrize = !!(route
-      && route.primaryCounterType === type
-      && quote.openingCounterPrepMight
-      && (!opts.mainKey || route.mainKey === opts.mainKey));
     return this.counterPayoffPreview(type, {
       ...opts,
       prepared: !!(quote.preparedCounter || quote.openingCounterPrepMight),
-      openingRoutePrize,
     });
   }
 
@@ -1890,7 +1835,6 @@ class GameScene extends Phaser.Scene {
         openingCounterPrepMight: false,
         openingCounterPrepDiscount: 0,
         openingRoutePrimary: false,
-        openingRoutePrizeEligible: false,
         consumesOpeningCounterPlan: false,
         consumesOpeningCounterPrep: false,
       };
@@ -1949,7 +1893,6 @@ class GameScene extends Phaser.Scene {
       openingCounterPrepMight,
       openingCounterPrepDiscount,
       openingRoutePrimary,
-      openingRoutePrizeEligible: !!(openingRoutePrimary && openingCounterPrepMight),
       openingCommissionReport,
       openingFullCrewReport,
       consumesOpeningCounterPlan,
@@ -2911,10 +2854,6 @@ class GameScene extends Phaser.Scene {
       && routeShopState.mainKey) {
       G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
       G.openingRouteCounterBoughtPirateId = p.id;
-      if (quote.openingRoutePrizeEligible || quote.openingCounterPrepMight) {
-        G.openingRouteCounterPrizeMainKey = routeShopState.mainKey;
-        G.openingRouteCounterPrizePirateId = p.id;
-      }
     }
     if (toTopDeck) {
       G.deck.push(p);
@@ -3268,8 +3207,8 @@ class GameScene extends Phaser.Scene {
     const counterSet = new Set(this.counterAmbushTypes(combat));
     if (!counterSet.size) return null;
 
-    const prizePirate = this.combatDefaultOpeningRoutePrizePirate(combat, counterSet);
-    if (prizePirate) return prizePirate.id;
+    const drilledPirate = this.combatDefaultCacheDrillBountyPirate(combat, counterSet);
+    if (drilledPirate) return drilledPirate.id;
 
     const pirate = (G.hand || []).find((entry) =>
       entry && !this.pirateWounded(entry) && counterSet.has(entry.type)
@@ -3277,29 +3216,27 @@ class GameScene extends Phaser.Scene {
     return pirate ? pirate.id : null;
   }
 
-  combatDefaultOpeningRoutePrizePirate(combat = G.combat, counterSet = null) {
-    if (this.isBattleTest()
-      || G.phase !== 'boarding'
-      || this.currentBoardingNumber() !== 1) {
-      return null;
-    }
-
+  combatDefaultCacheDrillBountyPirate(combat = G.combat, counterSet = null) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
     const mainKey = this.counterAmbushMainKey(combat);
-    if (!mainKey
-      || G.openingRouteCounterPrizeMainKey !== mainKey
-      || G.openingRouteCounterPrizePirateId == null) {
-      return null;
-    }
-
+    if (!mainKey) return null;
     const counters = counterSet || new Set(this.counterAmbushTypes(combat));
     if (!counters.size) return null;
 
-    const prize = this.openingRouteBoughtPrimaryPrize(mainKey, G.openingRouteCounterPrizePirateId);
-    if (!prize) return null;
+    const markedIds = new Set(this.cacheDrillBountyMarksForCombat(combat)
+      .filter(mark => mark.mainKey === mainKey)
+      .map(mark => mark.pirateId));
+    if (!markedIds.size) return null;
 
-    const pirate = (G.hand || []).find(entry => entry && entry.id === prize.pirateId) || null;
+    const pirate = (G.hand || []).find(entry =>
+      entry
+      && markedIds.has(entry.id)
+      && counters.has(entry.type)
+      && !this.pirateWounded(entry)
+      && this.pirateStillInCrew(entry)
+    ) || null;
     if (!pirate || this.pirateWounded(pirate) || !this.pirateStillInCrew(pirate)) return null;
-    return counters.has(pirate.type) ? pirate : null;
+    return pirate;
   }
 
   combatCompactSetupRows(rows) {
@@ -3815,8 +3752,7 @@ class GameScene extends Phaser.Scene {
     const def = TYPES[type] || {};
     const enemy = this.combatArchetypeByKey(mainKey);
     const drilled = this.hasCacheDrillBountyMark(ambush.pirateId, mainKey, combat);
-    const routePrize = !!this.openingRouteBoughtPrimaryPrize(mainKey, ambush.pirateId);
-    const count = drilled || routePrize ? 2 : 1;
+    const count = drilled ? 2 : 1;
     const bounty = {
       pirateId: ambush.pirateId,
       type,
@@ -3826,7 +3762,6 @@ class GameScene extends Phaser.Scene {
       resource,
       count,
       drilled,
-      openingRoutePrize: routePrize,
       doubled: count > 1,
       wood: resource === 'wood' ? count : 0,
       stone: resource === 'stone' ? count : 0,

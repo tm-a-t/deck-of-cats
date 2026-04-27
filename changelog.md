@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-27 — run 20260427-112625 — rev 3d5194a — build 0.1.0
+
+- Gameplay: true - Consolidated the doubled opening Ambush Bounty onto Cache Drill: Opening Counter Prep route-primary buys still discount, top-deck, Watch, and gain +1 Might, but preview and pay normal +1 bounty unless that pirate claims the matching cache; active Cache Drill bounty counters now lead the default formation ahead of unmarked counters. Validated with JS syntax checks, `node sim/fast-sim.js --check-cache-drill-opening-payoff --json`, `node sim/fast-sim.js --check-drilled-ambusher-bounty --json`, `node sim/fast-sim.js --check-opening-route-counter-shop --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-112625.log`.
+
 ## 2026-04-27 — run 20260427-111422 — rev 8eaf07f — build 0.1.0
 
 - Gameplay: true - Opening Route Prize counters now lead the default Boarding 1 formation when the prep-qualified route primary is ready in hand, so pressing `Fight!` shows that bought counter, not the mustered starter, deliver the Counter Ambush and existing `+2` Ambush Bounty payoff; absent, wounded, removed, wrong-main, Battle Test, and Boarding 2+ cases keep the prior fallback. Validated with JS syntax checks, `node sim/fast-sim.js --check-opening-route-prize --json`, `node sim/fast-sim.js --check-counter-ambush --json`, `git diff --check`, and `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-111422.log`.
