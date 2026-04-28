@@ -67,7 +67,7 @@ def self_test() -> dict:
     context = base_context(config, {"seen_feedback_ids": [], "external_submissions": [], "cycles": []}, "self-test")
     for role in ROLES:
         rendered = prompt_for(role, context)
-        if "<context_json>" not in rendered or "rules.md" not in rendered:
+        if "<context_json>" not in rendered or "rules.md" not in rendered or "todo.md" not in rendered:
             raise RuntimeError(f"prompt render failed for {role}")
 
     for role, payload in fixture_payloads().items():
