@@ -28,18 +28,17 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 
 ## Regular Run Flow
 
-### 1. Map
+### 1. Linear Voyage
 
-- Runs begin in phase `map`.
-- If only 1 next node is available, it is auto-selected.
-- If 2+ nodes are available, the player chooses on the map.
-- When a node is selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
-- Outside `phase = map`, the map is preview-only; node selection works only during the map phase.
-- In regular runs, layer `0` has three parallel route choices, one each of `Forest Island`, `Rocky Island`, and `Port Island`; all three are route-defined Boarding 1 `Scouted Counter Cache` islands.
-- The three normal Boarding 1 cache routes define the first ship's main enemy and route-specific cache stakes: `Forest Island` → `Shellback`, `+1🪵`, `+1☠️`, and `+0 Boarding Alert`; `Rocky Island` → `Powder Bomber`, `+1🪨`, `+2☠️`, and `+1 Boarding Alert`; `Port Island` → `Deck Sniper`, `+1🪙`, `+3☠️`, and `+3 Boarding Alert`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal `+1` cache resource, `+1☠️`, and `+1 Boarding Alert` stakes.
-- Selecting a layer-0 opening route before Boarding 1 immediately updates the first ship encounter to that route's main enemy and route-specific weak support, before any `Boarding Alert` guards: `Forest Island`/`Shellback` gets 1 `Bilge Rat` and 1 `Cabin Boy`; `Rocky Island`/`Powder Bomber` gets 2 `Bilge Rat`s; `Port Island`/`Deck Sniper` gets 2 `Cabin Boy`s. Unexpected opening routes keep the fallback 1 `Bilge Rat` and 1 `Cabin Boy` support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
-- During regular-run Boarding 1 only, the selected opening route also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
-- Selecting the first layer-0 opening route before Boarding 1 immediately creates `Opening Route Muster`: one still-owned matching `Opening Deckhand Counter` starter is mustered into current hand slot `0`, marked to report on the next Shop `Continue`, and gains `Counter Watch` until Boarding 1, preferring a matching pirate currently in hand, then the draw pile, then discard.
+- Regular runs use a hidden single-lane map itinerary. Each layer has exactly 1 next stop, so the game auto-selects the next node and never asks the player to choose a route.
+- Regular runs have no usable player-facing map button or map panel. The hidden map still exists for scouting, cache placement, shop counter logic, ship cadence, healing layers, and victory detection.
+- Internally, a run may pass through phase `map` only long enough to auto-select the single available node.
+- When a node is auto-selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
+- In regular runs, layer `0` has 1 hidden opening route cache island, randomly `Forest Island`, `Rocky Island`, or `Port Island`.
+- The layer-0 opening island defines the first ship's main enemy and route-specific cache stakes: `Forest Island` → `Shellback`, `+1🪵`, `+1☠️`, and `+0 Boarding Alert`; `Rocky Island` → `Powder Bomber`, `+1🪨`, `+2☠️`, and `+1 Boarding Alert`; `Port Island` → `Deck Sniper`, `+1🪙`, `+3☠️`, and `+3 Boarding Alert`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal `+1` cache resource, `+1☠️`, and `+1 Boarding Alert` stakes.
+- Auto-selecting the layer-0 opening island before Boarding 1 immediately updates the first ship encounter to that island's route enemy and route-specific weak support, before any `Boarding Alert` guards: `Forest Island`/`Shellback` gets 1 `Bilge Rat` and 1 `Cabin Boy`; `Rocky Island`/`Powder Bomber` gets 2 `Bilge Rat`s; `Port Island`/`Deck Sniper` gets 2 `Cabin Boy`s. Unexpected opening routes keep the fallback 1 `Bilge Rat` and 1 `Cabin Boy` support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
+- During regular-run Boarding 1 only, the auto-selected opening island also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
+- Auto-selecting the first layer-0 opening island before Boarding 1 immediately creates `Opening Route Muster`: one still-owned matching `Opening Deckhand Counter` starter is mustered into current hand slot `0`, marked to report on the next Shop `Continue`, and gains `Counter Watch` until Boarding 1, preferring a matching pirate currently in hand, then the draw pile, then discard.
 - If the `Opening Route Muster` starter is already in hand, it swaps into hand slot `0`. If it is in the draw pile or discard, it swaps with the current hand slot-`0` pirate, and that displaced pirate is placed back into the starter's previous zone at the same position.
 - `Opening Route Muster` happens once per regular run, never duplicates a pirate or changes the total number of cards in hand/draw/discard, grants no resource, weapon, `Might`, `Tempo`, Alert refund, cache claim, shop discount, prep, or reward other than that starter's `Counter Watch`, never applies in `Battle Test`, and clears when Boarding 1 starts.
 - If the Opening Route Muster starter is sent before Boarding 1, that `Counter Watch` is spent normally unless an eligible `Short Crew Drill` refreshes it; `Cache Drill` early report alone does not preserve the watch.
@@ -47,7 +46,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - `Opening Deckhand Counter` types do not count for shop generation, shop counter purchase quotes, `Top deck` purchases, `Opening Counter Prep` purchases, `Prepared` counter purchases, or `Full Crew Discount` coverage, because starter pirates are never sold in the shop.
 - `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
 - Opening Deckhand Counter starters never grant separate `☠️` by being sent. The opening route's extra shop currency comes only from the visible cache stakes, so it is paid once by the first cache opener, regardless of opener type, and is skipped when no pirate opens the cache.
-- Before the opening path is selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
+- Before the hidden opening island is auto-selected, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
 - Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
 - Selecting a marked cache island does not immediately grant that cache's stored resource, stored `☠️`, or stored `Boarding Alert`.
 - On a selected `Scouted Counter Cache` island, the first sent pirate opens the cache after resolving its island action and after any island removal. The cache then grants its stored resource amount, stored `☠️`, and stored `Boarding Alert` once, and the map cache is marked claimed.
@@ -237,7 +236,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
   - unused `Full Crew Discount` and `Opening Counter Prep` expire;
   - unused `Route Primary Commitment` expires;
   - a new hand is drawn up to 5;
-  - the run returns to `map`.
+  - the run returns to the hidden `map` auto-advance step.
 
 ### 5. Boarding Round
 
@@ -247,7 +246,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - Scouting is limited to the next unreached ship; later ship rosters stay hidden until they become the next ship.
 - Pending or projected `Boarding Alert` guards are previewed separately from the scouted base roster.
 - When the ship is reached, the actual boarding uses the same pre-generated base blueprint plus any consumed `Boarding Alert` guards.
-- Pending `Boarding Alert` persists through islands, shops, and map choices until the next ship node.
+- Pending `Boarding Alert` persists through islands, shops, and hidden map auto-advance until the next ship node.
 - When a regular-run boarding starts, the current `Boarding Alert` is snapshotted on that boarding and the pending Alert is cleared.
 - The snapshotted Alert adds visible guard reinforcements after the normal boarding party is generated:
   - Alert `1–2`: add 1 extra `Cabin Boy`.
@@ -322,7 +321,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 - The defeated current hand goes to discard and a new combat hand is drawn from the deck/discard using only pirates that are not `🩹 Wounded`.
 - The replacement combat hand draws up to 5 ready pirates; if fewer than 5 ready pirates remain, it draws all of them.
 - A regular run is lost only when the crew has no ready pirates left, meaning every pirate in `allCrew` is `🩹 Wounded`.
-- After a win, the whole current hand goes to discard except any eligible `Counter Ambusher Report` pirate or `Route Sidekick Report` pirate, a new hand is drawn, and the player returns to the map.
+- After a win, the whole current hand goes to discard except any eligible `Counter Ambusher Report` pirate or `Route Sidekick Report` pirate, a new hand is drawn, and the hidden voyage auto-advances.
 - After that all-wounded loss, the run goes to `Game Over`.
 - Winning the final ship on layer 39 ends the run with the `Victory` screen.
 
@@ -469,20 +468,21 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 ## Map Generation And Victory
 
 - A run has `40` layers total and `8` ship nodes.
+- Regular-run map layers are a hidden single lane: every layer has exactly 1 node and every non-final node connects to the next layer's only node.
 - Early block:
-  - `layer 0`: three parallel `Forest Island`/`Rocky Island`/`Port Island` route cache islands
+  - `layer 0`: 1 random `Forest Island`/`Rocky Island`/`Port Island` route cache island
   - `layer 1`: first ship node
-  - `layers 2–8`: three parallel non-crossing island paths
+  - `layers 2–8`: one hidden island per layer
   - `layer 9`: second ship node
-- Each three-node early island layer deals `Forest Island`, `Rocky Island`, and `Port Island` once in shuffled order.
-- The three islands on `layer 0` are the Boarding 1 route caches: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
+- Each early island layer is one of `Forest Island`, `Rocky Island`, or `Port Island`.
+- The island on `layer 0` is the Boarding 1 route cache: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
 - Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
 - `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
-- From `layer 10` onward, normal non-infirmary island layers contain `2–3` nodes.
+- From `layer 10` onward, normal non-infirmary island layers contain 1 hidden island node.
 - From `layer 10` onward, `Siren Island` is added to that layer's pool with `50%` chance; the other islands may always appear.
 - After `layer 9`, ship nodes are placed at `layers 14, 19, 24, 29, 34, 39`.
 - `Infirmary Island` does not appear randomly; it appears only on its mandatory layers.
-- On later map layers, each normal node connects to `1–2` nodes in the next layer; the code guarantees every next-layer node is reachable and tries to avoid crossing paths.
+- On later map layers, each normal node connects to the next layer's only node.
 - Ship nodes still receive numeric `strength` values: `6`, `8`, `11`, `14`, `17`, `21`, `24`, `28`, but current boarding combat does not directly use those values.
 - Normal-run victory happens by winning `Boarding 8` on `layer 39`.
 

@@ -1269,6 +1269,8 @@ function makeSimScene(api) {
   scene._combatSetupPopupPinned = false;
   scene._combatSetupPopupDismissTimer = null;
   scene._boardingIntroTimer = null;
+  scene.closePanels = () => {};
+  scene.refreshPanelUi = () => {};
   scene.renderAll = () => {};
   // Headless sim can still hit direct UI refresh calls from GameScene.
   scene.renderNav = () => {};
@@ -1296,6 +1298,17 @@ function makeSimScene(api) {
   };
   scene.L = { k: 1, Y_ISL_CY: 0, cx: 0 };
   return scene;
+}
+
+function initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland, attempts = 300) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    runtime.setSeed((seedBase + attempt * 7919) >>> 0);
+    api.initState();
+    const G = api.getG();
+    const found = routeFirstIsland(G.map, route.mainKey);
+    if (found && found.firstIsland) return { G, ...found };
+  }
+  throw new Error(`could not generate ${route.label || route.mainKey} linear voyage`);
 }
 
 function applyShipWagesForSim(scene, G) {
@@ -1553,6 +1566,9 @@ function runOpeningRouteCaptainsChecks(runtime) {
     const G = api.getG();
     const map = G.map;
     assertOpeningRouteCaptainsCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
+    assertOpeningRouteCaptainsCheck(map.linearVoyage === true, `sample ${sample} map is not marked linear`);
+    assertOpeningRouteCaptainsCheck(map.layers.every(layer => layer && layer.length === 1), `sample ${sample} has multi-node layers`);
+    assertOpeningRouteCaptainsCheck(api.getAvailableNodes(map).length === 1, `sample ${sample} starts with a map choice`);
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     assertOpeningRouteCaptainsCheck(firstShipLayer === 1, `sample ${sample} first ship layer ${firstShipLayer} !== 1`);
 
@@ -1566,10 +1582,10 @@ function runOpeningRouteCaptainsChecks(runtime) {
 
     const firstEligibleCacheNodes = eligibleScoutedCounterCacheNodes(api, map.layers[firstShipLayer - 1]);
     const firstCacheNodes = map.layers[firstShipLayer - 1].filter(node => node && node.scoutedCache);
-    assertOpeningRouteCaptainsCheck(firstEligibleCacheNodes.length === routeCases.length, `sample ${sample} first pre-ship layer has ${firstEligibleCacheNodes.length} eligible lanes`);
+    assertOpeningRouteCaptainsCheck(firstEligibleCacheNodes.length === 1, `sample ${sample} first pre-ship layer has ${firstEligibleCacheNodes.length} eligible nodes`);
     assertOpeningRouteCaptainsCheck(
       firstCacheNodes.length === firstEligibleCacheNodes.length,
-      `sample ${sample} first cache nodes ${firstCacheNodes.length} !== eligible lanes ${firstEligibleCacheNodes.length}`
+      `sample ${sample} first cache nodes ${firstCacheNodes.length} !== eligible nodes ${firstEligibleCacheNodes.length}`
     );
     firstEligibleCacheNodes.forEach((node) => {
       const cache = node && node.scoutedCache;
@@ -1598,31 +1614,38 @@ function runOpeningRouteCaptainsChecks(runtime) {
   }
 
   results.push({
-    name: 'generated regular maps mark Forest/Rocky/Port Boarding 1 caches with distinct route enemies and support',
+    name: 'generated linear voyages mark the first island as a Boarding 1 cache with route enemy stakes',
     ok: true,
     samples,
   });
 
   runtime.setSeed(0x2cadcafe);
   api.initState();
-  const pendingIntel = scene.nextShipIntel();
-  assertOpeningRouteCaptainsCheck(
-    pendingIntel && pendingIntel.mainKey === null && pendingIntel.mainLabel === 'Route decides',
-    `opening pre-route intel was ${JSON.stringify(pendingIntel)}`
-  );
-  results.push({ name: 'pre-route Boarding 1 intel waits for the route choice', ok: true });
+  let openedMapPanel = false;
+  scene.openMapPanel = () => { openedMapPanel = true; };
+  scene.enterMapPhase();
+  const autoG = api.getG();
+  assertOpeningRouteCaptainsCheck(!openedMapPanel, 'linear voyage opened a map panel');
+  assertOpeningRouteCaptainsCheck(autoG.map.currentLayer === 0, `auto voyage current layer ${autoG.map.currentLayer} !== 0`);
+  assertOpeningRouteCaptainsCheck(autoG.phase === 'sending', `auto voyage phase ${autoG.phase} !== sending`);
+  results.push({ name: 'linear voyage auto-selects the first island without opening a map panel', ok: true });
 
   for (const route of routeCases) {
-    runtime.setSeed(0x2cadcafe);
-    api.initState();
-    const G = api.getG();
+    let G = null;
+    let firstNode = null;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      runtime.setSeed((0x2cadcafe + route.islandIdx * 1009 + attempt * 7919) >>> 0);
+      api.initState();
+      G = api.getG();
+      firstNode = G.map && G.map.layers[0] && G.map.layers[0][0];
+      if (firstNode && firstNode.islandIdx === route.islandIdx) break;
+    }
+    assertOpeningRouteCaptainsCheck(firstNode && firstNode.islandIdx === route.islandIdx, `${route.label} generated first stop missing`);
     const map = G.map;
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const ship = map.layers[firstShipLayer][0];
-    const cacheNode = map.layers[firstShipLayer - 1].find(node => node && node.islandIdx === route.islandIdx);
-    const startNode = cacheNode && map.layers[0].includes(cacheNode)
-      ? cacheNode
-      : map.layers[0].find(node => node && Array.isArray(node.conns) && cacheNode && node.conns.includes(cacheNode.id));
+    const cacheNode = map.layers[firstShipLayer - 1][0];
+    const startNode = firstNode;
     assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
     assertOpeningRouteCaptainsCheck(startNode, `${route.label} start route missing`);
     assertOpeningRouteCaptainsCheck(
@@ -1659,6 +1682,7 @@ function runFirstShellbackChecks(runtime) {
 
 function runMapScheduleChecks(runtime) {
   const api = runtime.api;
+  const scene = makeSimScene(api);
   const results = [];
   const expectedShipLayers = [1, 9, 14, 19, 24, 29, 34, 39];
   const earlyIslandLayers = [0, 2, 3, 4, 5, 6, 7, 8];
@@ -1673,7 +1697,10 @@ function runMapScheduleChecks(runtime) {
     api.initState();
     const map = api.getG().map;
     assertMapScheduleCheck(map && Array.isArray(map.layers), `sample ${sample} did not generate map layers`);
+    assertMapScheduleCheck(map.linearVoyage === true, `sample ${sample} map is not marked linear`);
     assertMapScheduleCheck(map.layers.length === api.MAP_LAYERS, `sample ${sample} layer count ${map.layers.length} !== ${api.MAP_LAYERS}`);
+    assertMapScheduleCheck(map.layers.every(layer => layer && layer.length === 1), `sample ${sample} generated multi-node layers`);
+    assertMapScheduleCheck(api.getAvailableNodes(map).length === 1, `sample ${sample} exposes a starting map decision`);
 
     const shipLayers = [];
     for (let li = 0; li < map.layers.length; li++) {
@@ -1687,22 +1714,17 @@ function runMapScheduleChecks(runtime) {
 
     for (const li of earlyIslandLayers) {
       const layer = map.layers[li];
-      assertMapScheduleCheck(layer && layer.length === 3, `sample ${sample} layer ${li} has ${layer && layer.length} nodes`);
+      assertMapScheduleCheck(layer && layer.length === 1, `sample ${sample} layer ${li} has ${layer && layer.length} nodes`);
       assertMapScheduleCheck(layer.every(node => node.type === 'island'), `sample ${sample} layer ${li} has non-island node`);
-      const islandIdx = layer.map(node => node.islandIdx).sort((a, b) => a - b);
+      const islandIdx = layer.map(node => node.islandIdx);
       assertMapScheduleCheck(
-        JSON.stringify(islandIdx) === JSON.stringify(expectedEarlyIslandIdx),
-        `sample ${sample} layer ${li} islands ${islandIdx.join(',')} are not Forest/Rocky/Port once`
+        expectedEarlyIslandIdx.includes(islandIdx[0]),
+        `sample ${sample} layer ${li} island ${islandIdx[0]} is not Forest/Rocky/Port`
       );
     }
 
-    for (let pi = 0; pi < 3; pi++) {
-      const cacheNode = map.layers[0][pi];
-      assertMapScheduleCheck(
-        cacheNode.scoutedCache,
-        `sample ${sample} opening path ${pi} layer-0 cache is missing`
-      );
-    }
+    const cacheNode = map.layers[0][0];
+    assertMapScheduleCheck(cacheNode.scoutedCache, `sample ${sample} opening layer-0 cache is missing`);
 
     for (const { base, length } of earlySegments) {
       for (let step = 0; step < length - 1; step++) {
@@ -1728,12 +1750,23 @@ function runMapScheduleChecks(runtime) {
   }
 
   results.push({
-    name: '40-layer map schedule with early 1/7 islands and straight early paths',
+    name: '40-layer linear voyage schedule with hidden one-node early paths',
     ok: true,
     samples: 12,
     shipLayers: expectedShipLayers,
     earlyIslandLayers,
   });
+
+  runtime.setSeed(0x6d2b7abc);
+  api.initState();
+  let openedMapPanel = false;
+  scene.openMapPanel = () => { openedMapPanel = true; };
+  scene.enterMapPhase();
+  const G = api.getG();
+  assertMapScheduleCheck(!openedMapPanel, 'linear voyage opened a map panel during auto-advance');
+  assertMapScheduleCheck(G.map.currentLayer === 0, `auto-advance current layer ${G.map.currentLayer} !== 0`);
+  assertMapScheduleCheck(G.phase === 'sending', `auto-advance phase ${G.phase} !== sending`);
+  results.push({ name: 'fresh regular run auto-advances to first island sending with no map panel', ok: true });
   return { ok: true, checks: results };
 }
 
@@ -2037,19 +2070,27 @@ function runScoutedCounterCacheChecks(runtime) {
     );
     assertScoutedCounterCacheCheck(shipCacheLayers.length === 8, `sample ${sample} generated ${shipCacheLayers.length} caches`);
   }
-  results.push({ name: 'generated regular maps mark every Boarding 1 lane and one preferred cache before later ships', ok: true, samples: 12, generatedCacheCount });
+  results.push({ name: 'generated linear voyages mark one Boarding 1 cache and one preferred cache before later ships', ok: true, samples: 12, generatedCacheCount });
 
   for (const cacheCase of openingRouteByIslandIdx.values()) {
-    runtime.setSeed(0x5c0a7e11);
-    api.initState();
-    const G = api.getG();
-    const map = G.map;
+    let G = null;
+    let map = null;
+    let chosen = null;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      runtime.setSeed((0x5c0a7e11 + cacheCase.islandIdx * 1009 + attempt * 7919) >>> 0);
+      api.initState();
+      G = api.getG();
+      map = G.map;
+      const firstShipLayerForAttempt = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+      const cacheNodesForAttempt = map.layers[firstShipLayerForAttempt - 1].filter((node) => node && node.scoutedCache);
+      chosen = cacheNodesForAttempt.find((node) => node && node.islandIdx === cacheCase.islandIdx);
+      if (chosen) break;
+    }
+    assertScoutedCounterCacheCheck(chosen, `first cache selection sample lacks ${cacheCase.label} stop`);
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const firstShip = map.layers[firstShipLayer][0];
     const cacheNodes = map.layers[firstShipLayer - 1].filter((node) => node && node.scoutedCache);
-    assertScoutedCounterCacheCheck(cacheNodes.length > 1, `first cache selection sample has only ${cacheNodes.length} cache lane`);
-    const chosen = cacheNodes.find((node) => node && node.islandIdx === cacheCase.islandIdx);
-    assertScoutedCounterCacheCheck(chosen, `first cache selection sample lacks ${cacheCase.label} lane`);
+    assertScoutedCounterCacheCheck(cacheNodes.length === 1, `first cache selection sample has ${cacheNodes.length} cache nodes`);
     const untouched = cacheNodes.filter((node) => node !== chosen);
     const cache = chosen.scoutedCache;
     assertScoutedCounterCacheCheck(cache.res === cacheCase.res, `${cacheCase.label} cache res ${cache.res} !== ${cacheCase.res}`);
@@ -2066,7 +2107,7 @@ function runScoutedCounterCacheChecks(runtime) {
     assertScoutedCounterCacheCheck(handled, 'generated first cache island selection failed');
     assertScoutedCounterCacheCheck(firstShip.encounter && firstShip.encounter.mainKey === cacheCase.mainKey, `${cacheCase.label} selection did not route first ship to ${cacheCase.mainKey}`);
     assertScoutedCounterCacheCheck(chosen.scoutedCache.claimed === false, 'selected first cache was claimed before a pirate opened it');
-    assertScoutedCounterCacheCheck(untouched.every(node => node.scoutedCache && node.scoutedCache.claimed === false), 'unselected first cache lane was claimed');
+    assertScoutedCounterCacheCheck(untouched.every(node => node.scoutedCache && node.scoutedCache.claimed === false), 'unselected first cache node was claimed');
     assertScoutedCounterCacheCheck(G.res[cache.res] === 0, `generated first cache granted ${cache.res} on selection: ${G.res[cache.res]}`);
     assertScoutedCounterCacheCheck(G.enthusiasm === 0, `generated first cache enthusiasm on selection ${G.enthusiasm}`);
     assertScoutedCounterCacheCheck(G.boardingAlert === 2, `generated first cache alert on selection ${G.boardingAlert} !== 2`);
@@ -2094,13 +2135,20 @@ function runScoutedCounterCacheChecks(runtime) {
 
   {
     const cacheCase = openingRouteByIslandIdx.get(3);
-    runtime.setSeed(0x5c0a7e11);
-    api.initState();
-    const G = api.getG();
-    const map = G.map;
+    let G = null;
+    let map = null;
+    let chosen = null;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      runtime.setSeed((0x5c0b0e11 + attempt * 7919) >>> 0);
+      api.initState();
+      G = api.getG();
+      map = G.map;
+      const firstShipLayerForAttempt = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+      chosen = map.layers[firstShipLayerForAttempt - 1].find((node) => node && node.islandIdx === cacheCase.islandIdx);
+      if (chosen) break;
+    }
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const firstShip = map.layers[firstShipLayer][0];
-    const chosen = map.layers[firstShipLayer - 1].find((node) => node && node.islandIdx === cacheCase.islandIdx);
     assertScoutedCounterCacheCheck(chosen && chosen.scoutedCache, 'Port non-counter cache route missing');
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.enthusiasm = 0;
@@ -2495,12 +2543,10 @@ function runOpeningRouteContractChecks(runtime) {
       : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
 
   routeCases.forEach((route, routeIndex) => {
-    runtime.setSeed((0x61c04700 + routeIndex * 8191) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland } = initRouteState(route, (0x61c04700 + routeIndex * 1009) >>> 0);
     assertOpeningRouteContractCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
     assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
 
@@ -2548,10 +2594,7 @@ function runOpeningRouteContractChecks(runtime) {
 
   {
     const route = routeCases[0];
-    runtime.setSeed(0x61c04820);
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland } = initRouteState(route, 0x61c04820);
     assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'starter claimant route selection failed');
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -2586,10 +2629,7 @@ function runOpeningRouteContractChecks(runtime) {
 
   {
     const route = routeCases[0];
-    runtime.setSeed(0x61c04780);
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland } = initRouteState(route, 0x61c04780);
     assertOpeningRouteContractCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'non-counter route selection failed');
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -2765,6 +2805,7 @@ function runOpeningRoutePrizeChecks(runtime) {
     const ship = map.layers[firstShipLayer][0];
     return { firstShipLayer, routeCache, firstIsland, ship };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
   const assertOnlyRoutePrimaryOpeningCounter = (shop, label, primary) => {
     const visible = (shop || []).filter(type => openingCounters.includes(type));
     assertOpeningRoutePrizeCheck(
@@ -2939,10 +2980,7 @@ function runOpeningRoutePrizeChecks(runtime) {
   }
 
   routeCases.forEach((route, routeIndex) => {
-    runtime.setSeed((0x61c05700 + routeIndex * 8191) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, (0x61c05700 + routeIndex * 1009) >>> 0);
     assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} cash route selection failed`);
 
     G.phase = 'shopping';
@@ -2973,10 +3011,7 @@ function runOpeningRoutePrizeChecks(runtime) {
   });
 
   routeCases.forEach((route, routeIndex) => {
-    runtime.setSeed((0x61c09700 + routeIndex * 8191) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland, ship } = initRouteState(route, (0x61c09700 + routeIndex * 1009) >>> 0);
     assertOpeningRoutePrizeCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
     assertOpeningRoutePrizeCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
 
@@ -3230,12 +3265,10 @@ function runOpeningRouteVictoryCacheChecks(runtime) {
     const ship = firstShipLayer >= 0 ? map.layers[firstShipLayer][0] : null;
     return { firstShipLayer, routeCache, firstIsland, ship };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
 
   const setupBoarding = (route, opts = {}) => {
-    runtime.setSeed((opts.seed || 0x71c0ffee) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland, ship } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland, ship } = initRouteState(route, (opts.seed || 0x71c0ffee) >>> 0);
     assertOpeningRouteVictoryCacheCheck(routeCache && routeCache.scoutedCache, `${route.label} route cache missing`);
     assertOpeningRouteVictoryCacheCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
     const routeEmoji = api.RES_EMOJI && api.RES_EMOJI[route.resource] ? api.RES_EMOJI[route.resource] : '';
@@ -3391,15 +3424,13 @@ function runOpeningRouteVictoryCacheChecks(runtime) {
       resource: routes[1].resource,
     },
     {
-      name: 'unselected route caches',
+      name: 'absent unselected route caches',
       setup: () => {
         const setup = setupBoarding(routes[0], { seed: 0x71c0c005, claimCache: false });
         const other = setup.G.map.layers[0].find(node =>
           node && node.scoutedCache && node.scoutedCache.mainKey !== routes[0].mainKey
         );
-        assertOpeningRouteVictoryCacheCheck(other && other.scoutedCache, 'unselected route cache missing');
-        other.scoutedCache.claimed = true;
-        if (!setup.G.map.visited.includes(other.id)) setup.G.map.visited.push(other.id);
+        assertOpeningRouteVictoryCacheCheck(!other, 'linear voyage generated an unselected route cache');
         return setup;
       },
       result: 'win',
@@ -3687,12 +3718,11 @@ function runNoAlarmRushRouteCounterChecks(runtime) {
       : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
   const setupRouteShop = (route, opts = {}) => {
-    api.initState();
-    const G = api.getG();
+    const { G, routeCache, firstIsland } = initRouteState(route, opts.seed || 0x704a1000);
     const desiredMode = opts.mode || 'run';
     G.mode = 'run';
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
     assertNoAlarmRushRouteCounterCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
     if (opts.cacheClaimed && routeCache && routeCache.scoutedCache) routeCache.scoutedCache.claimed = true;
     G.mode = desiredMode;
@@ -3752,10 +3782,8 @@ function runNoAlarmRushRouteCounterChecks(runtime) {
 
   {
     const route = routeCases[2];
-    api.initState();
-    const G = api.getG();
+    const { G, routeCache, firstIsland } = initRouteState(route, 0x704a1100);
     G.mode = 'run';
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
     assertNoAlarmRushRouteCounterCheck(firstIsland && firstIsland.islandIdx === 3, 'Deck Sniper route did not start on Port');
     assertNoAlarmRushRouteCounterCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'Port claimed-cache route selection failed');
     const openerIndex = G.hand.findIndex(pirate => pirate && pirate.type !== 'armsman');
@@ -3807,10 +3835,8 @@ function runNoAlarmRushRouteCounterChecks(runtime) {
 
   {
     const route = routeCases[2];
-    api.initState();
-    const G = api.getG();
+    const { G, firstIsland } = initRouteState(route, 0x704a1200);
     G.mode = 'run';
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
     assertNoAlarmRushRouteCounterCheck(firstIsland && firstIsland.islandIdx === 3, 'Deck Sniper route did not start on Port');
     assertNoAlarmRushRouteCounterCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'Port zero-send route selection failed');
     const wagePreview = finishZeroSendIslandForShop(G);
@@ -3976,11 +4002,10 @@ function runRouteCounterCoverChecks(runtime) {
       : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { routeCache, firstIsland };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
 
   const setupRouteShop = (route, opts = {}) => {
-    api.initState();
-    const G = api.getG();
-    const { routeCache, firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, routeCache, firstIsland } = initRouteState(route, opts.seed || 0x704c0000);
     assertRouteCounterCoverCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
     if (opts.cacheClaimed && routeCache && routeCache.scoutedCache) routeCache.scoutedCache.claimed = true;
     G.mode = opts.mode || 'run';
@@ -4592,6 +4617,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
     return { firstShipLayer, routeCache, firstIsland };
   };
 
+  const initRouteState = (route, seedBase) => {
+    return initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
+  };
+
   const continueRefreshShopForTest = (G) => {
     G.openingRoutePrimaryCommitmentMainKey = null;
     G.shop.shift();
@@ -4666,11 +4695,11 @@ function runOpeningRouteCounterShopChecks(runtime) {
   }
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
-    runtime.setSeed((0x704501b0 + routeIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
+    const { G, firstShipLayer, routeCache, firstIsland } = initRouteState(
+      { label, mainKey },
+      (0x704501b0 + routeIndex * 1009) >>> 0
+    );
     const map = G.map;
-    const { firstShipLayer, routeCache, firstIsland } = routeFirstIsland(map, mainKey);
     assertOpeningRouteCounterShopCheck(routeCache, `missing ${label} ${mainKey} cache`);
     assertOpeningRouteCounterShopCheck(firstIsland && firstIsland.type === 'island', `missing ${label} first island setup`);
     assertOpeningRouteCounterShopCheck(scene.applyMapNodeSelection(firstIsland.id), `${label} first island selection failed`);
@@ -4721,10 +4750,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
-    runtime.setSeed((0x704501d0 + routeIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, mainKey);
+    const { G, firstIsland } = initRouteState(
+      { label, mainKey },
+      (0x704501d0 + routeIndex * 1009) >>> 0
+    );
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} commitment route selection failed`);
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
@@ -4762,10 +4791,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   {
     const route = routeCases[2];
-    runtime.setSeed(0x704501e0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, 0x704501e0);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'Dockside commitment route selection failed');
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
@@ -4794,10 +4820,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   {
     const route = routeCases[0];
-    runtime.setSeed(0x704501e8);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, 0x704501e8);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'missed commitment route selection failed');
     G.fullCrewDiscount = 0;
     G.openingCounterPlan = false;
@@ -4830,10 +4853,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
   };
 
   routeCases.forEach(({ label, mainKey, starterType, primary, sideOffer }, routeIndex) => {
-    runtime.setSeed((0x704501f0 + routeIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, mainKey);
+    const { G, firstIsland } = initRouteState(
+      { label, mainKey },
+      (0x704501f0 + routeIndex * 1009) >>> 0
+    );
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} side-prep route selection failed`);
     const musteredStarter = G.openingRouteMuster
       ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
@@ -4915,10 +4938,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   {
     const route = routeCases[1];
-    runtime.setSeed(0x70450208);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, 0x70450208);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'fallback side-prep route selection failed');
     const musteredStarter = G.openingRouteMuster
       ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
@@ -4954,10 +4974,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   {
     const route = routeCases[1];
-    runtime.setSeed(0x7045020c);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, 0x7045020c);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'side-prep plan route selection failed');
     const musteredStarter = G.openingRouteMuster
       ? (G.allCrew || []).find(pirate => pirate && pirate.id === G.openingRouteMuster.pirateId)
@@ -4978,10 +4995,7 @@ function runOpeningRouteCounterShopChecks(runtime) {
 
   {
     const route = routeCases[0];
-    runtime.setSeed(0x70450210);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, 0x70450210);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), 'non-side-offer negative route selection failed');
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -5008,10 +5022,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
     { name: 'secured route primary', setup: (G, route) => { G.boardingCount = 0; G.openingRouteCounterBoughtMainKey = route.mainKey; } },
   ].forEach((negative, negIndex) => {
     const route = routeCases[negIndex];
-    runtime.setSeed((0x70450220 + negIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(
+      route,
+      (0x70450220 + negIndex * 1009) >>> 0
+    );
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${negative.name} side-prep negative route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -5034,10 +5048,10 @@ function runOpeningRouteCounterShopChecks(runtime) {
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
-    runtime.setSeed((0x70450240 + routeIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, mainKey);
+    const { G, firstIsland } = initRouteState(
+      { label, mainKey },
+      (0x70450240 + routeIndex * 1009) >>> 0
+    );
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} discard-primary route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -5063,11 +5077,11 @@ function runOpeningRouteCounterShopChecks(runtime) {
   });
 
   routeCases.forEach(({ label, mainKey, primary }, routeIndex) => {
-    runtime.setSeed((0x704502a0 + routeIndex) >>> 0);
-    api.initState();
-    const G = api.getG();
+    const { G, firstIsland } = initRouteState(
+      { label, mainKey },
+      (0x704502a0 + routeIndex * 1009) >>> 0
+    );
     const map = G.map;
-    const { firstIsland } = routeFirstIsland(map, mainKey);
     assertOpeningRouteCounterShopCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${label} prep route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;
@@ -9044,14 +9058,12 @@ function runRouteSidekickReportChecks(runtime) {
       : map.layers[0].find(node => node && Array.isArray(node.conns) && routeCache && node.conns.includes(routeCache.id));
     return { firstShipLayer, routeCache, firstIsland };
   };
+  const initRouteState = (route, seedBase) => initGeneratedRouteState(runtime, api, route, seedBase, routeFirstIsland);
 
   const resourceCount = (G, res) => Math.max(0, Math.floor(Number(G.res && G.res[res]) || 0));
 
   const buyOpeningSidekick = (route, seed = 0x51de51de) => {
-    runtime.setSeed(seed >>> 0);
-    api.initState();
-    const G = api.getG();
-    const { firstIsland } = routeFirstIsland(G.map, route.mainKey);
+    const { G, firstIsland } = initRouteState(route, seed >>> 0);
     assertRouteSidekickReportCheck(firstIsland && scene.applyMapNodeSelection(firstIsland.id), `${route.label} route selection failed`);
     G.phase = 'shopping';
     G.shopCreditUsed = false;

@@ -5,7 +5,7 @@
 const MAP_LAYERS = 40;
 const EARLY_SEGMENT_LENGTHS = [1, 7];
 const EARLY_SEGMENTS = EARLY_SEGMENT_LENGTHS.length;
-const EARLY_PATHS = 3;
+const EARLY_PATHS = 1;
 const EARLY_LAYER_COUNT = EARLY_SEGMENT_LENGTHS.reduce((sum, length) => sum + length + 1, 0);
 const FIRST_LINEAR_SEGMENTS = 0;
 const TOTAL_BATTLES = 8;
@@ -336,7 +336,7 @@ function generateMap() {
   let nextId = 0;
   let battlesSoFar = 0;
 
-  // Early game: parallel route forks with straight non-intersecting paths.
+  // Early game: hidden single-lane route with the old ship cadence.
   let segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
     const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
@@ -372,7 +372,7 @@ function generateMap() {
     segmentBase += segmentLength + 1;
   }
 
-  // Remaining layers: place ship every 5th layer, island layers in between
+  // Remaining layers: place ship every 5th layer, island layers in between.
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS; li++) {
     const healIdx = healingIslandIndex();
     if (HEAL_LAYER_INDICES.has(li) && healIdx >= 0) {
@@ -391,7 +391,7 @@ function generateMap() {
         conns: [],
       }]);
     } else {
-      const count = 2 + Math.floor(Math.random() * 2);
+      const count = 1;
       const allowSacrifice = li >= 10 && Math.random() < 0.5;
       const available = regularIslandIndices({ allowSacrifice });
       const layer = [];
@@ -403,7 +403,7 @@ function generateMap() {
     }
   }
 
-  // Connections: early segments — straight non-intersecting paths
+  // Connections: early segments — straight single-lane path.
   segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
     const base = segmentBase;
@@ -428,7 +428,7 @@ function generateMap() {
     segmentBase = nextBase;
   }
 
-  // Connections: remaining layers
+  // Connections: remaining layers.
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS - 1; li++) {
     const cur = layers[li];
     const nxt = layers[li + 1];
@@ -453,6 +453,7 @@ function generateMap() {
     visited: [],
     currentNodeId: null,
     currentLayer: -1,
+    linearVoyage: true,
   };
 }
 

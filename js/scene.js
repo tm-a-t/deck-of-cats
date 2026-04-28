@@ -132,6 +132,14 @@ class GameScene extends Phaser.Scene {
     return !!(G && G.mode === 'battleTest');
   }
 
+  isLinearVoyage() {
+    return !!(G && G.mode === 'run' && G.map && G.map.linearVoyage);
+  }
+
+  shouldShowMapPanelButton() {
+    return !!(G && G.map && !this.isBattleTest() && !this.isLinearVoyage());
+  }
+
   normalizeCrewWeapons() {
     [G.allCrew, G.deck, G.discard, G.hand].forEach((cards) => {
       if (!Array.isArray(cards)) return;
@@ -1547,7 +1555,7 @@ class GameScene extends Phaser.Scene {
 
   startRound() {
     // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
-    // are all set by MapScene.selectMapNode() before transitioning here.
+    // are set by hidden map-node selection before transitioning here.
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStart();
     }
@@ -1652,7 +1660,7 @@ class GameScene extends Phaser.Scene {
     this.renderAll();
 
     const available = getAvailableNodes(G.map);
-    if (available.length === 1) {
+    if (available.length === 1 || (this.isLinearVoyage() && available.length > 0)) {
       this.applyMapNodeSelection(available[0]);
       return;
     }
@@ -1729,6 +1737,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openMapPanel() {
+    if (!this.shouldShowMapPanelButton()) return;
     this.openPanel('map');
   }
 
@@ -1745,6 +1754,7 @@ class GameScene extends Phaser.Scene {
   }
 
   toggleMapPanel() {
+    if (!this.shouldShowMapPanelButton()) return;
     this.togglePanel('map');
   }
 
@@ -9078,7 +9088,8 @@ class GameScene extends Phaser.Scene {
     this.renderInventory();
 
     const panelEnabled = !this.weaponAssignmentActive() && G.phase !== 'boarding';
-    const mapEnabled = panelEnabled;
+    const showMapButton = this.shouldShowMapPanelButton();
+    const mapEnabled = panelEnabled && showMapButton;
     const shopEnabled = panelEnabled && !G.busy;
     const pileEnabled = panelEnabled && !G.busy;
     const pauseEnabled = true;
@@ -9110,20 +9121,24 @@ class GameScene extends Phaser.Scene {
     });
     this._panelButtons.shopModal = shopBtn;
 
-    const mapBtn = this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
-      this.toggleMapPanel();
-    }, {
-      ...iconOpts,
-      enabled: mapEnabled,
-      bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
-      hoverBg: UI_THEME.colors.cocoaDark,
-      disabledBg: UI_THEME.colors.disabled,
-      color: UI_THEME.colors.paper,
-      disabledColor: UI_THEME.colors.ink,
-    });
-    this._panelButtons.map = mapBtn;
+    let pauseX = shopBtn.x - shopBtn.width / 2 - topGap;
+    if (showMapButton) {
+      const mapBtn = this.mkBtn('nav', pauseX, topY, '🗺️', () => {
+        this.toggleMapPanel();
+      }, {
+        ...iconOpts,
+        enabled: mapEnabled,
+        bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+        hoverBg: UI_THEME.colors.cocoaDark,
+        disabledBg: UI_THEME.colors.disabled,
+        color: UI_THEME.colors.paper,
+        disabledColor: UI_THEME.colors.ink,
+      });
+      this._panelButtons.map = mapBtn;
+      pauseX = mapBtn.x - mapBtn.width / 2 - topGap;
+    }
 
-    this.mkBtn('nav', mapBtn.x - mapBtn.width / 2 - topGap, topY, '⏸', () => {
+    this.mkBtn('nav', pauseX, topY, '⏸', () => {
       this.openPauseMenu();
     }, {
       ...iconOpts,
