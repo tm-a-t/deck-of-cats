@@ -66,6 +66,44 @@ function openingRouteMainKeyForIslandIdx(islandIdx) {
   return null;
 }
 
+const OPENING_CONTRACTS = [
+  { key: 'forest', label: 'Forest', islandIdx: 0, mainKey: 'shellback' },
+  { key: 'rocky', label: 'Rocky', islandIdx: 1, mainKey: 'powderBomber' },
+  { key: 'port', label: 'Port', islandIdx: 3, mainKey: 'deckSniper' },
+];
+
+function openingContractChoices() {
+  return OPENING_CONTRACTS.map(contract => ({ ...contract }));
+}
+
+function openingContractByKey(key) {
+  return OPENING_CONTRACTS.find(contract => contract.key === key) || null;
+}
+
+function openingContractByMainKey(mainKey) {
+  return OPENING_CONTRACTS.find(contract => contract.mainKey === mainKey) || null;
+}
+
+function refreshOpeningRouteCacheNode(node, mainKey = null) {
+  if (!node || node.type !== 'island') return null;
+  const routeMainKey = mainKey || openingRouteMainKeyForIslandIdx(node.islandIdx);
+  if (!routeMainKey) return null;
+  assignScoutedCounterCache(node, routeMainKey, openingScoutedCounterCacheStakes(node, routeMainKey));
+  return node.scoutedCache || null;
+}
+
+function applyOpeningContractToMap(map, contractKey) {
+  const contract = openingContractByKey(contractKey);
+  if (!contract || !map || !Array.isArray(map.layers)) return null;
+  const firstLayer = map.layers[0];
+  const node = firstLayer && firstLayer[0];
+  if (!node || node.type !== 'island') return null;
+
+  node.islandIdx = contract.islandIdx;
+  refreshOpeningRouteCacheNode(node, contract.mainKey);
+  return { contract: { ...contract }, node };
+}
+
 const FIRST_BOARDING_FALLBACK_SUPPORT_KEYS = ['bilgeRat', 'cabinBoy'];
 const FIRST_BOARDING_ROUTE_SUPPORT_KEYS = {
   shellback: ['bilgeRat', 'cabinBoy'],

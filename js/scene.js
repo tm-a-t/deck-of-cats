@@ -1564,6 +1564,25 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  chooseOpeningContract(contractKey, opts = {}) {
+    if (this.isBattleTest() || G.phase !== 'openingContract' || !G.map) return false;
+    const applied = typeof applyOpeningContractToMap === 'function'
+      ? applyOpeningContractToMap(G.map, contractKey)
+      : null;
+    if (!applied || !applied.node) return false;
+    if (this._animateInitialMapHand) {
+      this.queueHandAppear(G.hand, { delay: CARD_MOTION.handAppearDelay });
+      this._animateInitialMapHand = false;
+    }
+    const selected = this.applyMapNodeSelection(applied.node.id);
+    if (selected && !opts.silent && this.L) {
+      const island = ISLANDS[applied.node.islandIdx];
+      const label = island && island.name ? island.name.replace(' Island', '') : 'Contract';
+      this.float(this.L.cx, this.L.Y_ISL_CY - 48 * this.L.k, `${label} contract`, '#ffca28');
+    }
+    return selected;
+  }
+
   applyMapNodeSelection(nodeId) {
     const map = G.map;
     const node = mapNodeById(map, nodeId);
@@ -1648,6 +1667,14 @@ class GameScene extends Phaser.Scene {
 
   enterMapPhase() {
     this.closePanels('map');
+    if (G.phase === 'openingContract') {
+      G.island = null;
+      G.enemyShip = null;
+      G.healing = null;
+      this.clearCombatState();
+      this.renderAll();
+      return;
+    }
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
@@ -7181,7 +7208,7 @@ class GameScene extends Phaser.Scene {
           turnsAway: li - currentLayer,
           boardingNo,
           mainKey: null,
-          encounterDesc: 'Choose an opening route',
+          encounterDesc: 'Choose an opening contract',
           rosterLabels: ['Route decides'],
           mainLabel: 'Route decides',
         };
@@ -7336,6 +7363,14 @@ class GameScene extends Phaser.Scene {
         icon: '☠️',
         line1: 'Choose a pirate to exile.',
         line2: 'Pick one cat that is not in hand',
+      };
+    }
+
+    if (G.phase === 'openingContract') {
+      return {
+        icon: '🧭',
+        line1: 'Choose an opening contract.',
+        line2: 'Safe cache, risky bomber, or greedy port',
       };
     }
 
@@ -8597,12 +8632,23 @@ class GameScene extends Phaser.Scene {
     }
 
     if (!G.island) {
-      const title = this.add.text(cx, titleY, 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
+      const opening = G.phase === 'openingContract';
+      const emptyTitleY = opening ? Math.max(78 * L.k, cy - 132 * L.k) : titleY;
+      const title = this.add.text(cx, emptyTitleY, opening ? 'Opening Contract' : 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
         align: 'center',
         lineSpacing: titleLineSpacing,
+        wordWrap: { width: L.W - 72 * L.k },
       })).setOrigin(0.5, 0);
       this.addTo('island', title);
-      this.addTo('island', this.add.text(cx, titleY + title.height + titleDescMargin, 'Choose the next place to sail', uiBodyStyle(L, UI_THEME.colors.paper))
+      this.addTo('island', this.add.text(
+        cx,
+        emptyTitleY + title.height + titleDescMargin,
+        opening ? 'Pick the first cache and Boarding 1 threat' : 'Choose the next place to sail',
+        uiBodyStyle(L, UI_THEME.colors.paper, {
+          align: 'center',
+          wordWrap: { width: L.W - 96 * L.k },
+        })
+      )
         .setOrigin(0.5, 0));
       return;
     }
@@ -8881,12 +8927,115 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  openingContractCardLines(choice) {
+    const island = choice && ISLANDS[choice.islandIdx];
+    const info = this.openingRouteInfoForMainKey(choice && choice.mainKey);
+    if (!choice || !island || !info) return null;
+    const stakes = this.openingRouteCacheStakesFromNode({
+      type: 'island',
+      islandIdx: choice.islandIdx,
+    }, choice.mainKey);
+    const cacheText = this.openingRouteCacheStakesText(stakes);
+    const alert = Math.max(0, Math.floor(Number(stakes && stakes.alert) || 0));
+    const fullCacheText = `${cacheText}${alert === 0 ? ' +0 Alert' : ''}`;
+    const encounter = typeof firstBoardingEncounterBlueprint === 'function'
+      ? firstBoardingEncounterBlueprint(choice.mainKey)
+      : null;
+    const support = (Array.isArray(encounter && encounter.supportKeys) ? encounter.supportKeys : [])
+      .map((key) => this.combatArchetypeByKey(key))
+      .filter(Boolean)
+      .map(arch => arch.name)
+      .join(' + ');
+    const risk = choice.key === 'forest'
+      ? 'Safe'
+      : (choice.key === 'rocky' ? 'Volatile' : 'Greedy');
+    return {
+      title: `${island.emoji || ''} ${choice.label}`,
+      enemy: info.enemyLabel,
+      cache: `${risk} cache: ${fullCacheText}`,
+      shop: `${info.starterName} -> ${info.primaryName}`,
+      side: `Prep unlocks ${info.sideName}`,
+      support,
+    };
+  }
+
+  renderOpeningContractChoices() {
+    const choices = typeof openingContractChoices === 'function' ? openingContractChoices() : [];
+    if (!choices.length) return;
+    const L = this.L;
+    const isStacked = L.IS_MOBILE || L.W < 700;
+    const gap = 12 * L.k;
+    const cardW = isStacked
+      ? Math.min(L.W - 44 * L.k, 356 * L.k)
+      : Math.min(214 * L.k, (L.W - 76 * L.k - gap * 2) / 3);
+    const cardH = isStacked ? 104 * L.k : 160 * L.k;
+    const totalH = isStacked ? cardH * choices.length + gap * (choices.length - 1) : cardH;
+    const top = Math.max(
+      146 * L.k,
+      Math.min(this.islandCenterY() + 96 * L.k, L.Y_NAV - totalH - 60 * L.k)
+    );
+    const left = isStacked ? L.cx - cardW / 2 : L.cx - (cardW * choices.length + gap * (choices.length - 1)) / 2;
+    const radius = 8 * L.k;
+
+    choices.forEach((choice, index) => {
+      const lines = this.openingContractCardLines(choice);
+      if (!lines) return;
+      const x = isStacked ? left : left + index * (cardW + gap);
+      const y = isStacked ? top + index * (cardH + gap) : top;
+      const bg = this.add.graphics();
+      const drawBg = (fill, stroke, alpha = 0.94) => {
+        bg.clear();
+        bg.fillStyle(uiColorInt(fill), alpha);
+        bg.fillRoundedRect(x, y, cardW, cardH, radius);
+        bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(stroke), 0.95);
+        bg.strokeRoundedRect(x, y, cardW, cardH, radius);
+      };
+      drawBg(UI_THEME.colors.cocoa, UI_THEME.colors.sandBorder);
+      this.addTo('phase', bg);
+
+      const pad = 10 * L.k;
+      const title = this.add.text(x + pad, y + pad, lines.title, uiHeadingStyle(L, isStacked ? 18 : 17, '#f6d28a', {
+        wordWrap: { width: cardW - pad * 2 },
+      })).setOrigin(0, 0);
+      this.addTo('phase', title);
+
+      const detail = [
+        lines.enemy,
+        lines.support ? `Support: ${lines.support}` : '',
+        lines.cache,
+        lines.shop,
+        lines.side,
+      ].filter(Boolean).join('\n');
+      const body = this.add.text(x + pad, y + pad + (isStacked ? 28 : 34) * L.k, detail, uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(isStacked ? 11 : 12),
+        lineSpacing: uiLineSpacingPx(L, isStacked ? 11 : 12, isStacked ? 13 : 15),
+        wordWrap: { width: cardW - pad * 2 },
+      })).setOrigin(0, 0);
+      this.addTo('phase', body);
+
+      const hit = this.add.zone(x + cardW / 2, y + cardH / 2, cardW, cardH)
+        .setInteractive({ useHandCursor: true });
+      hit.on('pointerover', () => drawBg(UI_THEME.colors.cocoaDark, '#f6d28a', 0.98));
+      hit.on('pointerout', () => drawBg(UI_THEME.colors.cocoa, UI_THEME.colors.sandBorder));
+      hit.on('pointerdown', (ptr) => {
+        if (ptr && ptr.event) ptr.event.stopPropagation();
+        this.chooseOpeningContract(choice.key);
+      });
+      this.addTo('phase', hit);
+    });
+  }
+
   renderPhase() {
     this.clearCt('phase');
     if (this.weaponAssignmentActive()) {
       return;
     }
     const L = this.L;
+
+    if (G.phase === 'openingContract') {
+      this.renderOpeningContractChoices();
+      return;
+    }
 
     if (G.phase === 'healing') {
       this.renderHealingChoices();
@@ -8974,7 +9123,7 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
-    if (G.phase === 'healing') {
+    if (G.phase === 'healing' || G.phase === 'openingContract') {
       this.clearCt('hand');
       this._cardHand.destroy();
       return;
@@ -9087,7 +9236,7 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     this.renderInventory();
 
-    const panelEnabled = !this.weaponAssignmentActive() && G.phase !== 'boarding';
+    const panelEnabled = !this.weaponAssignmentActive() && G.phase !== 'boarding' && G.phase !== 'openingContract';
     const showMapButton = this.shouldShowMapPanelButton();
     const mapEnabled = panelEnabled && showMapButton;
     const shopEnabled = panelEnabled && !G.busy;

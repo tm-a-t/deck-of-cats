@@ -562,7 +562,7 @@ function initState() {
     res: { wood: 0, stone: 0, gold: 0 },
     enthusiasm: 0,
     round: 0,
-    phase: 'map',
+    phase: 'openingContract',
     sent: [],
     island: null,
     enemyShip: null,

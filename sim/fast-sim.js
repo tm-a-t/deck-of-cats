@@ -51,6 +51,7 @@ function parseArgs(argv) {
     checkOpeningRoutePrize: false,
     checkOpeningRouteVictoryCache: false,
     checkOpeningRoutePromotion: false,
+    checkOpeningContractChoice: false,
     checkRouteSidekickReport: false,
     checkNoAlarmRushRouteCounter: false,
     checkRouteCounterCover: false,
@@ -199,7 +200,7 @@ function parseArgs(argv) {
       out.checkOpeningRouteMuster = true;
       continue;
     }
-    if (a === '--check-cache-drill-opening-payoff' || a === '--check-opening-route-prize' || a === '--check-opening-route-contract') {
+    if (a === '--check-cache-drill-opening-payoff' || a === '--check-opening-route-prize') {
       out.checkOpeningRoutePrize = true;
       continue;
     }
@@ -209,6 +210,10 @@ function parseArgs(argv) {
     }
     if (a === '--check-opening-route-promotion') {
       out.checkOpeningRoutePromotion = true;
+      continue;
+    }
+    if (a === '--check-opening-contract-choice' || a === '--check-opening-contracts' || a === '--check-opening-route-contract') {
+      out.checkOpeningContractChoice = true;
       continue;
     }
     if (a === '--check-route-sidekick-report') {
@@ -376,6 +381,9 @@ function buildRuntime() {
       isScoutedCounterShopType,
       openingDeckhandCounterTypes,
       gameplayCounterTypes,
+      openingContractChoices,
+      applyOpeningContractToMap,
+      refreshOpeningRouteCacheNode,
       firstBoardingEncounterBlueprint,
       firstShipLayerIndex,
       openingRouteCacheNodeForSelection,
@@ -482,6 +490,7 @@ function phaseCode(phase) {
   if (phase === 'shopping') return 4;
   if (phase === 'boarding') return 5;
   if (phase === 'removing') return 6;
+  if (phase === 'openingContract') return 7;
   return 0;
 }
 
@@ -1514,6 +1523,10 @@ function assertOpeningRoutePromotionCheck(condition, message) {
   if (!condition) throw new Error(`opening route promotion check failed: ${message}`);
 }
 
+function assertOpeningContractChoiceCheck(condition, message) {
+  if (!condition) throw new Error(`opening contract choice check failed: ${message}`);
+}
+
 function assertNoAlarmRushRouteCounterCheck(condition, message) {
   if (!condition) throw new Error(`no-alarm-rush route counter check failed: ${message}`);
 }
@@ -1544,9 +1557,9 @@ function runOpeningRouteCaptainsChecks(runtime) {
   const results = [];
   const samples = 24;
   const routeCases = [
-    { islandIdx: 0, mainKey: 'shellback', supportKeys: ['bilgeRat', 'cabinBoy'], res: 'wood', amount: 1, enthusiasm: 1, alert: 0, counter: 'poisoner', label: 'Forest' },
-    { islandIdx: 1, mainKey: 'powderBomber', supportKeys: ['bilgeRat', 'bilgeRat'], res: 'stone', amount: 1, enthusiasm: 2, alert: 1, counter: 'sawbones', label: 'Rocky' },
-    { islandIdx: 3, mainKey: 'deckSniper', supportKeys: ['cabinBoy', 'cabinBoy'], res: 'gold', amount: 1, enthusiasm: 3, alert: 3, counter: 'needler', label: 'Port' },
+    { key: 'forest', islandIdx: 0, mainKey: 'shellback', supportKeys: ['bilgeRat', 'cabinBoy'], res: 'wood', amount: 1, enthusiasm: 1, alert: 0, counter: 'poisoner', label: 'Forest' },
+    { key: 'rocky', islandIdx: 1, mainKey: 'powderBomber', supportKeys: ['bilgeRat', 'bilgeRat'], res: 'stone', amount: 1, enthusiasm: 2, alert: 1, counter: 'sawbones', label: 'Rocky' },
+    { key: 'port', islandIdx: 3, mainKey: 'deckSniper', supportKeys: ['cabinBoy', 'cabinBoy'], res: 'gold', amount: 1, enthusiasm: 3, alert: 3, counter: 'needler', label: 'Port' },
   ];
   const routeByIslandIdx = new Map(routeCases.map(route => [route.islandIdx, route]));
   routeCases.forEach((route) => {
@@ -1625,35 +1638,31 @@ function runOpeningRouteCaptainsChecks(runtime) {
   scene.openMapPanel = () => { openedMapPanel = true; };
   scene.enterMapPhase();
   const autoG = api.getG();
-  assertOpeningRouteCaptainsCheck(!openedMapPanel, 'linear voyage opened a map panel');
-  assertOpeningRouteCaptainsCheck(autoG.map.currentLayer === 0, `auto voyage current layer ${autoG.map.currentLayer} !== 0`);
-  assertOpeningRouteCaptainsCheck(autoG.phase === 'sending', `auto voyage phase ${autoG.phase} !== sending`);
-  results.push({ name: 'linear voyage auto-selects the first island without opening a map panel', ok: true });
+  assertOpeningRouteCaptainsCheck(!openedMapPanel, 'opening contract wait opened a map panel');
+  assertOpeningRouteCaptainsCheck(autoG.map.currentLayer === -1, `pre-choice voyage current layer ${autoG.map.currentLayer} !== -1`);
+  assertOpeningRouteCaptainsCheck(autoG.phase === 'openingContract', `pre-choice phase ${autoG.phase} !== openingContract`);
+  assertOpeningRouteCaptainsCheck(scene.chooseOpeningContract('forest', { silent: true }), 'forest opening contract choice failed');
+  assertOpeningRouteCaptainsCheck(autoG.map.currentLayer === 0, `chosen voyage current layer ${autoG.map.currentLayer} !== 0`);
+  assertOpeningRouteCaptainsCheck(autoG.phase === 'sending', `chosen voyage phase ${autoG.phase} !== sending`);
+  results.push({ name: 'linear voyage waits for an opening contract, then selects the first island without opening a map panel', ok: true });
 
   for (const route of routeCases) {
-    let G = null;
-    let firstNode = null;
-    for (let attempt = 0; attempt < 200; attempt++) {
-      runtime.setSeed((0x2cadcafe + route.islandIdx * 1009 + attempt * 7919) >>> 0);
-      api.initState();
-      G = api.getG();
-      firstNode = G.map && G.map.layers[0] && G.map.layers[0][0];
-      if (firstNode && firstNode.islandIdx === route.islandIdx) break;
-    }
-    assertOpeningRouteCaptainsCheck(firstNode && firstNode.islandIdx === route.islandIdx, `${route.label} generated first stop missing`);
+    runtime.setSeed((0x2cadcafe + route.islandIdx * 1009) >>> 0);
+    api.initState();
+    const G = api.getG();
     const map = G.map;
     const firstShipLayer = map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
     const ship = map.layers[firstShipLayer][0];
-    const cacheNode = map.layers[firstShipLayer - 1][0];
-    const startNode = firstNode;
-    assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
+    const startNode = map.layers[0][0];
     assertOpeningRouteCaptainsCheck(startNode, `${route.label} start route missing`);
+    assertOpeningRouteCaptainsCheck(scene.chooseOpeningContract(route.key, { silent: true }), `${route.label} contract choice failed`);
+    const cacheNode = map.layers[firstShipLayer - 1][0];
+    assertOpeningRouteCaptainsCheck(cacheNode && cacheNode.scoutedCache, `${route.label} cache route missing`);
     assertOpeningRouteCaptainsCheck(
       startNode.islandIdx === route.islandIdx,
       `${route.label} start island ${startNode.islandIdx} does not match cache island ${route.islandIdx}`
     );
 
-    assertOpeningRouteCaptainsCheck(scene.applyMapNodeSelection(startNode.id), `${route.label} start selection failed`);
     assertOpeningRouteCaptainsCheck(ship.encounter && ship.encounter.mainKey === route.mainKey, `${route.label} route selected ${ship.encounter && ship.encounter.mainKey}`);
     assertOpeningRouteCaptainsCheck(ship.encounter.totalCount === 3, `${route.label} route total ${ship.encounter.totalCount}`);
     assertOpeningRouteCaptainsCheck(
@@ -1678,6 +1687,109 @@ function runOpeningRouteCaptainsChecks(runtime) {
 
 function runFirstShellbackChecks(runtime) {
   return runOpeningRouteCaptainsChecks(runtime);
+}
+
+function runOpeningContractChoiceChecks(runtime) {
+  const api = runtime.api;
+  const scene = makeSimScene(api);
+  const results = [];
+  const routeCases = [
+    {
+      key: 'forest',
+      label: 'Forest/Shellback',
+      islandIdx: 0,
+      mainKey: 'shellback',
+      primary: 'poisoner',
+      side: 'drummer',
+      starterType: 'lumberjack',
+      res: 'wood',
+      enthusiasm: 1,
+      alert: 0,
+      supportKeys: ['bilgeRat', 'cabinBoy'],
+    },
+    {
+      key: 'rocky',
+      label: 'Rocky/Powder Bomber',
+      islandIdx: 1,
+      mainKey: 'powderBomber',
+      primary: 'sawbones',
+      side: 'trainer',
+      starterType: 'miner',
+      res: 'stone',
+      enthusiasm: 2,
+      alert: 1,
+      supportKeys: ['bilgeRat', 'bilgeRat'],
+    },
+    {
+      key: 'port',
+      label: 'Port/Deck Sniper',
+      islandIdx: 3,
+      mainKey: 'deckSniper',
+      primary: 'needler',
+      side: 'survivalist',
+      starterType: 'armsman',
+      res: 'gold',
+      enthusiasm: 3,
+      alert: 3,
+      supportKeys: ['cabinBoy', 'cabinBoy'],
+    },
+  ];
+
+  runtime.setSeed(0x57a41c00);
+  api.initState();
+  let G = api.getG();
+  let openedMapPanel = false;
+  scene.openMapPanel = () => { openedMapPanel = true; };
+  assertOpeningContractChoiceCheck(G.phase === 'openingContract', `fresh run phase ${G.phase} !== openingContract`);
+  assertOpeningContractChoiceCheck(G.round === 0 && G.map.currentLayer === -1, `fresh run already advanced round=${G.round} layer=${G.map.currentLayer}`);
+  scene.enterMapPhase();
+  assertOpeningContractChoiceCheck(!openedMapPanel, 'opening contract phase opened the map panel');
+  assertOpeningContractChoiceCheck(G.phase === 'openingContract', `enterMapPhase bypassed opening contract into ${G.phase}`);
+  assertOpeningContractChoiceCheck(G.map.currentLayer === -1 && G.round === 0, `enterMapPhase auto-selected before choice round=${G.round} layer=${G.map.currentLayer}`);
+  results.push({ name: 'fresh regular runs wait on Opening Contract before any hidden map auto-selection', ok: true });
+
+  routeCases.forEach((route, index) => {
+    runtime.setSeed((0x57a42000 + index * 811) >>> 0);
+    api.initState();
+    G = api.getG();
+    const chosen = scene.chooseOpeningContract(route.key, { silent: true });
+    const firstNode = G.map.layers[0][0];
+    const firstShip = G.map.layers[api.firstShipLayerIndex(G.map)][0];
+    const cache = firstNode.scoutedCache || null;
+    const routeShopPrimary = api.openingRoutePrimaryCounterTypeForShop({ map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    const routeSide = api.openingRouteSideOfferTypeForShop({ map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    const openingCounters = ['poisoner', 'sawbones', 'needler'];
+    const visibleOpeningCounters = G.shop.filter(type => openingCounters.includes(type));
+    const muster = G.openingRouteMuster || null;
+
+    assertOpeningContractChoiceCheck(chosen, `${route.label} choice failed`);
+    assertOpeningContractChoiceCheck(G.phase === 'sending' && G.round === 1, `${route.label} did not enter round-1 sending phase=${G.phase} round=${G.round}`);
+    assertOpeningContractChoiceCheck(G.map.currentLayer === 0 && G.map.currentNodeId === firstNode.id, `${route.label} did not select layer 0`);
+    assertOpeningContractChoiceCheck(firstNode.islandIdx === route.islandIdx, `${route.label} first node island ${firstNode.islandIdx} !== ${route.islandIdx}`);
+    assertOpeningContractChoiceCheck(cache && cache.mainKey === route.mainKey, `${route.label} cache main ${cache && cache.mainKey}`);
+    assertOpeningContractChoiceCheck(cache.res === route.res && cache.amount === 1 && cache.enthusiasm === route.enthusiasm && cache.alert === route.alert, `${route.label} cache stakes ${JSON.stringify(cache)}`);
+    assertOpeningContractChoiceCheck(firstShip.openingRouteMainKey === route.mainKey, `${route.label} first ship route ${firstShip.openingRouteMainKey}`);
+    assertOpeningContractChoiceCheck(firstShip.encounter && firstShip.encounter.mainKey === route.mainKey, `${route.label} first ship main ${firstShip.encounter && firstShip.encounter.mainKey}`);
+    assertOpeningContractChoiceCheck(JSON.stringify(firstShip.encounter.supportKeys) === JSON.stringify(route.supportKeys), `${route.label} support ${JSON.stringify(firstShip.encounter.supportKeys)}`);
+    assertOpeningContractChoiceCheck(muster && muster.type === route.starterType && muster.mainKey === route.mainKey, `${route.label} muster ${JSON.stringify(muster)}`);
+    assertOpeningContractChoiceCheck((G.counterWatchIds || []).includes(muster.pirateId), `${route.label} mustered starter did not gain Counter Watch`);
+    assertOpeningContractChoiceCheck(routeShopPrimary === route.primary, `${route.label} primary ${routeShopPrimary} !== ${route.primary}`);
+    assertOpeningContractChoiceCheck(routeSide === route.side, `${route.label} side offer ${routeSide} !== ${route.side}`);
+    assertOpeningContractChoiceCheck(G.shop[0] === route.primary, `${route.label} primary not pinned in slot 0: ${G.shop.join(',')}`);
+    assertOpeningContractChoiceCheck(visibleOpeningCounters.length === 1 && visibleOpeningCounters[0] === route.primary, `${route.label} shop counters ${visibleOpeningCounters.join(',')}`);
+    assertOpeningContractChoiceCheck(scene.shouldShowMapPanelButton() === false, `${route.label} exposed map button`);
+    results.push({ name: `${route.label} choice sets island, cache stakes, first boarding, starter muster, and route shop`, ok: true });
+  });
+
+  api.initBattleTestState();
+  G = api.getG();
+  const battleBefore = { phase: G.phase, map: G.map, boardingCount: G.boardingCount };
+  const battleChoice = scene.chooseOpeningContract('forest', { silent: true });
+  assertOpeningContractChoiceCheck(battleChoice === false, 'Battle Test accepted an opening contract');
+  assertOpeningContractChoiceCheck(G.phase === battleBefore.phase && G.map === battleBefore.map && G.boardingCount === battleBefore.boardingCount, 'Battle Test changed after rejected contract choice');
+  results.push({ name: 'Battle Test ignores Opening Contract choice and keeps its direct boarding setup', ok: true });
+
+  return { ok: true, checks: results };
 }
 
 function runMapScheduleChecks(runtime) {
@@ -1763,10 +1875,13 @@ function runMapScheduleChecks(runtime) {
   scene.openMapPanel = () => { openedMapPanel = true; };
   scene.enterMapPhase();
   const G = api.getG();
-  assertMapScheduleCheck(!openedMapPanel, 'linear voyage opened a map panel during auto-advance');
-  assertMapScheduleCheck(G.map.currentLayer === 0, `auto-advance current layer ${G.map.currentLayer} !== 0`);
-  assertMapScheduleCheck(G.phase === 'sending', `auto-advance phase ${G.phase} !== sending`);
-  results.push({ name: 'fresh regular run auto-advances to first island sending with no map panel', ok: true });
+  assertMapScheduleCheck(!openedMapPanel, 'opening contract wait opened a map panel');
+  assertMapScheduleCheck(G.map.currentLayer === -1, `pre-choice current layer ${G.map.currentLayer} !== -1`);
+  assertMapScheduleCheck(G.phase === 'openingContract', `pre-choice phase ${G.phase} !== openingContract`);
+  assertMapScheduleCheck(scene.chooseOpeningContract('forest', { silent: true }), 'forest contract did not advance hidden voyage');
+  assertMapScheduleCheck(G.map.currentLayer === 0, `post-choice current layer ${G.map.currentLayer} !== 0`);
+  assertMapScheduleCheck(G.phase === 'sending', `post-choice phase ${G.phase} !== sending`);
+  results.push({ name: 'fresh regular run waits for Opening Contract, then advances to first island sending with no map panel', ok: true });
   return { ok: true, checks: results };
 }
 
@@ -5124,9 +5239,9 @@ function runOpeningCachePurseChecks(runtime) {
   const scene = makeSimScene(api);
   const results = [];
   const routes = [
-    { label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0, cacheRes: 'wood', cacheEnthusiasm: 1, cacheAlert: 0 },
-    { label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1, cacheRes: 'stone', cacheEnthusiasm: 2, cacheAlert: 1 },
-    { label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, cacheRes: 'gold', cacheEnthusiasm: 3, cacheAlert: 3 },
+    { key: 'forest', label: 'Forest/Shellback', mainKey: 'shellback', primary: 'poisoner', starterType: 'lumberjack', nonmatchingType: 'miner', islandIdx: 0, cacheRes: 'wood', cacheEnthusiasm: 1, cacheAlert: 0 },
+    { key: 'rocky', label: 'Rocky/Powder Bomber', mainKey: 'powderBomber', primary: 'sawbones', starterType: 'miner', nonmatchingType: 'lumberjack', islandIdx: 1, cacheRes: 'stone', cacheEnthusiasm: 2, cacheAlert: 1 },
+    { key: 'port', label: 'Port/Deck Sniper', mainKey: 'deckSniper', primary: 'needler', starterType: 'armsman', nonmatchingType: 'miner', islandIdx: 3, cacheRes: 'gold', cacheEnthusiasm: 3, cacheAlert: 3 },
   ];
 
   const routeCacheMap = (route) => ({
@@ -5228,11 +5343,10 @@ function runOpeningCachePurseChecks(runtime) {
     runtime.setSeed(0x5cadc0de);
     api.initState();
     const G = api.getG();
-    const cacheNode = G.map.layers[0].find(node =>
-      node && node.scoutedCache && node.scoutedCache.mainKey === route.mainKey
-    );
+    assertOpeningCachePurseCheck(scene.chooseOpeningContract(route.key, { silent: true }), 'generated Rocky contract choice failed');
+    const cacheNode = G.map.layers[0][0];
     assertOpeningCachePurseCheck(cacheNode, 'generated Rocky layer-0 cache route missing');
-    assertOpeningCachePurseCheck(scene.applyMapNodeSelection(cacheNode.id), 'generated Rocky route selection failed');
+    assertOpeningCachePurseCheck(cacheNode.scoutedCache && cacheNode.scoutedCache.mainKey === route.mainKey, `generated Rocky cache main ${cacheNode.scoutedCache && cacheNode.scoutedCache.mainKey}`);
     G.res = { wood: 0, stone: 0, gold: 0 };
     G.enthusiasm = 0;
     G.boardingAlert = 4;
@@ -9820,6 +9934,18 @@ async function runModelMapChoice(runtime, api, scene, policy, actionCap, decisio
   return true;
 }
 
+function chooseOpeningContractForSim(runtime, api, scene, preferredKey = null) {
+  const choices = typeof api.openingContractChoices === 'function'
+    ? api.openingContractChoices()
+    : [];
+  if (!choices.length || !scene || typeof scene.chooseOpeningContract !== 'function') return false;
+  const chosen = preferredKey
+    ? choices.find(choice => choice.key === preferredKey)
+    : pickRandom(runtime, choices);
+  if (!chosen) return false;
+  return scene.chooseOpeningContract(chosen.key, { silent: true });
+}
+
 async function runModelSendingAndShipPhase(runtime, api, scene, policy, typeIndexMap, actionCap, decisions) {
   const G = api.getG();
 
@@ -10231,6 +10357,14 @@ async function simulateAttempt(runtime, api, scene, maxSteps, purchases, policy,
     steps++;
     const G = api.getG();
 
+    if (G.phase === 'openingContract') {
+      if (!chooseOpeningContractForSim(runtime, api, scene)) {
+        outcome = 'error';
+        break;
+      }
+      continue;
+    }
+
     if (G.phase === 'map') {
       if (!api.getAvailableNodes(G.map).length) {
         outcome = 'stalled';
@@ -10413,7 +10547,6 @@ async function simulateRunWithRetries(
   const scene = makeSimScene(api);
   runtime.setSeed(mixSeed(runSeed, runIndex, 0, 0));
   api.initState();
-  scene.enterMapPhase();
   scene._sendingToIsland.clear();
   scene._sacrificedIds.clear();
 
@@ -10646,6 +10779,11 @@ async function main() {
   }
   if (opts.checkOpeningRoutePromotion) {
     const result = runOpeningRoutePromotionChecks(runtime);
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+  if (opts.checkOpeningContractChoice) {
+    const result = runOpeningContractChoiceChecks(runtime);
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return;
   }

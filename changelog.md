@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260428-215232 — rev 419cc78 — build 0.1.0
+
+- Gameplay: true - Added Opening Contract Choice: regular runs now pause before round 1 for an explicit Forest/Shellback, Rocky/Powder Bomber, or Port/Deck Sniper contract, then mutate the hidden first island/cache and reuse the existing route-selection path for starter muster, route-focused shop, cache drill, and Boarding 1 setup while keeping the map unavailable and Battle Test unchanged. Validated with JS syntax checks, targeted opening contract, map schedule, opening route captain, opening route shop, opening route muster, opening cache purse, opening deckhand counter, opening side prep, and opening victory cache checks, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260428-215232.log`, and `git diff --check`.
+
 ## 2026-04-28 — run 20260428-165236 — rev f9190d3 — build 0.1.0
 
 - Gameplay: true - Applied the Tier-1 Resource Converter pass: Armsman, Poisoner, Drummer, Herald, and Survivalist now gather base resources on island, while Herald and Survivalist ship output requires gold/wood respectively, keeping cheap pirates focused on gather-then-convert decisions instead of direct early `☠️` or free ship money. Validated with JS syntax checks, generated starter/tier-1 card description smoke, targeted opening route shop, opening route promotion, opening side prep, route sidekick, and counter recruit report checks, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260428-165236.log`, and `git diff --check`.
