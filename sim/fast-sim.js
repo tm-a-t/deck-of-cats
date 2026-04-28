@@ -5267,8 +5267,10 @@ function runOpeningCachePurseChecks(runtime) {
     assertOpeningCachePurseCheck(bought && bought.type === route.primary, `${route.label} primary buy failed`);
     assertOpeningCachePurseCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} primary did not top-deck`);
     assertOpeningCachePurseCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} primary did not gain Counter Watch`);
-    assertOpeningCachePurseCheck((bought.might || 0) === 0 && !(G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id), `${route.label} Full Crew route primary gained prep Might or pass-off mark: ${JSON.stringify({ bought, marks: G.cacheDrillBountyMarks })}`);
-    results.push({ name: `${route.label} full-send cache purse funds a Full Crew route counter buy without Opening Prep`, ok: true });
+    assertOpeningCachePurseCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} Full Crew route primary gained prep/prepared stats: ${JSON.stringify(bought)}`);
+    assertOpeningCachePurseCheck((G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id && mark.mainKey === route.mainKey), `${route.label} Full Crew route primary did not receive starter bounty mark: ${JSON.stringify({ bought, marks: G.cacheDrillBountyMarks })}`);
+    assertOpeningCachePurseCheck((pirates[0].might || 0) === 1 && (G.cacheDrillMusterIds || []).includes(pirates[0].id), `${route.label} starter lost Cache Drill Might or early report after Full Crew pass-off`);
+    results.push({ name: `${route.label} full-send cache purse funds a Full Crew route counter buy and passes the starter bounty mark`, ok: true });
   });
 
   {
@@ -5600,6 +5602,20 @@ function runOpeningDeckhandCounterChecks(runtime) {
     return G.combat;
   };
 
+  const assertBoughtPrimaryDoubledBountyAfterPassOff = (G, route, starter, bought, label) => {
+    G.res = { wood: 0, stone: 0, gold: 0 };
+    const combat = setupPassOffCombat(G, route, starter, bought);
+    combat.playerSetupRows = scene.combatDefaultPlayerSetupRows(combat);
+    assertOpeningDeckhandCounterCheck(combat.playerSetupRows[0][0] === bought.id, `${label} bought primary did not default front-left after pass-off`);
+    combat.playerFighters = scene.buildPlayerCombatFighters(combat.playerSetupRows, combat);
+    const ambush = scene.applyCounterAmbush(combat, { silent: true });
+    assertOpeningDeckhandCounterCheck(ambush && ambush.pirateId === bought.id, `${label} bought primary did not Counter Ambush from default setup`);
+    combat.result = 'win';
+    const bounty = scene.grantAmbushBounty(combat);
+    assertOpeningDeckhandCounterCheck(bounty && bounty.pirateId === bought.id && bounty.count === 2 && bounty.drilled, `${label} bought primary did not earn doubled bounty: ${JSON.stringify(bounty)}`);
+    assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 2, `${label} doubled bounty resource wrong: ${JSON.stringify(G.res)}`);
+  };
+
   routes.forEach((route) => {
     const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
     const drillDesc = scene.scoutedCacheDrillDescription();
@@ -5696,6 +5712,41 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(starterBounty && starterBounty.pirateId === pirate.id && starterBounty.count === 1 && !starterBounty.drilled, `${route.label} starter kept doubled bounty after pass-off: ${JSON.stringify(starterBounty)}`);
     assertOpeningDeckhandCounterCheck(G.res[route.bountyRes] === 1, `${route.label} starter normal bounty resource wrong: ${JSON.stringify(G.res)}`);
     results.push({ name: `${route.label} route primary spends one-short Opening Prep, takes the starter Cache Drill bounty mark, defaults front-left, and pays doubled Ambush Bounty`, ok: true });
+  });
+
+  routes.forEach((route) => {
+    const { G, pirate } = setupCache(route, route.starterType, { round: 2 });
+    const reward = applyScoutedCacheDrillForSim(scene, pirate);
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, `${route.label} commitment setup granted starter cache prep`);
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.openingRoutePrimaryCommitmentMainKey = route.mainKey;
+    G.enthusiasm = api.TYPES[route.primary].cost;
+    G.shop = api.normalizeOpeningRouteShop(
+      [route.primary, 'drummer', 'herald', 'trainer'],
+      G.round,
+      { map: G.map, mode: G.mode, boardingCount: G.boardingCount }
+    );
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningDeckhandCounterCheck(
+      quote.canBuy && quote.counter && quote.topDeck && quote.openingRoutePrimaryCommitment && !quote.openingCounterPrepMight && quote.discount === 0 && quote.fullCrewCoverage === 0,
+      `${route.label} commitment primary quote mismatch: ${JSON.stringify(quote)}`
+    );
+    const bought = scene.buyPirate(G.shop.indexOf(route.primary), { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningDeckhandCounterCheck(bought && bought.type === route.primary, `${route.label} commitment primary buy failed`);
+    assertOpeningDeckhandCounterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} commitment primary did not top-deck`);
+    assertOpeningDeckhandCounterCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} commitment primary did not gain Counter Watch`);
+    assertOpeningDeckhandCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} commitment primary gained prep/prepared stats: ${JSON.stringify(bought)}`);
+    assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1, `${route.label} starter lost Cache Drill Might on commitment pass-off`);
+    assertOpeningDeckhandCounterCheck((G.cacheDrillMusterIds || []).includes(pirate.id), `${route.label} commitment pass-off moved starter early report`);
+    assertOpeningDeckhandCounterCheck(G.openingRouteCounterBoughtMainKey === route.mainKey && G.openingRouteCounterBoughtPirateId === bought.id, `${route.label} commitment primary did not secure route`);
+    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || []).length === 1 && G.cacheDrillBountyMarks[0].pirateId === bought.id && G.cacheDrillBountyMarks[0].mainKey === route.mainKey, `${route.label} commitment primary did not take starter bounty mark: ${JSON.stringify(G.cacheDrillBountyMarks)}`);
+    assertBoughtPrimaryDoubledBountyAfterPassOff(G, route, pirate, bought, `${route.label} commitment pass-off`);
+    results.push({ name: `${route.label} Route Primary Commitment passes the starter Cache Drill bounty mark to the bought primary`, ok: true, quote });
   });
 
   const setupSecuredPrimaryBeforeCache = (route) => {
@@ -5913,8 +5964,35 @@ function runOpeningDeckhandCounterChecks(runtime) {
     assertOpeningDeckhandCounterCheck(quote.canBuy && quote.topDeck && !quote.openingCounterPrepMight, `Full Crew-only route primary quote mismatch: ${JSON.stringify(quote)}`);
     const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
     assertOpeningDeckhandCounterCheck(bought && bought.type === route.primary, 'Full Crew-only primary buy failed');
-    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === pirate.id, 'Full Crew-only primary transferred the starter bounty mark');
-    results.push({ name: 'route-primary buys without Opening Counter Prep do not trigger Route Starter Pass-Off', ok: true });
+    assertOpeningDeckhandCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `Full Crew-only primary gained prep/prepared stats: ${JSON.stringify(bought)}`);
+    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === bought.id, 'Full Crew-only primary did not take the starter bounty mark');
+    assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1 && (G.cacheDrillMusterIds || []).includes(pirate.id), 'starter lost Might or early report during Full Crew pass-off');
+    assertBoughtPrimaryDoubledBountyAfterPassOff(G, route, pirate, bought, 'Full Crew-only pass-off');
+    results.push({ name: 'Full Crew route-primary buys pass the starter Cache Drill bounty mark without prep stats', ok: true });
+  }
+
+  {
+    const route = routes[1];
+    const { G, pirate } = setupCache(route, route.starterType, { round: 1 });
+    const reward = applyScoutedCacheDrillForSim(scene, pirate);
+    assertOpeningDeckhandCounterCheck(reward && reward.applied && !reward.openingCounterPrep, 'Full Crew coverage setup granted starter cache prep');
+    G.phase = 'shopping';
+    G.busy = false;
+    G.shopAnimating = false;
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = 1;
+    G.openingCounterPlan = false;
+    G.enthusiasm = Math.max(0, api.TYPES[route.primary].cost - 2);
+    G.shop = [route.primary, 'drummer', 'herald', 'trainer'];
+    const quote = scene.shopPurchaseQuote(route.primary);
+    assertOpeningDeckhandCounterCheck(quote.canBuy && quote.topDeck && quote.fullCrewCoverage === 1 && !quote.openingCounterPrepMight, `Full Crew coverage route primary quote mismatch: ${JSON.stringify(quote)}`);
+    const bought = scene.buyPirate(0, { deferRender: true, silent: true, ignoreAnimating: true, skipPanelRefresh: true });
+    assertOpeningDeckhandCounterCheck(bought && bought.type === route.primary, 'Full Crew coverage primary buy failed');
+    assertOpeningDeckhandCounterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `Full Crew coverage primary gained prep/prepared stats: ${JSON.stringify(bought)}`);
+    assertOpeningDeckhandCounterCheck((G.cacheDrillBountyMarks || [])[0].pirateId === bought.id, 'Full Crew coverage primary did not take the starter bounty mark');
+    assertOpeningDeckhandCounterCheck((pirate.might || 0) === 1 && (G.cacheDrillMusterIds || []).includes(pirate.id), 'starter lost Might or early report during Full Crew coverage pass-off');
+    assertBoughtPrimaryDoubledBountyAfterPassOff(G, route, pirate, bought, 'Full Crew coverage pass-off');
+    results.push({ name: 'Full Crew coverage route-primary buys pass the starter Cache Drill bounty mark without prep stats', ok: true });
   }
 
   {
@@ -6410,11 +6488,13 @@ function runOpeningRouteMusterChecks(runtime) {
     assertOpeningRouteMusterCheck(bought && bought.type === route.primary, `${route.label} route primary buy failed`);
     assertOpeningRouteMusterCheck(G.deck[G.deck.length - 1] === bought && !G.discard.includes(bought), `${route.label} route primary did not top-deck`);
     assertOpeningRouteMusterCheck((G.counterWatchIds || []).includes(bought.id), `${route.label} route primary did not gain Counter Watch`);
-    assertOpeningRouteMusterCheck((bought.might || 0) === 0 && !(G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id), `${route.label} Full Crew route primary gained prep Might or pass-off mark`);
+    assertOpeningRouteMusterCheck((bought.might || 0) === 0 && !bought.weaponKey && (bought.tempo || 0) === 0, `${route.label} Full Crew route primary gained prep/prepared stats`);
+    assertOpeningRouteMusterCheck((G.cacheDrillBountyMarks || []).some(mark => mark && mark.pirateId === bought.id && mark.mainKey === route.mainKey), `${route.label} Full Crew route primary did not receive starter bounty mark`);
+    assertOpeningRouteMusterCheck((starter.might || 0) === 1 && (G.cacheDrillMusterIds || []).includes(starter.id), `${route.label} starter lost Cache Drill Might or early report after Full Crew pass-off`);
     [starter, bought].forEach((pirate) => {
       assertOpeningRouteMusterCheck(zoneCount(G, pirate) === 1, `${route.label} full-send line duplicated ${pirate.id}: ${zoneCount(G, pirate)}`);
     });
-    results.push({ name: `${route.label} mustered-starter full-send affords a watched route-primary counter without Opening Prep`, ok: true, quote });
+    results.push({ name: `${route.label} mustered-starter full-send affords a watched route-primary counter and passes the starter bounty mark`, ok: true, quote });
   });
 
   {

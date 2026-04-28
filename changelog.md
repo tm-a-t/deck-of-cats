@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260427-235344 — rev 71de1e5 — build 0.1.0
+
+- Gameplay: true - Broadened Route Starter Pass-Off so a starter-opened `Cache Drill` bounty mark now transfers to a bought selected route primary when that purchase secures through Route Primary Commitment, Full Crew Discount, Full Crew coverage, or Opening Counter Prep, while moving only the doubled-bounty mark and preserving starter Might, Alert refund, early report, and Watch. Validated with JS syntax checks; targeted opening deckhand, cache purse, route muster, route shop, route cover, prep, side-prep, drilled bounty, no-alarm, counter ambush, and opening route promotion checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-235344.log`; and `git diff --check`.
+
 ## 2026-04-28 — run 20260427-234211 — rev 804e93d — build 0.1.0
 
 - Gameplay: true - Retimed Opening Route Promotion to apply immediately after a secured bought route-primary counter triggers Boarding 1 Counter Ambush, refreshing that fighter's same-combat weapon/buff stats before normal attacks while keeping the promotion idempotent and excluding starters, side offers, discard-only primaries, Battle Test, Boarding 2+, reinforcement hands, wrong-main, missing-ambush, and removed/non-owned cases. Validated with JS syntax checks; `node sim/fast-sim.js --check-opening-route-promotion --json`; related Counter Ambush, Opening Deckhand Counter, Drilled Ambusher Bounty, and Opening Route Victory Cache checks; `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260427-234211.log`; and `git diff --check`.

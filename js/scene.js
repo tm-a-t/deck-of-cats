@@ -950,14 +950,21 @@ class GameScene extends Phaser.Scene {
   }
 
   transferRouteStarterCacheDrillBountyToBoughtCounter(pirate, type, quote, routeShopState) {
+    const eligibleRoutePrimaryPassOff = !!(quote
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.openingRoutePrimaryCommitment
+        || quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight));
     if (this.isBattleTest()
       || G.phase !== 'shopping'
       || !pirate
       || pirate.id == null
       || !type
       || !quote
-      || !quote.openingCounterPrepMight
-      || !quote.consumesOpeningCounterPlan
+      || !eligibleRoutePrimaryPassOff
       || !routeShopState
       || type !== routeShopState.primaryCounterType
       || !routeShopState.mainKey
