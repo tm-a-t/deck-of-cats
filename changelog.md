@@ -2,6 +2,10 @@
 
 This file records gameplay and loop-driven changes. Future loop Developer steps must append entries here whenever they change the game.
 
+## 2026-04-28 — run 20260428-165236 — rev f9190d3 — build 0.1.0
+
+- Gameplay: true - Applied the Tier-1 Resource Converter pass: Armsman, Poisoner, Drummer, Herald, and Survivalist now gather base resources on island, while Herald and Survivalist ship output requires gold/wood respectively, keeping cheap pirates focused on gather-then-convert decisions instead of direct early `☠️` or free ship money. Validated with JS syntax checks, generated starter/tier-1 card description smoke, targeted opening route shop, opening route promotion, opening side prep, route sidekick, and counter recruit report checks, `node sim/fast-sim.js --runs 10 --seed 42 --max-steps 5000 --json --best-log /tmp/deck-of-cats-best-20260428-165236.log`, and `git diff --check`.
+
 ## 2026-04-28 — run 20260428-153529 — rev 771f773 — build 0.1.0
 
 - Gameplay: true - Changed regular runs to a hidden single-lane Linear Voyage: generated maps now have one node per layer, the first island auto-selects the Boarding 1 route cache/enemy/shop-primary package, regular map panels/buttons are hidden, and map-phase entry auto-advances instead of asking for route clicks. Validated with JS syntax checks; targeted linear map, opening route, cache, shop, victory, sidekick, and cover checks; configured fast sim; and `git diff --check`.

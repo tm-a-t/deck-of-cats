@@ -24,7 +24,7 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 |---|---:|---|---|
 | Rigger | 4 | 🪵 | 4🪵 → ☠️☠️ |
 | Ballaster | 4 | 🪨 | 4🪨 → ☠️☠️ |
-| Armsman | 2 | 🔨 | 🪵 → 🔫 Rusty Pistol |
+| Armsman | 2 | 🪵 | 🪵 → 🔫 Rusty Pistol |
 
 ## Regular Run Flow
 
@@ -354,14 +354,14 @@ Source of truth for all gameplay mechanics currently implemented in `js/`.
 |---|---:|---|---|
 | Rigger | — | 🪵 | 4🪵 → ☠️☠️ |
 | Ballaster | — | 🪨 | 4🪨 → ☠️☠️ |
-| Armsman | — | 🔨 | 🪵 → 🔫 Rusty Pistol |
-| Poisoner | 2 | ☠️☠️ | 🪵 → ☠️☠️+🗡️ |
-| Drummer | 2 | ☠️ | 🪵 → ☠️+⚡ |
-| Herald | 2 | ☠️☠️☠️ | — |
+| Armsman | — | 🪵 | 🪵 → 🔫 Rusty Pistol |
+| Poisoner | 2 | 🪵 | 🪵 → ☠️☠️+🗡️ |
+| Drummer | 2 | 🪵 | 🪵 → ☠️+⚡ |
+| Herald | 2 | 🪙 | 🪙 → ☠️☠️☠️ |
 | Sawbones | 3 | 🪨 | 🪨 → ☠️☠️+⚔️ |
 | Needler | 3 | 🪙 | 🪙 → ☠️☠️+🧪 |
 | Trainer | 3 | 🪨 | 🪨 → ☠️+💪 |
-| Survivalist | 3 | 🪵+☠️☠️ | ☠️☠️ |
+| Survivalist | 3 | 🪵 | 🪵 → ☠️☠️ |
 | Bosun | 5 | — | ☠️☠️☠️ |
 | Cutthroat | 5 | ☠️ | 🪙🪙 → exile pirate |
 | Scarwright | 7 | 🪨 | 🪨🪨 → 4☠️+🪝 |

@@ -862,27 +862,27 @@ const TYPES = {
   },
   armsman: {
     name: 'Armsman', cat: [1,14,39,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'hammer', count: 1 } },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 1, personalGains: [{ weapon: 'rustyPistol' }] },
     cost: null,
   },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
   poisoner: {
     name: 'Poisoner', cat: [1,6,42,34,16,0], canIsland: true,
-    island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 2, personalGains: [{ weapon: 'venomKnife' }] },
     cost: 2,
   },
   drummer: {
     name: 'Drummer', cat: [1,8,42,27,16,8], canIsland: true,
-    island: { guaranteed: { res: 'enthusiasm', amt: 1 } },
+    island: { res: 'wood', amt: 1 },
     ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 1, personalGains: [{ buff: 'tempo' }] },
     cost: 2,
   },
   herald: {
     name: 'Herald', cat: [1,7,39,32,16,2], canIsland: true,
-    island: { guaranteed: { res: 'enthusiasm', amt: 3 } },
-    ship:   null,
+    island: { res: 'gold', amt: 1 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
   },
   sawbones: {
@@ -905,8 +905,8 @@ const TYPES = {
   },
   survivalist: {
     name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
-    island: { res: 'wood', amt: 1, bonusEnthusiasm: 2 },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
+    island: { res: 'wood', amt: 1 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 2 },
     cost: 3,
   },
   bosun: {
