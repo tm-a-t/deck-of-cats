@@ -181,6 +181,7 @@ class MapScene extends Phaser.Scene {
     const available = new Set(getAvailableNodes(map));
     const visited = new Set(map.visited);
     const selecting = G.phase === 'map';
+    const nextShipIntel = this.nextShipIntel();
     const activePath = uiColorInt(UI_THEME.colors.cocoa);
     const dimPath = uiColorInt(UI_THEME.colors.outline);
 
@@ -310,12 +311,50 @@ class MapScene extends Phaser.Scene {
 
         // Boarding label
         if (isShip) {
-          const strTxt = this.add.text(nx, ny + r + 8, 'Board', {
+          const isNextShip = nextShipIntel && nextShipIntel.nodeId === node.id;
+          const boardText = isNextShip && nextShipIntel.mainLabel
+            ? `Board\n${nextShipIntel.mainLabel}`
+            : 'Board';
+          const strTxt = this.add.text(nx, ny + r + 8, boardText, {
             fontFamily: UI_THEME.fonts.body,
-            fontSize: L.fs(14),
+            fontSize: L.fs(isNextShip ? 12 : 14),
             color: UI_THEME.colors.ink,
+            align: 'center',
+            lineSpacing: uiLineSpacingPx(L, isNextShip ? 12 : 14, isNextShip ? 14 : 16),
+            wordWrap: { width: 132 * L.k },
           }).setOrigin(0.5, 0);
           this.mapGfx.add(strTxt);
+        }
+
+        const cacheText = this.scoutedCacheBadgeText(node);
+        if (cacheText) {
+          makeUiPill(this, {
+            container: this.mapGfx,
+            L,
+            x: nx,
+            y: ny - r - 18 * L.k,
+            label: cacheText,
+            textPx: 12,
+            padX: 7 * L.k,
+            padY: 4 * L.k,
+            minH: 20 * L.k,
+            fill: UI_THEME.colors.cocoaDark,
+            stroke: UI_THEME.colors.sand,
+            textColor: UI_THEME.colors.paper,
+          });
+        }
+
+        const routePlanLines = this.openingRouteChoicePlanLines(node, li);
+        if (routePlanLines.length) {
+          const routePlan = this.add.text(nx, ny + r + 20 * L.k, routePlanLines.join('\n'), {
+            fontFamily: UI_THEME.fonts.body,
+            fontSize: L.fs(9),
+            color: UI_THEME.colors.ink,
+            align: 'center',
+            lineSpacing: uiLineSpacingPx(L, 9, 11),
+            wordWrap: { width: 124 * L.k },
+          }).setOrigin(0.5, 0);
+          this.mapGfx.add(routePlan);
         }
 
         // Layer number (small, to the side)
@@ -490,6 +529,60 @@ class MapScene extends Phaser.Scene {
   }
 
   // ──────────── HELPERS ────────────
+
+  nextShipIntel() {
+    const game = this.scene.get('game');
+    if (!game || typeof game.nextShipIntel !== 'function') return null;
+    return game.nextShipIntel();
+  }
+
+  scoutedCacheBadgeText(node) {
+    const cache = node && node.scoutedCache;
+    if (!cache || cache.claimed) return '';
+    const emoji = RES_EMOJI[cache.res];
+    if (!emoji) return '';
+    const enemy = COMBAT.enemyArchetypes.find(archetype => archetype && archetype.key === cache.mainKey);
+    const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
+    const enthusiasm = cache.enthusiasm == null
+      ? 1
+      : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    const parts = [];
+    if (enemy && enemy.emoji) parts.push(enemy.emoji);
+    parts.push('1st opens');
+    if (amount > 0) parts.push(`+${amount > 1 ? amount : ''}${emoji}`);
+    if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    if (alert > 0) {
+      const refund = Math.min(alert, 1);
+      const remaining = Math.max(0, alert - refund);
+      parts.push(remaining > 0
+        ? `counter cuts ${refund} Alert, +${remaining} left`
+        : 'counter disarms');
+    }
+    const routeWatch = this.openingRouteWatchBadgeText(cache);
+    if (routeWatch) parts.push(routeWatch);
+    return parts.join(' ');
+  }
+
+  openingRouteWatchBadgeText(cache) {
+    if (!cache
+      || G.mode === 'battleTest'
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return '';
+    }
+    const starterType = openingDeckhandCounterTypes(cache.mainKey, 1, { mode: G.mode })[0];
+    const def = starterType && TYPES[starterType];
+    return def && def.name ? `${def.name} Watch` : '';
+  }
+
+  openingRouteChoicePlanLines(node, layerIdx) {
+    if (!node || layerIdx !== 0 || !G.map || G.map.currentLayer >= 0) return [];
+    const game = this.scene.get('game');
+    if (!game || typeof game.openingRouteChoicePlanLines !== 'function') return [];
+    return game.openingRouteChoicePlanLines(node);
+  }
 
   uiTxt(x, y, str, style) {
     const t = this.add.text(x, y, str, Object.assign(uiBodyStyle(this.L, UI_THEME.colors.ink), style)).setOrigin(0.5, 0);

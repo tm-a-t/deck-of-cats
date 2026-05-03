@@ -84,6 +84,19 @@ function ensureCardBandTexture(scene, bandTexKey, sourceImage, cw, textureResolu
   scene.textures.get(bandTexKey).setFilter(Phaser.Textures.FilterMode.LINEAR);
 }
 
+function cardBuffCount(value) {
+  return Math.max(0, Math.floor(Number(value) || 0));
+}
+
+function cardBuffBadges(opts = {}) {
+  const might = cardBuffCount(opts.might);
+  const tempo = cardBuffCount(opts.tempo);
+  const badges = [];
+  if (might > 0) badges.push({ emoji: BUFF_EMOJI.might, count: might, fill: '#f0b46a', stroke: '#9a5b20' });
+  if (tempo > 0) badges.push({ emoji: BUFF_EMOJI.tempo, count: tempo, fill: '#f4df74', stroke: '#9d8424' });
+  return badges;
+}
+
 function buildCardTexture(scene, typeKey, L, opts = {}) {
   const k = L.k;
   const textureResolution = Math.max(1, Math.ceil(scene.game.config.resolution || 1));
@@ -93,11 +106,14 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
   const bw = Math.max(1, Math.round(CARD.BORDER * k));
   const slotState = opts.slotState || 'none';
   const slotWeaponKey = opts.slotWeaponKey || null;
+  const wounded = !!opts.wounded;
+  const buffBadges = cardBuffBadges(opts);
 
   const def = TYPES[typeKey];
   const islandDesc = pirateIslandDesc(def);
   const shipDesc = pirateShipDesc(def);
-  const textHash = cardTextHash(`${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}`);
+  const buffHash = buffBadges.map((badge) => `${badge.emoji}${badge.count}`).join(',');
+  const textHash = cardTextHash(`${wounded ? 'wounded' : 'ok'}|${buffHash}|${slotState}|${slotWeaponKey || ''}|${typeKey}|${def.name}|${islandDesc}|${shipDesc}`);
   const texKey = '_card_' + typeKey + '_' + textHash + '_' + cw + 'x' + ch + '@' + textureResolution;
   const islandBand = cardIslandBandMetrics(ch, k);
   const islandBandTexKey = texKey + '_islandband';
@@ -187,6 +203,57 @@ function buildCardTexture(scene, typeKey, L, opts = {}) {
       ctx.textBaseline = 'top';
     }
 
+    if (wounded) {
+      const statusW = Math.round(30 * k);
+      const statusH = Math.round(30 * k);
+      const statusR = Math.round(4 * k);
+      const statusX = cw - statusW;
+      const statusY = Math.round(36 * k);
+      roundRect(ctx, statusX, statusY, statusW, statusH, statusR);
+      ctx.fillStyle = '#f1d6d0';
+      ctx.fill();
+      ctx.strokeStyle = '#c96f64';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = UI_THEME.colors.ink;
+      ctx.font = `${Math.max(UI_THEME.fonts.headingMinPx, Math.round(15 * k))}px ${UI_THEME.fonts.heading}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(WOUNDED_EMOJI, statusX + statusW / 2, statusY + statusH / 2 + Math.round(1 * k));
+      ctx.textBaseline = 'top';
+    }
+
+    if (buffBadges.length) {
+      const gap = Math.round(4 * k);
+      const badgeH = Math.round(20 * k);
+      const badgeR = Math.round(6 * k);
+      const fontSize = Math.max(10, Math.round(12 * k));
+      ctx.font = `${fontSize}px ${UI_THEME.fonts.heading}`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      const widths = buffBadges.map((badge) => {
+        const label = `${badge.emoji}${badge.count}`;
+        return Math.max(Math.round(28 * k), Math.ceil(ctx.measureText(label).width + 10 * k));
+      });
+      const totalW = widths.reduce((sum, w) => sum + w, 0) + gap * (widths.length - 1);
+      let badgeX = Math.round((cw - totalW) / 2);
+      const badgeY = Math.round(145 * k);
+      buffBadges.forEach((badge, idx) => {
+        const badgeW = widths[idx];
+        const label = `${badge.emoji}${badge.count}`;
+        roundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeR);
+        ctx.fillStyle = badge.fill;
+        ctx.fill();
+        ctx.strokeStyle = badge.stroke;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = UI_THEME.colors.ink;
+        ctx.fillText(label, badgeX + badgeW / 2, badgeY + badgeH / 2 + Math.round(1 * k));
+        badgeX += badgeW + gap;
+      });
+      ctx.textBaseline = 'top';
+    }
+
     ctx.fillStyle = UI_THEME.colors.ink;
 
     ctx.font = `${islandFs}px ${UI_THEME.fonts.body}`;
@@ -231,6 +298,9 @@ function createPirateCard(scene, opts) {
   const built = buildCardTexture(scene, opts.type, L, {
     slotState: opts.slotState || 'none',
     slotWeaponKey: opts.slotWeaponKey || null,
+    wounded: !!opts.wounded,
+    might: opts.might || 0,
+    tempo: opts.tempo || 0,
   });
   const cardImg = scene.add.image(0, 0, built.texKey).setOrigin(0.5, 0.5);
   if (built.textureResolution > 1) {
@@ -258,6 +328,48 @@ function createPirateCard(scene, opts) {
     cw: built.cw,
     ch: built.ch,
   };
+}
+
+function createCardBadgeOverlay(scene, parentContainer, cardView, badge, L) {
+  if (!scene || !parentContainer || !cardView || !badge) return null;
+  const k = L.k;
+  const label = String(badge.label || 'Route counter');
+  const cardW = cardView.cw;
+  const cardH = cardView.ch;
+  const strokeColor = uiColorInt(badge.stroke || '#ffca28');
+  const fillColor = uiColorInt(badge.fill || '#f6d28a');
+  const textColor = badge.textColor || UI_THEME.colors.ink;
+
+  const border = scene.add.graphics();
+  border.lineStyle(Math.max(1, Math.round(2 * k)), strokeColor, 0.96);
+  border.strokeRoundedRect(
+    -cardW / 2 + 3 * k,
+    -cardH / 2 + 3 * k,
+    cardW - 6 * k,
+    cardH - 6 * k,
+    Math.round((CARD.RADIUS + 2) * k)
+  );
+
+  let fontPx = 9;
+  const text = scene.add.text(0, -cardH / 2 + 18 * k, label, uiHeadingStyle(L, fontPx, textColor, {
+    align: 'center',
+  })).setOrigin(0.5, 0.5);
+  const maxTextW = Math.max(48 * k, cardW - 22 * k);
+  while (text.width > maxTextW && fontPx > 7) {
+    fontPx -= 1;
+    text.setFontSize(L.fs(fontPx));
+  }
+
+  const badgeH = Math.max(16 * k, text.height + 2 * k);
+  const badgeW = Math.min(cardW - 12 * k, Math.max(62 * k, text.width + 12 * k));
+  const bg = scene.add.graphics();
+  bg.fillStyle(fillColor, 0.96);
+  bg.lineStyle(Math.max(1, Math.round(1 * k)), strokeColor, 1);
+  bg.fillRoundedRect(-badgeW / 2, text.y - badgeH / 2, badgeW, badgeH, Math.round(5 * k));
+  bg.strokeRoundedRect(-badgeW / 2, text.y - badgeH / 2, badgeW, badgeH, Math.round(5 * k));
+
+  parentContainer.add([border, bg, text]);
+  return { border, bg, text };
 }
 
 function createCardBandOverlay(scene, opts) {
@@ -704,6 +816,7 @@ class CardHand {
     const onCardPointerDown = opts.onCardPointerDown;
     const cardSlotStateForCard = opts.cardSlotStateForCard || (() => 'none');
     const cardSlotWeaponKeyForCard = opts.cardSlotWeaponKeyForCard || (() => null);
+    const cardBadgeForCard = opts.cardBadgeForCard || (() => null);
     const touchTapPreviewsAction = opts.touchTapPreviewsAction !== false;
     const container = opts.container;
     this._onCardHoverChange = opts.onCardHoverChange || null;
@@ -737,6 +850,9 @@ class CardHand {
         depth: 10 + slotI,
         slotState: cardSlotStateForCard(pirate, handIdx),
         slotWeaponKey: cardSlotWeaponKeyForCard(pirate, handIdx),
+        wounded: !!pirate.wounded,
+        might: pirate.might || 0,
+        tempo: pirate.tempo || 0,
         L,
         container,
       });
@@ -760,6 +876,11 @@ class CardHand {
         hovered: false,
         dragging: false,
       };
+
+      const cardBadge = cardBadgeForCard(pirate, handIdx);
+      if (cardBadge) {
+        cardData.badge = createCardBadgeOverlay(scene, ct, cardView, cardBadge, L);
+      }
 
       if (allowInteraction) {
         cardImg.setInteractive({ useHandCursor: true });

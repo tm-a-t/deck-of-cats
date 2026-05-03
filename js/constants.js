@@ -49,6 +49,16 @@ const CARD_MOTION = {
 const BASE_PIRATE_HP = 9;
 const BASE_PIRATE_ATTACK = 3;
 
+const QUIET_DOCKS = {
+  cost: 2,
+  alertReduction: 1,
+};
+
+const SHOP_CREDIT = {
+  maxMissing: 2,
+  alertPerMissing: 1,
+};
+
 const COMBAT = {
   pirateHp: BASE_PIRATE_HP,
   pirateDamage: BASE_PIRATE_ATTACK,
@@ -158,13 +168,44 @@ const COMBAT = {
       unlockAt: 1,
       deathEffect: 'frontRowBlast',
       deathEffectDamage: 4,
-      summary: 'When defeated, it explodes and hits your whole front row for 4.',
+      summary: 'When defeated, it explodes and hits your whole front row for 4. Wounds disarm the blast.',
       encounterDesc: 'Explosive crew aboard',
     },
   ],
 };
 
+const SCOUTED_SHIP_COUNTERS = {
+  shellback: ['poisoner', 'needler', 'plagueCaptain'],
+  powderBomber: ['sawbones', 'scarwright'],
+  deckSniper: ['needler', 'bandmaster'],
+  netter: ['drummer', 'trainer', 'flagbearer'],
+  flintDuelist: ['poisoner', 'needler', 'sawbones', 'scarwright', 'plagueCaptain'],
+};
+
+const OPENING_DECKHAND_COUNTERS = {
+  shellback: ['lumberjack'],
+  powderBomber: ['miner'],
+  deckSniper: ['armsman'],
+};
+
+const SCOUTED_COUNTER_CACHE_RES = {
+  shellback: 'wood',
+  powderBomber: 'stone',
+  deckSniper: 'gold',
+  netter: 'wood',
+  flintDuelist: 'wood',
+};
+
 const WEAPON_CATEGORY_EMOJI = '⚔️';
+const WOUNDED_EMOJI = '🩹';
+const BUFF_EMOJI = {
+  might: '💪',
+  tempo: '⚡',
+};
+const BUFF_LABELS = {
+  might: 'Might',
+  tempo: 'Tempo',
+};
 
 const WEAPON_TYPES = {
   hammer: {
@@ -175,89 +216,70 @@ const WEAPON_TYPES = {
     hpBonus: 4,
     summary: 'Melee. +4 HP.',
   },
-  axe: {
-    name: 'Axe',
-    emoji: '🪓',
-    range: 'melee',
-    targetMode: 'frontRowAll',
-    summary: 'Melee. Hits the whole front row.',
-  },
-  bow: {
-    name: 'Bow',
-    emoji: '🏹',
-    range: 'ranged',
-    targetMode: 'lowestHpAny',
-    summary: 'Ranged. Targets the lowest-HP foe.',
-  },
-  musket: {
-    name: 'Musket',
+  rustyPistol: {
+    name: 'Rusty Pistol',
     emoji: '🔫',
-    range: 'ranged',
-    targetMode: 'highestHpAny',
-    damageBonus: 2,
-    attackMsMultiplier: 1.6,
-    summary: 'Ranged. Slower, +2 dmg, targets the toughest foe.',
-  },
-  hookshot: {
-    name: 'Hookshot',
-    emoji: '🪝',
-    range: 'ranged',
-    targetMode: 'lastRowPull',
-    attackMsMultiplier: 1.45,
-    damageOverride: 0,
-    summary: 'Ranged. Slower, no damage, pulls a back-row foe forward.',
-  },
-  chain: {
-    name: 'Chain',
-    emoji: '⛓️',
-    range: 'melee',
-    targetMode: 'frontBand',
-    damageOverride: 0,
-    nextAttackDelayMsOnHit: 1000,
-    summary: 'Melee. No damage, delays the target by 1s.',
-  },
-  dirk: {
-    name: 'Dirk',
-    emoji: '🗡️',
-    range: 'melee',
-    targetMode: 'frontBand',
-    bleed: { damage: 1, ticks: 3, intervalMs: 700 },
-    summary: 'Melee. Normal hit, then 3 bleed ticks.',
-  },
-  trident: {
-    name: 'Trident',
-    emoji: '🔱',
-    range: 'melee',
-    targetMode: 'frontBand',
-    healRowBehindOnHit: 1,
-    summary: 'Melee. After each hit, heals the row behind for 1.',
-  },
-  anchor: {
-    name: 'Anchor',
-    emoji: '⚓',
-    range: 'melee',
-    targetMode: 'frontBand',
-    damageOverride: 6,
-    damagePerOtherAllyInRow: 1,
-    summary: 'Melee. 6 dmg, -1 per other ally in the row.',
-  },
-  blunderbuss: {
-    name: 'Bomb Lance',
-    emoji: '🧨',
-    range: 'melee',
-    targetMode: 'frontBand',
-    damageOverride: 8,
-    maxAttacks: 1,
-    summary: 'Melee. 8 dmg, but only strikes once.',
-  },
-  chakram: {
-    name: 'Chakram',
-    emoji: '🥏',
     range: 'ranged',
     targetMode: 'frontBand',
     damageOverride: 2,
-    damageGrowthPerAttack: 1,
-    summary: 'Ranged. Starts at 2 dmg and gains +1 each shot.',
+    summary: 'Ranged. Deals 2 damage with normal front-band targeting.',
+  },
+  venomKnife: {
+    name: 'Venom Knife',
+    emoji: '🗡️',
+    range: 'melee',
+    targetMode: 'frontBand',
+    poisonOnHit: 1,
+    summary: 'Melee. Hit, then apply 1 poison.',
+  },
+  toxinPistol: {
+    name: 'Toxin Pistol',
+    emoji: '🧪',
+    range: 'ranged',
+    targetMode: 'lowestHpAny',
+    poisonOnHit: 1,
+    summary: 'Ranged. Hits the weakest foe, then applies 1 poison.',
+  },
+  barbedBlade: {
+    name: 'Barbed Blade',
+    emoji: '⚔️',
+    range: 'melee',
+    targetMode: 'frontBand',
+    woundsOnHit: 1,
+    summary: 'Melee. Hit, then apply 1 wound.',
+  },
+  scarHarpoon: {
+    name: 'Scar Harpoon',
+    emoji: '🪝',
+    range: 'ranged',
+    targetMode: 'highestHpAny',
+    attackMsMultiplier: 1.35,
+    woundsOnHit: 2,
+    summary: 'Ranged. Slower. Hits the toughest foe and applies 2 wounds.',
+  },
+  officerSabre: {
+    name: 'Officer Sabre',
+    emoji: '⚔️',
+    range: 'melee',
+    targetMode: 'frontBand',
+    damagePerBuff: 1,
+    summary: 'Melee. Gains +1 damage for each of the owner\'s buffs.',
+  },
+  cadencePistols: {
+    name: 'Cadence Pistols',
+    emoji: '🔫',
+    range: 'ranged',
+    targetMode: 'lowestHpAny',
+    attackMsMultiplierPerBuff: 0.9,
+    summary: 'Ranged. Gains 10% attack speed for each of the owner\'s buffs.',
+  },
+  bannerAxe: {
+    name: 'Banner Axe',
+    emoji: '🪓',
+    range: 'melee',
+    targetMode: 'frontBand',
+    frontRowAllAtBuffCount: 3,
+    summary: 'Melee. If the owner has 3+ buffs, it hits the whole front row.',
   },
 };
 
@@ -503,6 +525,7 @@ function normalizePirateDescText(text) {
 
 function pirateDescEmoji(kind) {
   if (WEAPON_TYPES[kind]) return WEAPON_TYPES[kind].emoji;
+  if (BUFF_EMOJI[kind]) return BUFF_EMOJI[kind];
   if (kind === 'weapons') return WEAPON_CATEGORY_EMOJI;
   if (kind === 'enthusiasm') return '☠️';
   return RES_EMOJI[kind] || '';
@@ -518,6 +541,63 @@ function pirateDescCount(kind, count = 1) {
 
 function pirateDescJoin(parts, joiner = '+') {
   return parts.filter(Boolean).join(joiner);
+}
+
+function normalizePersonalGain(gain) {
+  if (!gain || typeof gain !== 'object') return null;
+  if (gain.weapon && WEAPON_TYPES[gain.weapon]) {
+    return { weapon: gain.weapon, count: Math.max(1, Math.floor(Number(gain.count) || 1)) };
+  }
+  if (gain.buff && BUFF_EMOJI[gain.buff]) {
+    return { buff: gain.buff, count: Math.max(1, Math.floor(Number(gain.count) || 1)) };
+  }
+  return null;
+}
+
+function normalizePersonalGains(gains) {
+  return (Array.isArray(gains) ? gains : [])
+    .map(normalizePersonalGain)
+    .filter(Boolean);
+}
+
+function personalGainDescParts(gains) {
+  return normalizePersonalGains(gains).map((gain) => (
+    gain.weapon
+      ? pirateDescCount(gain.weapon, gain.count)
+      : pirateDescCount(gain.buff, gain.count)
+  ));
+}
+
+function personalGainText(gains) {
+  return pirateDescJoin(personalGainDescParts(gains));
+}
+
+function pirateTypeDisplayName(type) {
+  return (type && TYPES[type] && TYPES[type].name) || type || 'Pirate';
+}
+
+function openingSidePrepSupportText(quote) {
+  if (!quote || !quote.openingSidePrep) return '';
+  const gainText = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+  const targetName = quote.openingSidePrepTargetName || pirateTypeDisplayName(quote.openingSidePrepTargetType);
+  const targetText = targetName ? ` ${targetName}` : '';
+  return `Support${targetText}${gainText ? ` +${gainText}` : ''}`;
+}
+
+function openingSidekickBountyText(quote) {
+  if (!quote || !quote.openingSidePrep || !quote.openingSidekickBountyRes) return '';
+  const emoji = RES_EMOJI[quote.openingSidekickBountyRes] || '';
+  return emoji ? `Sidekick win +${emoji}` : '';
+}
+
+function pirateBuffStatusText(pirate) {
+  if (!pirate || typeof pirate !== 'object') return '';
+  const might = Math.max(0, Math.floor(Number(pirate.might) || 0));
+  const tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0));
+  const parts = [];
+  if (might > 0) parts.push(`${BUFF_LABELS.might} ${pirateDescCount('might', might)}`);
+  if (tempo > 0) parts.push(`${BUFF_LABELS.tempo} ${pirateDescCount('tempo', tempo)}`);
+  return parts.join('. ');
 }
 
 function pirateIslandDesc(def, opts = {}) {
@@ -577,6 +657,7 @@ function pirateShipGainDesc(ship) {
   }
   if (ship.extraEnthusiasm) gains.push(pirateDescCount('enthusiasm', ship.extraEnthusiasm));
   if (ship.prodWeapon) gains.push(pirateDescCount(ship.prodWeapon, ship.prodWeaponN || 1));
+  gains.push(...personalGainDescParts(ship.personalGains));
   return pirateDescJoin(gains);
 }
 
@@ -649,9 +730,31 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
     addTip(
       'weapon-grant',
       'Weapon Gain',
-      `Assign ${weapon.emoji} to one pirate.`
+      `Choose a pirate to take ${weapon.emoji}.`
     );
     addWeaponTip(weaponKey);
+  };
+
+  const addShipTargetingTip = () => {
+    addTip(
+      'ship-target',
+      'Leftmost Island Pirate',
+      'Ship weapons and buffs go to the leftmost pirate already on the island. If nobody is there, those personal gains are lost.'
+    );
+  };
+
+  const addBuffTip = (buffKey, count = 1) => {
+    if (!BUFF_EMOJI[buffKey]) return;
+    const gainText = pirateDescCount(buffKey, count);
+    const label = BUFF_LABELS[buffKey] || pirateTooltipTitle(buffKey);
+    const body = buffKey === 'might'
+      ? `${gainText} gives +1 damage per stack.`
+      : `${gainText} makes that pirate attack 20% faster per stack.`;
+    addTip(
+      `buff-${buffKey}`,
+      `${BUFF_EMOJI[buffKey]} ${label}`,
+      body
+    );
   };
 
   if (island) {
@@ -699,12 +802,31 @@ function pirateCardEffectTips(typeOrPirate, opts = {}) {
       );
     }
     if (ship.prodWeapon) addWeaponGrantTips(ship.prodWeapon);
+    const personalGains = normalizePersonalGains(ship.personalGains);
+    if (personalGains.length) {
+      addShipTargetingTip();
+      personalGains.forEach((gain) => {
+        if (gain.weapon) addWeaponTip(gain.weapon);
+        if (gain.buff) addBuffTip(gain.buff, gain.count);
+      });
+    }
   }
 
   const equippedWeaponKey = opts.equippedWeaponKey != null
     ? opts.equippedWeaponKey
     : (pirate && pirate.weaponKey);
   if (WEAPON_TYPES[equippedWeaponKey]) addWeaponTip(equippedWeaponKey);
+  if (pirate) {
+    if (pirate.wounded) {
+      addTip(
+        'wounded',
+        `${WOUNDED_EMOJI} Wounded`,
+        'This pirate can gather resources and work on the ship, but sits out boarding until healed.'
+      );
+    }
+    const buffStatus = pirateBuffStatusText(pirate);
+    if (buffStatus) addTip('current-buffs', 'Current Buffs', buffStatus);
+  }
 
   return tips;
 }
@@ -713,9 +835,10 @@ const ISLANDS = [
   { name: 'Forest Island',    emoji: '🌲', bonus: 'wood',  accent: 0x3a7a30 },
   { name: 'Rocky Island',     emoji: '⛰️',  bonus: 'stone', accent: 0x707070 },
   { name: 'Treasure Island',  emoji: '💎', bonus: 'gold',  accent: 0xc8a020 },
-  { name: 'Port Island',      emoji: '⚓', bonus: null, extraSend: 1, accent: 0x8b5e3c },
+  { name: 'Port Island',      emoji: '⚓', bonus: null, extraSend: 1, fullSendBuff: { buff: 'tempo', count: 1 }, accent: 0x8b5e3c },
   { name: 'Skull Island',     emoji: '💀', bonus: null, bonusEnthusiasm: 2, accent: 0x8a2040 },
   { name: 'Siren Island',    emoji: '🧜', bonus: null, sacrifice: true, accent: 0x6a2080 },
+  { name: 'Infirmary Island', emoji: WOUNDED_EMOJI, bonus: null, healWounded: 5, accent: 0x4e8f79 },
 ];
 
 // ────────────────── PIRATE DEFINITIONS ──────────────────
@@ -739,58 +862,52 @@ const TYPES = {
   },
   armsman: {
     name: 'Armsman', cat: [1,14,39,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'hammer', count: 1 } },
-    ship:   null,
+    island: { res: 'wood', amt: 1 },
+    ship:   { cRes: 'wood', cN: 1, personalGains: [{ weapon: 'rustyPistol' }] },
     cost: null,
   },
   // ---- tier 1: cheap early upgrades (2-3☠️) ----
-  carpenter: {
-    name: 'Carpenter', cat: [3,30,45,16,0,0], canIsland: true,
+  poisoner: {
+    name: 'Poisoner', cat: [1,6,42,34,16,0], canIsland: true,
     island: { res: 'wood', amt: 1 },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'axe', prodWeaponN: 1 },
-    cost: 3,
-  },
-  stonemason: {
-    name: 'Stonemason', cat: [5,23,39,16,0,2], canIsland: true,
-    island: { res: 'stone', amt: 1 },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 2, prodWeapon: 'chain', prodWeaponN: 1 },
-    cost: 3,
-  },
-  brute: {
-    name: 'Brute', cat: [3,26,39,19,0,3], canIsland: true,
-    island: { guaranteed: { weapon: 'hammer', count: 1 } },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 3 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 2, personalGains: [{ weapon: 'venomKnife' }] },
     cost: 2,
   },
-  whittler: {
-    name: 'Whittler', cat: [1,6,42,34,16,0], canIsland: true,
-    island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
-    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 0, prodWeapon: 'chakram', prodWeaponN: 1 },
+  drummer: {
+    name: 'Drummer', cat: [1,8,42,27,16,8], canIsland: true,
+    island: { res: 'wood', amt: 1 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 1, personalGains: [{ buff: 'tempo' }] },
     cost: 2,
-  },
-  corsair: {
-    name: 'Corsair', cat: [1,8,42,27,16,8], canIsland: true,
-    island: { guaranteed: { weapon: 'hammer', count: 2 } },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
-    cost: 2,
-  },
-  privateer: {
-    name: 'Privateer', cat: [1,12,45,27,16,4], canIsland: true,
-    island: { res: 'gold', amt: 1 },
-    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
-    cost: 3,
   },
   herald: {
     name: 'Herald', cat: [1,7,39,32,16,2], canIsland: true,
-    island: { guaranteed: { res: 'enthusiasm', amt: 3 } },
-    ship:   null,
+    island: { res: 'gold', amt: 1 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 3 },
     cost: 2,
   },
-  deckhand: {
-    name: 'Deckhand', cat: [4,34,40,16,0,6], canIsland: true,
+  sawbones: {
+    name: 'Sawbones', cat: [5,23,39,16,0,2], canIsland: true,
     island: { res: 'stone', amt: 1 },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 1, prodWeapon: 'hammer', prodWeaponN: 1 },
-    cost: 2,
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2, personalGains: [{ weapon: 'barbedBlade' }] },
+    cost: 3,
+  },
+  needler: {
+    name: 'Needler', cat: [1,12,45,27,16,4], canIsland: true,
+    island: { res: 'gold', amt: 1 },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 2, personalGains: [{ weapon: 'toxinPistol' }] },
+    cost: 3,
+  },
+  trainer: {
+    name: 'Trainer', cat: [4,34,40,16,0,6], canIsland: true,
+    island: { res: 'stone', amt: 1 },
+    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 1, personalGains: [{ buff: 'might' }] },
+    cost: 3,
+  },
+  survivalist: {
+    name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
+    island: { res: 'wood', amt: 1 },
+    ship:   { cRes: 'wood', cN: 1, pRes: 'enthusiasm', pN: 2 },
+    cost: 3,
   },
   bosun: {
     name: 'Bosun', cat: [3,27,46,16,20,6], canIsland: false,
@@ -811,22 +928,27 @@ const TYPES = {
     cost: 10,
   },
   // ---- tier 2: solid mid-game (12-16☠️) ----
-  trader: {
-    name: 'Trader', cat: [8,34,46,16,0,5], canIsland: true,
-    island: { convert: { cRes: 'wood', cN: 3, pRes: 'stone', pN: 3 } },
-    ship:   { cRes: 'stone', cN: 1, pRes: 'enthusiasm', pN: 2, prodWeapon: 'anchor', prodWeaponN: 1 },
-    cost: 7,
-  },
-  woodsman: {
-    name: 'Woodsman', cat: [11,25,43,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 1 },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'bow', prodWeaponN: 2 },
-    cost: 7,
-  },
-  prospector: {
-    name: 'Prospector', cat: [7,30,45,16,0,2], canIsland: true,
+  scarwright: {
+    name: 'Scarwright', cat: [7,30,45,16,0,2], canIsland: true,
     island: { res: 'stone', amt: 1 },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'blunderbuss', prodWeaponN: 2 },
+    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, personalGains: [{ weapon: 'scarHarpoon' }] },
+    cost: 7,
+  },
+  flagbearer: {
+    name: 'Flagbearer', cat: [8,34,46,16,0,5], canIsland: true,
+    island: { res: 'gold', amt: 1 },
+    ship:   {
+      costs: [{ res: 'wood', n: 1 }, { res: 'stone', n: 1 }],
+      pRes: 'enthusiasm',
+      pN: 4,
+      personalGains: [{ buff: 'might' }, { buff: 'tempo' }],
+    },
+    cost: 7,
+  },
+  duelMaster: {
+    name: 'Duel Master', cat: [11,25,43,16,0,0], canIsland: true,
+    island: { guaranteed: { weapon: 'hammer', count: 1 } },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 3, personalGains: [{ weapon: 'officerSabre' }] },
     cost: 7,
   },
   smuggler: {
@@ -835,64 +957,45 @@ const TYPES = {
     ship:   { cRes: 'gold', cN: 1, gains: [{ res: 'enthusiasm', n: 6 }, { res: 'wood', n: 1 }, { res: 'stone', n: 1 }] },
     cost: 8,
   },
-  explorer: {
-    name: 'Explorer', cat: [13,23,38,17,0,2], canIsland: true,
+  bandmaster: {
+    name: 'Bandmaster', cat: [15,34,43,17,0,9], canIsland: true,
+    island: { guaranteed: { res: 'enthusiasm', amt: 2 } },
+    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 4, personalGains: [{ weapon: 'cadencePistols' }] },
+    cost: 8,
+  },
+  plagueCaptain: {
+    name: 'Plague Captain', cat: [13,23,38,17,0,2], canIsland: true,
     island: { res: 'gold', amt: 1 },
-    ship:   { cRes: 'gold', cN: 1, pRes: 'enthusiasm', pN: 5, prodWeapon: 'trident', prodWeaponN: 1 },
-    cost: 9,
+    ship:   { cRes: 'gold', cN: 2, pRes: 'enthusiasm', pN: 5, personalGains: [{ weapon: 'toxinPistol' }, { buff: 'might' }] },
+    cost: 10,
   },
   // ---- tier 3: late-game powerhouses (24-32☠️) ----
-  masterLumberjack: {
-    name: 'Master Rigger', cat: [10,28,40,16,0,8], canIsland: true,
-    island: { res: 'wood', amt: 2 },
-    ship:   { cRes: 'wood', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'hookshot', prodWeaponN: 2 },
+  admiralsMate: {
+    name: 'Admiral\'s Mate', cat: [10,28,40,16,0,8], canIsland: true,
+    island: { res: 'gold', amt: 2 },
+    ship:   {
+      cRes: 'gold',
+      cN: 2,
+      pRes: 'enthusiasm',
+      pN: 6,
+      personalGains: [{ weapon: 'bannerAxe' }, { buff: 'might' }, { buff: 'tempo' }],
+    },
     cost: 13,
-  },
-  masterMiner: {
-    name: 'Master Ballaster', cat: [15,34,43,17,0,9], canIsland: true,
-    island: { res: 'stone', amt: 2 },
-    ship:   { cRes: 'stone', cN: 2, pRes: 'enthusiasm', pN: 4, prodWeapon: 'musket', prodWeaponN: 2 },
-    cost: 13,
-  },
-  // ---- special: get-lost pirates (removeSelf on ship) ----
-  raider: {
-    name: 'Raider', cat: [1,15,44,26,19,3], canIsland: true,
-    island: { guaranteed: { weapon: 'axe', count: 2 } },
-    ship:   { removeSelf: true },
-    cost: 4,
-  },
-  profiteer: {
-    name: 'Profiteer', cat: [9,33,46,16,0,7], canIsland: true,
-    island: { convert: { cRes: 'gold', cN: 1, pRes: 'gold', pN: 2 } },
-    ship:   { removeSelf: true },
-    cost: 5,
-  },
-  drifter: {
-    name: 'Drifter', cat: [14,37,42,16,0,0], canIsland: true,
-    island: { res: 'wood', amt: 2 },
-    ship:   { removeSelf: true },
-    cost: 6,
-  },
-  // ---- special: utility ----
-  marooner: {
-    name: 'Marooner', cat: [6,28,43,17,20,4], canIsland: true,
-    island: { exileSent: true },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 0, prodWeapon: 'dirk', prodWeaponN: 1 },
-    cost: 6,
-  },
-  survivalist: {
-    name: 'Survivalist', cat: [1,15,45,28,16,8], canIsland: true,
-    island: { res: 'wood', amt: 1, bonusEnthusiasm: 2 },
-    ship:   { cRes: null, cN: 0, pRes: 'enthusiasm', pN: 2 },
-    cost: 3,
   },
 };
 
 const SHOP_POOL = [
-  'woodsman', 'prospector', 'explorer',
-  'masterLumberjack', 'masterMiner',
-  'bosun', 'carpenter', 'stonemason', 'smuggler', 'quartermaster', 'cutthroat',
-  'brute', 'deckhand', 'trader',
-  'whittler', 'corsair', 'privateer', 'herald',
-  'raider', 'profiteer', 'drifter', 'marooner', 'survivalist',
+  'poisoner', 'drummer', 'herald',
+  'sawbones', 'needler', 'trainer', 'survivalist',
+  'bosun', 'cutthroat',
+  'scarwright', 'flagbearer', 'duelMaster',
+  'smuggler', 'bandmaster',
+  'quartermaster', 'plagueCaptain', 'admiralsMate',
+];
+
+const STARTER_SHOP_LANES = [
+  ['poisoner', 'drummer'],
+  ['sawbones', 'trainer'],
+  ['needler'],
+  ['herald', 'survivalist'],
 ];

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["submitted", "skipped", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "submission_id": { "type": "string" },
+    "submitted_build_label": { "type": "string" },
+    "requested_test_type": { "type": "string" },
+    "details": { "type": "string" }
+  },
+  "required": [
+    "status",
+    "summary",
+    "submission_id",
+    "submitted_build_label",
+    "requested_test_type",
+    "details"
+  ]
+}

@@ -2,16 +2,271 @@
    PIRATES — Map Generation
    ============================================================ */
 
-const MAP_LAYERS = 30;
-const EARLY_SEGMENTS = 2;
-const EARLY_PATHS = 3;
-const STEPS_PER_SEGMENT = 4;
-const EARLY_LAYER_COUNT = EARLY_SEGMENTS * (STEPS_PER_SEGMENT + 1);
-const FIRST_LINEAR_SEGMENTS = 1;
-const TOTAL_BATTLES = 6;
+const MAP_LAYERS = 40;
+const EARLY_SEGMENT_LENGTHS = [1, 7];
+const EARLY_SEGMENTS = EARLY_SEGMENT_LENGTHS.length;
+const EARLY_PATHS = 1;
+const EARLY_LAYER_COUNT = EARLY_SEGMENT_LENGTHS.reduce((sum, length) => sum + length + 1, 0);
+const FIRST_LINEAR_SEGMENTS = 0;
+const TOTAL_BATTLES = 8;
+const HEAL_LAYER_INDICES = new Set([10, 20, 30]);
+
+function healingIslandIndex() {
+  return ISLANDS.findIndex(island => island && island.healWounded);
+}
+
+function regularIslandIndices(opts = {}) {
+  const allowSacrifice = !!opts.allowSacrifice;
+  return ISLANDS
+    .map((_, i) => i)
+    .filter((i) => {
+      const island = ISLANDS[i];
+      if (!island) return false;
+      if (island.healWounded) return false;
+      if (island.sacrifice && !allowSacrifice) return false;
+      return true;
+    });
+}
 
 function earlyPathCount(seg) {
   return seg < FIRST_LINEAR_SEGMENTS ? 1 : EARLY_PATHS;
+}
+
+function chooseIslandIndices(available, count, dealWithoutReplacement = false) {
+  const picked = [];
+  const bag = dealWithoutReplacement ? available.slice() : [];
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+
+  for (let i = 0; i < count; i++) {
+    const islandIdx = bag.length
+      ? bag.pop()
+      : available[Math.floor(Math.random() * available.length)];
+    picked.push(islandIdx);
+  }
+  return picked;
+}
+
+function scoutedCounterCacheResource(mainKey) {
+  return (SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey]) || null;
+}
+
+function combatArchetypeForMap(key) {
+  return COMBAT.enemyArchetypes.find(a => a && a.key === key) || null;
+}
+
+function openingRouteMainKeyForIslandIdx(islandIdx) {
+  const island = ISLANDS[islandIdx];
+  if (!island) return null;
+  if (island.bonus === 'wood') return 'shellback';
+  if (island.bonus === 'stone') return 'powderBomber';
+  if (island.extraSend) return 'deckSniper';
+  return null;
+}
+
+const OPENING_CONTRACTS = [
+  { key: 'forest', label: 'Forest', islandIdx: 0, mainKey: 'shellback' },
+  { key: 'rocky', label: 'Rocky', islandIdx: 1, mainKey: 'powderBomber' },
+  { key: 'port', label: 'Port', islandIdx: 3, mainKey: 'deckSniper' },
+];
+
+function openingContractChoices() {
+  return OPENING_CONTRACTS.map(contract => ({ ...contract }));
+}
+
+function openingContractByKey(key) {
+  return OPENING_CONTRACTS.find(contract => contract.key === key) || null;
+}
+
+function openingContractByMainKey(mainKey) {
+  return OPENING_CONTRACTS.find(contract => contract.mainKey === mainKey) || null;
+}
+
+function refreshOpeningRouteCacheNode(node, mainKey = null) {
+  if (!node || node.type !== 'island') return null;
+  const routeMainKey = mainKey || openingRouteMainKeyForIslandIdx(node.islandIdx);
+  if (!routeMainKey) return null;
+  assignScoutedCounterCache(node, routeMainKey, openingScoutedCounterCacheStakes(node, routeMainKey));
+  return node.scoutedCache || null;
+}
+
+function applyOpeningContractToMap(map, contractKey) {
+  const contract = openingContractByKey(contractKey);
+  if (!contract || !map || !Array.isArray(map.layers)) return null;
+  const firstLayer = map.layers[0];
+  const node = firstLayer && firstLayer[0];
+  if (!node || node.type !== 'island') return null;
+
+  node.islandIdx = contract.islandIdx;
+  refreshOpeningRouteCacheNode(node, contract.mainKey);
+  return { contract: { ...contract }, node };
+}
+
+const FIRST_BOARDING_FALLBACK_SUPPORT_KEYS = ['bilgeRat', 'cabinBoy'];
+const FIRST_BOARDING_ROUTE_SUPPORT_KEYS = {
+  shellback: ['bilgeRat', 'cabinBoy'],
+  powderBomber: ['bilgeRat', 'bilgeRat'],
+  deckSniper: ['cabinBoy', 'cabinBoy'],
+};
+
+function firstBoardingEncounterBlueprint(mainKey = 'shellback') {
+  const fallback = combatArchetypeForMap('shellback')
+    || COMBAT.enemyArchetypes.find(a => a && a.tier === 'strong')
+    || COMBAT.enemyArchetypes[0];
+  const mainArch = combatArchetypeForMap(mainKey) || fallback;
+  const supportKeys = FIRST_BOARDING_ROUTE_SUPPORT_KEYS[mainArch.key]
+    || FIRST_BOARDING_FALLBACK_SUPPORT_KEYS;
+  return {
+    mainKey: mainArch.key,
+    supportKeys: supportKeys.slice(),
+    totalCount: 3,
+    encounterDesc: mainArch.encounterDesc || mainArch.summary || null,
+  };
+}
+
+function openingScoutedCounterCacheResource(node, mainKey) {
+  const island = node && node.type === 'island' ? ISLANDS[node.islandIdx] : null;
+  if (!island) return scoutedCounterCacheResource(mainKey);
+  if (island.bonus === 'wood' || island.bonus === 'stone') return island.bonus;
+  if (island.extraSend) return 'gold';
+  return scoutedCounterCacheResource(mainKey);
+}
+
+function openingScoutedCounterCacheStakes(node, mainKey) {
+  const island = node && node.type === 'island' ? ISLANDS[node.islandIdx] : null;
+  if (island && island.bonus === 'wood') {
+    return { res: 'wood', amount: 1, enthusiasm: 1, alert: 0 };
+  }
+  if (island && island.bonus === 'stone') {
+    return { res: 'stone', amount: 1, enthusiasm: 2, alert: 1 };
+  }
+  if (island && island.extraSend) {
+    return { res: 'gold', amount: 1, enthusiasm: 3, alert: 3 };
+  }
+  return {
+    res: openingScoutedCounterCacheResource(node, mainKey),
+    amount: 1,
+    enthusiasm: 1,
+    alert: 1,
+  };
+}
+
+function scoutedCounterCacheNode(prevLayer, res) {
+  const candidates = scoutedCounterCacheEligibleNodes(prevLayer);
+  if (!candidates.length) return null;
+
+  const matchingBonus = candidates.find((node) => {
+    const island = ISLANDS[node.islandIdx];
+    return island && island.bonus === res;
+  });
+  if (matchingBonus) return matchingBonus;
+
+  const port = candidates.find((node) => {
+    const island = ISLANDS[node.islandIdx];
+    return island && island.extraSend;
+  });
+  return port || candidates[0];
+}
+
+function scoutedCounterCacheEligibleNodes(prevLayer) {
+  return (Array.isArray(prevLayer) ? prevLayer : []).filter((node) => {
+    if (!node || node.type !== 'island') return false;
+    const island = ISLANDS[node.islandIdx];
+    return island && !island.healWounded;
+  });
+}
+
+function assignScoutedCounterCache(node, mainKey, stakes) {
+  const cacheStakes = typeof stakes === 'string'
+    ? { res: stakes }
+    : (stakes || {});
+  node.scoutedCache = {
+    mainKey,
+    res: cacheStakes.res,
+    amount: cacheStakes.amount == null ? 1 : Math.max(0, Math.floor(Number(cacheStakes.amount) || 0)),
+    enthusiasm: cacheStakes.enthusiasm == null ? 1 : Math.max(0, Math.floor(Number(cacheStakes.enthusiasm) || 0)),
+    alert: cacheStakes.alert == null ? 1 : Math.max(0, Math.floor(Number(cacheStakes.alert) || 0)),
+    claimed: false,
+  };
+}
+
+function markScoutedCounterCaches(layers) {
+  if (!Array.isArray(layers)) return;
+  let shipNo = 0;
+  for (let li = 1; li < layers.length; li++) {
+    const layer = layers[li];
+    if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+    shipNo++;
+
+    const ship = layer[0];
+    const mainKey = ship.encounter && ship.encounter.mainKey;
+    const res = scoutedCounterCacheResource(mainKey);
+    if (!res) continue;
+
+    if (shipNo === 1) {
+      scoutedCounterCacheEligibleNodes(layers[li - 1]).forEach((node) => {
+        const routeMainKey = openingRouteMainKeyForIslandIdx(node.islandIdx) || mainKey;
+        assignScoutedCounterCache(node, routeMainKey, openingScoutedCounterCacheStakes(node, routeMainKey));
+      });
+      continue;
+    }
+
+    const node = scoutedCounterCacheNode(layers[li - 1], res);
+    if (!node) continue;
+    assignScoutedCounterCache(node, mainKey, res);
+  }
+}
+
+function firstShipLayerIndex(map) {
+  if (!map || !Array.isArray(map.layers)) return -1;
+  return map.layers.findIndex(layer => layer && layer.length === 1 && layer[0].type === 'ship');
+}
+
+function openingRouteCacheNodeForSelection(map, node, layerIdx) {
+  if (!map || !Array.isArray(map.layers) || !node || node.type !== 'island') return null;
+  const firstShipLayer = firstShipLayerIndex(map);
+  const cacheLayerIdx = firstShipLayer - 1;
+  if (firstShipLayer <= 0 || layerIdx < 0 || layerIdx >= firstShipLayer) return null;
+
+  if (layerIdx === cacheLayerIdx) {
+    return node.scoutedCache ? node : null;
+  }
+
+  let reachableIds = new Set([node.id]);
+  for (let li = layerIdx; li < cacheLayerIdx; li++) {
+    const currentLayer = map.layers[li] || [];
+    const nextLayer = map.layers[li + 1] || [];
+    const nextIds = new Set();
+    currentLayer.forEach((candidate) => {
+      if (!candidate || !reachableIds.has(candidate.id) || !Array.isArray(candidate.conns)) return;
+      candidate.conns.forEach(id => nextIds.add(id));
+    });
+    reachableIds = new Set(nextLayer
+      .filter(candidate => candidate && nextIds.has(candidate.id))
+      .map(candidate => candidate.id));
+    if (!reachableIds.size) return null;
+  }
+
+  const cacheLayer = map.layers[cacheLayerIdx] || [];
+  return cacheLayer.find(candidate =>
+    candidate && reachableIds.has(candidate.id) && candidate.scoutedCache
+  ) || null;
+}
+
+function applyOpeningRouteToFirstShip(map, node, layerIdx) {
+  const cacheNode = openingRouteCacheNodeForSelection(map, node, layerIdx);
+  const mainKey = cacheNode && cacheNode.scoutedCache && cacheNode.scoutedCache.mainKey;
+  const firstShipLayer = firstShipLayerIndex(map);
+  const firstShip = firstShipLayer >= 0 && map.layers[firstShipLayer]
+    ? map.layers[firstShipLayer][0]
+    : null;
+  if (!mainKey || !firstShip || firstShip.type !== 'ship') return null;
+
+  firstShip.encounter = firstBoardingEncounterBlueprint(mainKey);
+  firstShip.openingRouteMainKey = mainKey;
+  return { ship: firstShip, cacheNode, mainKey };
 }
 
 function shipStrength(shipNumber) {
@@ -29,7 +284,9 @@ function generateEncounterBlueprint(boardingNo) {
 
   let mainKey, supportKeys, totalCount, desc;
 
-  if (boardingNo <= 2) {
+  if (boardingNo === 1) {
+    return firstBoardingEncounterBlueprint('shellback');
+  } else if (boardingNo <= 2) {
     totalCount = 3;
     const strongCount = Math.min(boardingNo, 2);
     const weakCount = totalCount - strongCount;
@@ -65,6 +322,25 @@ function generateEncounterBlueprint(boardingNo) {
     for (let i = 0; i < weakCount; i++) {
       supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
     }
+  } else if (boardingNo === 5) {
+    totalCount = 5;
+    const mainArch = eligibleStrong.length
+      ? eligibleStrong[Math.floor(Math.random() * eligibleStrong.length)]
+      : strong[Math.floor(Math.random() * strong.length)];
+    mainKey = mainArch.key;
+    desc = mainArch.encounterDesc || mainArch.summary;
+    supportKeys = [];
+    const otherStrong = eligibleStrong.filter(a => a.key !== mainKey);
+    const secondaryCount = Math.random() < 0.5 && otherStrong.length ? 1 : 0;
+    const secondaryArch = otherStrong.length
+      ? otherStrong[Math.floor(Math.random() * otherStrong.length)]
+      : null;
+    const strongFill = 4 - 1 - secondaryCount;
+    for (let i = 0; i < strongFill; i++) supportKeys.push(mainKey);
+    if (secondaryArch) {
+      for (let i = 0; i < secondaryCount; i++) supportKeys.push(secondaryArch.key);
+    }
+    supportKeys.push(weak[Math.floor(Math.random() * weak.length)].key);
   } else {
     totalCount = Math.min(COMBAT.enemyCountMax, 3 + Math.floor(boardingNo / 2));
     const mainArch = eligibleStrong.length
@@ -98,18 +374,28 @@ function generateMap() {
   let nextId = 0;
   let battlesSoFar = 0;
 
-  // Early game: first segment is linear, later segments use 3 non-intersecting paths
+  // Early game: hidden single-lane route with the old ship cadence.
+  let segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
+    const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
     const pathCount = earlyPathCount(seg);
-    for (let step = 0; step < STEPS_PER_SEGMENT; step++) {
-      const li = seg * (STEPS_PER_SEGMENT + 1) + step;
-      const available = (li < 9)
-        ? ISLANDS.map((_, i) => i).filter(i => i !== 2 && i !== 4 && !ISLANDS[i].sacrifice)
-        : ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice);
+    const lockedOpeningLanes = seg === 0
+      ? chooseIslandIndices(regularIslandIndices().filter(i => i !== 2 && i !== 4), pathCount, true)
+      : null;
+    for (let step = 0; step < segmentLength; step++) {
+      const li = segmentBase + step;
+      const earlyRestricted = li < 9;
+      const available = earlyRestricted
+        ? regularIslandIndices().filter(i => i !== 2 && i !== 4)
+        : regularIslandIndices();
+      const islandChoices = lockedOpeningLanes || chooseIslandIndices(
+        available,
+        pathCount,
+        earlyRestricted && pathCount >= available.length
+      );
       const layer = [];
       for (let pi = 0; pi < pathCount; pi++) {
-        const islandIdx = available[Math.floor(Math.random() * available.length)];
-        layer.push({ id: nextId++, type: 'island', islandIdx, conns: [] });
+        layer.push({ id: nextId++, type: 'island', islandIdx: islandChoices[pi], conns: [] });
       }
       layers.push(layer);
     }
@@ -121,10 +407,17 @@ function generateMap() {
       encounter: bp,
       conns: [],
     }]);
+    segmentBase += segmentLength + 1;
   }
 
-  // Remaining layers: place ship every 5th layer, island layers in between
+  // Remaining layers: place ship every 5th layer, island layers in between.
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS; li++) {
+    const healIdx = healingIslandIndex();
+    if (HEAL_LAYER_INDICES.has(li) && healIdx >= 0) {
+      layers.push([{ id: nextId++, type: 'island', islandIdx: healIdx, conns: [] }]);
+      continue;
+    }
+
     const isShip = (li + 1) % 5 === 0;
     if (isShip) {
       battlesSoFar++;
@@ -136,9 +429,9 @@ function generateMap() {
         conns: [],
       }]);
     } else {
-      const count = 2 + Math.floor(Math.random() * 2);
+      const count = 1;
       const allowSacrifice = li >= 10 && Math.random() < 0.5;
-      const available = ISLANDS.map((_, i) => i).filter(i => !ISLANDS[i].sacrifice || allowSacrifice);
+      const available = regularIslandIndices({ allowSacrifice });
       const layer = [];
       for (let ni = 0; ni < count; ni++) {
         const islandIdx = available[Math.floor(Math.random() * available.length)];
@@ -148,29 +441,32 @@ function generateMap() {
     }
   }
 
-  // Connections: early segments — straight non-intersecting paths
+  // Connections: early segments — straight single-lane path.
+  segmentBase = 0;
   for (let seg = 0; seg < EARLY_SEGMENTS; seg++) {
-    const base = seg * (STEPS_PER_SEGMENT + 1);
+    const base = segmentBase;
+    const segmentLength = EARLY_SEGMENT_LENGTHS[seg];
     const pathCount = earlyPathCount(seg);
-    for (let step = 0; step < STEPS_PER_SEGMENT - 1; step++) {
+    for (let step = 0; step < segmentLength - 1; step++) {
       const cur = layers[base + step];
       const nxt = layers[base + step + 1];
       for (let pi = 0; pi < pathCount; pi++) {
         cur[pi].conns = [nxt[pi].id];
       }
     }
-    const lastIslands = layers[base + STEPS_PER_SEGMENT - 1];
-    const battle = layers[base + STEPS_PER_SEGMENT];
+    const lastIslands = layers[base + segmentLength - 1];
+    const battle = layers[base + segmentLength];
     for (const node of lastIslands) {
       node.conns = [battle[0].id];
     }
-    const nextBase = base + STEPS_PER_SEGMENT + 1;
+    const nextBase = base + segmentLength + 1;
     if (nextBase < layers.length) {
       battle[0].conns = layers[nextBase].map(n => n.id);
     }
+    segmentBase = nextBase;
   }
 
-  // Connections: remaining layers
+  // Connections: remaining layers.
   for (let li = EARLY_LAYER_COUNT; li < MAP_LAYERS - 1; li++) {
     const cur = layers[li];
     const nxt = layers[li + 1];
@@ -188,11 +484,14 @@ function generateMap() {
     }
   }
 
+  markScoutedCounterCaches(layers);
+
   return {
     layers,
     visited: [],
     currentNodeId: null,
     currentLayer: -1,
+    linearVoyage: true,
   };
 }
 

@@ -1,361 +1,505 @@
 # Deck of Cats — Game Rules
 
-Source of truth for all gameplay mechanics.
+Source of truth for all gameplay mechanics currently implemented in `js/`.
 
----
+## Core Premise
 
-## Overview
+- Deck-builder about pirate cats.
+- Base resources: `🪵 wood`, `🪨 stone`, `🪙 gold`, `☠️ enthusiasm`.
+- Island actions are deterministic. The old miss chances, treasure maps, temporary swords, and permanent cannons are gone.
+- Ship actions now mostly produce `☠️`, permanent personal weapons, and permanent personal buffs.
+- Weapons stay on individual pirates until that pirate leaves the crew.
+- Personal buffs also stay on that pirate until that pirate leaves the crew.
+- Pirates defeated during regular boarding become `🩹 Wounded` instead of being lost.
 
-Genre: deck-building with pirate cats. Player assembles a crew (deck), sails a branching map, gathers resources on islands, arms the ship, and fights enemy ships in boarding battles.
+## Regular Run Start
 
----
+- Starting deck: 10 pirates.
+- Starting resources, `☠️`, `Boarding Alert`, `Full Crew Discount`, `Opening Counter Prep`, `Counter Watch`, `Route Primary Commitment`, the opening route counter secured marker, bought-pirate marker, `Opening Route Muster`, `Route Sidekick`, and Cache Drill bounty marks: `0`/empty.
+- Regular runs start with the `Opening Contract` choice pending before round 1.
+- Starting hand: up to 5 pirates.
+- Starting shop in regular runs: 4 unique pirates, shuffled: always `Poisoner`, `Sawbones`, `Needler`, and 1 of `Herald`/`Survivalist`.
+- When the deck is empty, the whole discard pile is shuffled back into the deck. If fewer than 5 pirates remain, the new hand is simply smaller.
 
-## Regular Run Starting Deck
-
-10 pirates total:
-
-| Name | Count |
-|------|-------|
-| Rigger | 4 |
-| Ballaster | 4 |
-| Armsman | 2 |
-
-Hand size: draw up to 5. When the deck is empty, the discard pile is shuffled back into the deck. If fewer than 5 crew remain, the new hand is smaller.
-
----
+| Pirate | Count | Island | Ship |
+|---|---:|---|---|
+| Rigger | 4 | 🪵 | 4🪵 → ☠️☠️ |
+| Ballaster | 4 | 🪨 | 4🪨 → ☠️☠️ |
+| Armsman | 2 | 🪵 | 🪵 → 🔫 Rusty Pistol |
 
 ## Regular Run Flow
 
-### 1. Map Phase
+### 1. Opening Contract And Linear Voyage
 
-Player picks the next node on the map.
-- If only 1 available node → auto-selected.
-- If 2+ available → player chooses among the available nodes.
+- Regular runs begin with `Opening Contract` before round 1. The player chooses exactly 1 of 3 contracts:
+  - `Forest` / `Shellback`: first hidden island is `Forest Island`; route cache `+1🪵`, `+1☠️`, `+0 Boarding Alert`; Boarding 1 main enemy `Shellback` with 1 `Bilge Rat` and 1 `Cabin Boy`; `Opening Deckhand Counter` `Rigger`; route primary `Poisoner`; side offer `Drummer`.
+  - `Rocky` / `Powder Bomber`: first hidden island is `Rocky Island`; route cache `+1🪨`, `+2☠️`, `+1 Boarding Alert`; Boarding 1 main enemy `Powder Bomber` with 2 `Bilge Rat`s; `Opening Deckhand Counter` `Ballaster`; route primary `Sawbones`; side offer `Trainer`.
+  - `Port` / `Deck Sniper`: first hidden island is `Port Island`; route cache `+1🪙`, `+3☠️`, `+3 Boarding Alert`; Boarding 1 main enemy `Deck Sniper` with 2 `Cabin Boy`s; `Opening Deckhand Counter` `Armsman`; route primary `Needler`; side offer `Survivalist`.
+- The `Opening Contract` choice rewrites the first hidden map node, that node's scouted cache stakes/main enemy, and the first ship's route package, then immediately auto-selects that layer-0 node through the normal route-selection rules. The choice adds no extra resources, `☠️`, discounts, prep, `Counter Watch`, or route security beyond the normal layer-0 route effects.
+- Battle Test skips `Opening Contract` and starts directly in boarding as before.
+- Regular runs use a hidden single-lane map itinerary after the contract is chosen. Each layer has exactly 1 next stop, so the game auto-selects the next node and never asks the player to choose a map route.
+- Regular runs have no usable player-facing map button or map panel. The hidden map still exists for scouting, cache placement, shop counter logic, ship cadence, healing layers, and victory detection.
+- Internally, a run may pass through phase `map` only long enough to auto-select the single available node.
+- When a node is auto-selected, `round` increases by 1, `☠️` resets to `0`, and resources persist.
+- In regular runs, layer `0` has 1 hidden opening route cache island set by the `Opening Contract` choice: `Forest Island`, `Rocky Island`, or `Port Island`.
+- The layer-0 opening island defines the first ship's main enemy and route-specific cache stakes: `Forest Island` → `Shellback`, `+1🪵`, `+1☠️`, and `+0 Boarding Alert`; `Rocky Island` → `Powder Bomber`, `+1🪨`, `+2☠️`, and `+1 Boarding Alert`; `Port Island` → `Deck Sniper`, `+1🪙`, `+3☠️`, and `+3 Boarding Alert`. If an unexpected eligible opening island appears, it uses the first ship's current main enemy and the normal `+1` cache resource, `+1☠️`, and `+1 Boarding Alert` stakes.
+- Auto-selecting the layer-0 opening island before Boarding 1 immediately updates the first ship encounter to that island's route enemy and route-specific weak support, before any `Boarding Alert` guards: `Forest Island`/`Shellback` gets 1 `Bilge Rat` and 1 `Cabin Boy`; `Rocky Island`/`Powder Bomber` gets 2 `Bilge Rat`s; `Port Island`/`Deck Sniper` gets 2 `Cabin Boy`s. Unexpected opening routes keep the fallback 1 `Bilge Rat` and 1 `Cabin Boy` support. The route enemy is then used for Cache Drill, scouted counter shop rules, Top deck eligibility, Counter Watch, Counter Ambush, Counter Trophy, and Ambush Bounty.
+- During regular-run Boarding 1 only, the auto-selected opening island also makes one starter pirate type an `Opening Deckhand Counter`: `Forest Island`/`Shellback` → `Rigger`, `Rocky Island`/`Powder Bomber` → `Ballaster`, and `Port Island`/`Deck Sniper` → `Armsman`.
+- Auto-selecting the first layer-0 opening island before Boarding 1 immediately creates `Opening Route Muster`: one still-owned matching `Opening Deckhand Counter` starter is mustered into current hand slot `0`, marked to report on the next Shop `Continue`, and gains `Counter Watch` until Boarding 1, preferring a matching pirate currently in hand, then the draw pile, then discard.
+- If the `Opening Route Muster` starter is already in hand, it swaps into hand slot `0`. If it is in the draw pile or discard, it swaps with the current hand slot-`0` pirate, and that displaced pirate is placed back into the starter's previous zone at the same position.
+- `Opening Route Muster` happens once per regular run, never duplicates a pirate or changes the total number of cards in hand/draw/discard, grants no resource, weapon, `Might`, `Tempo`, Alert refund, cache claim, shop discount, prep, or reward other than that starter's `Counter Watch`, never applies in `Battle Test`, and clears when Boarding 1 starts.
+- If the Opening Route Muster starter is sent before Boarding 1, that `Counter Watch` is spent normally unless an eligible `Short Crew Drill` refreshes it; `Cache Drill` early report alone does not preserve the watch.
+- `Opening Deckhand Counter` types count for Cache Drill, Short Crew counter Alert refunds and `Counter Watch`, `Counter Watch` readiness, `Counter Ambush`, `Counter Edge`, `Counter Trophy`, and `Ambush Bounty` eligibility.
+- `Opening Deckhand Counter` types do not count for shop generation, shop counter purchase quotes, `Top deck` purchases, `Opening Counter Prep` purchases, `Prepared` counter purchases, or `Full Crew Discount` coverage, because starter pirates are never sold in the shop.
+- `Opening Deckhand Counter` never applies in `Battle Test` or Boarding 2+.
+- Opening Deckhand Counter starters never grant separate `☠️` by being sent. The opening route's extra shop currency comes only from the visible cache stakes, so it is paid once by the first cache opener, regardless of opener type, and is skipped when no pirate opens the cache.
+- Before the `Opening Contract` is chosen, Boarding 1 scouting is shown as route-decided rather than locking a specific enemy preview.
+- Boarding 2 and later each mark 1 `Scouted Counter Cache` in the immediately preceding normal island layer, tied to that ship's main scouted enemy.
+- Selecting a marked cache island does not immediately grant that cache's stored resource, stored `☠️`, or stored `Boarding Alert`.
+- On a selected `Scouted Counter Cache` island, the first sent pirate opens the cache after resolving its island action and after any island removal. The cache then grants its stored resource amount, stored `☠️`, and stored `Boarding Alert` once, and the map cache is marked claimed.
+- If that same first opener is still in the crew and its type counters the cache's main scouted enemy, `Cache Drill` triggers: the opener gains `+1 💪 Might`, refunds up to `1` of that cache's stored `Boarding Alert`, and is marked to report early.
+- Claiming the selected Boarding 1 route cache grants only its visible stored resource, stored `☠️`, stored `Boarding Alert`, and any eligible `Cache Drill` rewards. It does not grant `Opening Counter Prep`.
+- Before Boarding 1, `Opening Counter Prep` is earned only from the `Opening Commission` one-short condition. Once active, it follows the normal purchase rules: the first eligible top-deck scouted-counter buy gets `-1☠️`, `+1 💪 Might`, top-deck placement, and `Counter Watch`; an eligible route side offer can spend it as `Opening Side Prep`; non-eligible non-counters and `Quiet Docks` do not consume it; and unused prep expires on Shop `Continue`.
+- Matching `Opening Deckhand Counter` starter openers keep the existing premium `Cache Drill` rewards: `+1 💪 Might`, Alert refund, early report, Cache Drill bounty mark, and eligible pass-off. They do not arm `Opening Counter Prep` by opening or drilling the cache.
+- Cache claims never grant `Opening Counter Prep` in `Battle Test`, Boarding 2+, non-opening caches, non-cache islands, zero-send skipped caches, unselected route caches, or routes whose primary opening counter is already secured.
+- If the first opener is not a surviving eligible counter, the cache is claimed without `Cache Drill`; the stored `Boarding Alert` remains pending and later sent pirates cannot drill that cache.
+- Ending a cache island with zero sent pirates grants no cache resource, no cache `☠️`, and no cache `Boarding Alert`. Because the node is already visited, that skipped cache cannot be claimed later.
+- When a regular run wins Boarding 1 after the selected layer-0 route cache was claimed by at least one sent pirate, `Opening Route Victory Cache` grants that route resource once based on the Boarding 1 consumed `Boarding Alert` snapshot: `+1` resource if the boarding consumed `0 Alert`, or `+3` resource if it consumed `1+ Alert`. The route resource is `Forest Island`/`Shellback` → `🪵`, `Rocky Island`/`Powder Bomber` → `🪨`, and `Port Island`/`Deck Sniper` → `🪙`.
+- `Opening Route Victory Cache` grants on any Boarding 1 win after the route cache was opened, including reinforcement-hand wins, and stacks with the cache's normal reward, Alert guard plunder, Opening plunder, Ambush Bounty, Route Sidekick Bounty, `Boarding Trophy`, and `Counter Trophy`. Alert guards removed by `Counter Ambush` do not lower this payout because the consumed Alert snapshot is already set when boarding starts.
+- `Opening Route Victory Cache` is tracked on the claimed route cache and cannot be duplicated by repeated resolution. It never applies to skipped or unclaimed caches, losses, `Battle Test`, Boarding 2+, unselected route caches, or later normal scouted caches.
+- Boarding 2+ `Scouted Counter Cache` islands use the normal stakes: `+1` mapped cache resource, `+1☠️`, and `+1 Boarding Alert`.
+- That same `Cache Drill` also marks the drilled pirate for the immediately following scouted boarding, unless `Route Starter Pass-Off` or `Secured Route Cache Pass-Off` later transfers that mark. If the current holder of that matching active mark triggers `Counter Ambush` against that boarding's matching main scouted enemy, survives the final winning opening combat hand, and `Ambush Bounty` would already be granted, that Ambush Bounty pays `+2` of the mapped cache resource instead of `+1`.
+- Cache Drill bounty marks expire after that immediately following boarding, are cleared if the next boarding's main enemy does not match, never carry to later ships, and never apply in `Battle Test`, losses, defeated ambushers, wrong-main encounters, missing `Counter Ambush`, reinforcement-hand wins, or any case where normal `Ambush Bounty` would not be granted.
+- The cache `☠️`, if present, is normal round shop currency, is granted only once by the first cache opener, is not doubled by island bonuses, is not refunded by `Cache Drill`, and can help buy a `Top deck` counter in that round's Shop.
+- During regular runs before Boarding 1, each Shop opens with `Route Primary Commitment` active while the selected route's primary opening counter is unsecured. If the first successful pirate purchase in that Shop is the selected route primary, that bought pirate goes on top of the draw pile, gains `Counter Watch`, and marks the route counter as secured even without `Full Crew Discount`, Full Crew coverage, or `Opening Counter Prep`.
+- `Route Primary Commitment` is cleared by the first successful pirate purchase in that Shop, whether that purchase is the route primary or not, and expires on Shop `Continue`. `Quiet Docks` is not a pirate purchase and does not clear it.
+- A committed route-primary purchase grants no `Prepared` gains, prep `Might`, `Route Counter Cover`, resource, weapon, `Tempo`, or extra `☠️`. It can receive `Route Starter Pass-Off` only if a matching starter-opened `Cache Drill` bounty mark is active; otherwise it does not double `Ambush Bounty`.
+- `Route Counter Cover`: when a pre-Boarding-1 route-primary purchase secures the selected route by spending `Full Crew Discount`, using `Full Crew Discount` coverage, or consuming `Opening Counter Prep`, and pending `Boarding Alert` after the purchase is above `0`, immediately reduce pending `Boarding Alert` by `1`, never below `0`.
+- `Route Counter Cover` applies only to secured route-primary purchases through `Full Crew Discount`, `Full Crew Discount` coverage, or `Opening Counter Prep`. It grants no extra reward when no pending Alert exists and never applies to discard-only route-primary buys, route side offers, non-counters, `Battle Test`, Boarding 2+, or purchases after Boarding 1 starts.
+- After `Route Primary Commitment` is missed by buying a non-primary pirate first, a route-primary buy that meets none of the setup gates still adds that pirate to discard, does not mark the route secured, does not suppress the route-primary shop guarantee, gains no `Counter Watch`, and gains no prep `Might`.
+- Claimed route cache Alert, existing pending `Boarding Alert`, and `Dockside Credit` never secure the opening route primary by themselves. They can help afford a purchase or increase the risk of Boarding 1. A Dockside Credit first-purchase route primary can use `Route Primary Commitment` to top-deck, Watch, and secure while adding the normal missing-`☠️` Alert, but it does not trigger `Route Counter Cover` unless the purchase also spends `Full Crew Discount`, uses Full Crew coverage, or consumes `Opening Counter Prep`.
+- If a matching starter-opened `Cache Drill` route cache has an active bounty mark and the selected route's bought primary opening counter secures the route by any eligible top-deck route-primary path in that immediately following Shop, `Route Starter Pass-Off` transfers the matching active Cache Drill bounty mark from the starter opener to the bought primary counter. Eligible purchase paths are `Route Primary Commitment`, `Full Crew Discount`, `Full Crew Discount` coverage, and `Opening Counter Prep`. The starter keeps its `Cache Drill` `+1 💪 Might`, Alert refund, early-report marker, and any `Counter Watch`; only the doubled-bounty mark moves.
+- After `Route Starter Pass-Off`, the bought primary counter counts as the Cache Drill bounty pirate for matching Boarding 1 `Ambush Bounty` and for the default front-left counter slot. If the starter ambushes after the mark moved away, it gets normal counter benefits but not the doubled bounty.
+- `Route Starter Pass-Off` does not happen for non-primary buys, `Opening Side Prep` buys, discard-only route-primary buys, route-primary buys after a missed `Route Primary Commitment` that meet no setup gate, wrong-main marks, missing or removed starter marks, missing or removed bought pirates, `Battle Test`, Boarding 2+, or any buy that does not secure the selected route by an eligible top-deck route-primary path in the immediately following Shop.
+- During regular-run Boarding 1 only, if the selected route's `Opening Deckhand Counter` starter successfully opens and drills the matching route cache after that route's primary opening counter has already been secured by a setup-gated top-deck `Counter Watch` purchase using `Full Crew Discount`, Full Crew coverage, or `Opening Counter Prep`, `Secured Route Cache Pass-Off` transfers the active Cache Drill bounty mark from the starter to that recorded bought primary counter if it is still owned.
+- `Secured Route Cache Pass-Off` moves only the doubled-bounty mark. The starter keeps its `Cache Drill` `+1 💪 Might`, Alert refund, early-report marker, and any `Counter Watch`; the bought primary gains no `Might`, Alert refund, early report, `Opening Counter Prep`, `Prepared` gains, weapon, resource, or `☠️` from this transfer.
+- After `Secured Route Cache Pass-Off`, the bought primary counter counts as the Cache Drill bounty pirate for matching Boarding 1 `Ambush Bounty` and for the default front-left counter slot. If the starter ambushes after the mark moved away, it gets normal counter benefits but not the doubled bounty.
+- `Secured Route Cache Pass-Off` does not happen for `Battle Test`, Boarding 2+, wrong-main routes, failed Cache Drill, non-starter openers, missing or removed recorded bought primaries, discard-only route-primary buys, commitment-only route-primary buys, unsecure route-primary purchases, or bought primaries that are no longer owned.
+- `Opening Counter Prep` on a route-primary buy still grants its normal `-1☠️`, top-deck placement, `Counter Watch`, and `+1 💪 Might`, but does not by itself double `Ambush Bounty`; only a matching active Cache Drill bounty mark, including one received by `Route Starter Pass-Off` or `Secured Route Cache Pass-Off`, does that.
+- A matching active `Cache Drill` bounty mark is the only way to make `Ambush Bounty` pay `+2` of the mapped cache resource instead of `+1`.
+- The `Cache Drill` Alert refund reduces pending `Boarding Alert` by `min(cache stored Alert, 1)` once, but never below the amount present before that cache was claimed and never removes the cache `☠️`.
+- Successful `Cache Drill` fully clears normal `+1 Boarding Alert` caches, including Rocky's Boarding 1 route cache and all Boarding 2+ caches. The Boarding 1 Port route cache stores `+3 Boarding Alert`, so a successful Armsman or Needler drill cuts `1` Alert and leaves `+2` pending unless `Quiet Docks` or another later effect reduces it.
+- Normal cache resource map for Boarding 2+ caches and `Ambush Bounty`: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
+- Boarding 2+ cache placement prefers an island whose bonus matches the cache resource, then `Port Island`, then the first eligible island in that layer.
+- `Cache Drill` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It can trigger only from the first cache opener, at most once per cache island, and its Might gain, Alert refund, early report, and cache `☠️` bounty are not doubled by island bonuses.
+- A Cache Drill pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
+- Cache Drill early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
+- If Cache Drill early report and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn above every other returning, mustered, watched, or top-deck card.
+- Caches and `Cache Drill` never appear in `Battle Test`, never apply to ship nodes, `Infirmary Island`, claimed caches, or unmarked islands, and a claimed cache cannot grant its resource, `☠️`, Alert, or drill reward again.
 
-### 2a. Island Round
+### 2. Island Round
 
-If the selected node is an island:
+- If the chosen node is an island, the round enters phase `sending`.
+- `Infirmary Island` is a special island: it enters phase `healing` instead of `sending`.
+- By default the player may send up to 2 pirates.
+- `Port Island` adds `+1`, so the maximum becomes 3.
+- On a regular `Port Island`, ending with all 3 send slots filled triggers `Port Drill` before ship actions: the leftmost surviving sent pirate gains `+1 ⚡ Tempo`.
+- `Port Drill` does not trigger on partial Port sends, non-Port islands, `Infirmary Island`/healing rounds, or Battle Test; it adds no `Boarding Alert`, is not doubled by island bonuses, and stacks as normal permanent `Tempo`.
+- In regular runs, ending a non-`Infirmary Island` round exactly 1 send slot short with at least 1 surviving sent pirate triggers `Short Crew Drill` before ship actions: the leftmost surviving sent pirate gains `+1 💪 Might`.
+- `Short Crew Drill` does not trigger on full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, Battle Test, or if every sent pirate was removed by `Siren Island` or another island effect.
+- `Short Crew Drill` adds no `Boarding Alert` by itself, is not doubled by island bonuses, and stacks as a normal permanent `Might` buff.
+- In regular runs only, if `Short Crew Drill` triggers while the next unreached ship is `1` to `3` map turns away, that same pirate is marked to report early.
+- In regular runs only, if that drilled pirate's type counters the next scouted ship's main enemy, `Short Crew Drill` refunds `1 Boarding Alert` after `Ship Wages` are paid.
+- If `Short Crew Drill` both reports early and refunds Alert because the drilled pirate counters the next scouted ship's main enemy, that drilled pirate also gains `Counter Watch` until the next boarding.
+- The `Short Crew Drill` counter refund is clamped to the pending `Boarding Alert` present immediately before that `End`/`Work on Ship` action paid `Ship Wages`, so it refunds only the Alert from the one unused send slot and cannot remove cache Alert, `Dockside Credit` Alert, earlier pending Alert, or Alert already snapshotted onto boarding.
+- The `Short Crew Drill` counter refund and `Counter Watch` never apply in `Battle Test`.
+- A Short Crew pirate marked to report early is placed on top of the draw pile on the next `Continue` after that island's Shop, before the next hand is drawn. The mark is then cleared.
+- Short Crew early report cannot duplicate a pirate; if the marked pirate is no longer in the crew at `Continue`, no card is moved and the stale mark is cleared.
+- If a pirate has both a Short Crew early-report marker and `Counter Watch`, the Short Crew report places it on top once on the next `Continue`, and `Counter Watch` remains active for later Shop `Continue`s before the next boarding.
+- If Cache Drill early report, Short Crew early report, Opening Route Muster, Counter Watch, and Shop `Top deck` purchases happen in the same Shop, Cache Drill pirates are drawn first, Short Crew pirates are drawn next, the Opening Route Muster pirate is drawn third, watched counters are drawn fourth, and ordinary Shop `Top deck` purchases are drawn after all returning pirates. If the same pirate is both Opening Route Muster and watched, it uses the Opening Route Muster placement once and its `Counter Watch` remains active.
+- Sending is animated, but the player may send the next pirate immediately without waiting for the previous effect to finish.
+- Each sent pirate resolves its island action as soon as it lands.
+- The player may stop early with `End`. Once the send limit is filled, the button becomes `Work on Ship`.
+- Ending a regular island round with `End` or `Work on Ship` pays `Ship Wages` before ship actions resolve: gain a baseline `1☠️`, plus `+1☠️` per unused send slot.
+- During only rounds `1` and `2` before any boarding has happened, ending a regular non-`Infirmary Island` round exactly 1 send slot short with at least 1 sent pirate adds `+1☠️ Opening Commission` to `Ship Wages`.
+- `Opening Commission` does not apply in Battle Test, does not apply to full sends, empty sends, or sends with 2 or more unused slots, does not apply after round `2`, does not apply after the first boarding, and never adds Boarding Alert.
+- During only rounds `1` and `2` before any boarding has happened, if `Opening Commission` is earned and at least 1 sent pirate is still in the crew after island effects, the next Shop also gains `Opening Counter Prep`.
+- The `Opening Commission` source of `Opening Counter Prep` does not apply in Battle Test, full sends, empty sends, sends with 2 or more unused slots, `Infirmary Island`/healing rounds, after round `2`, after the first boarding, or if every sent pirate was removed by `Siren Island` or another island effect.
+- A normal 2-send island therefore pays `3☠️` with 0 sent pirates, `2☠️` with 1 sent pirate, and `1☠️` when both slots are filled; during eligible Opening Commission rounds, the 1-sent one-short payout is `3☠️` instead.
+- `Port Island`'s extra send slot counts for `Ship Wages`, so it pays `4☠️`, `3☠️`, `2☠️`, or `1☠️` for 0, 1, 2, or 3 sent pirates; during eligible Opening Commission rounds, the 2-sent one-short payout is `3☠️` instead.
+- Whenever `Ship Wages` are paid in a regular run, gain `+1 Boarding Alert` per unused send slot; the baseline `1☠️` adds no Alert. A normal 2-send island adds `2`, `1`, or `0` Alert; `Port Island` adds `3`, `2`, `1`, or `0` Alert.
+- `Ship Wages` are not doubled by island bonuses, do not trigger on `Infirmary Island` or boarding rounds, and stack normally with `Skull Island` and pirate ship actions.
+- Ending a regular non-`Infirmary Island` round with every available send slot filled grants `Full Crew Discount` for the next Shop phase.
+- `Full Crew Discount` gives `-1☠️` on the first successful pirate purchase in that Shop, cannot reduce a price below `0☠️`, does not stack, and does not add Boarding Alert by itself.
+- Pirates with island conversion cannot be sent unless the input resource is available.
+- `Bosun` cannot go ashore at all.
+- On `Siren Island`, a pirate resolves its island action first and is then permanently removed from the crew.
+- On a selected `Scouted Counter Cache` island, the first sent pirate opens the cache and checks `Cache Drill` after resolving its island action and after any `Siren Island` removal, so a pirate removed by the island can open and claim the cache but cannot receive the `+1 💪 Might` or refund up to `1` cache Alert.
+- Island bonuses double only matching resource outputs (`wood`, `stone`, `gold`). They do not double guaranteed effects, `☠️`, recall/exile effects, buffs, or weapon grants.
+- If an island action grants a weapon, the player chooses which pirate from the current hand gets it.
 
-**Sending phase**:
-- Player sends 0–2 pirates from hand to the island.
-- Port Island allows 3 (base 2 + 1 extra).
-- Skull Island grants +2☠️ at round start (applied immediately when the node is selected).
-- Siren Island: pirates sent are **permanently lost** after their island action resolves.
-- Each pirate's island ability resolves on arrival (resource gathering, conversion, recall, etc.).
-- Send animation/effect resolution is non-blocking: while one pirate is traveling/resolving, player may send another immediately.
-- Ship phase starts only after all already-triggered island actions finish resolving and the player clicks `Work on Ship`.
-- Player may stop sending early with `End`, or use all allowed sends and then click `Work on Ship` to begin ship actions.
+### 3. Ship Round
 
-**Ship phase**:
-- Each pirate remaining on the ship (not sent to island) executes their ship action sequentially, in hand order.
-- "Get lost" pirates are permanently removed when their turn comes.
-- "Exile" pirates trigger selection: player picks a crew member (not from current hand) to permanently remove.
-- Some pirates have no ship action.
-- All others attempt to spend input resources and produce output resources, enthusiasm, and/or specific weapons.
+- After `End` or `Work on Ship`, every unsent pirate resolves its ship action in current hand order.
+- A ship action may:
+  - do nothing;
+  - spend resources and produce resources or `☠️`;
+  - grant a weapon or permanent buff;
+  - remove itself (`get lost`);
+  - trigger an exile pick from the overall crew.
+- If a ship action cannot pay its cost, it simply fails.
+- `Cutthroat` pauses ship resolution and enters phase `removing`: the player chooses 1 pirate from `allCrew` that is not in the current hand and permanently exiles it.
+- Ship rewards that grant a weapon, `Might`, or `Tempo` always target the leftmost surviving pirate currently on the island.
+- If a ship action grants both a weapon and buffs, all of those personal gains apply to that same leftmost island pirate in definition order.
+- If no surviving pirate is currently on the island, those ship-side personal gains are lost, but any paid resource or `☠️` outputs still resolve normally.
+- A newly granted ship weapon replaces the old weapon on the target pirate.
+- Ship buffs stack on the target pirate.
 
-**Shopping phase**:
-- After ship effects finish, the round enters shopping.
-- Player may buy pirates for ☠️; bought pirates go straight to the discard pile, not the hand.
-- When the player continues from shopping:
-  1. The first pirate in the shop window is removed, remaining shift left, a new random pirate enters from the right.
-  2. Hand goes to discard (only pirates still in the crew; exiled pirates are gone).
-  3. Enthusiasm resets to 0; resources persist.
-  4. Up to 5 new pirates are drawn from deck.
-  5. Return to map phase.
+### 4. Shop
 
-### 2b. Boarding Round
+- The shop appears only after island rounds. There is no shop after boarding.
+- The shop always has 4 slots. Starters (`Rigger`, `Ballaster`, `Armsman`) are never sold there.
+- `randomShopType(round, excludeTypes = [])` selects from `SHOP_POOL` with `cost <= max(3, round + 1)`, first avoiding any excluded visible shop types when the eligible pool has an unused type.
+- The initial display before an opening route is selected is created as `initialShop(4, 0)`, which in regular runs includes `Poisoner`, `Sawbones`, `Needler`, and 1 economy pirate from `Herald`/`Survivalist`, shuffled.
+- Non-curated random shop generation avoids duplicate visible types whenever the eligible pool can support it, falling back to the normal eligible pool only if every eligible type is already visible.
+- In regular runs, after the opening route is selected and until Boarding 1 starts, shops are route-focused. The route-selected first ship sets exactly 1 primary opening counter offer: `Forest Island`/`Shellback` → `Poisoner`, `Rocky Island`/`Powder Bomber` → `Sawbones`, and `Port Island`/`Deck Sniper` → `Needler`.
+- Until that route's primary opening counter is secured, the visible 4-slot shop contains exactly 1 of `Poisoner`/`Sawbones`/`Needler`, it must be the route primary, and it is pinned to shop slot `0`.
+- While the route primary is unsecured and `Opening Counter Prep` is not active, the selected route side offer is suppressed from route-focused filler/refill generation. The remaining slots are filled by distinct affordable non-counter starter shop options from the other available `Drummer`, `Herald`, `Trainer`, and `Survivalist` options, falling back to normal unique eligible generation only if needed.
+- While the route primary is unsecured and `Opening Counter Prep` is active, the visible 4-slot shop also contains exactly 1 selected route side offer: `Forest Island`/`Shellback` → `Drummer`, `Rocky Island`/`Powder Bomber` → `Trainer`, and `Port Island`/`Deck Sniper` → `Survivalist`. The remaining slots are filled by distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist`, falling back to normal unique eligible generation only if needed.
+- While that route's primary opening counter is not secured, the selected route side offer can spend active `Opening Counter Prep` as `Opening Side Prep`: after any `Full Crew Discount`, the bought side offer gets the normal prep `-1☠️`, goes on top of the draw pile, consumes `Opening Counter Prep`, and applies an immediate permanent support buff to the selected route's `Opening Route Muster` starter if that starter is still owned and still matches the route. `Forest Island`/`Shellback` side-prepped `Drummer` supports the mustered `Rigger` with `+1 ⚡ Tempo`; `Rocky Island`/`Powder Bomber` side-prepped `Trainer` supports the mustered `Ballaster` with `+1 💪 Might`; `Port Island`/`Deck Sniper` side-prepped `Survivalist` supports the mustered `Armsman` with `+1 💪 Might`.
+- If the selected route's mustered starter is no longer owned or no longer matches the route, `Opening Side Prep` falls back to applying that listed support buff to the bought side-offer pirate.
+- The bought `Opening Side Prep` side-offer pirate is marked as the `Route Sidekick` until Boarding 1 resolves. If another `Opening Side Prep` side offer is bought before Boarding 1, the newest bought side-offer pirate becomes the `Route Sidekick`.
+- `Opening Side Prep` also shows the side offer's Boarding 1 `Route Sidekick Bounty` resource before purchase: `Forest Island`/`Shellback` sidekick win → `+1🪵`; `Rocky Island`/`Powder Bomber` sidekick win → `+1🪨`; `Port Island`/`Deck Sniper` sidekick win → `+1🪙`.
+- `Opening Side Prep` does not secure the route, gain `Counter Watch` or `Watch Ready`, get counter prep `Might` on the bought side offer unless it is also the fallback support target and the listed support buff is `Might`, create `Prepared`, trigger `Route Starter Pass-Off`, create or move Cache Drill bounty marks, show counter payoff text, grant route security, refund Alert, grant immediate resources, or receive counter ambush benefits.
+- Opening route side offers without active eligible `Opening Side Prep`, if visible outside the unsecured route-focused guarantee, are ordinary non-counter purchases: they discard normally and do not consume `Opening Counter Prep`, go on top of the draw pile, gain `Counter Watch`, secure the route, or receive counter payoff perks.
+- Once the route primary is secured before Boarding 1, remaining pre-Boarding-1 route-focused shop refills suppress all three opening counter candidates (`Poisoner`, `Sawbones`, `Needler`) and fill with distinct affordable non-counter starter shop options from `Drummer`, `Herald`, `Trainer`, and `Survivalist` where possible, falling back to normal unique eligible non-opening pirates only if needed.
+- Buying a non-counter or a discard-only route primary after missing `Route Primary Commitment` does not mark the route counter as secured; the primary remains guaranteed until secured or until Boarding 1 starts.
+- Route-focused normalization applies when the route is selected, when the Shop phase opens, after immediate purchase refills, and after end-of-shop `Continue` refills. While unsecured it pins the route primary to slot `0`; otherwise it does not change prices, setup-gated route-primary `Top deck` eligibility, `Counter Watch`, `Opening Counter Prep`, `Full Crew Discount` coverage, `Dockside Credit`, or counter payoff logic, and a bought route primary keeps those purchase effects when it qualifies for them.
+- Route-focused opening shops never apply in `Battle Test` and stop after Boarding 1 starts.
+- Outside the route-focused opening window, in regular runs while a next ship is scouted, each initial shop, immediate purchase refill, and end-of-shop `Continue` refill tries to show at least 1 counter pirate for that ship's main scouted enemy.
+- The scouted counter rule checks the 4 visible slots after the new slot is generated. If no visible pirate counters the main scouted enemy and the current cost-gated shop pool contains an eligible non-duplicate counter, only the newly generated slot is replaced by one counter.
+- The scouted counter rule does not apply in `Battle Test`, never sells starter pirates, and does nothing when no eligible non-duplicate counter exists.
+- Scouted counter map:
+  - `Shellback` → `Poisoner`, `Needler`, `Plague Captain`
+  - `Powder Bomber` → `Sawbones`, `Scarwright`
+  - `Deck Sniper` → `Needler`, `Bandmaster`
+  - `Netter` → `Drummer`, `Trainer`, `Flagbearer`
+  - `Flint Duelist` → `Poisoner`, `Needler`, `Sawbones`, `Scarwright`, `Plague Captain`
+- Immediate refills after purchases use the current `G.round` and exclude the remaining visible shop types.
+- The end-of-shop refresh (`Continue`) removes the leftmost slot, shifts the rest left, and adds one new pirate using the next-round rule while excluding the remaining visible shop types: `randomShopType(G.round + 1, G.shop)`.
+- Bought pirates normally go straight to discard, not to hand.
+- Exception: in regular runs, if the bought pirate is a scouted counter for the next unreached ship and that ship is `3` or fewer map turns away, the new pirate goes on top of the draw pile instead of discard.
+- Before Boarding 1, the selected route's primary opening counter uses that `Top deck` exception when the purchase spends `Full Crew Discount`, uses Full Crew coverage, consumes `Opening Counter Prep`, or is the first successful pirate purchase in that Shop while `Route Primary Commitment` is active. Without one of those setup gates or the active commitment, the bought primary goes to discard even though it still counts as a scouted counter, and it does not secure the route shop slot.
+- A bought pirate that qualifies for that `Top deck` scouted counter exception also gains `Counter Watch` until the next boarding.
+- During rounds `1` and `2` before any boarding has happened, opening non-counter purchases still use the normal discard destination except for eligible route side offers that spend `Opening Side Prep`.
+- Opening non-counter purchases never consume `Opening Counter Prep`, never become `Top deck` from `Full Crew Discount`, never gain `Counter Watch`, never become `Watch Ready`, never create `Prepared`, never gain prep `Might`, never show counter payoff text, and never receive counter ambush benefits, except that eligible `Opening Side Prep` side offers consume the prep, top-deck, and apply their listed support buff to the mustered route starter or fallback bought side offer without becoming counters. Any opening non-counter pirate purchase also misses the active `Route Primary Commitment` for that Shop.
+- On each Shop `Continue` before that boarding, a watched pirate that is still owned, currently in hand, and was not sent to the island is separated from the discard step and placed on top of the draw pile so it returns in the next hand.
+- Sending a watched pirate spends `Counter Watch` unless that same sent pirate earns a new eligible counter `Short Crew Drill` that re-marks `Counter Watch`; Cache Drill and non-counter Short Crew report markers still work normally but do not preserve the watch.
+- When a regular-run boarding starts, `Counter Watch` clears. Any watched pirate that is still owned, in the current hand, not `🩹 Wounded`, and whose type counters that boarding's main scouted enemy becomes `Watch Ready` for that boarding.
+- `Watch Ready` counts as armed only for `Counter Ambush` damage, `Boarding Alert` guard removal, and regular Boarding 1 `Opening Counter Break` eligibility when the ambush removes zero Alert guards: if that pirate is the front-row ambusher, its `Counter Ambush` deals `5` damage and removes up to 2 Alert guards even without a permanent weapon, `Might`, or `Tempo`.
+- `Watch Ready` does not grant or mutate a weapon, `Might`, or `Tempo`; does not create `Prepared`; does not affect `Counter Edge`, `Boarding Trophy`, `Counter Trophy`, or `Ambush Bounty`; and never applies in `Battle Test`.
+- A watched pirate that was sent earlier, is absent from the current hand, is `🩹 Wounded`, does not counter the main scouted enemy, or is moved out of the front row before `Fight!` gets no `Watch Ready` ambush benefit.
+- A bought pirate that qualifies for that `Top deck` scouted counter exception is also `Prepared` only if at least 1 boarding has already started and that same successful purchase spends `Full Crew Discount`: immediately after purchase, the new pirate itself receives that type's ship-side personal gains (`weapon`, `Might`, and/or `Tempo`).
+- Before Boarding 1, `Full Crew Discount` alone does not make `Top deck` scouted counter purchases `Prepared`; those purchases still use the discount, go on top of the draw pile, and gain `Counter Watch`.
+- `Opening Counter Prep` is consumed by the first successful eligible `Top deck` scouted-counter purchase in that Shop, or by an eligible `Opening Side Prep` route side-offer purchase before Boarding 1 while the route primary is unsecured.
+- The `Top deck` scouted counter that consumes `Opening Counter Prep` gets `-1☠️` after any `Full Crew Discount`, cannot be reduced below `0☠️`, goes on top of the draw pile, gains `Counter Watch`, and gains permanent `+1 💪 Might`.
+- The route side offer that consumes `Opening Counter Prep` through `Opening Side Prep` gets the same `-1☠️` timing after any `Full Crew Discount`, can still use `Dockside Credit` for any remaining missing `☠️`, goes on top of the draw pile, and applies only its listed starter-support buff instead of `Counter Watch` or counter prep `Might`.
+- If that `Opening Counter Prep` purchase is the selected route's primary opening counter before Boarding 1, it still only gets the normal prep purchase effects; it needs a matching active Cache Drill bounty mark, either by claiming the matching `Cache Drill` itself or receiving `Route Starter Pass-Off`, to double `Ambush Bounty`.
+- `Opening Counter Prep` never creates `Prepared`: it does not grant the bought pirate's ship-side weapon, ship-side `Might`, ship-side `Tempo`, ship resource output, or ship `☠️`.
+- `Opening Counter Prep` by itself does not add or remove `Boarding Alert`, except when a qualifying route-primary purchase also triggers `Route Counter Cover`; it does not affect `Quiet Docks`, and does not stack beyond one `-1☠️` prep discount.
+- If `Opening Counter Prep` and `Full Crew Discount` are both present, `Full Crew Discount` applies first, then the prep `-1☠️` applies to the same eligible counter or `Opening Side Prep` purchase. If that purchase is an eligible `Top deck` scouted counter, both shop flags are consumed and the counter gets prep `+1 💪 Might`; if it is an eligible route side offer, both flags are consumed and its listed support buff applies to the mustered route starter or fallback bought side offer; if it is any other non-counter, only `Full Crew Discount` is consumed and `Opening Counter Prep` remains available for a later eligible purchase in the same Shop.
+- A prep or `Prepared` counter purchase may still use `Dockside Credit` for any remaining missing `☠️` after all discounts are applied.
+- `Top deck` scouted counter purchases without `Opening Counter Prep` or a post-Boarding-1 `Prepared` trigger still go on top of the draw pile, but are not `Prepared` and gain no prep `Might`; the pre-Boarding-1 selected route primary is the exception and needs `Full Crew Discount`, Full Crew coverage, or `Opening Counter Prep` to be `Top deck`.
+- If `Full Crew Discount` is spent on a non-counter first while `Opening Counter Prep` is not active, a later `Top deck` counter purchase in the same Shop is not `Prepared`.
+- `Prepared` does not pay ship costs, grant ship resource or `☠️` outputs, target the leftmost island pirate, consume a ship action, or apply in `Battle Test`.
+- Prepared weapons and buffs are permanent and use the normal weapon replacement and buff stacking rules.
+- The draw pile top is the next card drawn. If multiple Shop `Top deck` pirates are bought, each is placed on top using the normal draw pile order, so the most recent eligible purchase is drawn first.
+- Non-counter purchases, purchases when no ship is scouted, purchases when the scouted ship is more than `3` turns away, and all `Battle Test` purchases still go to discard.
+- The player may buy any number of pirates as long as enough `☠️` remains.
+- `Full Crew Discount`, if earned by filling every island send slot, reduces the effective cost of the first pirate bought in the next Shop by `1☠️`.
+- The discount applies before `Dockside Credit` checks missing `☠️`; for example, a cost-`3` pirate with `1☠️` and `Full Crew Discount` is missing only `1☠️`.
+- During the regular-run round-1 Shop before any boarding, `Full Crew Discount` coverage pays exactly `1☠️` for a `Top deck` counter to the route-selected first ship, whether that first ship is `Shellback`, `Powder Bomber`, or `Deck Sniper`, if that first purchase spends `Full Crew Discount` and is short exactly `1☠️` after the normal discount.
+- `Full Crew Discount` coverage is not spendable currency, does not use `Dockside Credit`, does not mark `shopCreditUsed`, and adds no `Boarding Alert`; the purchase spends the player's current `☠️`, consumes `Full Crew Discount`, goes on top of the draw pile, and gains `Counter Watch`, but the coverage and pre-Boarding-1 discount do not make it `Prepared` or grant prep `Might`. A covered route-primary purchase can receive `Route Starter Pass-Off` if a matching starter-opened `Cache Drill` bounty mark is active; otherwise it does not double the route primary's `Ambush Bounty`. A covered route-primary purchase can still trigger `Route Counter Cover` if pending Alert exists.
+- `Full Crew Discount` coverage does not apply without `Full Crew Discount`, from `Opening Counter Prep`, to already-affordable purchases, purchases that do not counter the route-selected first ship, purchases missing `2+☠️`, round `2+`, after the first boarding, after `Dockside Credit` was already used in that Shop, or in `Battle Test`.
+- `Full Crew Discount` is consumed only by a successful pirate purchase, never by `Quiet Docks`, and expires on `Continue` if unused.
+- `Opening Counter Prep` is consumed only by a successful eligible `Top deck` scouted-counter purchase or eligible `Opening Side Prep` route side-offer purchase, never by other non-counter purchases or `Quiet Docks`, and expires on `Continue` if unused.
+- Once per regular-run Shop phase, the player may use `Dockside Credit` to buy 1 pirate whose cost exceeds current `☠️` by 1 or 2.
+- A `Dockside Credit` purchase spends all current `☠️`, adds pending `Boarding Alert` equal to the missing `☠️`, buys the pirate using the normal purchase destination rules, and refills that shop slot normally.
+- Affordable purchases do not use `Dockside Credit`, do not add Alert, and do not prevent a later credit purchase in the same Shop phase.
+- `Dockside Credit` cannot cover 3+ missing `☠️`, cannot be used more than once in the same Shop phase, is unavailable in Battle Test, and resets when the next Shop phase begins.
+- `Dockside Credit` affects only pending `Boarding Alert`; it never changes Alert already snapshotted onto an active boarding.
+- During the Shop phase in regular runs, the player may use `Quiet Docks` while pending `Boarding Alert` is above `0`.
+- `Quiet Docks` costs `2☠️` and reduces pending `Boarding Alert` by `1`.
+- `Quiet Docks` may be bought repeatedly as long as the player has at least `2☠️` and pending Alert remains, can be used before or after pirate purchases, and does not occupy or refill a pirate shop slot.
+- `Quiet Docks` affects only pending Alert before the next ship node; it cannot reduce Alert already snapshotted onto an active boarding.
+- Battle Test has no `Quiet Docks` service because it ignores `Boarding Alert`.
+- On `Continue`:
+  - the current hand goes to discard only for pirates still present in `allCrew`;
+  - any still-owned Cache Drill or Short Crew early-report pirate is separated from that discard step and placed on top of the draw pile, with Cache Drill reports above Short Crew reports;
+  - any still-owned Opening Route Muster pirate that is not already returned by Cache Drill or Short Crew is separated from that discard step and placed below those early reports but above watched counters, using this placement instead of a separate watched-counter placement if it also has `Counter Watch`;
+  - any still-owned, held Counter Watch pirate is separated from that discard step and placed below Cache Drill reports, Short Crew reports, and Opening Route Muster but above ordinary Shop `Top deck` purchases;
+  - exiled and `get lost` pirates do not return;
+  - `☠️` resets to `0`;
+  - unused `Full Crew Discount` and `Opening Counter Prep` expire;
+  - unused `Route Primary Commitment` expires;
+  - a new hand is drawn up to 5;
+  - the run returns to the hidden `map` auto-advance step.
 
-If the selected node is an enemy ship:
-- All pirates currently in hand participate; no island phase, no shop phase.
-- Boarding starts with a **setup step**:
-  - The normal hand is drawn first.
-  - If that draw requires a reshuffle, boarding waits for the whole draw/reshuffle sequence to finish so the hand is complete before cards start moving to combat.
-  - After that, each player card leaves the hand and animates into its compact battle position; a card is never shown in both places at once.
-  - Initial setup places melee pirates in the front row and ranged pirates in the middle row.
-  - Player may drag those mini cards to rearrange pirates arbitrarily across the front, middle, and back rows, including left-to-right order within a row.
-  - Player may inspect a pirate by hovering/tapping that mini card.
-  - Weapons are **not** assigned here; each pirate uses their permanently equipped weapon, if any.
-- Pirate combat stats in this prototype:
-  - Pirate cards do not print a strength stat.
-  - Every pirate uses **3 base damage** before weapon modifiers.
-  - HP = 9 for every pirate.
-  - Attack speed = one shared base speed for all pirates.
-  - Pirate actions can equip these permanent weapons before boarding:
-    - `🔨 Hammer`: melee, **+4 HP**.
-    - `🪓 Axe`: melee, hits the whole opposing front row at once.
-    - `🏹 Bow`: ranged, targets the living enemy with the **lowest current HP** in any row.
-    - `🔫 Musket`: ranged, targets the living enemy with the **highest current HP** in any row, deals **+2 damage**, and attacks **60% slower**.
-    - `🪝 Hookshot`: ranged, attacks **45% slower**, targets a random living enemy in the **backmost enemy row**, deals **0 damage**, and pulls that target to the front row without cycling the rest of the formation.
-    - `⛓️ Chain`: melee, deals **0 damage** and delays the target's next attack by **1.0s**.
-    - `🗡️ Dirk`: melee, deals normal damage and applies bleed for **1 damage three times**, once every **0.7s**.
-    - `🔱 Trident`: melee, deals normal damage and then heals every living ally in the next row behind the attacker for **1 HP**.
-    - `⚓ Anchor`: melee, deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row.
-    - `🧨 Bomb Lance`: melee, deals **8 damage** but only strikes **once** per boarding.
-    - `🥏 Chakram`: ranged, deals **2 damage** on its first shot and gains **+1 damage** after each shot in that boarding.
-- Enemy boarding parties are generated from encounter blueprints stored on each map ship node:
-  - **Enemy roster** has two tiers:
-    - **Weak (swarm/support):**
-      - `🐀 Bilge Rat`: melee, 6 HP, 2 damage, fast but fragile.
-      - `🔔 Cabin Boy`: ranged, 5 HP, 2 damage, targets the backmost pirate.
-    - **Strong:**
-      - `🛡️ Shellback`: melee, 18 HP, 4 damage, attacks slowly, and while alive its row takes **2 less damage** from row-wide attacks, to a minimum of **1**.
-      - `🎯 Deck Sniper`: ranged, 9 HP, 4 damage, attacks quickly, and targets the **backmost armed pirate**; if nobody is armed, it targets the backmost pirate.
-      - `🪤 Netter`: ranged, 12 HP, 3 damage, targets the **backmost pirate**, and delays that pirate's next attack by **0.35s** on hit, or **1.2s** if that pirate is ranged.
-      - `🔥 Flint Duelist`: melee, 11 HP, 5 damage, and if it survives a **single hit of 5+ damage**, its next attack becomes ready in **0.22s**.
-      - `💣 Powder Bomber`: melee, 17 HP, 4 damage, explodes on death and deals 4 damage to the pirate front row.
-  - **Difficulty scaling by boarding number:**
-    - Boardings 1–2 (early): 3 enemies total; only 1–2 strong enemies, the rest are weak swarm fillers. Only `🛡️ Shellback`, `🎯 Deck Sniper`, and `💣 Powder Bomber` are eligible as strong picks.
-    - Boardings 3–4 (mid): 3–4 enemies; more strong enemies with a few weak supports. `🪤 Netter` unlocks at boarding **3**.
-    - Boardings 5–6 (late): 4–5 enemies; almost entirely strong enemies. `🔥 Flint Duelist` unlocks at boarding **5**.
-  - Each encounter centers on **one main strong enemy type**: most strong slots are filled with the main type, with at most one slot for a secondary strong type (50% chance when enough strong slots exist). Remaining slots are filled with weak swarm enemies in early/mid battles.
-  - Each enemy party is distributed across up to 3 rows with a variable split.
-  - Enemy rows are always filled from the **front backward**; random setup never leaves an empty front or middle row with enemies behind it.
-  - Ranged enemies prefer the deeper occupied rows, especially the back row when one exists.
-  - Enemy stats stay at their printed values; difficulty rises through party size, composition, and unlocked types.
-  - A short description of the main enemy type (e.g. "Heavy shields ahead") appears in the goal display under "Enemy in X turns" so the player can prepare.
-- Combat resolution:
-  - Both crews attack automatically once `Fight!` is pressed.
-  - Setup already uses the compact mini-card layout; pressing `Fight!` starts the autoplay battle from that same layout.
-  - During autoplay, player pirates still fighting remain on the table as mini cards.
-  - The hand stays hidden during active combat, even when pirates die.
-  - Boarding formations use up to 3 centered rows per side: front, middle, and back.
-  - Any number of fighters may start in a given row.
-  - The current front row is always the frontmost living row.
-  - If a whole row is defeated, any rows behind it slide forward to fill the gap.
-  - Melee fighters can only attack while they are in the current front row.
-  - Ranged fighters can attack from any living row.
-  - Every fighter gets a tiny random initial delay, then keeps attacking until dead.
-  - Across the whole boarding, only one attack may start every **0.3s**.
-  - A fighter's own attack cooldown is still based on that fighter's attack speed from its previous attack.
-  - A fighter cannot begin an attack while another attack is currently targeting them.
-  - Default melee attacks target a random living enemy in the opposing front row, within that fighter's positional band.
-  - Positional band rule: if a fighter is position `X` out of `N` living front-row allies and the opposing front row has `M` living enemies, the target band is the enemy indices from `floor((X-1)*M/N)` through `ceil(X*M/N)-1`, clamped to the living opposing front row.
-  - `🪓 Axe` attacks hit every living enemy in the opposing front row at once.
-  - `🏹 Bow` and `🔫 Musket` ignore rows and target across the whole enemy formation using lowest/highest current HP.
-  - `🪝 Hookshot` deals no damage and pulls a target from the backmost enemy row to the front row before later attacks resolve, without cycling the rest of the formation.
-  - `⛓️ Chain` delays the surviving target's next attack by **1.0s**.
-  - `🗡️ Dirk` adds bleed, which deals **1 damage** every **0.7s** for **3 ticks**; a fresh dirk hit refreshes that bleed.
-  - `🔱 Trident` heals every living ally in the next row behind the attacker for **1 HP** after each attack.
-  - `⚓ Anchor` uses **6 base damage** and loses **1 damage** for each other living ally in the attacker's row.
-  - `🧨 Bomb Lance` uses the normal front-row band target rule, deals **8 damage**, and then cannot attack again that boarding.
-  - `🥏 Chakram` uses the normal front-row band target rule, starts at **2 damage**, and gains **+1 damage** after each shot.
-  - `🛡️ Shellback` reduces row-wide hit damage by **2** for every living enemy in its row, to a minimum of **1** damage.
-  - `🎯 Deck Sniper` targets the backmost armed pirate first.
-  - `🪤 Netter` targets the backmost pirate and delays ranged targets longer than melee targets.
-  - `🔥 Flint Duelist` reacts only to **single-target** hits of **5+ damage** that it survives; row-wide hits do not trigger it.
-  - Enemy death effects resolve immediately after the attack that killed them. A `💣 Powder Bomber` explosion hits every pirate in the current front row for 4 damage.
-  - Bleed ticks resolve during autoplay and can kill fighters between attacks.
-- **Victory**:
-  - Equipped weapons persist.
-  - No combat casualties persist.
-  - After combat ends, the game shows a short result state with `Won Combat` and a `Continue` button.
-  - In that result state, the hand becomes visible again with pirates who retreated, while surviving pirates remain on the combat table.
-  - On `Continue`, both the hand cards and the surviving combat-table pirates move to discard, then the player draws up to 5 new pirates and proceeds to map phase.
-  - If this was the final map node → **Victory screen**.
-- **Defeat**:
-  - After combat ends, the game shows `Lost Combat` with a `Game Over` button.
-  - Pressing that button opens the **Game Over** screen.
-- **Battle Test**:
-  - Always starts with 5 pirates so the row-rearranging setup is fully available.
-  - Some pirates begin pre-equipped so the weapon behaviors are visible immediately.
-  - After the result screen, `Repeat` reruns the exact same crew, enemy party, and pre-fight formation. `Another Battle` rolls a fresh random test.
+### 5. Boarding Round
 
----
+- Ship nodes move the game directly into `phase = boarding`.
+- In regular runs, the next unreached ship is scouted before the player reaches it.
+- Scouting shows that ship's pre-generated base boarding party from its encounter blueprint before any `Boarding Alert` guards are added.
+- Scouting is limited to the next unreached ship; later ship rosters stay hidden until they become the next ship.
+- Pending or projected `Boarding Alert` guards are previewed separately from the scouted base roster.
+- When the ship is reached, the actual boarding uses the same pre-generated base blueprint plus any consumed `Boarding Alert` guards.
+- Pending `Boarding Alert` persists through islands, shops, and hidden map auto-advance until the next ship node.
+- When a regular-run boarding starts, the current `Boarding Alert` is snapshotted on that boarding and the pending Alert is cleared.
+- The snapshotted Alert adds visible guard reinforcements after the normal boarding party is generated:
+  - Alert `1–2`: add 1 extra `Cabin Boy`.
+  - Alert `3–5`: add 1 extra `Cabin Boy` and 1 extra `Bilge Rat`.
+  - Alert `6+`: add 2 extra `Cabin Boys` and 1 extra `Bilge Rat`.
+- Alert guards use normal enemy stats and normal late-run `Veteran`/`Elite` scaling. Alert no longer gives enemies bonus HP.
+- Alert previews show the resulting guard tier and any guard plunder available on a win. Battle Test ignores `Boarding Alert`.
+- After a regular-run boarding is won, the consumed Alert guards grant plunder once:
+  - each Alert `Cabin Boy` grants `+1🪵`;
+  - each Alert `Bilge Rat` grants `+1🪨`;
+  - Alert `1–2` therefore pays `+1🪵`;
+  - Alert `3–5` pays `+1🪵 +1🪨`;
+  - Alert `6+` pays `+2🪵 +1🪨`.
+- Alert guard plunder is granted only on a win, never on a loss, never in Battle Test, never for normal enemies, and cannot be duplicated after the boarding is resolved. Alert guards removed by `Counter Ambush` still count for this plunder if the boarding is won.
+- After a regular-run boarding is won, before the winning hand is discarded, the frontmost then leftmost surviving player fighter in the final combat hand gains `+1 💪 Might` as a `Boarding Trophy`.
+- `Boarding Trophy` triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no player fighter survives.
+- If a boarding is won by a reinforcement hand, only a survivor from that final winning combat hand can receive the `Boarding Trophy`.
+- After a regular-run boarding is won, if the final winning combat hand has at least 1 surviving pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching survivor gains `+1 ⚡ Tempo` as a `Counter Trophy`.
+- `Counter Trophy` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It triggers once per won regular boarding, never on losses, never in Battle Test, and grants nothing if no matching counter pirate survives.
+- If a boarding is won by a reinforcement hand, only a matching survivor from that final winning combat hand can receive the `Counter Trophy`.
+- `Boarding Trophy`, `Counter Trophy`, Alert guard plunder, Opening plunder, Ambush Bounty, Route Sidekick Bounty, Opening Route Victory Cache, and an already-applied Opening Route Promotion can all stack on the same win when their own conditions are met.
+- The old "sum team strength against ship strength" system no longer exists.
+- Ship nodes still store a numeric `strength` field, but current combat uses a generated enemy boarding party instead of a direct strength comparison.
+- Before the fight, the current ready pirates are automatically packed into a 3-row formation, then the player may drag ready pirates between front, middle, and back rows and reorder them within a row before pressing `Fight!`.
+- Wounded pirates in hand sit out and do not become combat fighters.
+- Default player setup puts armed ranged pirates in the deepest occupied row behind any melee front and everyone else in the front row.
+- In regular-run boarding with a scouted main enemy, the first ready pirate in hand whose type counters that main enemy is placed at the front of the front row by default, even if that pirate has a ranged weapon.
+- During regular-run boarding, an active matching `Cache Drill` bounty pirate takes priority for that default front-left counter slot if that exact pirate is still owned, in the current hand, not `🩹 Wounded`, and counters the boarding's main enemy. This puts the cache-drilled counter ahead of unmarked counters, including the `Opening Deckhand Counter` starter during Boarding 1.
+- `Cache Drill` default priority never applies in `Battle Test`, wrong-main encounters, absent/wounded/removed pirates, stale markers, or after the bounty mark has cleared.
+- The player may still move that defaulted counter before `Fight!`; `Counter Ambush` only triggers if a matching counter is still in the compacted front row when the fight starts.
+- Occupied player setup rows compact toward the front whenever the formation is normalized; no ready pirate remains behind an empty row at fight start.
+- Enemy setup is fixed before the fight and can be inspected while the player arranges their formation.
+- `Fight!` starts autoplay combat using the chosen player formation.
+- In regular-run boarding only, `Counter Ambush` checks once when `Fight!` starts for the opening combat hand.
+- If the player's compacted front row has at least 1 ready pirate whose type counters that boarding's main scouted enemy, the frontmost then leftmost matching pirate ambushes before normal attack timers begin.
+- `Counter Ambush` targets the frontmost then leftmost living enemy with that main archetype, deals `3` damage, and applies `+1 Wound`.
+- `Armed Counter Ambush`: if the ambushing counter pirate has any permanent personal upgrade at fight start, meaning a weapon, `1+ 💪 Might`, or `1+ ⚡ Tempo`, that `Counter Ambush` deals `5` damage instead of `3`.
+- A `Watch Ready` ambusher also uses the `Armed Counter Ambush` damage and Alert guard-removal limits for that boarding only, without gaining a permanent upgrade; during Boarding 1, it can enable `Opening Counter Break` only if it removes zero Alert guards.
+- After damaging and wounding the main scouted enemy, normal `Counter Ambush` also removes up to 1 frontmost then leftmost living `Boarding Alert` guard if any are present.
+- `Armed Counter Ambush` removes up to 2 frontmost then leftmost living `Boarding Alert` guards instead of 1.
+- Guards removed by `Counter Ambush` do not fight, but still count for normal Alert guard plunder if the boarding is won.
+- During regular-run Boarding 1 only, if `Armed Counter Ambush`, including a `Watch Ready` armed ambush, removes zero `Boarding Alert` guards, `Opening Counter Break` also removes 1 frontmost then leftmost living non-Alert weak support enemy, either `Bilge Rat` or `Cabin Boy`, after damaging and wounding the scouted main enemy and before normal combat timers begin.
+- A support routed by `Opening Counter Break` is not an Alert guard, grants no Alert guard plunder, and does not trigger in `Battle Test`, reinforcement hands, or Boarding 2+.
+- If that Boarding 1 is won, the support routed by `Opening Counter Break` grants separate `Opening plunder` once: `Cabin Boy` grants `+1🪵`, and `Bilge Rat` grants `+1🪨`.
+- `Opening plunder` is not Alert guard plunder, does not change Alert guard plunder totals, never triggers on losses, and never triggers in `Battle Test`, reinforcement hands, Boarding 2+, unarmed `Counter Ambush`, or `Armed Counter Ambush` that removes Alert guards instead of routing support.
+- After a regular-run boarding is won, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, grant `Ambush Bounty`: normally `+1` of that main enemy's Scouted Counter Cache resource.
+- If that surviving ambusher has a matching active Cache Drill bounty mark from the immediately preceding cache, `Ambush Bounty` pays `+2` of that resource instead of `+1`. Cache Drill bounty marks are then gone with the resolved boarding.
+- `Ambush Bounty` uses the cache resource map: `Shellback` → `🪵`, `Powder Bomber` → `🪨`, `Deck Sniper` → `🪙`, `Netter` → `🪵`, `Flint Duelist` → `🪵`.
+- `Ambush Bounty` is granted once per boarding, never on losses, never in `Battle Test`, never if the ambusher was defeated, and never if the win comes from a reinforcement hand; those exclusions also prevent the doubled Cache Drill bounty.
+- `Ambush Bounty` is separate from Alert guard plunder, Opening plunder, `Boarding Trophy`, and `Counter Trophy`.
+- During regular-run Boarding 1 only, if the selected route's secured bought primary opening counter triggers `Counter Ambush` in the opening combat hand, is still owned, is still represented by a living player fighter at that moment, and still matches the selected route main enemy, it immediately gains its pirate definition's ship-side personal gains as `Opening Route Promotion` before normal combat attacks begin.
+- `Opening Route Promotion` uses only that pirate type's ship-side weapon and buff personal gains. It pays no ship resource or `☠️` output, pays no ship cost, does not consume a ship action, does not target the leftmost island pirate, is not `Prepared`, and immediately updates that pirate's fighter for the same Boarding 1 combat.
+- `Opening Route Promotion` is permanent once applied and can apply at most once. It does not require winning the boarding; a later loss or later defeat of that pirate does not undo the promotion.
+- `Opening Route Promotion` applies to the recorded secured bought primary route counter only: `Forest Island`/`Shellback` → `Poisoner`, `Rocky Island`/`Powder Bomber` → `Sawbones`, and `Port Island`/`Deck Sniper` → `Needler`.
+- `Opening Route Promotion` never applies in `Battle Test`, reinforcement hands, Boarding 2+, missing `Counter Ambush`, wrong-main encounters, `Opening Deckhand Counter` starter ambushes, `Opening Side Prep` purchases, discard-only route-primary purchases, non-primary pirates, removed/non-owned bought primaries, or bought primaries that no longer match the selected route's recorded secured counter.
+- After winning any non-final regular-run boarding, if `Counter Ambush` triggered in the opening combat hand and that same ambushing pirate is still alive in the final winning combat hand, `Counter Ambusher Report` makes that pirate `report next`: on post-boarding `Continue`, it is separated from normal hand discard and placed on top of the draw pile before the next hand is drawn.
+- `Counter Ambusher Report` applies to the surviving ambusher, including bought counters and the `Opening Deckhand Counter` starter while that starter is eligible on Boarding 1, preserves any weapon, `Might`, `Tempo`, `Boarding Trophy`, `Counter Trophy`, Cache Drill, Opening Prep, Opening Route Promotion, or other personal upgrades already on that pirate, and cannot duplicate the pirate.
+- `Counter Ambusher Report` never applies on losses, `Battle Test`, reinforcement-hand wins, final victory boardings, missing `Counter Ambush`, defeated ambushers, or if the ambusher is no longer in the crew at report time.
+- During regular-run Boarding 1 only, if the `Route Sidekick` is still owned, present in the final winning opening combat hand, alive, and not `🩹 Wounded`, `Route Sidekick Report` makes that pirate `report next`: on post-boarding `Continue`, it is separated from normal hand discard and placed on top of the draw pile below any `Counter Ambusher Report` pirate and above normal discards before the next hand is drawn. The `Route Sidekick` mark clears when Boarding 1 resolves.
+- When `Route Sidekick Report` succeeds, `Route Sidekick Bounty` also grants `+1` of the selected route's cache resource once: `Forest Island`/`Shellback` grants `+1🪵`, `Rocky Island`/`Powder Bomber` grants `+1🪨`, and `Port Island`/`Deck Sniper` grants `+1🪙`.
+- `Route Sidekick Bounty` is granted once, is not doubled by Cache Drill or island bonuses, and never applies in `Battle Test`, Boarding 2+, losses, reinforcement-hand wins, ordinary side-offer buys, removed sidekicks, absent sidekicks, defeated sidekicks, wounded sidekicks, or sidekicks that do not qualify for `Route Sidekick Report`.
+- `Route Sidekick Report` and `Route Sidekick Bounty` grant no `Counter Watch`, `Counter Edge`, `Counter Ambush`, `Ambush Bounty`, `Opening Route Promotion`, route security, Alert refund, Cache Drill bounty mark, route-primary security, or other counter perks.
+- `Armed Counter Ambush` is not `Counter Edge`, does not mutate permanent buffs, does not count as an attack, and does not trigger weapon on-hit effects or enemy hit reactions.
+- `Counter Ambush` does not grant `Might` or `Tempo`, does not apply in `Battle Test`, and does not trigger for reinforcement hands.
+- All pirates share the same base combat stats before weapon and buff modifiers: `9 HP`, `3 damage`, `1350 ms attack`, melee/front-row behavior.
+- During a regular-run boarding, each ready player fighter whose pirate type counters that boarding's main scouted enemy has `Counter Edge`: `+1` temporary attack damage for that boarding only.
+- `Counter Edge` uses gameplay counter types: the shop scouted counter map, plus `Opening Deckhand Counter` during regular-run Boarding 1 only. It applies to reinforcement hands during the same boarding and does not apply to wounded pirates sitting out.
+- `Counter Edge` is not `Might`, is not a permanent buff, does not change stored `Might` or `Tempo`, does not count toward buff count, and does not affect Officer Sabre, Cadence Pistols, or Banner Axe buff-count thresholds.
+- `Counter Edge` never applies in `Battle Test`.
+- In regular runs, defeated player pirates become `🩹 Wounded`.
+- If all current player fighters fall while enemies remain, the run does not immediately end.
+- The defeated current hand goes to discard and a new combat hand is drawn from the deck/discard using only pirates that are not `🩹 Wounded`.
+- The replacement combat hand draws up to 5 ready pirates; if fewer than 5 ready pirates remain, it draws all of them.
+- A regular run is lost only when the crew has no ready pirates left, meaning every pirate in `allCrew` is `🩹 Wounded`.
+- After a win, the whole current hand goes to discard except any eligible `Counter Ambusher Report` pirate or `Route Sidekick Report` pirate, a new hand is drawn, and the hidden voyage auto-advances.
+- After that all-wounded loss, the run goes to `Game Over`.
+- Winning the final ship on layer 39 ends the run with the `Victory` screen.
 
-## Map Generation
+## Pirate Injury And Healing
 
-Total: **30 layers**, yielding **6 enemy ships** total.
-
-### Early Game (layers 0–9): 2 segments
-
-Each segment = 4 island layers + 1 battle layer = 5 layers. 2 segments = 10 layers.
-
-- Segment 1 (layers 0–3) is a single mandatory path with no route choice before the first battle.
-- Segment 2 uses 3 parallel non-intersecting paths.
-- All available paths converge at the battle node at the end of each segment.
-- After a battle, paths fan back out to 3 for the next segment.
-
-**Island restrictions in early game:**
-- Layers 0–8: no Treasure Island, no Skull Island, no Siren Island.
-- Layers 9: no Siren Island (Treasure and Skull are allowed).
-
-**Encounter blueprints:**
-- Each ship node stores a pre-generated encounter blueprint determining the main enemy type, support composition, and total count.
-- The blueprint also provides a short description shown in the goal display before the battle.
-
-**Early ship strength:**
-
-| Ship # | Layer | Strength |
-|--------|-------|----------|
-| 1 | 4 | 6 |
-| 2 | 9 | 8 |
-
-### Mid/Late Game (layers 10–29)
-
-- Non-ship layers have 2–3 island nodes (random).
-- Ship nodes every 5th layer (layers 14, 19, 24, 29).
-- Siren Island can appear starting at layer 10 (50% chance per layer of being included in the island pool).
-- Connections between layers: each node connects to 1–2 nodes in the next layer; every node in the next layer is reachable by at least one node in the current layer.
-
-**Ship strength** (general formula): `trunc(shipNumber ^ 1.2 × 2 + 4)`
-
-| Ship # | Layer | Strength |
-|--------|-------|----------|
-| 3 | 14 | 11 |
-| 4 | 19 | 14 |
-| 5 | 24 | 17 |
-| 6 | 29 | 21 |
-
-### Victory Condition
-
-Win the boarding at the final layer (layer 29, ship #6).
-
----
+- `🩹 Wounded` is a persistent pirate status in regular runs.
+- Wounded pirates still stay in the deck, hand, discard, and crew.
+- Wounded pirates can still be sent to islands and can still resolve normal ship actions.
+- Wounded pirates do not participate in boarding while wounded.
+- During an ongoing boarding, wounded pirates are skipped when drawing replacement combat hands.
+- A wounded pirate card shows a `🩹` badge.
+- `Infirmary Island` heals up to 5 wounded pirates chosen by the player from the whole crew.
+- Healing removes the `🩹 Wounded` status immediately.
 
 ## Islands
 
-| Name | Emoji | Effect |
-|------|-------|--------|
-| Forest Island | 🌲 | x2 🪵 yield |
-| Rocky Island | ⛰️ | x2 🪨 yield |
-| Treasure Island | 💎 | x2 🪙 yield |
-| Port Island | ⚓ | Can send 3 pirates instead of 2 |
-| Skull Island | 💀 | +2☠️ at round start |
-| Siren Island | 🧜 | Pirates sent are permanently lost after their action |
+| Island | Effect |
+|---|---|
+| Forest Island 🌲 | Doubles island output of `🪵` |
+| Rocky Island ⛰️ | Doubles island output of `🪨` |
+| Treasure Island 💎 | Doubles island output of `🪙` |
+| Port Island ⚓ | Lets the player send 3 pirates instead of 2. Full 3-pirate sends grant `Port Drill`: leftmost surviving sent pirate gains `+1 ⚡ Tempo` before ship actions |
+| Skull Island 💀 | Grants `☠️☠️` immediately when the node is selected |
+| Siren Island 🧜 | Every sent pirate is permanently lost after its island effect |
+| Infirmary Island 🩹 | Heals up to 5 wounded pirates chosen by the player |
 
-**Island bonus doubling**: applies to standard gathering, conversion outputs, and multi-resource outputs that match the island's bonus resource.
+## Pirates
 
----
+| Pirate | Cost | Island | Ship |
+|---|---:|---|---|
+| Rigger | — | 🪵 | 4🪵 → ☠️☠️ |
+| Ballaster | — | 🪨 | 4🪨 → ☠️☠️ |
+| Armsman | — | 🪵 | 🪵 → 🔫 Rusty Pistol |
+| Poisoner | 2 | 🪵 | 🪵 → ☠️☠️+🗡️ |
+| Drummer | 2 | 🪵 | 🪵 → ☠️+⚡ |
+| Herald | 2 | 🪙 | 🪙 → ☠️☠️☠️ |
+| Sawbones | 3 | 🪨 | 🪨 → ☠️☠️+⚔️ |
+| Needler | 3 | 🪙 | 🪙 → ☠️☠️+🧪 |
+| Trainer | 3 | 🪨 | 🪨 → ☠️+💪 |
+| Survivalist | 3 | 🪵 | 🪵 → ☠️☠️ |
+| Bosun | 5 | — | ☠️☠️☠️ |
+| Cutthroat | 5 | ☠️ | 🪙🪙 → exile pirate |
+| Scarwright | 7 | 🪨 | 🪨🪨 → 4☠️+🪝 |
+| Flagbearer | 7 | 🪙 | 🪵+🪨 → 4☠️+💪+⚡ |
+| Duel Master | 7 | 🔨 | 🪙 → 3☠️+⚔️ |
+| Smuggler | 8 | 🪙 | 🪙 → 6☠️+🪵+🪨 |
+| Bandmaster | 8 | ☠️☠️ | 🪙 → 4☠️+🔫 |
+| Quartermaster | 10 | recall 1 pirate | ☠️☠️ |
+| Plague Captain | 10 | 🪙 | 🪙🪙 → 5☠️+🧪+💪 |
+| Admiral's Mate | 13 | 🪙🪙 | 🪙🪙 → 6☠️+🪓+💪+⚡ |
 
-## Island Action Types
+### Special Island Notes
 
-1. **Recall** (Quartermaster): returns the last-sent pirate from the island back to the hand.
-2. **Exile Sent** (Marooner): permanently removes the previously-sent pirate on the island from the game. No effect if no one was sent before.
-3. **Guaranteed**: produces fixed resources or weapons with no chance of failure.
-4. **Convert** (Trader, Profiteer): spends input resources, produces output resources. Output doubled by island bonus. Can only go ashore if the player has enough input resources.
-5. **Gather**: standard resource gathering.
-   - Gain the listed resource every time.
-   - Island bonus doubles yield amount.
-   - Bonus enthusiasm (e.g. Survivalist) is always granted.
+- `Quartermaster`: recalls the most recently sent earlier pirate.
+- `Cutthroat`: the exile target must be outside the current hand.
 
----
+## Permanent Buffs
 
-## Ship Action Types
-
-1. **Get Lost**: pirate is permanently removed from the game. No other effect.
-2. **Exile from Deck** (Cutthroat): spend resources, then player picks a crew member (not from current hand) to permanently exile. No effect if resources insufficient or no valid targets.
-3. **No action** (Herald): does nothing on ship.
-4. **Free production** (Bosun, Corsair, etc.): generates enthusiasm and/or specific weapons with no input cost.
-5. **Resource conversion**: spend N of a resource, produce resources, enthusiasm, and/or specific weapons. Fails silently if insufficient resources.
-
----
+- `💪 Might`: `+1 damage` per stack.
+- `⚡ Tempo`: attacks `20%` faster per stack.
+- `Buff count` means `Might + Tempo` together.
+- Buffs stay on that pirate until that pirate leaves the crew.
 
 ## Weapons
 
-| Type | Emoji | Effect | Persistence |
-|------|-------|--------|-------------|
-| Weapon gain | `🔨` / `🪓` / `🏹` / `🔫` / `🪝` / `⛓️` / `🗡️` / `🔱` / `⚓` / `🧨` / `🥏` | When a pirate action produces a weapon, it creates that exact weapon. During the same round, the player must assign it to one pirate from the current hand, including pirates already sent to the island. If that pirate already has a weapon, the old weapon is discarded | Never enters inventory |
-| Hammer | 🔨 | Melee weapon; keeps the pirate's attack unchanged and gives **+4 HP** in every boarding while equipped | Stays on that pirate until that pirate leaves the crew |
-| Axe | 🪓 | Melee weapon; each swing hits the whole opposing front row | Stays on that pirate until that pirate leaves the crew |
-| Bow | 🏹 | Ranged weapon; targets the living enemy with the **lowest current HP** in any row | Stays on that pirate until that pirate leaves the crew |
-| Musket | 🔫 | Ranged weapon; targets the living enemy with the **highest current HP**, deals **+2 damage**, and attacks **60% slower** | Stays on that pirate until that pirate leaves the crew |
-| Hookshot | 🪝 | Ranged weapon; attacks **45% slower**, targets a random living enemy in the backmost enemy row, deals **0 damage**, and pulls that target to the front row without cycling the rest of the formation | Stays on that pirate until that pirate leaves the crew |
-| Chain | ⛓️ | Melee weapon; deals **0 damage** and delays the target's next attack by **1.0s** | Stays on that pirate until that pirate leaves the crew |
-| Dirk | 🗡️ | Melee weapon; deals normal damage and applies bleed for **1 damage three times**, once every **0.7s**; a fresh dirk hit refreshes that bleed | Stays on that pirate until that pirate leaves the crew |
-| Trident | 🔱 | Melee weapon; deals normal damage and then heals every living ally in the next row behind the attacker for **1 HP** | Stays on that pirate until that pirate leaves the crew |
-| Anchor | ⚓ | Melee weapon; deals **6 damage**, minus **1 damage** for each other living ally in the attacker's row | Stays on that pirate until that pirate leaves the crew |
-| Bomb Lance | 🧨 | Melee weapon; uses the normal front-row band target rule, deals **8 damage**, and only strikes **once** per boarding | Stays on that pirate until that pirate leaves the crew |
-| Chakram | 🥏 | Ranged weapon; uses the normal front-row band target rule, starts at **2 damage**, and gains **+1 damage** after each shot in that boarding | Stays on that pirate until that pirate leaves the crew |
+- Weapon grants never enter a shared inventory.
+- Each pirate can hold only 1 weapon at a time.
+- Island weapon grants make the player pick the receiving pirate from the current hand.
+- Ship-side weapon gains target the leftmost surviving pirate currently on the island; if no island pirate is available, the weapon is lost.
+- If a pirate gets a new weapon, the old weapon is replaced.
+- Weapons stay on that pirate until that pirate leaves the crew.
 
----
+| Weapon | Effect |
+|---|---|
+| 🔨 Hammer | Melee. `+4 HP` |
+| 🔫 Rusty Pistol | Ranged. Deals `2 damage` with normal front-band targeting. No poison, wounds, or buff scaling. |
+| 🗡️ Venom Knife | Melee. Normal hit, then apply `1 poison` |
+| 🧪 Toxin Pistol | Ranged. Targets the living enemy with the lowest HP, then applies `1 poison` |
+| ⚔️ Barbed Blade | Melee. Normal hit, then apply `1 wound` |
+| 🪝 Scar Harpoon | Ranged. Targets the living enemy with the highest HP, attacks `1.35x` slower, and applies `2 wounds` |
+| ⚔️ Officer Sabre | Melee. `+1 damage` for each buff on the owner |
+| 🔫 Cadence Pistols | Ranged. Targets the living enemy with the lowest HP and attacks `10%` faster for each buff on the owner |
+| 🪓 Banner Axe | Melee. Normal hit by default. If the owner has `3+ buffs`, it hits the whole opposing front row |
 
-## Shop
+## Poison And Wounds
 
-- Shop uses a 4-slot window.
-- Pool: all non-starter pirates (23 types).
-- **Regular-run cost filtering**: max offered cost = max(3, round + 1). Only pirates within that cost appear. Falls back to full pool if none qualify.
-- **Buying**: costs ☠️ equal to the pirate's cost. New pirate goes directly into the discard pile (not hand). The bought slot is refilled with a new random pirate from the pool.
-- **Next round rotation**: the first pirate in the window is removed, remaining pirates shift left, and a new random pirate enters at the end.
+- `Poison` and `Wounds` last for the whole boarding. They do not decay.
+- When poison is applied, the target immediately takes damage equal to the poison already on it, then gains `+1 poison`.
+- Example:
+  - at `0 poison`, applying poison deals `0`, then goes to `1 poison`
+  - at `1 poison`, applying poison deals `1`, then goes to `2 poison`
+  - at `2 poison`, applying poison deals `2`, then goes to `3 poison`
+- Outside the `Powder Bomber` death-blast exception, `Wounds` do nothing by themselves.
+- If a target has `k wounds` and receives poison, that poison application repeats `k + 1` times.
+- Example:
+  - target has `2 wounds` and `1 poison`
+  - one poison application repeats `3` times
+  - damage sequence is `1`, then `2`, then `3`
+  - target ends at `4 poison`
 
----
+## Boarding Combat
 
-## Pirate Types
+- Each side can occupy up to 3 rows: front, middle, back.
+- The front row is always the first living row. If an entire row dies, rows behind it automatically become the new front.
+- Melee fighters can attack only from the current front row.
+- Ranged fighters can attack from any living row.
+- Every fighter gets a random initial delay of `80–260 ms`.
+- Across the whole boarding, only one new attack may begin every `300 ms`.
+- A fighter cannot begin its own attack while another attack is currently resolving against it.
+- Player attack speed is also clamped to a minimum of `250 ms`.
+- Default `frontBand` targeting:
+  - if the attacker is position `X` among `N` living allies in its front row and the opposing front row has `M` living targets, then it randomly picks within `floor((X-1)*M/N)` through `ceil(X*M/N)-1`
+- Multi-target row hits lose `2 damage` per target if a living `Shellback` is present in that row. Damage never drops below `1`.
+- `Powder Bomber` explodes immediately on death and deals `4 damage` to the player's current front row unless it has `1+ Wounds`; wounded bombers fizzle and deal no death-blast damage.
+- Poison damage happens immediately when poison is applied and can finish fighters during an attack.
 
-### Starters
+## Enemy Boarding Parties
 
-| Name | Island | Ship |
-|------|--------|------|
-| Rigger | 1🪵 | 4🪵 → 2☠️ |
-| Ballaster | 1🪨 | 4🪨 → 2☠️ |
-| Armsman | → 🔨 | — |
+| Enemy | Stats | Behavior |
+|---|---|---|
+| 🐀 Bilge Rat | 6 HP, 2 damage, 1100 ms | Fast weak melee |
+| 🔔 Cabin Boy | 5 HP, 2 damage, 1250 ms | Weak ranged; hits the backmost pirate |
+| 🛡️ Shellback | 18 HP, 4 damage, 1450 ms | Strong melee; reduces row-wide damage taken by its row by 2 |
+| 🎯 Deck Sniper | 9 HP, 4 damage, 950 ms | Strong ranged; targets the backmost armed pirate, otherwise the backmost pirate |
+| 🪤 Netter | 12 HP, 3 damage, 1350 ms | Strong ranged; targets the backmost pirate and delays the next attack by `350 ms`, or `1200 ms` if that target is ranged |
+| 🔥 Flint Duelist | 11 HP, 5 damage, 1050 ms | Strong melee; if it survives a single-target hit of `5+ damage`, its next attack comes up in `220 ms` |
+| 💣 Powder Bomber | 17 HP, 4 damage, 1250 ms | Strong melee; explodes on death for `4 damage` to the player's front row unless it has `1+ Wounds` |
 
-### Tier 1: Early Upgrades (cost 2–5)
+### Encounter Scaling
 
-| Name | ☠️ | Island | Ship |
-|------|-----|--------|------|
-| Brute | 2 | → 🔨 | 1🪨 → 3☠️ |
-| Whittler | 2 | → 2☠️ | 1🪵 → 🥏 |
-| Corsair | 2 | → 🔨🔨 | → 2☠️ |
-| Herald | 2 | → 3☠️ | — (no ship action) |
-| Deckhand | 2 | 1🪨 | → 🔨+1☠️ |
-| Carpenter | 3 | 1🪵 | 2🪵 → 🪓+2☠️ |
-| Stonemason | 3 | 1🪨 | 2🪨 → ⛓️+2☠️ |
-| Privateer | 3 | 1🪙 | 2🪙 → 🔫🔫+4☠️ |
-| Survivalist | 3 | 1🪵 +2☠️ | → 2☠️ |
-| Raider | 4 | → 🪓🪓 | 💀 get lost |
-| Bosun | 5 | Can't land | → 3☠️ |
-| Cutthroat | 5 | → 1☠️ | 2🪙 → exile pirate |
-| Profiteer | 5 | 1🪙 → 2🪙 | 💀 get lost |
+- Counts below describe the normal generated party before any `Boarding Alert` guard reinforcements are added.
+- `Boarding 1`: exactly 3 enemies before Alert guards: the selected opening route's main enemy plus route-specific weak support: `Shellback` gets 1 `Bilge Rat` and 1 `Cabin Boy`; `Powder Bomber` gets 2 `Bilge Rat`s; `Deck Sniper` gets 2 `Cabin Boy`s.
+- `Boarding 2`: exactly 3 enemies, 2 strong and 1 weak.
+- `Boarding 3`: exactly 4 enemies, typically 2 strong and 2 weak. `Netter` unlocks here.
+- `Boarding 4`: exactly 4 enemies, typically 3 strong and 1 weak.
+- `Boarding 5`: exactly 5 enemies, 4 strong and 1 weak support. `Flint Duelist` unlocks here and can appear as the main or strong support.
+- `Boarding 6`: exactly 5 enemies, all strong.
+- `Boarding 7`: exactly 5 enemies, all strong, upgraded to `Veteran`: `+4 HP`, `+1 damage`, and `6%` faster attacks.
+- `Boarding 8`: exactly 5 enemies, all strong, upgraded to `Elite`: `+8 HP`, `+1 damage`, and `12%` faster attacks.
+- Boardings `2+` continue to use the normal random blueprint rules and unlock timing.
+- Each ship node stores a pre-generated blueprint with one main archetype and a short `encounterDesc` hint shown before the fight.
+- Enemy setup generation prefers melee in front and ranged deeper; the formation never leaves living enemies behind an empty front row.
 
-### Tier 2: Mid-Game (cost 6–10)
+## Map Generation And Victory
 
-| Name | ☠️ | Island | Ship |
-|------|-----|--------|------|
-| Marooner | 6 | Exile previous pirate on island | → 🗡️ |
-| Drifter | 6 | 2🪵 | 💀 get lost |
-| Trader | 7 | 3🪵 → 3🪨 | 1🪨 → ⚓+2☠️ |
-| Woodsman | 7 | 1🪵 | 2🪵 → 🏹🏹+4☠️ |
-| Prospector | 7 | 1🪨 | 2🪨 → 🧨🧨+4☠️ |
-| Smuggler | 8 | 1🪙 | 1🪙 → 6☠️+1🪵+1🪨 |
-| Explorer | 9 | 1🪙 | 1🪙 → 5☠️+🔱 |
-| Quartermaster | 10 | Recall 1 pirate from island | → 2☠️ |
+- A run has `40` layers total and `8` ship nodes.
+- Regular-run map layers are a hidden single lane: every layer has exactly 1 node and every non-final node connects to the next layer's only node.
+- Early block:
+  - `layer 0`: 1 `Forest Island`/`Rocky Island`/`Port Island` route cache island chosen by `Opening Contract`
+  - `layer 1`: first ship node
+  - `layers 2–8`: one hidden island per layer
+  - `layer 9`: second ship node
+- Each early island layer is one of `Forest Island`, `Rocky Island`, or `Port Island`.
+- The island on `layer 0` is the Boarding 1 route cache: Forest plans for `Shellback`, Rocky plans for `Powder Bomber`, and Port plans for `Deck Sniper`.
+- Early island layers use only `Forest Island`, `Rocky Island`, and `Port Island`. `Treasure`, `Skull`, `Siren`, and `Infirmary` do not appear there.
+- `layer 10`, `layer 20`, and `layer 30` are mandatory single-node `Infirmary Island` layers.
+- From `layer 10` onward, normal non-infirmary island layers contain 1 hidden island node.
+- From `layer 10` onward, `Siren Island` is added to that layer's pool with `50%` chance; the other islands may always appear.
+- After `layer 9`, ship nodes are placed at `layers 14, 19, 24, 29, 34, 39`.
+- `Infirmary Island` does not appear randomly; it appears only on its mandatory layers.
+- On later map layers, each normal node connects to the next layer's only node.
+- Ship nodes still receive numeric `strength` values: `6`, `8`, `11`, `14`, `17`, `21`, `24`, `28`, but current boarding combat does not directly use those values.
+- Normal-run victory happens by winning `Boarding 8` on `layer 39`.
 
-### Tier 3: Late-Game (cost 13)
+## Battle Test
 
-| Name | ☠️ | Island | Ship |
-|------|-----|--------|------|
-| Master Rigger | 13 | 2🪵 | 2🪵 → 🪝🪝+4☠️ |
-| Master Ballaster | 13 | 2🪨 | 2🪨 → 🔫🔫+4☠️ |
-
-### Special Abilities Detail
-
-**Recall** (Quartermaster): when sent to island, returns the last-sent pirate from the island back to the hand.
-
-**Exile Sent** (Marooner): when sent to island, permanently removes the previously-sent pirate on the island from the game. No effect if no one was sent before.
-
-**Convert** (Trader: 3🪵→3🪨; Profiteer: 1🪙→2🪙): converts resources. Output doubled by matching island bonus. Can only go ashore if the player has enough input resources.
-
-**Gatherers** (including Drifter: 2🪵): always gain their listed resource. Matching island bonus still doubles that yield.
-
-**Get Lost** (Raider, Profiteer, Drifter): ship action permanently removes them from the game. Their island action works normally.
-
-**Exile from Deck** (Cutthroat): ship action spends 2🪙, then player selects any crew member not in the current hand to permanently remove from the game.
-
-**Siren Island interaction**: any pirate sent to Siren Island executes their island action normally, then is permanently removed from the game afterward.
-
-**Survivalist bonus**: island action grants 1🪵 **plus** a guaranteed +2☠️.
-
----
-
-## Resources
-
-| Emoji | Name | Use |
-|-------|------|-----|
-| 🪵 | Wood | Ship actions input; weapon production |
-| 🪨 | Stone | Ship actions input; weapon production |
-| 🪙 | Gold | Ship actions input; high-tier conversions |
-| ☠️ | Enthusiasm | Buy pirates in shop (resets each round) |
-
-## Streak
-
-Tracks consecutive days played. Displayed on the main menu. Purely cosmetic.
+- `Battle Test` from the menu does not use the map, shop, deck, or discard pile.
+- It starts with 5 random pirates from the full `TYPES` list.
+- `round` and boarding number are rolled randomly from `1` to `8`.
+- The crew receives `1–5` random weapons via `rollWeaponKeys(..., { ensureDistinct: true })`.
+- Battle Test does not persist `🩹 Wounded` injuries after combat.
+- After combat:
+  - `Repeat` reruns the exact same crew, enemy party, and pre-fight setup rows
+  - `Another Battle` rerolls everything

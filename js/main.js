@@ -108,6 +108,172 @@ function syncCanvasResolution(game) {
   }
 }
 
+function buildDeckOfCatsTestState(game) {
+  const state = (typeof G !== 'undefined') ? G : null;
+  const sceneKeys = game && game.scene && Array.isArray(game.scene.scenes)
+    ? game.scene.scenes
+      .filter(scene => scene && scene.sys && scene.sys.isActive())
+      .map(scene => scene.scene && scene.scene.key)
+      .filter(Boolean)
+    : [];
+  const hand = state && Array.isArray(state.hand) ? state.hand : [];
+  const crew = state && Array.isArray(state.allCrew) ? state.allCrew : [];
+  const woundedCrew = crew.filter(pirate => pirate && pirate.wounded).length;
+  const combat = state && state.combat ? state.combat : null;
+  const mapAvailable = state && state.map && typeof getAvailableNodes === 'function'
+    ? getAvailableNodes(state.map)
+    : [];
+  const gameScene = game && game.scene && typeof game.scene.getScene === 'function'
+    ? game.scene.getScene('game')
+    : null;
+  const shopQuotes = state && Array.isArray(state.shop) && gameScene && typeof gameScene.shopPurchaseQuote === 'function'
+    ? state.shop.map((type, index) => ({
+      index,
+      type,
+      ...(gameScene.shopPurchaseQuote(type) || {}),
+    }))
+    : [];
+  const sendingPlan = state && state.phase === 'sending'
+    && gameScene
+    && typeof gameScene.shouldShowSendingPlanComparison === 'function'
+    && gameScene.shouldShowSendingPlanComparison()
+    && typeof gameScene.sendingPlanProjection === 'function'
+    && typeof gameScene.maxSend === 'function'
+      ? {
+        endNow: gameScene.sendingPlanProjection(Array.isArray(state.sent) ? state.sent.length : 0),
+        fillCrew: gameScene.sendingPlanProjection(gameScene.maxSend()),
+      }
+      : null;
+
+  return {
+    activeScenes: sceneKeys,
+    mode: state ? state.mode || 'run' : null,
+    phase: state ? state.phase || null : null,
+    round: state ? state.round || 0 : 0,
+    layer: state && state.map ? state.map.currentLayer : null,
+    resources: state && state.res ? { ...state.res } : { wood: 0, stone: 0, gold: 0 },
+    enthusiasm: state ? state.enthusiasm || 0 : 0,
+    alert: state ? state.boardingAlert || 0 : 0,
+    fullCrewDiscount: state ? state.fullCrewDiscount || 0 : 0,
+    openingCounterPlan: !!(state && state.openingCounterPlan),
+    shopCreditUsed: !!(state && state.shopCreditUsed),
+    boardingCount: state ? state.boardingCount || 0 : 0,
+    gameOver: !!(state && state.gameOver),
+    crew: {
+      total: crew.length,
+      ready: crew.length - woundedCrew,
+      wounded: woundedCrew,
+    },
+    hand: hand.map((pirate, index) => ({
+      index,
+      id: pirate && pirate.id,
+      type: pirate && pirate.type,
+      wounded: !!(pirate && pirate.wounded),
+      weapon: pirate && pirate.weaponKey || null,
+    })),
+    sent: state && Array.isArray(state.sent) ? [...state.sent] : [],
+    shop: state && Array.isArray(state.shop) ? [...state.shop] : [],
+    shopQuotes,
+    sendingPlan,
+    mapAvailable,
+    island: state && state.island ? {
+      name: state.island.name || null,
+      maxSend: state.island.maxSend || null,
+    } : null,
+    combat: combat ? {
+      mode: combat.mode || null,
+      result: combat.result || null,
+      enemyName: combat.enemyName || null,
+      encounterDesc: combat.encounterDesc || null,
+      alert: combat.boardingAlert || 0,
+      guards: combat.boardingAlertGuards || 0,
+      enemies: Array.isArray(combat.enemyParty)
+        ? combat.enemyParty.filter(Boolean).map(enemy => ({
+          name: enemy.name || enemy.key || null,
+          hp: enemy.hp || 0,
+          damage: enemy.damage || 0,
+          range: enemy.range || null,
+        }))
+        : [],
+    } : null,
+  };
+}
+
+function installDeckOfCatsTestHook(game) {
+  window.__deckOfCatsTest = {
+    game,
+    getState: () => buildDeckOfCatsTestState(game),
+    sendIslandDirect: (handIdx) => {
+      const state = (typeof G !== 'undefined') ? G : null;
+      const scene = game && game.scene ? game.scene.getScene('game') : null;
+      if (!state || !scene || state.phase !== 'sending') return { ok: false, reason: 'not sending' };
+      if (!Array.isArray(state.hand) || !Array.isArray(state.sent)) return { ok: false, reason: 'hand unavailable' };
+      if (state.sent.includes(handIdx)) return { ok: false, reason: 'already sent' };
+      if (typeof scene.maxSend === 'function' && state.sent.length >= scene.maxSend()) {
+        return { ok: false, reason: 'max send reached' };
+      }
+      if (typeof scene.canPreviewIslandDrop === 'function' && !scene.canPreviewIslandDrop(handIdx)) {
+        return { ok: false, reason: 'cannot send' };
+      }
+      const pirate = state.hand[handIdx];
+      const def = pirate && TYPES[pirate.type];
+      const directSafe = def && def.island && def.island.res && !def.island.guaranteed && !def.island.convert;
+      if (!directSafe || typeof scene.resolveIsland !== 'function') {
+        return { ok: false, reason: 'not a direct-safe island pirate' };
+      }
+      state.sent.push(handIdx);
+      const result = scene.resolveIsland(pirate);
+      if (state.island && state.island.sacrifice && pirate) {
+        state.allCrew = state.allCrew.filter(p => p.id !== pirate.id);
+        state.deck = state.deck.filter(p => p.id !== pirate.id);
+        state.discard = state.discard.filter(p => p.id !== pirate.id);
+        if (typeof scene.clearOpeningRouteCounterBought === 'function') scene.clearOpeningRouteCounterBought(pirate.id);
+        if (scene._sacrificedIds) scene._sacrificedIds.add(pirate.id);
+      }
+      const cacheClaim = typeof scene.claimScoutedCounterCache === 'function'
+        ? scene.claimScoutedCounterCache(pirate, { silent: true })
+        : null;
+      const cacheGrant = cacheClaim && cacheClaim.cacheGrant
+        ? { ...cacheClaim.cacheGrant }
+        : null;
+      const cacheDrill = cacheClaim && cacheClaim.drill
+        ? cacheClaim.drill
+        : null;
+      const cacheState = state.island && state.island.scoutedCacheDrill
+        ? {
+          cachePending: !!state.island.scoutedCacheDrill.cachePending,
+          cacheClaimed: !!state.island.scoutedCacheDrill.cacheClaimed,
+          granted: !!state.island.scoutedCacheDrill.granted,
+          openerId: state.island.scoutedCacheDrill.openerId != null
+            ? state.island.scoutedCacheDrill.openerId
+            : null,
+        }
+        : null;
+      if (typeof scene.renderAll === 'function') scene.renderAll();
+      return {
+        ok: true,
+        type: pirate.type,
+        result,
+        cacheGrant,
+        cacheState,
+        openingCounterPrep: !!(cacheClaim && cacheClaim.openingCounterPrep),
+        cacheDrill: cacheDrill ? {
+          mainKey: cacheDrill.mainKey || null,
+          applied: !!cacheDrill.applied,
+          might: pirate.might || 0,
+          alertRefund: cacheDrill.alertRefund || { amount: 0 },
+          openingCounterPrep: !!cacheDrill.openingCounterPrep,
+          cacheDrillBounty: !!cacheDrill.cacheDrillBounty,
+        } : null,
+        cacheClaim: cacheClaim ? {
+          openerId: cacheClaim.openerId != null ? cacheClaim.openerId : null,
+          openingCounterPrep: !!cacheClaim.openingCounterPrep,
+        } : null,
+      };
+    },
+  };
+}
+
 function bootPhaserGame() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const initialViewport = (typeof resolveViewportSize === 'function')
@@ -132,6 +298,7 @@ function bootPhaserGame() {
     },
     scene: [MenuScene, GameScene, MapScene, ShopScene, DrawPileScene, DiscardPileScene, PauseScene, CostumesScene, AllPiratesScene],
   });
+  installDeckOfCatsTestHook(phaserGame);
 
   window.addEventListener('resize', () => {
     syncCanvasResolution(phaserGame);

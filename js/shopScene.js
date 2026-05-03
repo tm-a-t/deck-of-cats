@@ -192,6 +192,53 @@ class ShopScene extends Phaser.Scene {
     });
   }
 
+  nextBoardingIntelLine() {
+    const game = this.scene.get('game');
+    if (!game || typeof game.nextShipIntelText !== 'function') return '';
+    return game.nextShipIntelText();
+  }
+
+  renderNextBoardingIntel(panel) {
+    const text = this.nextBoardingIntelLine();
+    if (!text) return '';
+
+    const L = this.L;
+    const label = this.add.text(panel.x + 28 * L.k, panel.y + 86 * L.k, text, {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(13),
+      lineSpacing: uiLineSpacingPx(L, 13, 15),
+      wordWrap: { width: panel.w - 96 * L.k },
+    }).setOrigin(0, 0);
+    this.panelLayer.add(label);
+    return text;
+  }
+
+  renderOpeningRoutePlan(panel, topY) {
+    const game = this.scene.get('game');
+    if (!game || typeof game.openingRoutePlanLines !== 'function') return 0;
+    const lines = game.openingRoutePlanLines({ context: 'shop' });
+    if (!lines.length) return 0;
+
+    const L = this.L;
+    const x = panel.x + 28 * L.k;
+    const w = panel.w - 96 * L.k;
+    const text = this.add.text(x + 10 * L.k, topY + 8 * L.k, lines.join('\n'), {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(11),
+      lineSpacing: uiLineSpacingPx(L, 11, 13),
+      wordWrap: { width: w - 20 * L.k },
+    }).setOrigin(0, 0);
+    const h = text.height + 16 * L.k;
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.paper), 0.42);
+    bg.fillRoundedRect(x, topY, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.75);
+    bg.strokeRoundedRect(x, topY, w, h, 8 * L.k);
+    this.panelLayer.add(bg);
+    this.panelLayer.add(text);
+    return h;
+  }
+
   renderPanel() {
     this.stopFeaturedTicker();
     this.panelLayer.removeAll(true);
@@ -227,8 +274,13 @@ class ShopScene extends Phaser.Scene {
       this.requestClose();
     });
     this.panelLayer.add(close);
+    const intelText = this.renderNextBoardingIntel(m);
+    const routePlanTop = m.y + (intelText ? 116 : 86) * L.k;
+    const routePlanH = this.renderOpeningRoutePlan(m, routePlanTop);
+    const routePlanBottomPad = routePlanH > 0 ? (routePlanTop - m.y + routePlanH + 22 * L.k) : 0;
 
-    const canBuyNow = G.phase === 'shopping' && !G.busy;
+    const canBuyNow = G.phase === 'shopping' && !G.busy && !G.shopAnimating;
+    const game = this.scene.get('game');
 
     if (G.shop.length === 0) {
       const empty = this.add.text(m.x + m.w / 2, m.y + m.h * 0.48, 'No pirates for hire', uiBodyStyle(L, UI_THEME.colors.ink))
@@ -240,7 +292,7 @@ class ShopScene extends Phaser.Scene {
 
     const rows = Math.max(1, Math.ceil(G.shop.length / 4));
     const layoutBase = {
-      topPad: 150 * L.k,
+      topPad: Math.max((intelText ? 176 : 150) * L.k, routePlanBottomPad),
       bottomPad: 100 * L.k,
       footerH: 52 * L.k,
       rowGap: 44 * L.k,
@@ -255,7 +307,12 @@ class ShopScene extends Phaser.Scene {
     G.shop.forEach((type, i) => {
       const def = TYPES[type];
       const pos = this.shopPos(i, G.shop.length, m, shopLayout);
-      const canBuy = canBuyNow && G.enthusiasm >= def.cost;
+      const quote = game && typeof game.shopPurchaseQuote === 'function'
+        ? game.shopPurchaseQuote(type)
+        : { canBuy: G.enthusiasm >= def.cost, credit: false, alert: 0, cost: def.cost, effectiveCost: def.cost, discount: 0 };
+      const canBuy = canBuyNow && quote.canBuy;
+      const creditBuy = canBuy && quote.credit;
+      const discountBuy = canBuy && quote.discount > 0;
       const tipKey = `shop-${i}-${type}`;
       const tips = pirateCardEffectTips(type);
       const card = createPirateCard(this, {
@@ -301,25 +358,75 @@ class ShopScene extends Phaser.Scene {
         }
         if (!canBuy) return;
         if (this._cardTips) this._cardTips.hide();
-        this.animateBuyTransition(i, m, cardScale);
+        this.animateBuyTransition(i, m, cardScale, shopLayout);
       });
 
       const priceY = pos.y - (CARD.H * L.k * cardScale) / 2 - 28 * L.k;
       const footerY = pos.y + (CARD.H * L.k * cardScale) / 2 + 28 * L.k;
-      const price = this.add.text(pos.x, priceY, `${def.cost}☠️`, uiBodyStyle(L, UI_THEME.colors.ink))
+      const effectiveCost = quote.effectiveCost != null ? quote.effectiveCost : def.cost;
+      const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
+      const sidePrepSupportText = openingSidePrepSupportText(quote);
+      const sidekickBountyText = openingSidekickBountyText(quote);
+      const priceReduced = effectiveCost < Math.max(0, Math.floor(Number(def.cost) || 0));
+      const coverage = Math.max(0, Math.floor(Number(quote.fullCrewCoverage) || 0));
+      const tags = [];
+      if (quote.counter) tags.push('Counter');
+      if (prepDiscount > 0) tags.push(quote.openingSidePrep ? 'Side Prep -1☠️' : 'Opening Prep -1☠️');
+      if (quote.openingCounterPrepMight) tags.push('Prep +💪');
+      if (quote.openingSidePrep && sidePrepSupportText) tags.push(sidePrepSupportText);
+      if (quote.openingSidePrep && sidekickBountyText) tags.push(sidekickBountyText);
+      if (quote.preparedCounter) tags.push('Prepared');
+      if (quote.topDeck) tags.push('Top deck');
+      if (coverage > 0) tags.push('Full Crew cover');
+      const payoffLines = quote.counterPayoff && Array.isArray(quote.counterPayoff.shopLines)
+        ? quote.counterPayoff.shopLines
+        : [];
+      const priceLine = priceReduced
+        ? `${def.cost}☠️ -> ${effectiveCost}☠️`
+        : `${def.cost}☠️`;
+      const coveredLine = coverage > 0 ? `Full Crew covers ${coverage}☠️` : '';
+      const coverLine = quote.routeCounterCover > 0 ? `Cover -${quote.routeCounterCover} Alert` : '';
+      const planLine = quote.consumesOpeningCounterPlan && canBuy
+        ? (quote.openingSidePrep
+          ? `Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? ` · ${sidePrepSupportText}` : ''}${sidekickBountyText ? ` · ${sidekickBountyText}` : ''}`
+          : (quote.openingCounterPrepMight ? `Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪` : 'Opening Prep spent'))
+        : '';
+      const priceText = [
+        tags.length ? tags.join(' · ') : '',
+        ...payoffLines,
+        priceLine,
+        coveredLine,
+        coverLine,
+        planLine,
+      ].filter(Boolean).join('\n');
+      const price = this.add.text(pos.x, priceY, priceText, uiBodyStyle(L, priceReduced ? '#177C05' : UI_THEME.colors.ink, {
+        fontSize: L.fs((payoffLines.length || coverage > 0 || quote.routeCounterCover > 0 || quote.consumesOpeningCounterPlan) ? 10 : (quote.preparedCounter ? 11 : (quote.topDeck ? 12 : ((priceReduced || quote.counter) ? 13 : 14)))),
+        align: 'center',
+        lineSpacing: payoffLines.length ? -1 * L.k : -2 * L.k,
+      }))
         .setOrigin(0.5, 0.5);
       this.panelLayer.add(price);
 
+      const missing = quote.missing != null
+        ? Math.max(0, Math.floor(Number(quote.missing) || 0))
+        : Math.max(0, effectiveCost - Math.max(0, Math.floor(Number(G.enthusiasm) || 0)));
+      const actionLabel = canBuy
+        ? (creditBuy ? `Buy +${quote.alert} Alert` : (coverage > 0 ? 'Buy covered' : (quote.openingSidePrep ? 'Buy side prep' : (quote.openingCounterPrepMight ? 'Buy prep' : (discountBuy ? `Buy -${quote.discount}☠️` : 'Buy')))))
+        : (missing > 0 ? `Need ${missing}☠️` : 'Buy');
+      const actionFill = canBuy
+        ? (creditBuy ? UI_THEME.colors.outline : UI_THEME.colors.cocoa)
+        : UI_THEME.colors.disabled;
+      const actionTextColor = canBuy ? UI_THEME.colors.paper : UI_THEME.colors.ink;
       const action = makeUiPill(this, {
         x: pos.x,
         y: footerY,
-        label: 'Buy',
+        label: actionLabel,
         L,
-        minW: 74 * L.k,
+        minW: (creditBuy ? 132 : (coverage > 0 ? 126 : (quote.openingSidePrep ? 128 : (discountBuy ? 108 : 74)))) * L.k,
         minH: 44 * L.k,
-        fill: canBuy ? UI_THEME.colors.cocoa : UI_THEME.colors.disabled,
-        textColor: canBuy ? UI_THEME.colors.paper : UI_THEME.colors.ink,
-        textPx: 16,
+        fill: actionFill,
+        textColor: actionTextColor,
+        textPx: (creditBuy || discountBuy || coverage > 0 || quote.openingSidePrep) ? 14 : 16,
       });
       this.panelLayer.add(action);
 
@@ -329,19 +436,76 @@ class ShopScene extends Phaser.Scene {
           fill: UI_THEME.colors.cocoaDark,
           textColor: UI_THEME.colors.paper,
         }));
-        action.on('pointerout', () => action.setPillStyle({
-          fill: UI_THEME.colors.cocoa,
-          textColor: UI_THEME.colors.paper,
-        }));
+        action.on('pointerout', () => action.setPillStyle({ fill: actionFill, textColor: UI_THEME.colors.paper }));
         action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
           if (this._cardTips) this._cardTips.hide();
-          this.animateBuyTransition(i, m, cardScale);
+          this.animateBuyTransition(i, m, cardScale, shopLayout);
         });
       }
     });
 
+    this.renderQuietDocks(m);
     this.renderContinueButton(m);
+  }
+
+  renderQuietDocks(panel) {
+    if (G.phase !== 'shopping') return;
+    const game = this.scene.get('game');
+    if (!game || (typeof game.isBattleTest === 'function' && game.isBattleTest())) return;
+
+    const L = this.L;
+    const pendingAlert = typeof game.pendingBoardingAlert === 'function'
+      ? game.pendingBoardingAlert()
+      : Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+    const alertSummary = typeof game.boardingAlertSummary === 'function'
+      ? game.boardingAlertSummary(pendingAlert)
+      : null;
+    const cost = typeof game.quietDocksCost === 'function'
+      ? game.quietDocksCost()
+      : Math.max(0, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.cost) || 2) || 0));
+    const enabled = typeof game.canUseQuietDocks === 'function' && game.canUseQuietDocks();
+    const y = panel.y + panel.h - 42 * L.k;
+    const text = pendingAlert > 0
+      ? (alertSummary || `Alert ${pendingAlert}`)
+      : 'Alert 0 · seas quiet';
+
+    const label = this.add.text(panel.x + 28 * L.k, y - 31 * L.k, text, {
+      ...uiBodyStyle(L, UI_THEME.colors.ink),
+      fontSize: L.fs(13),
+      wordWrap: { width: Math.min(panel.w * 0.46, 260 * L.k) },
+    }).setOrigin(0, 0.5);
+    this.panelLayer.add(label);
+
+    const action = makeUiPill(this, {
+      x: panel.x + 28 * L.k,
+      y,
+      label: `Quiet Docks ${cost}☠️`,
+      L,
+      minW: 158 * L.k,
+      minH: 42 * L.k,
+      textPx: 15,
+      fill: enabled ? UI_THEME.colors.cocoa : UI_THEME.colors.disabled,
+      textColor: enabled ? UI_THEME.colors.paper : UI_THEME.colors.ink,
+    });
+    action.setPosition(panel.x + 28 * L.k + action.width / 2, y);
+    this.panelLayer.add(action);
+
+    if (!enabled) return;
+    action.setInteractive({ useHandCursor: true });
+    action.on('pointerover', () => action.setPillStyle({
+      fill: UI_THEME.colors.cocoaDark,
+      textColor: UI_THEME.colors.paper,
+    }));
+    action.on('pointerout', () => action.setPillStyle({
+      fill: UI_THEME.colors.cocoa,
+      textColor: UI_THEME.colors.paper,
+    }));
+    action.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      if (this._cardTips) this._cardTips.hide();
+      if (game.useQuietDocks({ skipPanelRefresh: true })) this.renderPanel();
+    });
   }
 
   renderContinueButton(panel) {
@@ -378,13 +542,14 @@ class ShopScene extends Phaser.Scene {
     });
   }
 
-  animateGhostToDiscard(cardView, cardScale) {
+  animateGhostToPile(cardView, cardScale, kind = 'discard') {
     const game = this.scene.get('game');
-    const target = game.pileButtonCenter('discard');
+    const target = game.pileButtonCenter(kind === 'draw' ? 'draw' : 'discard');
     const startX = cardView.container.x;
     const startY = cardView.container.y;
     const endRot = Phaser.Math.FloatBetween(-0.14, 0.14);
-    const cpX = (startX + target.x) / 2 + 56 * this.L.k;
+    const arcSign = target.x >= startX ? 1 : -1;
+    const cpX = (startX + target.x) / 2 + arcSign * 56 * this.L.k;
     const cpY = Math.min(startY, target.y) - 110 * this.L.k;
     const endScale = Math.min(cardScale, 0.34);
     const dur = 460;
@@ -411,7 +576,7 @@ class ShopScene extends Phaser.Scene {
     return dur;
   }
 
-  animateBuyTransition(shopIdx, panel, cardScale = 1) {
+  animateBuyTransition(shopIdx, panel, cardScale = 1, layoutOverride = null) {
     if (G.shopAnimating || G.phase !== 'shopping' || G.busy) return;
     const L = this.L;
     const game = this.scene.get('game');
@@ -421,18 +586,22 @@ class ShopScene extends Phaser.Scene {
     if (shopIdx < 0 || shopIdx >= oldN) return;
 
     const type = oldShop[shopIdx];
-    const cost = TYPES[type].cost;
-    if (G.enthusiasm < cost) return;
+    const quote = game && typeof game.shopPurchaseQuote === 'function'
+      ? game.shopPurchaseQuote(type)
+      : { canBuy: G.enthusiasm >= TYPES[type].cost, credit: false, alert: 0 };
+    if (!quote.canBuy) return;
 
     G.shopAnimating = true;
 
-    const shopLayout = {
-      cardScale,
-      topPad: 150 * L.k,
-      bottomPad: 100 * L.k,
-      footerH: 52 * L.k,
-      rowGap: 56 * L.k,
-    };
+    const shopLayout = layoutOverride
+      ? { ...layoutOverride, cardScale }
+      : {
+        cardScale,
+        topPad: 150 * L.k,
+        bottomPad: 100 * L.k,
+        footerH: 52 * L.k,
+        rowGap: 56 * L.k,
+      };
     const firstPos = this.shopPos(0, oldN, panel, shopLayout);
     const lastPos = this.shopPos(oldN - 1, oldN, panel, shopLayout);
     const cardH = CARD.H * L.k * cardScale;
@@ -459,11 +628,20 @@ class ShopScene extends Phaser.Scene {
       ghosts.push(card);
     });
 
-    game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
+    const bought = game.buyPirate(shopIdx, { deferRender: true, silent: true, ignoreAnimating: true });
+    if (!bought) {
+      G.shopAnimating = false;
+      ghosts.forEach(g => {
+        if (g.container) g.container.destroy();
+      });
+      rowMask.destroy();
+      this.renderPanel();
+      return;
+    }
     const newN = G.shop.length;
 
     const removed = ghosts[shopIdx];
-    const buyDur = this.animateGhostToDiscard(removed, cardScale);
+    const buyDur = this.animateGhostToPile(removed, cardScale, quote.topDeck ? 'draw' : 'discard');
 
     let ni = 0;
     for (let i = 0; i < oldN; i++) {
@@ -512,7 +690,21 @@ class ShopScene extends Phaser.Scene {
       }
       rowMask.destroy();
       G.shopAnimating = false;
-      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!', '#66bb6a');
+      const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
+      const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
+      const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
+      const coverText = quote.routeCounterCover > 0 ? ` Cover -${quote.routeCounterCover} Alert` : '';
+      const sidePrepSupportText = openingSidePrepSupportText(quote);
+      const sidekickBountyText = openingSidekickBountyText(quote);
+      const planText = quote.consumesOpeningCounterPlan
+        ? (quote.openingSidePrep
+          ? ` Side Prep${prepDiscountText}${sidePrepSupportText ? ` ${sidePrepSupportText}` : ''}${sidekickBountyText ? ` ${sidekickBountyText}` : ''}`
+          : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText} +💪` : ' Prep spent'))
+        : '';
+      const preparedText = quote.preparedCounter ? ' Prepared' : '';
+      const deckText = quote.topDeck ? ' Top deck' : '';
+      game.float(game.L.cx, game.L.Y_ISL_CY - 40 * game.L.k, '+ ' + TYPES[type].name + '!' + discountText + coveredText + planText + alertText + coverText + preparedText + deckText, '#66bb6a');
       game.renderAll();
       this.renderPanel();
     });

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "blocked", "failed"] },
+    "summary": { "type": "string" },
+    "bugs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "friction": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "interest_verdict": {
+      "type": "string",
+      "enum": ["boring", "unclear", "promising", "fun", "excellent"]
+    },
+    "fun_factor": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "playable": { "type": "boolean" },
+    "major_untested_changes": { "type": "boolean" },
+    "send_to_external_testing": { "type": "boolean" },
+    "external_test_reason": { "type": "string" },
+    "design_input_summary": { "type": "string" },
+    "details": { "type": "string" }
+  },
+  "required": [
+    "status",
+    "summary",
+    "bugs",
+    "friction",
+    "interest_verdict",
+    "fun_factor",
+    "playable",
+    "major_untested_changes",
+    "send_to_external_testing",
+    "external_test_reason",
+    "design_input_summary",
+    "details"
+  ]
+}

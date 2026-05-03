@@ -132,12 +132,23 @@ class GameScene extends Phaser.Scene {
     return !!(G && G.mode === 'battleTest');
   }
 
+  isLinearVoyage() {
+    return !!(G && G.mode === 'run' && G.map && G.map.linearVoyage);
+  }
+
+  shouldShowMapPanelButton() {
+    return !!(G && G.map && !this.isBattleTest() && !this.isLinearVoyage());
+  }
+
   normalizeCrewWeapons() {
     [G.allCrew, G.deck, G.discard, G.hand].forEach((cards) => {
       if (!Array.isArray(cards)) return;
       cards.forEach((pirate) => {
         if (!pirate) return;
         pirate.weaponKey = WEAPON_TYPES[pirate.weaponKey] ? pirate.weaponKey : null;
+        pirate.might = Math.max(0, Math.floor(Number(pirate.might) || 0));
+        pirate.tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0));
+        pirate.wounded = !!pirate.wounded;
       });
     });
   }
@@ -149,6 +160,188 @@ class GameScene extends Phaser.Scene {
 
   pirateHasWeapon(pirate) {
     return !!this.pirateWeaponKey(pirate);
+  }
+
+  pirateMight(pirate) {
+    return Math.max(0, Math.floor(Number(pirate && pirate.might) || 0));
+  }
+
+  pirateTempo(pirate) {
+    return Math.max(0, Math.floor(Number(pirate && pirate.tempo) || 0));
+  }
+
+  pirateBuffCount(pirate) {
+    return this.pirateMight(pirate) + this.pirateTempo(pirate);
+  }
+
+  pirateBuffSummary(pirate) {
+    const parts = [];
+    const might = this.pirateMight(pirate);
+    const tempo = this.pirateTempo(pirate);
+    if (might > 0) parts.push(`${BUFF_EMOJI.might}${might}`);
+    if (tempo > 0) parts.push(`${BUFF_EMOJI.tempo}${tempo}`);
+    return parts.join(' ');
+  }
+
+  pirateWounded(pirate) {
+    return !!(pirate && pirate.wounded);
+  }
+
+  woundedCrew() {
+    return (G.allCrew || []).filter((pirate) => pirate && this.pirateWounded(pirate));
+  }
+
+  readyCrew() {
+    return (G.allCrew || []).filter((pirate) => pirate && !this.pirateWounded(pirate));
+  }
+
+  activeCombatHandPirates() {
+    return (G.hand || []).filter((pirate) => pirate && !this.pirateWounded(pirate));
+  }
+
+  markPirateWounded(pirateId) {
+    const pirate = (G.allCrew || []).find((candidate) => candidate && candidate.id === pirateId);
+    if (!pirate || pirate.wounded) return false;
+    pirate.wounded = true;
+    return true;
+  }
+
+  healingLimit() {
+    const fromState = G.healing && G.healing.max;
+    const fromIsland = G.island && G.island.healWounded;
+    return Math.max(0, Math.floor(Number(fromState != null ? fromState : fromIsland) || 0));
+  }
+
+  healingUsed() {
+    return Array.isArray(G.healing && G.healing.healedIds) ? G.healing.healedIds.length : 0;
+  }
+
+  ensureHealingState() {
+    if (!G.healing) {
+      G.healing = {
+        max: this.healingLimit(),
+        healedIds: [],
+      };
+    }
+    if (!Array.isArray(G.healing.healedIds)) G.healing.healedIds = [];
+    G.healing.max = this.healingLimit();
+    return G.healing;
+  }
+
+  healPirate(pirateId) {
+    if (G.phase !== 'healing') return false;
+    const state = this.ensureHealingState();
+    if (this.healingUsed() >= this.healingLimit()) return false;
+    const pirate = (G.allCrew || []).find((candidate) => candidate && candidate.id === pirateId);
+    if (!pirate || !pirate.wounded || state.healedIds.includes(pirate.id)) return false;
+
+    pirate.wounded = false;
+    state.healedIds.push(pirate.id);
+    const label = (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate';
+    this.float(this.L.cx, this.endActionY() - 54 * this.L.k, `${label} healed`, '#66bb6a');
+    this.renderAll();
+    return true;
+  }
+
+  continueFromHealing() {
+    if (G.phase !== 'healing') return;
+    G.healing = null;
+    G.openingCounterPlan = false;
+    G.phase = 'map';
+    G.island = null;
+    this.closePanels();
+    this.renderAll();
+    this.enterMapPhase();
+  }
+
+  setPirateWeapon(pirate, weaponKey) {
+    if (!pirate) return null;
+    pirate.weaponKey = WEAPON_TYPES[weaponKey] ? weaponKey : null;
+    return pirate.weaponKey;
+  }
+
+  addPirateBuff(pirate, buffKey, count = 1) {
+    if (!pirate || !BUFF_EMOJI[buffKey]) return 0;
+    const amount = Math.max(0, Math.floor(Number(count) || 0));
+    if (amount <= 0) return 0;
+    pirate[buffKey] = Math.max(0, Math.floor(Number(pirate[buffKey]) || 0)) + amount;
+    return amount;
+  }
+
+  leftmostIslandPirateEntry() {
+    const sent = Array.isArray(G.sent) ? G.sent : [];
+    for (let sentSlot = 0; sentSlot < sent.length; sentSlot++) {
+      const handIdx = sent[sentSlot];
+      const pirate = G.hand && G.hand[handIdx];
+      if (!pirate) continue;
+      if (this._sacrificedIds.has(pirate.id)) continue;
+      if (!this.pirateStillInCrew(pirate)) continue;
+      return { pirate, handIdx, sentSlot };
+    }
+    return null;
+  }
+
+  leftmostIslandPirate() {
+    const entry = this.leftmostIslandPirateEntry();
+    return entry ? entry.pirate : null;
+  }
+
+  islandPirateEffectPoint(sentSlot) {
+    if (sentSlot == null || sentSlot < 0) return null;
+    return this.sentCardIslandEffectPosition(sentSlot);
+  }
+
+  applyPersonalGainsToPirate(pirate, gains) {
+    const personalGains = normalizePersonalGains(gains);
+    if (!pirate || !personalGains.length) return { applied: false, gains: [] };
+
+    const applied = [];
+    personalGains.forEach((gain) => {
+      if (gain.weapon) {
+        const weaponKey = this.setPirateWeapon(pirate, gain.weapon);
+        if (weaponKey) applied.push({ weapon: weaponKey, count: gain.count });
+      } else if (gain.buff) {
+        const added = this.addPirateBuff(pirate, gain.buff, gain.count);
+        if (added > 0) applied.push({ buff: gain.buff, count: added });
+      }
+    });
+
+    return {
+      applied: applied.length > 0,
+      gains: applied,
+      text: personalGainText(applied),
+      pirate,
+    };
+  }
+
+  splitPersonalGains(gains) {
+    const personalGains = normalizePersonalGains(gains);
+    const weaponGains = personalGains.filter((gain) => !!gain.weapon);
+    const buffGains = personalGains.filter((gain) => !!gain.buff);
+    return { personalGains, weaponGains, buffGains };
+  }
+
+  applyShipPersonalGains(gains) {
+    const personalGains = normalizePersonalGains(gains);
+    if (!personalGains.length) return { applied: false, gains: [] };
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) {
+      return {
+        applied: false,
+        gains: personalGains,
+        lost: true,
+        text: 'No island pirate',
+        color: '#ffa726',
+      };
+    }
+    const applied = this.applyPersonalGainsToPirate(target.pirate, personalGains);
+    return {
+      ...applied,
+      applied: applied.applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+      color: '#66bb6a',
+    };
   }
 
   canAssignWeaponToHandIndex(handIdx) {
@@ -275,7 +468,31 @@ class GameScene extends Phaser.Scene {
       extraSend: src.extraSend || 0,
       maxSend: src.maxSend != null ? src.maxSend : (opts.maxSend != null ? opts.maxSend : null),
       bonusEnthusiasm: src.bonusEnthusiasm || 0,
+      fullSendBuff: normalizePersonalGain(src.fullSendBuff || opts.fullSendBuff),
       sacrifice: !!src.sacrifice,
+      healWounded: Math.max(0, Math.floor(Number(src.healWounded || opts.healWounded) || 0)),
+      scoutedCacheDrill: (() => {
+        const drill = src.scoutedCacheDrill || opts.scoutedCacheDrill;
+        return drill
+          ? {
+            mainKey: drill.mainKey || null,
+            granted: !!drill.granted,
+            pirateId: drill.pirateId || null,
+            type: drill.type || null,
+            cachePending: !!drill.cachePending,
+            cacheClaimed: !!drill.cacheClaimed || !!drill.granted,
+            cacheNodeId: drill.cacheNodeId != null ? drill.cacheNodeId : null,
+            openerId: drill.openerId != null ? drill.openerId : null,
+            res: drill.res || null,
+            amount: Math.max(0, Math.floor(Number(drill.amount) || 0)),
+            enthusiasm: Math.max(0, Math.floor(Number(drill.enthusiasm) || 0)),
+            alert: Math.max(0, Math.floor(Number(drill.alert) || 0)),
+            alertRefundAmount: Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0)),
+            alertFloorBeforeCache: Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0)),
+            alertRefunded: !!drill.alertRefunded,
+          }
+          : null;
+      })(),
     };
   }
 
@@ -285,15 +502,1085 @@ class GameScene extends Phaser.Scene {
     return base * 2;
   }
 
+  scoutedCounterCachePayload(node) {
+    if (this.isBattleTest() || !node || node.type !== 'island') return null;
+    const cache = node.scoutedCache;
+    if (!cache || cache.claimed) return null;
+
+    const island = ISLANDS[node.islandIdx];
+    if (!island || island.healWounded) return null;
+
+    const res = cache.res;
+    const amount = Math.max(0, Math.floor(Number(cache.amount) || 0));
+    const enthusiasm = cache.enthusiasm == null
+      ? 1
+      : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(cache.alert) || 0));
+    if (!res || !RES_EMOJI[res] || (amount <= 0 && enthusiasm <= 0 && alert <= 0)) return null;
+
+    return {
+      nodeId: node.id,
+      res,
+      amount,
+      enthusiasm,
+      alert,
+      mainKey: cache.mainKey || null,
+    };
+  }
+
+  grantScoutedCounterCachePayload(payload, alertFloorBeforeCache = this.pendingBoardingAlert()) {
+    if (!payload) return null;
+    const res = payload.res;
+    const amount = Math.max(0, Math.floor(Number(payload.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(payload.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(payload.alert) || 0));
+    const floor = Math.max(0, Math.floor(Number(alertFloorBeforeCache) || 0));
+    if (!res || !RES_EMOJI[res] || (amount <= 0 && enthusiasm <= 0 && alert <= 0)) return null;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    if (amount > 0) {
+      G.res[res] = Math.max(0, Math.floor(Number(G.res[res]) || 0)) + amount;
+    }
+    if (enthusiasm > 0) {
+      G.enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + enthusiasm;
+    }
+    if (alert > 0) G.boardingAlert = floor + alert;
+
+    return {
+      ...payload,
+      res,
+      amount,
+      enthusiasm,
+      alert,
+      alertFloorBeforeCache: floor,
+      mainKey: payload.mainKey || null,
+    };
+  }
+
+  applyScoutedCounterCache(node) {
+    const payload = this.scoutedCounterCachePayload(node);
+    if (!payload) return null;
+    const grant = this.grantScoutedCounterCachePayload(payload);
+    if (!grant) return null;
+    if (node.scoutedCache) node.scoutedCache.claimed = true;
+    return grant;
+  }
+
+  armScoutedCounterCache(node) {
+    const payload = this.scoutedCounterCachePayload(node);
+    if (!payload) return null;
+    return {
+      mainKey: payload.mainKey,
+      granted: false,
+      pirateId: null,
+      type: null,
+      cachePending: true,
+      cacheClaimed: false,
+      cacheNodeId: payload.nodeId,
+      openerId: null,
+      res: payload.res,
+      amount: payload.amount,
+      enthusiasm: payload.enthusiasm,
+      alert: payload.alert,
+      alertRefundAmount: this.cacheDrillAlertRefundAmount(payload.alert),
+      alertFloorBeforeCache: 0,
+      alertRefunded: false,
+    };
+  }
+
+  pendingScoutedCounterCacheState() {
+    if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
+    const drill = G.island.scoutedCacheDrill;
+    if (!drill || !drill.cachePending || drill.cacheClaimed) return null;
+    if (!drill.res || !RES_EMOJI[drill.res]) return null;
+    const amount = Math.max(0, Math.floor(Number(drill.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(drill.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    if (amount <= 0 && enthusiasm <= 0 && alert <= 0) return null;
+    return drill;
+  }
+
+  scoutedCounterCacheNodeForDrill(drill) {
+    if (!drill || drill.cacheNodeId == null || !G.map || typeof mapNodeById !== 'function') return null;
+    return mapNodeById(G.map, drill.cacheNodeId);
+  }
+
+  claimScoutedCounterCache(pirate, opts = {}) {
+    const drill = this.pendingScoutedCounterCacheState();
+    if (!drill) return null;
+
+    const payload = {
+      nodeId: drill.cacheNodeId,
+      mainKey: drill.mainKey || null,
+      res: drill.res,
+      amount: Math.max(0, Math.floor(Number(drill.amount) || 0)),
+      enthusiasm: Math.max(0, Math.floor(Number(drill.enthusiasm) || 0)),
+      alert: Math.max(0, Math.floor(Number(drill.alert) || 0)),
+    };
+    const alertFloorBeforeCache = this.pendingBoardingAlert();
+    const cacheGrant = this.grantScoutedCounterCachePayload(payload, alertFloorBeforeCache);
+    if (!cacheGrant) return null;
+
+    drill.cachePending = false;
+    drill.cacheClaimed = true;
+    drill.openerId = pirate && pirate.id != null ? pirate.id : null;
+    drill.alertRefundAmount = this.cacheDrillAlertRefundAmount(cacheGrant.alert);
+    drill.alertFloorBeforeCache = cacheGrant.alertFloorBeforeCache;
+    drill.alertRefunded = false;
+    const cacheNode = this.scoutedCounterCacheNodeForDrill(drill);
+    if (cacheNode && cacheNode.scoutedCache) cacheNode.scoutedCache.claimed = true;
+    const openingCounterPrep = false;
+
+    const drillReward = this.applyScoutedCacheDrill(pirate, {
+      ...opts,
+      silent: true,
+      allowClaimedOpener: true,
+      openingCounterPrep,
+    });
+    const result = { cacheGrant, drill: drillReward, openingCounterPrep, openerId: drill.openerId };
+    if (!opts.silent) {
+      this.showScoutedCounterCacheResult(cacheGrant);
+      if (drillReward) this.showScoutedCacheDrillResult(drillReward);
+    }
+    return result;
+  }
+
+  scoutedCacheDrillCounterTypes(mainKey) {
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.mainKey === mainKey
+      ? intel.boardingNo
+      : Math.max(1, Math.floor(Number(G.boardingCount) || 0) + 1);
+    return this.gameplayCounterTypesForShip(mainKey, boardingNo, { intel });
+  }
+
+  scoutedCacheDrillState() {
+    if (this.isBattleTest() || G.phase !== 'sending' || !G.island || G.island.healWounded) return null;
+    const drill = G.island.scoutedCacheDrill;
+    if (!drill || !drill.mainKey) return null;
+    if (!drill.cachePending && !drill.cacheClaimed && !this.scoutedCacheDrillCounterTypes(drill.mainKey).length) return null;
+    return drill;
+  }
+
+  scoutedCounterCacheRewardText(drill) {
+    if (!drill) return '';
+    const parts = [];
+    const res = drill.res;
+    const amount = Math.max(0, Math.floor(Number(drill.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(drill.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    if (res && RES_EMOJI[res] && amount > 0) parts.push(`+${amount > 1 ? amount : ''}${RES_EMOJI[res]}`);
+    if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    return parts.join(' ');
+  }
+
+  cacheDrillAlertRefundAmount(storedAlert) {
+    const alert = Math.max(0, Math.floor(Number(storedAlert) || 0));
+    return Math.min(alert, 1);
+  }
+
+  cacheDrillAlertRefundInfo(drill) {
+    if (!drill) return { stored: 0, refundable: 0, remaining: 0 };
+    const stored = Math.max(0, Math.floor(Number(drill.alert) || 0));
+    const configured = drill.alertRefundAmount == null
+      ? this.cacheDrillAlertRefundAmount(stored)
+      : Math.max(0, Math.floor(Number(drill.alertRefundAmount) || 0));
+    const refundable = Math.min(stored, configured, 1);
+    return {
+      stored,
+      refundable,
+      remaining: Math.max(0, stored - refundable),
+    };
+  }
+
+  scoutedCacheDrillAlertPayoffText(drill) {
+    if (!drill || drill.alertRefunded) return '';
+    const info = this.cacheDrillAlertRefundInfo(drill);
+    if (info.refundable <= 0) return '';
+    if (info.remaining > 0) {
+      return `cuts ${info.refundable} Alert, leaves +${info.remaining} pending`;
+    }
+    return 'disarms cache Alert';
+  }
+
+  scoutedCacheDrillDescription() {
+    const drill = this.scoutedCacheDrillState();
+    if (!drill) return '';
+    if (drill.granted) return 'Cache Drill claimed';
+    if (drill.cacheClaimed) return 'Cache opened';
+    const counterTypes = this.scoutedCacheDrillCounterTypes(drill.mainKey);
+    const names = counterTypes
+      .map(type => TYPES[type] && TYPES[type].name)
+      .filter(Boolean);
+    const routeCounter = this.openingRouteCounterState();
+    const routeCounterType = routeCounter
+      && routeCounter.mainKey === drill.mainKey
+      && routeCounter.present
+      && counterTypes.includes(routeCounter.starterType)
+      ? routeCounter.starterType
+      : null;
+    const shopCounterNames = routeCounterType
+      ? counterTypes
+        .filter(type => type !== routeCounterType)
+        .map(type => TYPES[type] && TYPES[type].name)
+        .filter(Boolean)
+      : [];
+    const shopLabel = shopCounterNames.length > 2
+      ? `${shopCounterNames[0]}/${shopCounterNames[1]}...`
+      : shopCounterNames.join('/');
+    const label = names.length > 2 ? `${names[0]}/${names[1]}...` : names.join('/');
+    const alertPayoffText = this.scoutedCacheDrillAlertPayoffText(drill);
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[drill.mainKey];
+    const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
+    const bountyText = bountyEmoji ? `, ambush bounty +2${bountyEmoji}` : '';
+    const passOffTarget = routeCounterType ? this.securedRouteCachePassOffTarget(drill.mainKey) : null;
+    const prepText = passOffTarget ? `, passes mark to ${passOffTarget.label}` : '';
+    const payoff = alertPayoffText
+      ? ` ${alertPayoffText}, gains +💪, reports next${prepText}${bountyText}`
+      : ` gains +💪, reports next${prepText}${bountyText}`;
+    const cacheText = this.scoutedCounterCacheRewardText(drill);
+    const prefix = cacheText ? `Cache: first sent opens ${cacheText}; ` : 'Cache: first sent opens; ';
+    if (routeCounterType) {
+      const suffix = shopLabel ? ` (or ${shopLabel})` : '';
+      return `${prefix}route counter ${routeCounter.starterName}${suffix}${payoff}`;
+    }
+    return `${prefix}first ${label || 'counter'}${payoff}`;
+  }
+
+  openingRouteStarterCachePrepAvailable(mainKey) {
+    return false;
+  }
+
+  openingRouteCachePrepAvailable(mainKey, cacheNode = null) {
+    return false;
+  }
+
+  openingRouteStarterCachePrepEligible(pirate, drill) {
+    if (!pirate
+      || pirate.id == null
+      || !pirate.type
+      || !drill
+      || !drill.cacheClaimed
+      || drill.openerId !== pirate.id
+      || !this.openingRouteStarterCachePrepAvailable(drill.mainKey)) {
+      return false;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(drill.mainKey, 1, { mode: G.mode });
+    return starterTypes.includes(pirate.type)
+      && this.pirateStillInCrew(pirate)
+      && !(this._sacrificedIds && this._sacrificedIds.has(pirate.id));
+  }
+
+  applyOpeningRouteStarterCachePrep(pirate, drill) {
+    if (!this.openingRouteStarterCachePrepEligible(pirate, drill)) return false;
+    G.openingCounterPlan = true;
+    return true;
+  }
+
+  applyOpeningRouteCachePrep(drill, cacheNode = null) {
+    if (!drill
+      || !drill.cacheClaimed
+      || !this.openingRouteCachePrepAvailable(drill.mainKey, cacheNode)
+      || G.openingCounterPlan) {
+      return false;
+    }
+    G.openingCounterPlan = true;
+    return true;
+  }
+
+  pirateStillInCrew(pirate) {
+    if (!pirate) return false;
+    return (G.allCrew || []).some(candidate => candidate && candidate.id === pirate.id);
+  }
+
+  clearOpeningRouteCounterBought(pirateId = null) {
+    if (!G) return false;
+    if (pirateId != null) {
+      const hadBoughtPirate = G.openingRouteCounterBoughtPirateId === pirateId;
+      if (hadBoughtPirate) {
+        G.openingRouteCounterBoughtPirateId = null;
+        G.openingRouteCounterBoughtSetup = false;
+      }
+      return hadBoughtPirate;
+    }
+
+    const hadMarker = !!G.openingRouteCounterBoughtMainKey
+      || G.openingRouteCounterBoughtPirateId != null;
+    G.openingRouteCounterBoughtMainKey = null;
+    G.openingRouteCounterBoughtPirateId = null;
+    G.openingRouteCounterBoughtSetup = false;
+    return hadMarker;
+  }
+
+  markOpeningRouteSidekick(pirate, mainKey) {
+    if (this.isBattleTest()
+      || !pirate
+      || pirate.id == null
+      || !mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || !this.pirateStillInCrew(pirate)) {
+      return false;
+    }
+    G.openingRouteSidekick = {
+      pirateId: pirate.id,
+      mainKey,
+      type: pirate.type,
+    };
+    return true;
+  }
+
+  clearOpeningRouteSidekick(pirateId = null) {
+    if (!G || !G.openingRouteSidekick) return false;
+    if (pirateId != null && G.openingRouteSidekick.pirateId !== pirateId) return false;
+    G.openingRouteSidekick = null;
+    return true;
+  }
+
+  cacheDrillMusterIds() {
+    if (!Array.isArray(G.cacheDrillMusterIds)) G.cacheDrillMusterIds = [];
+    return G.cacheDrillMusterIds;
+  }
+
+  markCacheDrillMuster(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    const ids = this.cacheDrillMusterIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  cacheDrillBountyMarks() {
+    if (!Array.isArray(G.cacheDrillBountyMarks)) G.cacheDrillBountyMarks = [];
+    return G.cacheDrillBountyMarks;
+  }
+
+  normalizeCacheDrillBountyMark(mark) {
+    if (!mark || mark.pirateId == null || !mark.mainKey) return null;
+    return {
+      pirateId: mark.pirateId,
+      mainKey: mark.mainKey,
+    };
+  }
+
+  markCacheDrillBounty(pirate, mainKey) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !mainKey || !this.pirateStillInCrew(pirate)) return false;
+    const marks = this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .filter(mark => !(mark.pirateId === pirate.id && mark.mainKey === mainKey));
+    marks.push({ pirateId: pirate.id, mainKey });
+    G.cacheDrillBountyMarks = marks;
+    return true;
+  }
+
+  securedRouteCachePassOffTarget(mainKey) {
+    if (this.isBattleTest()
+      || !mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || G.openingRouteCounterBoughtMainKey !== mainKey
+      || G.openingRouteCounterBoughtPirateId == null
+      || !G.openingRouteCounterBoughtSetup
+      || typeof OPENING_ROUTE_PRIMARY_COUNTERS === 'undefined') {
+      return null;
+    }
+
+    const primaryType = OPENING_ROUTE_PRIMARY_COUNTERS[mainKey];
+    const target = (G.allCrew || []).find(pirate =>
+      pirate
+      && pirate.id === G.openingRouteCounterBoughtPirateId
+      && pirate.type === primaryType
+    );
+    if (!target || !this.pirateStillInCrew(target)) return null;
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    if (!intel || intel.mainKey !== mainKey || boardingNo !== 1) return null;
+
+    return {
+      pirate: target,
+      pirateId: target.id,
+      type: primaryType,
+      label: (TYPES[primaryType] && TYPES[primaryType].name) || 'Counter',
+      mainKey,
+    };
+  }
+
+  transferSecuredRouteCacheDrillBountyToBoughtCounter(pirate, drill) {
+    if (this.isBattleTest()
+      || !pirate
+      || pirate.id == null
+      || !pirate.type
+      || !drill
+      || !drill.mainKey
+      || !drill.granted
+      || drill.pirateId !== pirate.id
+      || drill.openerId !== pirate.id
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(drill.mainKey, 1, { mode: G.mode });
+    if (!starterTypes.includes(pirate.type)) return null;
+
+    const target = this.securedRouteCachePassOffTarget(drill.mainKey);
+    if (!target || target.pirateId === pirate.id) return null;
+
+    let transferred = false;
+    const next = this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .map((mark) => {
+        if (transferred || mark.mainKey !== drill.mainKey || mark.pirateId !== pirate.id) return mark;
+        transferred = true;
+        return { pirateId: target.pirateId, mainKey: mark.mainKey };
+      });
+    if (!transferred) return null;
+
+    const seen = new Set();
+    G.cacheDrillBountyMarks = next.filter((mark) => {
+      const key = `${mark.pirateId}:${mark.mainKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return {
+      applied: true,
+      fromPirateId: pirate.id,
+      toPirateId: target.pirateId,
+      mainKey: drill.mainKey,
+      type: target.type,
+      label: target.label,
+    };
+  }
+
+  transferRouteStarterCacheDrillBountyToBoughtCounter(pirate, type, quote, routeShopState) {
+    const eligibleRoutePrimaryPassOff = !!(quote
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.openingRoutePrimaryCommitment
+        || quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight));
+    if (this.isBattleTest()
+      || G.phase !== 'shopping'
+      || !pirate
+      || pirate.id == null
+      || !type
+      || !quote
+      || !eligibleRoutePrimaryPassOff
+      || !routeShopState
+      || type !== routeShopState.primaryCounterType
+      || !routeShopState.mainKey
+      || G.openingRouteCounterBoughtMainKey === routeShopState.mainKey
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function'
+      || !this.pirateStillInCrew(pirate)) {
+      return false;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(routeShopState.mainKey, 1, { mode: G.mode });
+    if (!starterTypes.length) return false;
+
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(candidate => [candidate.id, candidate]));
+    let transferred = false;
+    const next = this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .map((mark) => {
+        if (transferred || mark.mainKey !== routeShopState.mainKey || mark.pirateId === pirate.id) return mark;
+        const owner = ownedById.get(mark.pirateId);
+        if (!owner || !starterTypes.includes(owner.type)) return mark;
+        transferred = true;
+        return { pirateId: pirate.id, mainKey: mark.mainKey };
+      });
+
+    if (!transferred) return false;
+
+    const seen = new Set();
+    G.cacheDrillBountyMarks = next.filter((mark) => {
+      const key = `${mark.pirateId}:${mark.mainKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return true;
+  }
+
+  activeCacheDrillBountyMarksForMain(mainKey) {
+    if (this.isBattleTest() || !mainKey) return [];
+    const owned = new Set((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const seen = new Set();
+    return this.cacheDrillBountyMarks()
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .filter((mark) => {
+        if (mark.mainKey !== mainKey || !owned.has(mark.pirateId) || seen.has(mark.pirateId)) return false;
+        seen.add(mark.pirateId);
+        return true;
+      });
+  }
+
+  activateCacheDrillBountyMarksForBoarding(node) {
+    const mainKey = node && node.encounter && node.encounter.mainKey;
+    const marks = this.activeCacheDrillBountyMarksForMain(mainKey);
+    G.cacheDrillBountyMarks = marks;
+    return marks;
+  }
+
+  cacheDrillBountyMarksForCombat(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    const source = combat && Array.isArray(combat.cacheDrillBountyMarks)
+      ? combat.cacheDrillBountyMarks
+      : (G.enemyShip && Array.isArray(G.enemyShip.cacheDrillBountyMarks)
+        ? G.enemyShip.cacheDrillBountyMarks
+        : this.cacheDrillBountyMarks());
+    const owned = new Set((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const seen = new Set();
+    return (Array.isArray(source) ? source : [])
+      .map(mark => this.normalizeCacheDrillBountyMark(mark))
+      .filter(Boolean)
+      .filter((mark) => {
+        const key = `${mark.pirateId}:${mark.mainKey}`;
+        if (!owned.has(mark.pirateId) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
+  clearCacheDrillBountyMarks() {
+    G.cacheDrillBountyMarks = [];
+    if (G.enemyShip) G.enemyShip.cacheDrillBountyMarks = [];
+    if (G.combat) G.combat.cacheDrillBountyMarks = [];
+  }
+
+  hasCacheDrillBountyMark(pirateId, mainKey, combat = G.combat) {
+    if (pirateId == null || !mainKey) return false;
+    return this.cacheDrillBountyMarksForCombat(combat)
+      .some(mark => mark.pirateId === pirateId && mark.mainKey === mainKey);
+  }
+
+  consumeCacheDrillMusterPirates() {
+    const ids = Array.isArray(G.cacheDrillMusterIds) ? [...G.cacheDrillMusterIds] : [];
+    G.cacheDrillMusterIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const seen = new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirates = [];
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (pirate) pirates.push(pirate);
+    });
+    return pirates;
+  }
+
+  placeCacheDrillMusterPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  openingRouteMusterStillEligible() {
+    return !this.isBattleTest()
+      && Math.max(0, Math.floor(Number(G.boardingCount) || 0)) === 0;
+  }
+
+  findOpeningRouteMusterEntry(mainKey) {
+    if (!this.openingRouteMusterStillEligible()
+      || !mainKey
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
+    if (!starterTypes.length) return null;
+    const starterSet = new Set(starterTypes);
+    const ownedIds = new Set((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const pick = (pirates, zone) => {
+      const list = Array.isArray(pirates) ? pirates : [];
+      const index = list.findIndex(pirate =>
+        pirate
+        && ownedIds.has(pirate.id)
+        && starterSet.has(pirate.type)
+      );
+      return index >= 0 ? { pirate: list[index], zone, index } : null;
+    };
+
+    return pick(G.hand, 'hand') || pick(G.deck, 'deck') || pick(G.discard, 'discard');
+  }
+
+  findOpeningRouteMusterPirate(mainKey) {
+    const entry = this.findOpeningRouteMusterEntry(mainKey);
+    return entry ? entry.pirate : null;
+  }
+
+  openingSidePrepSupportTargetInfo(routeShopState, fallbackType, fallbackPirate = null) {
+    const mainKey = routeShopState && routeShopState.mainKey;
+    if (mainKey && G.openingRouteMuster && G.openingRouteMuster.mainKey === mainKey) {
+      const marker = G.openingRouteMuster;
+      const pirate = (G.allCrew || []).find(candidate =>
+        candidate
+        && candidate.id === marker.pirateId
+      );
+      const starterTypes = typeof openingDeckhandCounterTypes === 'function'
+        ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })
+        : [];
+      if (pirate
+        && this.pirateStillInCrew(pirate)
+        && starterTypes.includes(pirate.type)
+        && (!marker.type || marker.type === pirate.type)) {
+        return {
+          pirate,
+          pirateId: pirate.id,
+          type: pirate.type,
+          name: pirateTypeDisplayName(pirate.type),
+          targetsMuster: true,
+        };
+      }
+    }
+
+    const type = (fallbackPirate && fallbackPirate.type) || fallbackType || null;
+    return {
+      pirate: fallbackPirate || null,
+      pirateId: fallbackPirate && fallbackPirate.id != null ? fallbackPirate.id : null,
+      type,
+      name: pirateTypeDisplayName(type),
+      targetsMuster: false,
+    };
+  }
+
+  moveOpeningRouteMusterPirateToHand(entry) {
+    if (!entry || !entry.pirate || entry.pirate.id == null) return false;
+    if (!this.pirateStillInCrew(entry.pirate)) return false;
+    if (!Array.isArray(G.hand) || G.hand.length === 0 || !G.hand[0]) return false;
+
+    const pirateId = entry.pirate.id;
+    const handIndex = G.hand.findIndex(pirate => pirate && pirate.id === pirateId);
+    if (handIndex >= 0) {
+      if (handIndex !== 0) {
+        const displaced = G.hand[0];
+        G.hand[0] = G.hand[handIndex];
+        G.hand[handIndex] = displaced;
+      }
+      return true;
+    }
+
+    const source = entry.zone === 'deck'
+      ? G.deck
+      : (entry.zone === 'discard' ? G.discard : null);
+    if (!Array.isArray(source)) return false;
+    const sourceIndex = source.findIndex(pirate => pirate && pirate.id === pirateId);
+    if (sourceIndex < 0) return false;
+
+    const displaced = G.hand[0];
+    G.hand[0] = source[sourceIndex];
+    source[sourceIndex] = displaced;
+    return true;
+  }
+
+  markOpeningRouteMuster(mainKey) {
+    if (!this.openingRouteMusterStillEligible()
+      || !mainKey
+      || G.openingRouteMuster
+      || G.openingRouteMusterUsed) {
+      return null;
+    }
+    G.openingRouteMusterUsed = true;
+    const entry = this.findOpeningRouteMusterEntry(mainKey);
+    const pirate = entry && entry.pirate;
+    if (!pirate || pirate.id == null) return null;
+    this.moveOpeningRouteMusterPirateToHand(entry);
+    G.openingRouteMuster = {
+      pirateId: pirate.id,
+      mainKey,
+      type: pirate.type,
+    };
+    this.markCounterWatch(pirate);
+    return pirate;
+  }
+
+  clearOpeningRouteMuster() {
+    G.openingRouteMuster = null;
+  }
+
+  openingRouteCounterWatchText(intel = null) {
+    if (this.isBattleTest()
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return '';
+    }
+    const info = intel || this.nextShipIntel();
+    const marker = G.openingRouteMuster || null;
+    const mainKey = (info && info.mainKey) || (marker && marker.mainKey);
+    if (!mainKey) return '';
+
+    const watchIds = Array.isArray(G.counterWatchIds) ? G.counterWatchIds : [];
+    if (!watchIds.length) return '';
+
+    const starterTypes = openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode });
+    const watchedStarter = (G.allCrew || []).find(pirate =>
+      pirate
+      && watchIds.includes(pirate.id)
+      && starterTypes.includes(pirate.type)
+    );
+    if (!watchedStarter) return '';
+
+    const def = TYPES[watchedStarter.type];
+    return `Route counter: ${(def && def.name) || watchedStarter.type} · Watch`;
+  }
+
+  consumeOpeningRouteMusterPirates(skipIds = new Set()) {
+    const marker = G.openingRouteMuster || null;
+    this.clearOpeningRouteMuster();
+    if (!marker || !this.openingRouteMusterStillEligible()) return [];
+
+    const pirateId = marker.pirateId;
+    if (pirateId == null || (skipIds && typeof skipIds.has === 'function' && skipIds.has(pirateId))) {
+      return [];
+    }
+
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirate = ownedById.get(pirateId);
+    if (!pirate) return [];
+
+    const mainKey = marker.mainKey || null;
+    const starterTypes = typeof openingDeckhandCounterTypes === 'function'
+      ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })
+      : [];
+    if (!starterTypes.includes(pirate.type)) return [];
+    return [pirate];
+  }
+
+  placeOpeningRouteMusterPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  placeShortCrewReportPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  placeCounterWatchPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  placePiratesOnDeckTop(pirates) {
+    const mustered = Array.isArray(pirates) ? pirates.filter(Boolean) : [];
+    if (!mustered.length) return { pirates: [], ids: new Set() };
+    const ids = new Set(mustered.map(pirate => pirate.id));
+    G.deck = (G.deck || []).filter(pirate => pirate && !ids.has(pirate.id));
+    G.discard = (G.discard || []).filter(pirate => pirate && !ids.has(pirate.id));
+    mustered.forEach((pirate) => G.deck.push(pirate));
+    return { pirates: mustered, ids };
+  }
+
+  counterWatchIds() {
+    if (!Array.isArray(G.counterWatchIds)) G.counterWatchIds = [];
+    return G.counterWatchIds;
+  }
+
+  markCounterWatch(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    const ids = this.counterWatchIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  counterWatchReadyIdsForBoarding(node) {
+    if (this.isBattleTest() || !node || node.type !== 'ship') return [];
+    const ids = Array.isArray(G.counterWatchIds) ? [...G.counterWatchIds] : [];
+    if (!ids.length) return [];
+
+    const mainKey = node.encounter && node.encounter.mainKey;
+    const boardingNo = Math.max(1, Math.floor(Number(G.boardingCount) || 0) + 1);
+    const counters = this.gameplayCounterTypesForShip(mainKey, boardingNo);
+    if (!counters.length) return [];
+
+    const counterSet = new Set(counters);
+    const ownedIds = new Set((G.allCrew || []).filter(Boolean).map(pirate => pirate.id));
+    const handById = new Map((G.hand || []).filter(Boolean).map(pirate => [pirate.id, pirate]));
+    const sentIds = new Set((Array.isArray(G.sent) ? G.sent : [])
+      .map(handIdx => G.hand && G.hand[handIdx])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+    const readyIds = [];
+    const seen = new Set();
+
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = handById.get(id);
+      if (!pirate || !ownedIds.has(id) || sentIds.has(id)) return;
+      if (this.pirateWounded(pirate) || !counterSet.has(pirate.type)) return;
+      readyIds.push(id);
+    });
+
+    return readyIds;
+  }
+
+  clearCounterWatch(pirateId = null) {
+    if (pirateId == null) {
+      G.counterWatchIds = [];
+      return;
+    }
+    if (!Array.isArray(G.counterWatchIds)) {
+      G.counterWatchIds = [];
+      return;
+    }
+    G.counterWatchIds = G.counterWatchIds.filter(id => id !== pirateId);
+  }
+
+  spendCounterWatch(pirate) {
+    if (!pirate || pirate.id == null) return;
+    this.clearCounterWatch(pirate.id);
+  }
+
+  consumeCounterWatchPirates(skipIds = new Set(), opts = {}) {
+    const ids = Array.isArray(G.counterWatchIds) ? [...G.counterWatchIds] : [];
+    G.counterWatchIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const skip = skipIds && typeof skipIds.has === 'function' ? skipIds : new Set();
+    const preserveSent = opts && opts.preserveSentIds && typeof opts.preserveSentIds.has === 'function'
+      ? opts.preserveSentIds
+      : new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const handById = new Map((G.hand || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const sentIds = new Set((Array.isArray(G.sent) ? G.sent : [])
+      .map(handIdx => G.hand && G.hand[handIdx])
+      .filter(Boolean)
+      .map(pirate => pirate.id));
+
+    const keep = [];
+    const pirates = [];
+    const seen = new Set();
+    ids.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (!pirate || (sentIds.has(id) && !preserveSent.has(id))) return;
+      keep.push(id);
+      const handPirate = handById.get(id);
+      if (handPirate && !skip.has(id)) pirates.push(handPirate);
+    });
+    G.counterWatchIds = keep;
+    return pirates;
+  }
+
+  applyScoutedCacheDrill(pirate, opts = {}) {
+    const drill = this.scoutedCacheDrillState();
+    if (!drill || drill.granted || !pirate || !pirate.type) return null;
+    const cacheBacked = !!(drill.cachePending || drill.cacheClaimed || drill.cacheNodeId != null || drill.res);
+    if (cacheBacked && (!drill.cacheClaimed || !opts.allowClaimedOpener)) return null;
+    if (cacheBacked && drill.openerId != null && pirate.id !== drill.openerId) return null;
+    if (!this.scoutedCacheDrillCounterTypes(drill.mainKey).includes(pirate.type)) return null;
+    if (!this.pirateStillInCrew(pirate)) return null;
+    if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return null;
+
+    const applied = this.applyPersonalGainsToPirate(pirate, [{ buff: 'might', count: 1 }]);
+    if (!applied.applied) return null;
+
+    drill.granted = true;
+    drill.pirateId = pirate.id;
+    drill.type = pirate.type;
+    this.markCacheDrillMuster(pirate);
+    this.markCacheDrillBounty(pirate, drill.mainKey);
+    const securedRouteCachePassOff = this.transferSecuredRouteCacheDrillBountyToBoughtCounter(pirate, drill);
+    const alertRefund = this.applyScoutedCacheAlertRefund(drill);
+    const openingCounterPrep = !!opts.openingCounterPrep;
+
+    const handIdx = (G.hand || []).findIndex(candidate => candidate && candidate.id === pirate.id);
+    const sentSlot = handIdx >= 0 && Array.isArray(G.sent) ? G.sent.indexOf(handIdx) : -1;
+    const reward = {
+      ...applied,
+      mainKey: drill.mainKey,
+      handIdx,
+      sentSlot,
+      label: (TYPES[pirate.type] && TYPES[pirate.type].name) || 'Pirate',
+      alertRefund,
+      cacheDrillBounty: true,
+      securedRouteCachePassOff,
+      openingCounterPrep,
+    };
+    if (!opts.silent) this.showScoutedCacheDrillResult(reward);
+    return reward;
+  }
+
+  shortCrewReportIds() {
+    if (!Array.isArray(G.shortCrewReportIds)) G.shortCrewReportIds = [];
+    return G.shortCrewReportIds;
+  }
+
+  shortCrewReportsEarly() {
+    if (this.isBattleTest()) return false;
+    const intel = this.nextShipIntel();
+    const turnsAway = intel ? Math.max(0, Math.floor(Number(intel.turnsAway) || 0)) : 0;
+    return !!intel && turnsAway >= 1 && turnsAway <= 3;
+  }
+
+  shortCrewCounterAlertRefundState(pirate = null) {
+    const intel = this.nextShipIntel();
+    const counters = this.shortCrewReportsEarly() ? this.gameplayCounterTypesForShip(null, null, { intel }) : [];
+    const possible = !this.isBattleTest() && counters.length > 0;
+    const eligible = !!(possible && pirate && counters.includes(pirate.type));
+    return {
+      possible,
+      eligible,
+      amount: eligible ? 1 : 0,
+      counters,
+      targetType: pirate && pirate.type ? pirate.type : null,
+    };
+  }
+
+  markShortCrewReport(pirate) {
+    if (this.isBattleTest() || !pirate || pirate.id == null || !this.pirateStillInCrew(pirate)) return false;
+    if (!this.shortCrewReportsEarly()) return false;
+    const ids = this.shortCrewReportIds();
+    if (!ids.includes(pirate.id)) ids.push(pirate.id);
+    return true;
+  }
+
+  consumeShortCrewReportPirates(skipIds = new Set()) {
+    const ids = Array.isArray(G.shortCrewReportIds) ? [...G.shortCrewReportIds] : [];
+    G.shortCrewReportIds = [];
+    if (this.isBattleTest() || !ids.length) return [];
+
+    const seen = new Set();
+    const ownedById = new Map((G.allCrew || [])
+      .filter(Boolean)
+      .map(pirate => [pirate.id, pirate]));
+    const pirates = [];
+    ids.forEach((id) => {
+      if (seen.has(id) || (skipIds && skipIds.has(id))) return;
+      seen.add(id);
+      const pirate = ownedById.get(id);
+      if (pirate) pirates.push(pirate);
+    });
+    return pirates;
+  }
+
+  consumeEarlyReportPirates() {
+    const cache = this.consumeCacheDrillMusterPirates();
+    const cacheIds = new Set(cache.map(pirate => pirate.id));
+    const shortCrew = this.consumeShortCrewReportPirates(cacheIds);
+    const ids = new Set(cacheIds);
+    shortCrew.forEach(pirate => ids.add(pirate.id));
+    return { cache, shortCrew, ids };
+  }
+
+  applyScoutedCacheAlertRefund(drill) {
+    if (!drill || drill.alertRefunded) return { amount: 0 };
+    const refundInfo = this.cacheDrillAlertRefundInfo(drill);
+    const alertRefundAmount = refundInfo.refundable;
+    if (alertRefundAmount <= 0) return { amount: 0 };
+
+    const alertFloorBeforeCache = Math.max(0, Math.floor(Number(drill.alertFloorBeforeCache) || 0));
+    const before = this.pendingBoardingAlert();
+    const after = before > alertFloorBeforeCache
+      ? Math.max(alertFloorBeforeCache, before - alertRefundAmount)
+      : before;
+    const amount = Math.max(0, before - after);
+    if (amount > 0) G.boardingAlert = after;
+    drill.alertRefunded = true;
+    return {
+      amount,
+      before,
+      after,
+      floor: alertFloorBeforeCache,
+      stored: refundInfo.stored,
+      left: Math.max(0, after - alertFloorBeforeCache),
+    };
+  }
+
+  showScoutedCounterCacheResult(cacheGrant, x = null, y = null) {
+    if (!cacheGrant || !this.L) return;
+    const resText = cacheGrant.res && RES_EMOJI[cacheGrant.res] && cacheGrant.amount > 0
+      ? `+${cacheGrant.amount > 1 ? cacheGrant.amount : ''}${RES_EMOJI[cacheGrant.res]}`
+      : '';
+    const enthusiasmText = cacheGrant.enthusiasm > 0
+      ? ` +${cacheGrant.enthusiasm > 1 ? cacheGrant.enthusiasm : ''}${RES_EMOJI.enthusiasm}`
+      : '';
+    const alertText = cacheGrant.alert > 0
+      ? ` +${cacheGrant.alert > 1 ? cacheGrant.alert : ''}Alert`
+      : '';
+    const label = `${resText}${enthusiasmText}${alertText}`.trim();
+    if (!label) return;
+    const fx = Number.isFinite(x) ? x : this.L.cx;
+    const fy = Number.isFinite(y) ? y : this.L.Y_ISL_CY - 78 * this.L.k;
+    this.float(fx, fy, `Cache opened ${label}`, '#ffd166');
+  }
+
+  showScoutedCacheDrillResult(reward) {
+    if (!reward || !this.L) return;
+    const point = reward.sentSlot != null && reward.sentSlot >= 0
+      ? this.islandPirateEffectPoint(reward.sentSlot)
+      : null;
+    const x = point ? point.x : this.L.cx;
+    const y = point ? point.y + 28 * this.L.k : this.endActionY() - 54 * this.L.k;
+    const refundAmount = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.amount) || 0));
+    const refundLeft = Math.max(0, Math.floor(Number(reward.alertRefund && reward.alertRefund.left) || 0));
+    const refundText = refundAmount > 0
+      ? ` -${refundAmount > 1 ? refundAmount : ''}Alert${refundLeft > 0 ? ` (+${refundLeft} left)` : ''}`
+      : '';
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[reward.mainKey];
+    const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
+    const bountyText = bountyEmoji ? ` +2${bountyEmoji} Ambush` : '';
+    const passOffText = reward.securedRouteCachePassOff
+      ? ` -> ${reward.securedRouteCachePassOff.label}`
+      : '';
+    const prepText = reward.openingCounterPrep ? ' Opening Prep' : '';
+    this.effectText(x, y, `Cache Drill +${reward.text || '💪'}${refundText} Reports next${prepText}${bountyText}${passOffText}`, '#ffca28', 760);
+    this.renderIsland();
+  }
+
   startRound() {
     // G.round, G.phase, G.island, G.enemyShip, G.hand, G.sent, G.enthusiasm
-    // are all set by MapScene.selectMapNode() before transitioning here.
+    // are set by hidden map-node selection before transitioning here.
     if (window.PokiBridge) {
       window.PokiBridge.gameplayStart();
     }
     if (!(this._animateInitialMapHand && G.phase === 'map')) {
       this.renderAll();
     }
+  }
+
+  chooseOpeningContract(contractKey, opts = {}) {
+    if (this.isBattleTest() || G.phase !== 'openingContract' || !G.map) return false;
+    const applied = typeof applyOpeningContractToMap === 'function'
+      ? applyOpeningContractToMap(G.map, contractKey)
+      : null;
+    if (!applied || !applied.node) return false;
+    if (this._animateInitialMapHand) {
+      this.queueHandAppear(G.hand, { delay: CARD_MOTION.handAppearDelay });
+      this._animateInitialMapHand = false;
+    }
+    const selected = this.applyMapNodeSelection(applied.node.id);
+    if (selected && !opts.silent && this.L) {
+      const island = ISLANDS[applied.node.islandIdx];
+      const label = island && island.name ? island.name.replace(' Island', '') : 'Contract';
+      this.float(this.L.cx, this.L.Y_ISL_CY - 48 * this.L.k, `${label} contract`, '#ffca28');
+    }
+    return selected;
   }
 
   applyMapNodeSelection(nodeId) {
@@ -310,9 +1597,24 @@ class GameScene extends Phaser.Scene {
     }
     if (layerIdx < 0) return false;
 
+    if (!this.isBattleTest()
+      && G.boardingCount === 0
+      && layerIdx === 0
+      && typeof applyOpeningRouteToFirstShip === 'function') {
+      const route = applyOpeningRouteToFirstShip(map, node, layerIdx);
+      if (route && route.mainKey) this.markOpeningRouteMuster(route.mainKey);
+    }
+
     map.currentNodeId = nodeId;
     map.currentLayer = layerIdx;
     map.visited.push(nodeId);
+    if (typeof normalizeOpeningRouteShop === 'function') {
+      G.shop = normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    }
+
+    const watchReadyCounterIds = node.type === 'ship'
+      ? this.counterWatchReadyIdsForBoarding(node)
+      : [];
 
     G.round++;
     G.sent = [];
@@ -324,20 +1626,38 @@ class GameScene extends Phaser.Scene {
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
     this._sacrificedIds.clear();
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
     if (node.type === 'ship') {
+      const alert = this.consumeBoardingAlertForBoarding();
+      const cacheDrillBountyMarks = this.activateCacheDrillBountyMarksForBoarding(node);
+      this.clearCounterWatch();
+      this.clearOpeningRouteMuster();
       G.boardingCount++;
       G.phase = 'boarding';
       G.island = null;
+      G.healing = null;
       G.enemyShip = {
         strength: node.strength,
         encounterNo: G.boardingCount,
         encounter: node.encounter || null,
+        boardingAlert: alert.amount,
+        boardingAlertGuards: alert.guardCount,
+        watchReadyCounterIds,
+        cacheDrillBountyMarks,
       };
     } else {
-      G.phase = 'sending';
       G.island = this.buildIslandState(ISLANDS[node.islandIdx]);
+      G.island.scoutedCacheDrill = this.armScoutedCounterCache(node);
       G.enemyShip = null;
-      if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+      if (G.island.healWounded) {
+        G.phase = 'healing';
+        G.healing = { max: G.island.healWounded, healedIds: [] };
+      } else {
+        G.phase = 'sending';
+        G.healing = null;
+        if (G.island.bonusEnthusiasm) G.enthusiasm += G.island.bonusEnthusiasm;
+      }
     }
 
     this.closePanels();
@@ -347,9 +1667,18 @@ class GameScene extends Phaser.Scene {
 
   enterMapPhase() {
     this.closePanels('map');
+    if (G.phase === 'openingContract') {
+      G.island = null;
+      G.enemyShip = null;
+      G.healing = null;
+      this.clearCombatState();
+      this.renderAll();
+      return;
+    }
     G.phase = 'map';
     G.island = null;
     G.enemyShip = null;
+    G.healing = null;
     this.clearCombatState();
     if (this._animateInitialMapHand) {
       this.queueHandAppear(G.hand, { delay: CARD_MOTION.handAppearDelay });
@@ -358,7 +1687,7 @@ class GameScene extends Phaser.Scene {
     this.renderAll();
 
     const available = getAvailableNodes(G.map);
-    if (available.length === 1) {
+    if (available.length === 1 || (this.isLinearVoyage() && available.length > 0)) {
       this.applyMapNodeSelection(available[0]);
       return;
     }
@@ -435,6 +1764,7 @@ class GameScene extends Phaser.Scene {
   }
 
   openMapPanel() {
+    if (!this.shouldShowMapPanelButton()) return;
     this.openPanel('map');
   }
 
@@ -451,6 +1781,7 @@ class GameScene extends Phaser.Scene {
   }
 
   toggleMapPanel() {
+    if (!this.shouldShowMapPanelButton()) return;
     this.togglePanel('map');
   }
 
@@ -485,6 +1816,1214 @@ class GameScene extends Phaser.Scene {
     if (!G.island) return 0;
     if (G.island.maxSend != null) return G.island.maxSend;
     return 2 + (G.island.extraSend || 0);
+  }
+
+  unusedSendSlots() {
+    if (G.phase !== 'sending' || !G.island || G.island.healWounded) return 0;
+    return Math.max(0, this.maxSend() - G.sent.length);
+  }
+
+  shipWageProjection(sentCount = (Array.isArray(G.sent) ? G.sent.length : 0)) {
+    const paysWages = !this.isBattleTest() && G.phase === 'sending' && !!G.island && !G.island.healWounded;
+    const max = paysWages ? this.maxSend() : 0;
+    const sent = Math.max(0, Math.min(max, Math.floor(Number(sentCount) || 0)));
+    const unused = paysWages ? Math.max(0, max - sent) : 0;
+    const openingCommission = paysWages ? this.projectOpeningCommission(sent) : 0;
+    return {
+      unused,
+      openingCommission,
+      wages: paysWages ? unused + 1 + openingCommission : 0,
+      alert: unused,
+    };
+  }
+
+  shipWagePreview() {
+    return this.shipWageProjection();
+  }
+
+  shipWages() {
+    return this.shipWagePreview().wages;
+  }
+
+  pendingBoardingAlert() {
+    return Math.max(0, Math.floor(Number(G.boardingAlert) || 0));
+  }
+
+  boardingAlertGuardCount(amount = this.pendingBoardingAlert()) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    if (alert <= 0) return 0;
+    if (alert >= 6) return 3;
+    return alert >= 3 ? 2 : 1;
+  }
+
+  boardingAlertGuardLabel(guardCount) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    if (count <= 0) return '';
+    return `+${count} guard${count === 1 ? '' : 's'}`;
+  }
+
+  boardingAlertPlunderLabel(guardCount) {
+    const plunder = this.boardingAlertGuardPlunder(guardCount);
+    const items = this.boardingAlertPlunderItems(plunder);
+    if (!items.length) return '';
+    return `win ${items.map((item) => `+${item.count > 1 ? item.count : ''}${item.emoji}`).join(' ')}`;
+  }
+
+  boardingAlertRiskText(guardCount, opts = {}) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    const label = opts.compact && count > 0
+      ? `+${count}g`
+      : this.boardingAlertGuardLabel(count);
+    if (!label) return '';
+    const includePlunder = opts.includePlunder !== false;
+    const plunder = includePlunder ? this.boardingAlertPlunderLabel(guardCount) : '';
+    return [label, plunder].filter(Boolean).join(' · ');
+  }
+
+  boardingAlertSummary(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount), opts = {}) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    const label = this.boardingAlertRiskText(guardCount, opts);
+    return alert > 0 && label ? `Alert ${alert} · ${label}` : null;
+  }
+
+  quietDocksCost() {
+    return Math.max(0, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.cost) || 2) || 0));
+  }
+
+  quietDocksAlertReduction() {
+    return Math.max(1, Math.floor(Number((QUIET_DOCKS && QUIET_DOCKS.alertReduction) || 1) || 1));
+  }
+
+  shopCreditMaxMissing() {
+    return Math.max(0, Math.floor(Number((SHOP_CREDIT && SHOP_CREDIT.maxMissing) || 0) || 0));
+  }
+
+  shopCreditAlertPerMissing() {
+    return Math.max(0, Math.floor(Number((SHOP_CREDIT && SHOP_CREDIT.alertPerMissing) || 0) || 0));
+  }
+
+  shopCreditAvailable() {
+    return !this.isBattleTest() && G.phase === 'shopping' && !G.shopCreditUsed;
+  }
+
+  routeCounterCoverEligible(type, quote, routeShopState = null) {
+    if (!type || !quote || !quote.canBuy || this.isBattleTest()) return false;
+    const route = routeShopState || (typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null);
+    return !!(route
+      && route.mainKey
+      && route.primaryCounterType === type
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight));
+  }
+
+  routeCounterCoverPreviewForQuote(type, quote, opts = {}) {
+    if (!this.routeCounterCoverEligible(type, quote, opts.routeShopState || null)) return 0;
+    const alertBase = opts.alertBase != null
+      ? Math.max(0, Math.floor(Number(opts.alertBase) || 0))
+      : this.pendingBoardingAlert();
+    const purchaseAlert = Math.max(0, Math.floor(Number(quote.alert) || 0));
+    return alertBase + purchaseAlert > 0 ? 1 : 0;
+  }
+
+  applyRouteCounterCover(type, quote, routeShopState = null) {
+    if (!this.routeCounterCoverEligible(type, quote, routeShopState)) return { amount: 0 };
+    const before = this.pendingBoardingAlert();
+    const amount = before > 0 ? 1 : 0;
+    if (amount <= 0) return { amount: 0, before, after: before };
+    const after = Math.max(0, before - amount);
+    G.boardingAlert = after;
+    return { amount, before, after };
+  }
+
+  pendingFullCrewDiscount() {
+    return Math.max(0, Math.min(1, Math.floor(Number(G.fullCrewDiscount) || 0)));
+  }
+
+  activeFullCrewDiscount() {
+    if (this.isBattleTest() || G.phase !== 'shopping') return 0;
+    return this.pendingFullCrewDiscount();
+  }
+
+  openingCounterPrepActiveForState(source = null, isProjection = false) {
+    const state = source || {};
+    const mode = state.mode != null ? state.mode : G.mode;
+    const phase = state.phase != null ? state.phase : G.phase;
+    const prep = state.openingCounterPlan != null ? state.openingCounterPlan : G.openingCounterPlan;
+    const round = state.round != null
+      ? Math.max(0, Math.floor(Number(state.round) || 0))
+      : Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = state.boardingCount != null
+      ? Math.max(0, Math.floor(Number(state.boardingCount) || 0))
+      : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
+    return mode !== 'battleTest'
+      && !this.isBattleTest()
+      && (isProjection || phase === 'shopping')
+      && round >= 1
+      && round <= 2
+      && boardingCount === 0
+      && !!prep;
+  }
+
+  openingCounterPlanActiveForState(source = null, isProjection = false) {
+    return this.openingCounterPrepActiveForState(source, isProjection);
+  }
+
+  scoutedCounterTypes() {
+    if (this.isBattleTest() || typeof scoutedCounterTypesForMap !== 'function') return [];
+    return scoutedCounterTypesForMap(G.map, { mode: G.mode });
+  }
+
+  gameplayCounterTypesForShip(mainKey = null, boardingNo = null, opts = {}) {
+    if (this.isBattleTest() || typeof gameplayCounterTypes !== 'function') return [];
+    const intel = opts.intel || ((!mainKey || boardingNo == null) ? this.nextShipIntel() : null);
+    const key = mainKey
+      || (intel && intel.mainKey)
+      || this.counterTrophyMainKey()
+      || null;
+    const no = boardingNo != null
+      ? Math.max(1, Math.floor(Number(boardingNo) || 1))
+      : (intel && intel.boardingNo != null
+        ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+        : this.currentBoardingNumber());
+    return gameplayCounterTypes(key, no, { mode: G.mode });
+  }
+
+  openingRouteCounterState() {
+    if (this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || typeof openingDeckhandCounterTypes !== 'function') {
+      return null;
+    }
+
+    const intel = this.nextShipIntel();
+    const boardingNo = intel && intel.boardingNo != null
+      ? Math.max(1, Math.floor(Number(intel.boardingNo) || 1))
+      : 0;
+    if (!intel || boardingNo !== 1 || !intel.mainKey) return null;
+
+    const starterTypes = openingDeckhandCounterTypes(intel.mainKey, boardingNo, { mode: G.mode });
+    const starterType = starterTypes[0];
+    if (!starterType || !TYPES[starterType]) return null;
+
+    const sent = new Set(Array.isArray(G.sent) ? G.sent : []);
+    const sending = this._sendingToIsland || new Set();
+    const watchedIds = new Set(Array.isArray(G.counterWatchIds) ? G.counterWatchIds : []);
+    const entries = [];
+    const availableEntries = [];
+    (G.hand || []).forEach((pirate, handIdx) => {
+      if (!pirate || pirate.type !== starterType || !this.pirateStillInCrew(pirate)) return;
+      if (this._sacrificedIds && this._sacrificedIds.has(pirate.id)) return;
+      const entry = {
+        pirate,
+        handIdx,
+        sent: sent.has(handIdx),
+        available: !sent.has(handIdx) && !sending.has(handIdx),
+        watched: watchedIds.has(pirate.id),
+      };
+      entries.push(entry);
+      if (entry.available) availableEntries.push(entry);
+    });
+
+    const active = this.leftmostIslandPirateEntry();
+    const activeEntry = active && active.pirate && active.pirate.type === starterType ? active : null;
+    const starterName = TYPES[starterType].name || starterType;
+
+    return {
+      mainKey: intel.mainKey,
+      boardingNo,
+      intel,
+      starterType,
+      starterName,
+      starterTypes,
+      entries,
+      availableEntries,
+      activeEntry,
+      present: entries.length > 0,
+      available: availableEntries.length > 0,
+      active: !!activeEntry,
+      watched: entries.some(entry => entry.watched),
+    };
+  }
+
+  routeCounterBadgeForCard(pirate) {
+    const state = this.openingRouteCounterState();
+    if (!state || !pirate || pirate.type !== state.starterType) return null;
+    const watchedIds = new Set(Array.isArray(G.counterWatchIds) ? G.counterWatchIds : []);
+    return {
+      label: watchedIds.has(pirate.id) ? 'Route Watch' : 'Route counter',
+      fill: '#f6d28a',
+      stroke: '#ffca28',
+      textColor: UI_THEME.colors.ink,
+    };
+  }
+
+  openingRouteCounterShortCrewPlan(sentCount, shortCrewDrill) {
+    if (!shortCrewDrill) return null;
+    const state = this.openingRouteCounterState();
+    if (!state || !state.present) return null;
+
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    if (max <= 0 || sent <= 0 || max - sent !== 1 || sent < currentSent) return null;
+
+    const target = this.leftmostIslandPirateEntry();
+    const active = !!(target && target.pirate && target.pirate.type === state.starterType);
+    const available = !active && currentSent === 0 && sent > currentSent && state.availableEntries.length > 0;
+    if (!active && !available) return null;
+
+    return {
+      type: state.starterType,
+      name: state.starterName,
+      active,
+      available,
+      conditional: available && !active,
+      watched: state.watched,
+      showCounterPayoff: !!shortCrewDrill.reportsEarly,
+    };
+  }
+
+  isScoutedCounterShopType(type) {
+    if (!type) return false;
+    return this.scoutedCounterTypes().includes(type);
+  }
+
+  counterRecruitReportsEarly(type) {
+    if (!type || this.isBattleTest() || !this.isScoutedCounterShopType(type)) return false;
+    const intel = this.nextShipIntel();
+    const turnsAway = intel ? Math.max(0, Math.floor(Number(intel.turnsAway) || 0)) : 0;
+    return !!intel && turnsAway >= 1 && turnsAway <= 3;
+  }
+
+  preparedCounterGains(type) {
+    const def = TYPES[type];
+    return normalizePersonalGains(def && def.ship && def.ship.personalGains);
+  }
+
+  counterPayoffPreview(type = null, opts = {}) {
+    if (this.isBattleTest()) return null;
+    const intel = opts.intel || this.nextShipIntel();
+    const mainKey = opts.mainKey || (intel && intel.mainKey);
+    if (!mainKey) return null;
+
+    const counterTypes = this.gameplayCounterTypesForShip(mainKey, opts.boardingNo, { intel });
+    if (!counterTypes.length) return null;
+    if (type && !counterTypes.includes(type)) return null;
+
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const scaledName = intel && intel.mainLabel
+      ? String(intel.mainLabel).replace(/^\S+\s+/, '').trim()
+      : '';
+    const enemyName = scaledName || (enemy && enemy.name) || mainKey;
+    const counterNames = counterTypes
+      .map(counterType => TYPES[counterType] && TYPES[counterType].name)
+      .filter(Boolean);
+    const armed = !!(opts.armed || opts.prepared || opts.watchReady);
+    const damage = armed ? 5 : 3;
+    const guardsRemoved = armed ? 2 : 1;
+    const guardText = `${guardsRemoved} guard${guardsRemoved === 1 ? '' : 's'}`;
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    const bountyEmoji = bountyRes ? RES_EMOJI[bountyRes] : '';
+    const bountyCount = 1;
+    const bountyText = bountyEmoji ? `survive win +${bountyEmoji}` : '';
+    const line1 = `Vs ${enemyName}: Ambush ${damage}`;
+    const line2 = [`cut ${guardText}`, bountyText].filter(Boolean).join(', ');
+    const text = [line1, line2].filter(Boolean).join(', ');
+
+    return {
+      mainKey,
+      enemyName,
+      counterTypes,
+      counterNames,
+      damage,
+      guardsRemoved,
+      bountyRes: bountyRes || null,
+      bountyEmoji: bountyEmoji || '',
+      bountyCount,
+      armed,
+      line1,
+      line2,
+      text,
+      shopLines: [line1, line2].filter(Boolean),
+    };
+  }
+
+  counterPayoffPreviewForQuote(type, quote, opts = {}) {
+    if (!quote || !quote.counter) return null;
+    return this.counterPayoffPreview(type, {
+      ...opts,
+      prepared: !!(quote.preparedCounter || quote.openingCounterPrepMight),
+    });
+  }
+
+  openingRouteInfoForMainKey(mainKey) {
+    if (!mainKey) return null;
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const starterType = typeof openingDeckhandCounterTypes === 'function'
+      ? openingDeckhandCounterTypes(mainKey, 1, { mode: G.mode })[0]
+      : null;
+    const primaryType = typeof OPENING_ROUTE_PRIMARY_COUNTERS !== 'undefined'
+      ? OPENING_ROUTE_PRIMARY_COUNTERS[mainKey]
+      : null;
+    const sideType = typeof OPENING_ROUTE_SIDE_OFFERS !== 'undefined'
+      ? OPENING_ROUTE_SIDE_OFFERS[mainKey]
+      : null;
+    const bountyRes = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    return {
+      mainKey,
+      enemy,
+      enemyName: enemy ? enemy.name : mainKey,
+      enemyLabel: enemy ? `${enemy.emoji} ${enemy.name}` : mainKey,
+      starterType,
+      starterName: pirateTypeDisplayName(starterType),
+      primaryType,
+      primaryName: pirateTypeDisplayName(primaryType),
+      sideType,
+      sideName: pirateTypeDisplayName(sideType),
+      bountyRes,
+      bountyEmoji: bountyRes ? (RES_EMOJI[bountyRes] || '') : '',
+    };
+  }
+
+  openingRouteCacheStakesFromNode(node, mainKey = null) {
+    if (!node || node.type !== 'island') return null;
+    const cache = node.scoutedCache;
+    if (cache) {
+      return {
+        mainKey: cache.mainKey || mainKey || null,
+        res: cache.res || null,
+        amount: Math.max(0, Math.floor(Number(cache.amount) || 0)),
+        enthusiasm: cache.enthusiasm == null ? 1 : Math.max(0, Math.floor(Number(cache.enthusiasm) || 0)),
+        alert: Math.max(0, Math.floor(Number(cache.alert) || 0)),
+        claimed: !!cache.claimed,
+      };
+    }
+    const key = mainKey || (typeof openingRouteMainKeyForIslandIdx === 'function'
+      ? openingRouteMainKeyForIslandIdx(node.islandIdx)
+      : null);
+    const stakes = key && typeof openingScoutedCounterCacheStakes === 'function'
+      ? openingScoutedCounterCacheStakes(node, key)
+      : null;
+    return stakes ? {
+      mainKey: key,
+      res: stakes.res || null,
+      amount: Math.max(0, Math.floor(Number(stakes.amount) || 0)),
+      enthusiasm: stakes.enthusiasm == null ? 1 : Math.max(0, Math.floor(Number(stakes.enthusiasm) || 0)),
+      alert: Math.max(0, Math.floor(Number(stakes.alert) || 0)),
+      claimed: false,
+    } : null;
+  }
+
+  openingRouteCacheStakesText(stakes) {
+    if (!stakes) return '';
+    const parts = [];
+    const res = stakes.res || null;
+    const amount = Math.max(0, Math.floor(Number(stakes.amount) || 0));
+    const enthusiasm = Math.max(0, Math.floor(Number(stakes.enthusiasm) || 0));
+    const alert = Math.max(0, Math.floor(Number(stakes.alert) || 0));
+    if (res && RES_EMOJI[res] && amount > 0) parts.push(`+${amount > 1 ? amount : ''}${RES_EMOJI[res]}`);
+    if (enthusiasm > 0) parts.push(`+${enthusiasm > 1 ? enthusiasm : ''}${RES_EMOJI.enthusiasm}`);
+    if (alert > 0) parts.push(`+${alert > 1 ? alert + ' ' : ''}Alert`);
+    return parts.join(' ');
+  }
+
+  openingRouteVictoryCachePreviewText(info) {
+    const emoji = info && info.bountyEmoji;
+    return emoji ? `clean +1${emoji}/Alert +3${emoji}` : '';
+  }
+
+  openingRouteChoicePlanLines(node) {
+    if (this.isBattleTest() || !node || node.type !== 'island') return [];
+    const stakes = this.openingRouteCacheStakesFromNode(node);
+    const mainKey = stakes && stakes.mainKey;
+    const info = this.openingRouteInfoForMainKey(mainKey);
+    if (!info || !info.enemy) return [];
+    const island = ISLANDS[node.islandIdx];
+    const cacheText = this.openingRouteCacheStakesText(stakes) || 'cache';
+    const routeName = island && island.name ? island.name.replace(' Island', '') : 'Route';
+    const victory = this.openingRouteVictoryCachePreviewText(info);
+    const victoryText = victory ? `; B1 win ${victory}` : '';
+    return [
+      `${routeName}: ${info.enemyName}`,
+      `${info.starterName} opens ${cacheText}${victoryText}`,
+      `Shop ${info.primaryName}; one-short unlocks ${info.sideName}`,
+    ];
+  }
+
+  selectedOpeningRouteState() {
+    if (this.isBattleTest()
+      || Math.max(0, Math.floor(Number(G.boardingCount) || 0)) !== 0
+      || !G.map
+      || typeof openingRouteShopState !== 'function') {
+      return null;
+    }
+    const route = openingRouteShopState({
+      map: G.map,
+      mode: G.mode,
+      boardingCount: G.boardingCount,
+    });
+    if (!route || !route.mainKey) return null;
+    const info = this.openingRouteInfoForMainKey(route.mainKey);
+    if (!info || !info.enemy) return null;
+
+    const currentNode = typeof mapNodeById === 'function' && G.map.currentNodeId != null
+      ? mapNodeById(G.map, G.map.currentNodeId)
+      : null;
+    let cacheNode = currentNode
+      && currentNode.scoutedCache
+      && currentNode.scoutedCache.mainKey === route.mainKey
+      ? currentNode
+      : null;
+    if (!cacheNode && Array.isArray(G.map.layers)) {
+      const firstLayer = typeof firstShipLayerIndex === 'function' ? firstShipLayerIndex(G.map) : -1;
+      const cacheLayer = firstLayer > 0 ? G.map.layers[firstLayer - 1] : [];
+      cacheNode = (cacheLayer || []).find(node =>
+        node && node.scoutedCache && node.scoutedCache.mainKey === route.mainKey
+      ) || null;
+    }
+    const stakes = cacheNode ? this.openingRouteCacheStakesFromNode(cacheNode, route.mainKey) : null;
+    return { route, info, cacheNode, stakes };
+  }
+
+  selectedOpeningRouteCacheStatusText(state) {
+    if (!state || !state.info) return '';
+    const stakes = state.stakes;
+    const mainKey = state.info.mainKey;
+    const drill = G.island && G.island.scoutedCacheDrill && G.island.scoutedCacheDrill.mainKey === mainKey
+      ? G.island.scoutedCacheDrill
+      : null;
+    const cacheText = this.openingRouteCacheStakesText(stakes || drill) || 'cache';
+    const claimed = !!(
+      (stakes && stakes.claimed)
+      || (drill && drill.cacheClaimed)
+    );
+    if (claimed) return `Cache opened ${cacheText}`;
+    if (G.phase === 'sending' && drill && drill.cachePending) return `Cache unopened: first sent opens ${cacheText}`;
+    if ((G.phase === 'ship' || G.phase === 'shopping') && state.cacheNode && state.cacheNode.id === G.map.currentNodeId) {
+      return `Cache missed ${cacheText}`;
+    }
+    return `Cache unopened ${cacheText}`;
+  }
+
+  openingRouteSetupFlagText() {
+    const full = this.activeFullCrewDiscount();
+    const prepArmed = !!G.openingCounterPlan;
+    const parts = [];
+    if (G.phase === 'shopping') {
+      parts.push(full > 0 ? `Full Crew -${full}☠️ active` : 'Full Crew expired');
+      parts.push(prepArmed ? 'Opening Prep active' : 'Opening Prep expired');
+    } else if (G.phase === 'sending') {
+      parts.push('Full send arms Full Crew -1☠️');
+      parts.push(prepArmed ? 'Opening Prep armed' : 'One-short arms Opening Prep');
+    } else {
+      if (full > 0) parts.push(`Full Crew -${full}☠️`);
+      if (prepArmed) parts.push('Opening Prep armed');
+    }
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  openingRouteBuyQuoteText(type) {
+    if (!type || !TYPES[type]) return '';
+    const def = TYPES[type];
+    const visible = Array.isArray(G.shop) && G.shop.includes(type);
+    if (!visible) return `${def.name}: target`;
+    const quote = this.shopPurchaseQuote(type);
+    const price = quote.effectiveCost < quote.cost
+      ? `${quote.cost}->${quote.effectiveCost}☠️`
+      : `${quote.effectiveCost}☠️`;
+    if (!quote.canBuy) {
+      const missing = Math.max(0, Math.floor(Number(quote.missing) || 0));
+      return `${def.name} ${price}: need ${missing}☠️`;
+    }
+    const tags = [];
+    if (quote.openingRoutePrimaryCommitment && quote.topDeck) tags.push('Commit top+Watch');
+    if (quote.fullCrewCoverage > 0) tags.push(`covered ${quote.fullCrewCoverage}☠️`);
+    if (quote.openingCounterPrepMight) tags.push('+💪');
+    if (quote.openingSidePrep) {
+      const gain = quote.openingSidePrepGain ? personalGainText([quote.openingSidePrepGain]) : '';
+      const target = quote.openingSidePrepTargetName || pirateTypeDisplayName(quote.openingSidePrepTargetType);
+      const bounty = quote.openingSidekickBountyEmoji ? `win +${quote.openingSidekickBountyEmoji}` : '';
+      tags.push(['Side Prep', gain ? `+${gain} ${target}` : '', bounty].filter(Boolean).join(' '));
+    }
+    if (quote.topDeck) tags.push(quote.counter ? 'top+Watch' : 'top');
+    if (quote.credit && quote.alert > 0) tags.push(`+${quote.alert} Alert`);
+    if (quote.routeCounterCover > 0) tags.push(`Cover -${quote.routeCounterCover} Alert`);
+    return `${def.name} ${price}: ${tags.length ? tags.join(', ') : 'buy'}`;
+  }
+
+  openingRoutePlanLines(opts = {}) {
+    const state = this.selectedOpeningRouteState();
+    if (!state) return [];
+    const info = state.info;
+    const cacheStatus = this.selectedOpeningRouteCacheStatusText(state);
+    const setup = this.openingRouteSetupFlagText();
+    const victory = this.openingRouteVictoryCachePreviewText(info);
+    const payoff = info.bountyEmoji
+      ? `B1 payoff: opened cache win ${victory}; counter +${info.bountyEmoji}; drilled +2${info.bountyEmoji}; sidekick +${info.bountyEmoji}`
+      : '';
+    const routePrimarySecured = G.openingRouteCounterBoughtMainKey === info.mainKey;
+    const sideUnlocked = !!G.openingCounterPlan && !routePrimarySecured;
+    const sideTarget = sideUnlocked
+      ? `${info.sideName} Side Prep`
+      : (routePrimarySecured ? `${info.sideName} ordinary buy` : `${info.sideName} locked until Opening Prep`);
+    const targets = `Targets: ${info.primaryName} primary; ${sideTarget}`;
+    if (opts.context === 'shop') {
+      const payoffShort = info.bountyEmoji
+        ? `B1 cache ${victory}; counter +${info.bountyEmoji}/drill +2${info.bountyEmoji}/side +${info.bountyEmoji}`
+        : 'B1 counter payoff';
+      const sideBuyText = sideUnlocked
+        ? this.openingRouteBuyQuoteText(info.sideType)
+        : (routePrimarySecured ? this.openingRouteBuyQuoteText(info.sideType) : `${info.sideName}: locked until Opening Prep`);
+      return [
+        `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
+        [setup, payoffShort].filter(Boolean).join(' · '),
+        `Buy: ${this.openingRouteBuyQuoteText(info.primaryType)}; ${sideBuyText}`,
+      ].filter(Boolean);
+    }
+    if (opts.context === 'sending') {
+      const bountyPair = info.bountyEmoji ? `B1 cache ${victory}; counter +${info.bountyEmoji}/+2${info.bountyEmoji}` : 'B1 counter payoff';
+      return [
+        `Route: ${info.enemyLabel}; ${info.starterName} starter; ${cacheStatus}`,
+        `Full send = Full Crew ${info.primaryName}; one-short unlocks ${info.sideName} or +💪 primary; ${bountyPair}`,
+      ];
+    }
+    const sendChoice = '';
+    return [
+      `Opening route: ${info.enemyLabel}; ${info.starterName} starter. ${cacheStatus}`,
+      [targets, setup, payoff].filter(Boolean).join(' · '),
+      sendChoice,
+    ].filter(Boolean);
+  }
+
+  updateFullCrewDiscountForCompletedIsland() {
+    G.fullCrewDiscount = this.projectFullCrewDiscount(Array.isArray(G.sent) ? G.sent.length : 0);
+    return G.fullCrewDiscount;
+  }
+
+  projectFullCrewDiscount(sentCount) {
+    const max = this.maxSend();
+    return !this.isBattleTest()
+      && !!G.island
+      && !G.island.healWounded
+      && max > 0
+      && Math.max(0, Math.floor(Number(sentCount) || 0)) >= max
+      ? 1
+      : 0;
+  }
+
+  projectOpeningCommission(sentCount) {
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const unused = Math.max(0, max - sent);
+    const round = Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = Math.max(0, Math.floor(Number(G.boardingCount) || 0));
+    return !this.isBattleTest()
+      && G.phase === 'sending'
+      && !!G.island
+      && !G.island.healWounded
+      && boardingCount === 0
+      && round >= 1
+      && round <= 2
+      && max > 0
+      && sent > 0
+      && unused === 1
+      ? 1
+      : 0;
+  }
+
+  projectOpeningCounterPlan(sentCount) {
+    if (this.projectOpeningCommission(sentCount) <= 0) return 0;
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    if (sent === currentSent) return this.leftmostIslandPirateEntry() ? 1 : 0;
+    return sent > currentSent ? 1 : 0;
+  }
+
+  updateOpeningCounterPlanForCompletedIsland() {
+    G.openingCounterPlan = !!(
+      G.openingCounterPlan
+      || this.projectOpeningCounterPlan(Array.isArray(G.sent) ? G.sent.length : 0)
+    );
+    return G.openingCounterPlan;
+  }
+
+  projectPortDrill(sentCount) {
+    const gain = normalizePersonalGain(G.island && G.island.fullSendBuff);
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    if (!gain
+      || this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || max <= 0
+      || sent < max) {
+      return null;
+    }
+    return {
+      gain,
+      text: personalGainText([gain]),
+    };
+  }
+
+  projectShortCrewDrill(sentCount) {
+    const max = this.maxSend();
+    const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+    if (this.isBattleTest()
+      || G.phase !== 'sending'
+      || !G.island
+      || G.island.healWounded
+      || max <= 0
+      || sent <= 0
+      || max - sent !== 1) {
+      return null;
+    }
+
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    const target = this.leftmostIslandPirateEntry();
+    if (sent === currentSent && !target) return null;
+    const targetPirate = target && target.pirate ? target.pirate : null;
+    const reportsEarly = this.shortCrewReportsEarly();
+    const counterAlertRefund = this.shortCrewCounterAlertRefundState(targetPirate);
+    const gain = { buff: 'might', count: 1 };
+    return {
+      gain,
+      text: personalGainText([gain]),
+      reportsEarly,
+      targetKnown: !!target,
+      targetType: targetPirate ? targetPirate.type : null,
+      counterAlertRefund,
+      counterWatch: !!(reportsEarly && counterAlertRefund.eligible),
+    };
+  }
+
+  applyPortDrill(opts = {}) {
+    const drill = this.projectPortDrill(Array.isArray(G.sent) ? G.sent.length : 0);
+    if (!drill) return null;
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) return null;
+
+    const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
+    if (!applied.applied) return null;
+
+    if (!opts.silent && this.L) {
+      const point = this.islandPirateEffectPoint(target.sentSlot);
+      const x = point ? point.x : this.L.cx;
+      const y = point ? point.y : this.endActionY() - 54 * this.L.k;
+      this.effectText(x, y, `+${applied.text || drill.text}`, '#66bb6a');
+      this.renderIsland();
+    }
+
+    return {
+      ...applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+    };
+  }
+
+  applyShortCrewDrill(opts = {}) {
+    const drill = this.projectShortCrewDrill(Array.isArray(G.sent) ? G.sent.length : 0);
+    if (!drill) return null;
+    const target = this.leftmostIslandPirateEntry();
+    if (!target) return null;
+    if (!this.pirateStillInCrew(target.pirate)) return null;
+
+    const applied = this.applyPersonalGainsToPirate(target.pirate, [drill.gain]);
+    if (!applied.applied) return null;
+    const reportEarly = this.markShortCrewReport(target.pirate);
+    const counterAlertRefund = this.shortCrewCounterAlertRefundState(target.pirate);
+    const counterWatch = !!(reportEarly && counterAlertRefund.eligible && this.markCounterWatch(target.pirate));
+
+    if (!opts.silent && this.L) {
+      const point = this.islandPirateEffectPoint(target.sentSlot);
+      const x = point ? point.x : this.L.cx;
+      const y = point ? point.y : this.endActionY() - 54 * this.L.k;
+      const reportText = reportEarly ? ` Reports next${counterWatch ? ', Watch' : ''}` : '';
+      this.effectText(x, y, `Short Crew +${applied.text || drill.text}${reportText}`, '#ffca28');
+      this.renderIsland();
+    }
+
+    return {
+      ...applied,
+      handIdx: target.handIdx,
+      sentSlot: target.sentSlot,
+      reportEarly,
+      counterAlertRefund,
+      counterWatch,
+    };
+  }
+
+  applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages, opts = {}) {
+    const refund = shortCrewResult && shortCrewResult.counterAlertRefund;
+    if (!refund || !refund.eligible) return { amount: 0 };
+    const refundAmount = Math.max(0, Math.floor(Number(refund.amount) || 0));
+    if (refundAmount <= 0) return { amount: 0 };
+
+    const floor = Math.max(0, Math.floor(Number(alertFloorBeforeWages) || 0));
+    const before = this.pendingBoardingAlert();
+    const after = before > floor ? Math.max(floor, before - refundAmount) : before;
+    const amount = Math.max(0, before - after);
+    const result = { amount, before, after, floor };
+    refund.applied = result;
+    if (amount <= 0) return result;
+
+    G.boardingAlert = after;
+    if (!opts.silent) this.showShortCrewCounterAlertRefund(shortCrewResult, result);
+    return result;
+  }
+
+  showShortCrewCounterAlertRefund(shortCrewResult, refund) {
+    if (!shortCrewResult || !refund || !this.L) return;
+    const point = shortCrewResult.sentSlot != null && shortCrewResult.sentSlot >= 0
+      ? this.islandPirateEffectPoint(shortCrewResult.sentSlot)
+      : null;
+    const x = point ? point.x : this.L.cx;
+    const y = point ? point.y + 30 * this.L.k : this.endActionY() - 16 * this.L.k;
+    const amount = Math.max(0, Math.floor(Number(refund.amount) || 0));
+    const text = amount > 1 ? `Counter Short -${amount} Alert` : 'Counter Short -Alert';
+    this.effectText(x, y, text, '#ffca28', 760);
+  }
+
+  shopPurchaseQuoteForState(type, state = null) {
+    const def = TYPES[type];
+    const cost = Math.max(0, Math.floor(Number(def && def.cost) || 0));
+    const counter = !!(def && this.isScoutedCounterShopType(type));
+    const scoutedCounterTopDeck = !!(def && this.counterRecruitReportsEarly(type));
+    if (!def) {
+      return {
+        canBuy: false,
+        credit: false,
+        counter: false,
+        topDeck: false,
+        openingCommissionReport: false,
+        openingFullCrewReport: false,
+        preparedCounter: false,
+        cost,
+        effectiveCost: cost,
+        discount: 0,
+        missing: 0,
+        alert: 0,
+        spend: 0,
+        fullCrewCoverage: 0,
+        openingCounterPlan: false,
+        openingCounterPrep: false,
+        openingCounterPrepMight: false,
+        openingCounterPrepDiscount: 0,
+        openingSidePrep: false,
+        openingSidePrepGain: null,
+        openingSidePrepTargetType: null,
+        openingSidePrepTargetName: '',
+        openingSidePrepTargetPirateId: null,
+        openingSidePrepTargetsMuster: false,
+        openingSidekickBountyRes: null,
+        openingSidekickBountyEmoji: '',
+        openingRoutePrimary: false,
+        openingRoutePrimaryCommitment: false,
+        routeCounterCover: 0,
+        consumesOpeningCounterPlan: false,
+        consumesOpeningCounterPrep: false,
+      };
+    }
+    const withPayoff = (quote) => {
+      const withCover = {
+        ...quote,
+        routeCounterCover: this.routeCounterCoverPreviewForQuote(type, quote, {
+          routeShopState,
+          alertBase: pendingAlert,
+        }),
+      };
+      const payoff = this.counterPayoffPreviewForQuote(type, withCover);
+      return payoff ? { ...withCover, counterPayoff: payoff } : withCover;
+    };
+    const isProjection = !!state;
+    const source = state || {};
+    const discountPool = source.fullCrewDiscount != null
+      ? source.fullCrewDiscount
+      : this.activeFullCrewDiscount();
+    const discount = Math.min(cost, Math.max(0, Math.min(1, Math.floor(Number(discountPool) || 0))));
+    const costAfterDiscount = Math.max(0, cost - discount);
+    const enthusiasmSource = source.enthusiasm != null ? source.enthusiasm : G.enthusiasm;
+    const enthusiasm = Math.max(0, Math.floor(Number(enthusiasmSource) || 0));
+    const openingCounterPrep = this.openingCounterPrepActiveForState(source, isProjection);
+    const shopCreditUsed = source.shopCreditUsed != null ? !!source.shopCreditUsed : !!G.shopCreditUsed;
+    const round = source.round != null
+      ? Math.max(0, Math.floor(Number(source.round) || 0))
+      : Math.max(0, Math.floor(Number(G.round) || 0));
+    const boardingCount = source.boardingCount != null
+      ? Math.max(0, Math.floor(Number(source.boardingCount) || 0))
+      : Math.max(0, Math.floor(Number(G.boardingCount) || 0));
+    const phase = source.phase != null ? source.phase : G.phase;
+    const mode = source.mode != null ? source.mode : G.mode;
+    const openingCommissionReport = false;
+    const openingFullCrewReport = false;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({
+        map: source.map || G.map,
+        mode,
+        boardingCount,
+        currentLayer: source.currentLayer,
+      })
+      : null;
+    const openingRoutePrimary = !!(routeShopState
+      && routeShopState.primaryCounterType === type
+      && routeShopState.mainKey
+      && boardingCount === 0
+      && mode !== 'battleTest');
+    const openingRouteCounterBoughtMainKey = source.openingRouteCounterBoughtMainKey != null
+      ? source.openingRouteCounterBoughtMainKey
+      : (G.openingRouteCounterBoughtMainKey || null);
+    const openingRoutePrimaryCommitmentMainKey = source.openingRoutePrimaryCommitmentMainKey != null
+      ? source.openingRoutePrimaryCommitmentMainKey
+      : (G.openingRoutePrimaryCommitmentMainKey || null);
+    const openingRoutePrimaryCommitment = !!(openingRoutePrimary
+      && routeShopState
+      && routeShopState.mainKey
+      && openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      && openingRoutePrimaryCommitmentMainKey === routeShopState.mainKey
+      && (isProjection || phase === 'shopping'));
+    const openingRouteSideOffer = routeShopState && routeShopState.mainKey && typeof OPENING_ROUTE_SIDE_OFFERS !== 'undefined'
+      ? OPENING_ROUTE_SIDE_OFFERS[routeShopState.mainKey] || null
+      : null;
+    const openingSidePrepGain = typeof openingRouteSidePrepGain === 'function'
+      ? openingRouteSidePrepGain(type)
+      : null;
+    const openingSidePrep = !!(routeShopState
+      && openingRouteSideOffer === type
+      && routeShopState.mainKey
+      && openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      && boardingCount === 0
+      && mode !== 'battleTest'
+      && openingCounterPrep
+      && openingSidePrepGain);
+    const openingSidePrepTarget = openingSidePrep
+      ? this.openingSidePrepSupportTargetInfo(routeShopState, type)
+      : null;
+    const openingSidekickBountyRes = openingSidePrep
+      && routeShopState
+      && routeShopState.mainKey
+      && SCOUTED_COUNTER_CACHE_RES
+      ? SCOUTED_COUNTER_CACHE_RES[routeShopState.mainKey] || null
+      : null;
+    const hasPreparedGains = this.preparedCounterGains(type).length > 0;
+    const discountPreparesCounter = discount > 0 && boardingCount > 0;
+    const preparedCounter = !!(scoutedCounterTopDeck && hasPreparedGains && discountPreparesCounter);
+    const openingCounterPrepMight = !!(scoutedCounterTopDeck && counter && openingCounterPrep);
+    const openingCounterPrepDiscount = (openingCounterPrepMight || openingSidePrep) ? Math.min(1, costAfterDiscount) : 0;
+    const effectiveCost = Math.max(0, costAfterDiscount - openingCounterPrepDiscount);
+    const consumesOpeningCounterPlan = !!(openingCounterPrepMight || openingSidePrep);
+    const setupTopDeck = !!(scoutedCounterTopDeck && (discount > 0 || openingCounterPrepMight));
+    const commitmentTopDeck = !!(scoutedCounterTopDeck && openingRoutePrimaryCommitment);
+    const topDeck = openingRoutePrimary
+      ? (setupTopDeck || commitmentTopDeck)
+      : (openingSidePrep
+        ? true
+        : !!scoutedCounterTopDeck);
+    const alertSource = source.boardingAlert != null ? source.boardingAlert : this.pendingBoardingAlert();
+    const pendingAlert = Math.max(0, Math.floor(Number(alertSource) || 0));
+    const shared = {
+      openingCounterPlan: openingCounterPrep,
+      openingCounterPrep: openingCounterPrepMight,
+      openingCounterPrepMight,
+      openingCounterPrepDiscount,
+      openingSidePrep,
+      openingSidePrepGain,
+      openingSidePrepTargetType: openingSidePrepTarget ? openingSidePrepTarget.type : null,
+      openingSidePrepTargetName: openingSidePrepTarget ? openingSidePrepTarget.name : '',
+      openingSidePrepTargetPirateId: openingSidePrepTarget ? openingSidePrepTarget.pirateId : null,
+      openingSidePrepTargetsMuster: !!(openingSidePrepTarget && openingSidePrepTarget.targetsMuster),
+      openingSidekickBountyRes,
+      openingSidekickBountyEmoji: openingSidekickBountyRes ? (RES_EMOJI[openingSidekickBountyRes] || '') : '',
+      openingRoutePrimary,
+      openingRoutePrimaryCommitment,
+      openingCommissionReport,
+      openingFullCrewReport,
+      consumesOpeningCounterPlan,
+      consumesOpeningCounterPrep: consumesOpeningCounterPlan,
+      alarmRushedRouteCounter: false,
+    };
+    if (enthusiasm >= effectiveCost) {
+      return withPayoff({
+        canBuy: true,
+        credit: false,
+        counter,
+        topDeck,
+        preparedCounter,
+        cost,
+        effectiveCost,
+        discount,
+        missing: 0,
+        alert: 0,
+        spend: effectiveCost,
+        fullCrewCoverage: 0,
+        ...shared,
+      });
+    }
+    const missing = effectiveCost - enthusiasm;
+    const intel = this.nextShipIntel();
+    const fullCrewCoverage = mode !== 'battleTest'
+      && !this.isBattleTest()
+      && (isProjection || phase === 'shopping')
+      && round === 1
+      && boardingCount === 0
+      && !shopCreditUsed
+      && discount > 0
+      && !openingCounterPrep
+      && counter
+      && topDeck
+      && intel
+      && intel.mainKey
+      && missing === 1
+      ? 1
+      : 0;
+    if (fullCrewCoverage > 0) {
+      return withPayoff({
+        canBuy: true,
+        credit: false,
+        counter,
+        topDeck,
+        preparedCounter,
+        cost,
+        effectiveCost,
+        discount,
+        missing,
+        alert: 0,
+        spend: Math.max(0, effectiveCost - fullCrewCoverage),
+        fullCrewCoverage,
+        ...shared,
+      });
+    }
+    const allowCredit = source.allowCredit != null ? !!source.allowCredit : (isProjection ? !this.isBattleTest() : this.shopCreditAvailable());
+    const canCredit = allowCredit
+      && !shopCreditUsed
+      && missing >= 1
+      && missing <= this.shopCreditMaxMissing();
+    const creditAlert = canCredit ? missing * this.shopCreditAlertPerMissing() : 0;
+    return withPayoff({
+      canBuy: canCredit,
+      credit: canCredit,
+      counter,
+      topDeck,
+      preparedCounter,
+      cost,
+      effectiveCost,
+      discount,
+      missing,
+      alert: creditAlert,
+      spend: canCredit ? enthusiasm : 0,
+      fullCrewCoverage: 0,
+      ...shared,
+      consumesOpeningCounterPlan: !!(consumesOpeningCounterPlan && canCredit),
+      consumesOpeningCounterPrep: !!(consumesOpeningCounterPlan && canCredit),
+    });
+  }
+
+  shopPurchaseQuote(type, state = null) {
+    return this.shopPurchaseQuoteForState(type, state);
+  }
+
+  bestVisibleShopPurchase(state = null) {
+    if (!Array.isArray(G.shop) || !G.shop.length) return null;
+    const candidates = G.shop
+      .map((type, index) => ({
+        type,
+        index,
+        quote: this.shopPurchaseQuoteForState(type, state),
+      }))
+      .filter(item => item.quote && item.quote.canBuy);
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const tierA = a.quote.credit ? 1 : 0;
+      const tierB = b.quote.credit ? 1 : 0;
+      if (tierA !== tierB) return tierA - tierB;
+      const counterA = a.quote.counter ? 1 : 0;
+      const counterB = b.quote.counter ? 1 : 0;
+      if (counterA !== counterB) return counterB - counterA;
+      const costA = Math.max(0, Number(a.quote.cost) || 0);
+      const costB = Math.max(0, Number(b.quote.cost) || 0);
+      if (costA !== costB) return costB - costA;
+      const creditA = a.quote.credit ? 1 : 0;
+      const creditB = b.quote.credit ? 1 : 0;
+      if (creditA !== creditB) return creditA - creditB;
+      return a.index - b.index;
+    });
+    return candidates[0];
+  }
+
+  shopPlanText(state = null) {
+    const best = this.bestVisibleShopPurchase(state);
+    if (!best) return 'Shop: no visible buy';
+    const def = TYPES[best.type];
+    const quote = best.quote;
+    const priceReduced = quote.effectiveCost < quote.cost;
+    const price = priceReduced
+      ? `${quote.cost}->${quote.effectiveCost}☠️`
+      : `${quote.effectiveCost}☠️`;
+    const alertBase = state && state.boardingAlert != null
+      ? Math.max(0, Math.floor(Number(state.boardingAlert) || 0))
+      : this.pendingBoardingAlert();
+    const alertRisk = quote.credit && quote.alert > 0
+      ? this.boardingAlertRiskText(this.boardingAlertGuardCount(alertBase + quote.alert), { compact: true })
+      : '';
+    const credit = quote.credit && quote.alert > 0
+      ? `, credit +${quote.alert} Alert${alertRisk ? ` (${alertRisk})` : ''}`
+      : '';
+    const label = quote.counter ? 'Counter ' : '';
+    const prepDiscount = Math.max(0, Math.floor(Number(quote.openingCounterPrepDiscount) || 0));
+    const prep = quote.openingCounterPrepMight
+      ? `, Opening Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''} +💪`
+      : '';
+    const sidePrepSupportText = openingSidePrepSupportText(quote);
+    const sidekickBountyText = openingSidekickBountyText(quote);
+    const sidePrep = quote.openingSidePrep
+      ? `, Side Prep${prepDiscount > 0 ? ` -${prepDiscount}☠️` : ''}${sidePrepSupportText ? `, ${sidePrepSupportText}` : ''}${sidekickBountyText ? `, ${sidekickBountyText}` : ''}`
+      : '';
+    const commitment = quote.openingRoutePrimaryCommitment ? ', route commitment' : '';
+    const prepared = quote.preparedCounter ? ', prepared' : '';
+    const topDeck = quote.topDeck ? ', top deck' : '';
+    const covered = quote.fullCrewCoverage > 0 ? `, Full Crew covers -${quote.fullCrewCoverage}☠️` : '';
+    const cover = quote.routeCounterCover > 0 ? `, Cover -${quote.routeCounterCover} Alert` : '';
+    const payoff = quote.counterPayoff || this.counterPayoffPreviewForQuote(best.type, quote);
+    const payoffText = payoff ? ` · ${payoff.text}` : '';
+    return `Shop: ${label}${def.name} ${price}${prep}${sidePrep}${commitment}${prepared}${topDeck}${covered}${credit}${cover}${payoffText}`;
+  }
+
+  sendingPlanProjection(sentCount, opts = {}) {
+    const wage = this.shipWageProjection(sentCount);
+    const discount = this.projectFullCrewDiscount(sentCount);
+    const baseBoardingAlert = this.pendingBoardingAlert();
+    const shortCrewDrill = this.projectShortCrewDrill(sentCount);
+    if (shortCrewDrill) {
+      shortCrewDrill.routeCounterPlan = this.openingRouteCounterShortCrewPlan(sentCount, shortCrewDrill);
+    }
+    const refund = shortCrewDrill && shortCrewDrill.counterAlertRefund;
+    const alertBeforeRefund = baseBoardingAlert + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const projectedRefund = refund && refund.eligible
+      ? Math.max(0, alertBeforeRefund - Math.max(baseBoardingAlert, alertBeforeRefund - Math.max(0, Math.floor(Number(refund.amount) || 0))))
+      : 0;
+    if (refund) refund.projectedAmount = projectedRefund;
+    const boardingAlert = Math.max(baseBoardingAlert, alertBeforeRefund - projectedRefund);
+    const enthusiasm = Math.max(0, Math.floor(Number(G.enthusiasm) || 0)) + wage.wages;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
+    const openingRoutePrimaryCommitmentMainKey = routeShopState
+      && routeShopState.mainKey
+      && G.openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      ? routeShopState.mainKey
+      : null;
+    const shopState = {
+      enthusiasm,
+      boardingAlert,
+      fullCrewDiscount: discount,
+      openingCounterPlan: this.projectOpeningCounterPlan(sentCount),
+      openingRoutePrimaryCommitmentMainKey,
+      shopCreditUsed: false,
+    };
+    return {
+      wage,
+      discount,
+      baseBoardingAlert,
+      alertBeforeRefund,
+      boardingAlert,
+      portDrill: opts.includePortDrill ? this.projectPortDrill(sentCount) : null,
+      shortCrewDrill,
+      openingCounterPlan: shopState.openingCounterPlan,
+      shopText: this.shopPlanText(shopState),
+    };
+  }
+
+  canUseQuietDocks() {
+    if (this.isBattleTest()) return false;
+    if (G.phase !== 'shopping' || G.busy || G.shopAnimating) return false;
+    return this.pendingBoardingAlert() > 0 && G.enthusiasm >= this.quietDocksCost();
+  }
+
+  useQuietDocks(opts = {}) {
+    if (!this.canUseQuietDocks()) return false;
+    const beforeAlert = this.pendingBoardingAlert();
+    const reduction = Math.min(this.quietDocksAlertReduction(), beforeAlert);
+    G.enthusiasm -= this.quietDocksCost();
+    G.boardingAlert = Math.max(0, beforeAlert - reduction);
+
+    if (!opts.silent && this.L) {
+      const summary = this.boardingAlertSummary(G.boardingAlert) || 'Alert cleared';
+      this.float(this.L.cx, this.L.Y_ISL_CY - 40 * this.L.k, `Quiet Docks: ${summary}`, '#66bb6a');
+    }
+    if (opts.deferRender) return true;
+    this.renderAll();
+    if (!opts.skipPanelRefresh && this.scene.isActive('shopModal')) {
+      this.scene.get('shopModal').renderPanel();
+    }
+    return true;
+  }
+
+  enterShoppingPhase() {
+    G.phase = 'shopping';
+    G.shopCreditUsed = false;
+    G.fullCrewDiscount = this.isBattleTest() ? 0 : this.pendingFullCrewDiscount();
+    if (this.isBattleTest()) G.openingCounterPlan = false;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
+    G.openingRoutePrimaryCommitmentMainKey = routeShopState
+      && routeShopState.mainKey
+      && G.openingRouteCounterBoughtMainKey !== routeShopState.mainKey
+      ? routeShopState.mainKey
+      : null;
+    if (typeof normalizeOpeningRouteShop === 'function') {
+      G.shop = normalizeOpeningRouteShop(G.shop, G.round, { map: G.map, mode: G.mode, boardingCount: G.boardingCount });
+    }
+  }
+
+  consumeBoardingAlertForBoarding() {
+    if (this.isBattleTest()) return { amount: 0, guardCount: 0 };
+    const amount = this.pendingBoardingAlert();
+    const guardCount = this.boardingAlertGuardCount(amount);
+    G.boardingAlert = 0;
+    return { amount, guardCount };
+  }
+
+  activeBoardingAlertState() {
+    if (this.isBattleTest()) return { amount: 0, guardCount: 0 };
+    const ship = G.enemyShip || {};
+    const amount = Math.max(0, Math.floor(Number(ship.boardingAlert) || 0));
+    const guardCount = ship.boardingAlertGuards != null
+      ? Math.max(0, Math.min(3, Math.floor(Number(ship.boardingAlertGuards) || 0)))
+      : this.boardingAlertGuardCount(amount);
+    return { amount, guardCount };
+  }
+
+  grantShipWages() {
+    const preview = this.shipWagePreview();
+    const wages = preview.wages;
+    if (wages <= 0) return 0;
+
+    G.enthusiasm += wages;
+    let nextAlert = this.pendingBoardingAlert();
+    if (!this.isBattleTest() && preview.alert > 0) {
+      nextAlert += preview.alert;
+      G.boardingAlert = nextAlert;
+    }
+    const L = this.L;
+    const x = this.actionPanelRightX();
+    const y = this.endActionY() - 40 * L.k;
+    const commissionText = preview.openingCommission > 0
+      ? `\nincl. +${preview.openingCommission}☠️ Opening Commission`
+      : '';
+    const alertSummary = preview.alert > 0 ? this.boardingAlertSummary(nextAlert) : null;
+    const alertText = alertSummary ? `\n${alertSummary}` : '';
+    this.effectText(x, y, `+${wages}☠️ Wages${commissionText}${alertText}`, '#66bb6a');
+    this.animateResourceGain(x, y, [{ emoji: '☠️', count: wages }]);
+    return wages;
   }
 
   sentOffsetX(si) {
@@ -577,6 +3116,7 @@ class GameScene extends Phaser.Scene {
     }
 
     G.sent.push(idx);
+    this.spendCounterWatch(p);
     this._sendingToIsland.add(idx);
     this.renderAll();
 
@@ -586,7 +3126,13 @@ class GameScene extends Phaser.Scene {
     const toX = placement.x;
     const toY = placement.y;
 
-    const { texKey: sendTex } = buildCardTexture(this, p.type, L);
+    const { texKey: sendTex } = buildCardTexture(this, p.type, L, {
+      slotState: this.pirateHasWeapon(p) ? 'armed' : 'none',
+      slotWeaponKey: this.pirateWeaponKey(p),
+      wounded: !!p.wounded,
+      might: this.pirateMight(p),
+      tempo: this.pirateTempo(p),
+    });
     const ghost = this.add.image(fromX, fromY, sendTex);
     ghost.setOrigin(0.5, 0.5).setDepth(60);
     const cardStartW = Math.round(CARD.W * L.k);
@@ -602,16 +3148,22 @@ class GameScene extends Phaser.Scene {
         ghost.destroy();
         this._sendingToIsland.delete(idx);
         const result = this.resolveIsland(p);
-        const sentSlot = Math.max(0, G.sent.indexOf(idx));
-        const effectPos = this.sentCardIslandEffectPosition(sentSlot);
+        const sentSlot = G.sent.indexOf(idx);
+        const effectSlot = Math.max(0, sentSlot);
+        const effectPos = this.sentCardIslandEffectPosition(effectSlot);
 
         const isSacrifice = G.island && G.island.sacrifice;
         if (isSacrifice) {
           this.sacrificePirate(p, effectPos.x, effectPos.y);
         }
+        const cacheClaim = this.claimScoutedCounterCache(p, { silent: true });
 
         this.renderAll();
-        const effect = this.showIslandResult(p, sentSlot, result, effectPos.x, effectPos.y);
+        const effect = this.showIslandResult(p, effectSlot, result, effectPos.x, effectPos.y);
+        if (cacheClaim && cacheClaim.cacheGrant) {
+          this.showScoutedCounterCacheResult(cacheClaim.cacheGrant, effectPos.x, effectPos.y - 44 * L.k);
+        }
+        if (cacheClaim && cacheClaim.drill) this.showScoutedCacheDrillResult(cacheClaim.drill);
         const baseWait = isSacrifice ? 1400 : (effect.spendDuration !== false ? 1000 : 800);
         const waitMs = baseWait + (effect.spendDuration || 0);
         this.scheduleEffectFollowup({
@@ -669,6 +3221,9 @@ class GameScene extends Phaser.Scene {
         G.allCrew = G.allCrew.filter(p => p.id !== target.id);
         G.deck = G.deck.filter(p => p.id !== target.id);
         G.discard = G.discard.filter(p => p.id !== target.id);
+        this.spendCounterWatch(target);
+        this.clearOpeningRouteCounterBought(target.id);
+        this.clearOpeningRouteSidekick(target.id);
         this._sacrificedIds.add(target.id);
         return { ok: true, exileSent: true, name: TYPES[target.type].name };
       }
@@ -716,6 +3271,9 @@ class GameScene extends Phaser.Scene {
     G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
     G.deck = G.deck.filter(p => p.id !== pirate.id);
     G.discard = G.discard.filter(p => p.id !== pirate.id);
+    this.spendCounterWatch(pirate);
+    this.clearOpeningRouteCounterBought(pirate.id);
+    this.clearOpeningRouteSidekick(pirate.id);
     this._sacrificedIds.add(pirate.id);
     this.time.delayedCall(400, () => {
       this.float(x, y, '💀 Lost!', '#c060ff');
@@ -895,6 +3453,13 @@ class GameScene extends Phaser.Scene {
     }
     this._pendingEndSending = false;
     this.closePanels();
+    this.applyPortDrill();
+    const shortCrewResult = this.applyShortCrewDrill();
+    const alertFloorBeforeWages = this.pendingBoardingAlert();
+    this.updateFullCrewDiscountForCompletedIsland();
+    this.updateOpeningCounterPlanForCompletedIsland();
+    this.grantShipWages();
+    this.applyShortCrewCounterAlertRefund(shortCrewResult, alertFloorBeforeWages);
     G.phase = 'ship';
     G.busy = true;
 
@@ -911,7 +3476,7 @@ class GameScene extends Phaser.Scene {
     if (this._shipQueuePos >= this._shipQueue.length) {
       this.time.delayedCall(400, () => {
         this.closePanels();
-        G.phase = 'shopping';
+        this.enterShoppingPhase();
         G.busy = false;
         this.renderAll();
       });
@@ -958,6 +3523,9 @@ class GameScene extends Phaser.Scene {
       G.allCrew = G.allCrew.filter(p => p.id !== pirate.id);
       G.deck = G.deck.filter(p => p.id !== pirate.id);
       G.discard = G.discard.filter(p => p.id !== pirate.id);
+      this.spendCounterWatch(pirate);
+      this.clearOpeningRouteCounterBought(pirate.id);
+      this.clearOpeningRouteSidekick(pirate.id);
       this._cardHand.showShipEffectOverlay(hi, shipEffectSuccessColor);
       resolveAndContinue(600);
       return;
@@ -1000,6 +3568,8 @@ class GameScene extends Phaser.Scene {
     const s = def.ship;
     const spendItems = [];
     const gainItems = [];
+    const weaponGrant = r.ok ? (r.weaponGrant || null) : null;
+    const personalReward = r.ok ? r.personalReward : null;
     if (r.ok) {
       if (s.costs) {
         for (const c of s.costs) spendItems.push({ emoji: c.res === 'enthusiasm' ? '☠️' : RES_EMOJI[c.res], count: c.n });
@@ -1025,28 +3595,48 @@ class GameScene extends Phaser.Scene {
       overlayColor: r.ok ? shipEffectSuccessColor : shipEffectFailColor,
       spendItems,
       gainItems,
-      weaponGrant: r.ok ? r.weaponGrant : null,
-      weaponTextPos: (r.ok && r.weaponGrant)
-        ? { x, y: y - 116 * L.k, color: '#66bb6a' }
-        : null,
+      weaponGrant,
+      weaponTextPos: weaponGrant ? { x, y: y - 116 * L.k, color: '#66bb6a' } : null,
     });
+    if (personalReward && personalReward.text) {
+      const showPersonalReward = () => {
+        if (!this.sys || !this.sys.isActive()) return;
+        let fxX = x;
+        let fxY = y - 116 * L.k;
+        if (personalReward.sentSlot != null) {
+          const point = this.islandPirateEffectPoint(personalReward.sentSlot);
+          if (point) {
+            fxX = point.x;
+            fxY = point.y;
+          }
+        }
+        this.effectText(
+          fxX,
+          fxY,
+          personalReward.applied ? `+${personalReward.text}` : personalReward.text,
+          personalReward.color || '#66bb6a'
+        );
+        if (personalReward.applied) this.renderIsland();
+      };
+      if (effect.gainStartDelay > 0) this.time.delayedCall(effect.gainStartDelay, showPersonalReward);
+      else showPersonalReward();
+    }
     const shipWait = 1000 + effect.spendDuration;
     this.scheduleEffectFollowup({
       gainStartDelay: effect.gainStartDelay,
       fallbackDelay: shipWait,
       hasPendingWeapons: this._pendingWeaponQueue.length > 0,
-      tryStartAssignment: () => {
-        if (this._pendingWeaponQueue.length === 0) return false;
-        if (!this.maybeStartPendingWeaponAssignment({ onComplete: () => resolveAndContinue(0) })) {
-          resolveAndContinue(0);
-        }
-        return true;
-      },
+      tryStartAssignment: () => this.maybeStartPendingWeaponAssignment({
+        onComplete: () => resolveAndContinue(0),
+      }),
       fallback: () => resolveAndContinue(0),
     });
   }
 
   completeRemoval(pirateId) {
+    this.clearCounterWatch(pirateId);
+    this.clearOpeningRouteCounterBought(pirateId);
+    this.clearOpeningRouteSidekick(pirateId);
     G.allCrew = G.allCrew.filter(p => p.id !== pirateId);
     G.deck = G.deck.filter(p => p.id !== pirateId);
     G.discard = G.discard.filter(p => p.id !== pirateId);
@@ -1077,10 +3667,12 @@ class GameScene extends Phaser.Scene {
         gainItems.push({ res: s.pRes, n: s.pN });
       }
       if (s.extraEnthusiasm) G.enthusiasm += s.extraEnthusiasm;
+      const personalReward = this.applyShipPersonalGains(s.personalGains);
       return {
         gainItems,
         extraEnthusiasm: s.extraEnthusiasm || 0,
-        weaponGrant: createWeaponGrant(s.prodWeapon, s.prodWeaponN || 1),
+        weaponGrant: personalReward.weaponGrant || null,
+        personalReward: personalReward.applied || personalReward.lost ? personalReward : null,
       };
     };
     if (s.costs) {
@@ -1115,20 +3707,108 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     const type = G.shop[si];
     const def = TYPES[type];
-    if (G.enthusiasm < def.cost) {
+    const quote = this.shopPurchaseQuote(type);
+    if (!quote.canBuy) {
       this.float(L.cx, L.Y_ISL_CY - 40 * L.k, 'Not enough ☠️', '#ef5350');
       return;
     }
-    G.enthusiasm -= def.cost;
+    const routeShopState = typeof openingRouteShopState === 'function'
+      ? openingRouteShopState({ map: G.map, mode: G.mode, boardingCount: G.boardingCount })
+      : null;
+    if (quote.credit) {
+      G.enthusiasm = 0;
+      G.boardingAlert = this.pendingBoardingAlert() + quote.alert;
+      G.shopCreditUsed = true;
+    } else {
+      G.enthusiasm = Math.max(0, G.enthusiasm - quote.spend);
+    }
+    if (quote.discount > 0) G.fullCrewDiscount = 0;
+    if (quote.consumesOpeningCounterPlan) G.openingCounterPlan = false;
     const p = mkP(type);
     G.allCrew.push(p);
-    G.discard.push(p);
+    const toTopDeck = !!quote.topDeck;
+    const watchCounter = !!(quote.counter && quote.topDeck);
+    const prepMight = quote.openingCounterPrepMight
+      ? this.applyPersonalGainsToPirate(p, [{ buff: 'might', count: 1 }])
+      : null;
+    const sidePrepTarget = quote.openingSidePrep
+      ? this.openingSidePrepSupportTargetInfo(routeShopState, type, p)
+      : null;
+    const sidePrepGain = quote.openingSidePrep && quote.openingSidePrepGain
+      ? this.applyPersonalGainsToPirate((sidePrepTarget && sidePrepTarget.pirate) || p, [quote.openingSidePrepGain])
+      : null;
+    if (quote.openingSidePrep && routeShopState && routeShopState.mainKey) {
+      this.markOpeningRouteSidekick(p, routeShopState.mainKey);
+    }
+    const prepared = quote.preparedCounter
+      ? this.applyPersonalGainsToPirate(p, this.preparedCounterGains(type))
+      : null;
+    const routePassOff = this.transferRouteStarterCacheDrillBountyToBoughtCounter(p, type, quote, routeShopState);
+    const setupSecuresOpeningRouteCounter = !!(routeShopState
+      && type === routeShopState.primaryCounterType
+      && routeShopState.mainKey
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && (quote.discount > 0
+        || quote.fullCrewCoverage > 0
+        || quote.openingCounterPrepMight));
+    const commitmentSecuresOpeningRouteCounter = !!(routeShopState
+      && type === routeShopState.primaryCounterType
+      && routeShopState.mainKey
+      && quote.openingRoutePrimary
+      && quote.counter
+      && quote.topDeck
+      && quote.openingRoutePrimaryCommitment);
+    const securesOpeningRouteCounter = setupSecuresOpeningRouteCounter || commitmentSecuresOpeningRouteCounter;
+    if (securesOpeningRouteCounter) {
+      G.openingRouteCounterBoughtMainKey = routeShopState.mainKey;
+      G.openingRouteCounterBoughtPirateId = p.id;
+      G.openingRouteCounterBoughtSetup = !!setupSecuresOpeningRouteCounter;
+    }
+    const routeCounterCover = setupSecuresOpeningRouteCounter
+      ? this.applyRouteCounterCover(type, quote, routeShopState)
+      : { amount: 0 };
+    G.openingRoutePrimaryCommitmentMainKey = null;
+    if (toTopDeck) {
+      G.deck.push(p);
+      if (watchCounter) this.markCounterWatch(p);
+    } else {
+      G.discard.push(p);
+    }
 
     G.shop.splice(si, 1);
     if (G.shop.length) {
-      G.shop.push(randomShopType(G.round));
+      G.shop.push(randomShopType(G.round, G.shop, { map: G.map, mode: G.mode }));
+      if (typeof normalizeOpeningRouteShop === 'function') {
+        G.shop = normalizeOpeningRouteShop(G.shop, G.round, {
+          map: G.map,
+          mode: G.mode,
+          boardingCount: G.boardingCount,
+          newSlotIndex: G.shop.length - 1,
+        });
+      }
     }
-    if (!opts.silent) this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!', '#66bb6a');
+    if (!opts.silent) {
+      const alertText = quote.credit && quote.alert > 0 ? ` +${quote.alert} Alert` : '';
+      const discountText = quote.discount > 0 ? ` -${quote.discount}☠️` : '';
+      const prepDiscountText = quote.openingCounterPrepDiscount > 0 ? ` -${quote.openingCounterPrepDiscount}☠️` : '';
+      const coveredText = quote.fullCrewCoverage > 0 ? ` Full Crew covers ${quote.fullCrewCoverage}☠️` : '';
+      const sidekickBountyText = openingSidekickBountyText(quote);
+      const planText = quote.consumesOpeningCounterPlan
+        ? (quote.openingSidePrep ? ` Side Prep${prepDiscountText}${sidekickBountyText ? ` ${sidekickBountyText}` : ''}` : (quote.openingCounterPrepMight ? ` Opening Prep${prepDiscountText}` : ' Prep spent'))
+        : '';
+      const prepText = prepMight && prepMight.applied ? ` +${prepMight.text || '💪'}` : '';
+      const sidePrepTargetText = sidePrepTarget
+        ? { ...quote, openingSidePrepTargetName: sidePrepTarget.name, openingSidePrepTargetType: sidePrepTarget.type }
+        : quote;
+      const sidePrepText = sidePrepGain && sidePrepGain.applied ? ` ${openingSidePrepSupportText(sidePrepTargetText)}` : '';
+      const passOffText = routePassOff ? ' Cache mark' : '';
+      const coverText = routeCounterCover && routeCounterCover.amount > 0 ? ` Cover -${routeCounterCover.amount} Alert` : '';
+      const preparedText = prepared && prepared.applied ? ` Prepared ${prepared.text || ''}` : '';
+      const deckText = toTopDeck ? (watchCounter ? ' Top deck, Watch' : ' Top deck') : '';
+      this.float(L.cx, L.Y_ISL_CY - 40 * L.k, '+ ' + def.name + '!' + discountText + coveredText + planText + prepText + sidePrepText + passOffText + alertText + coverText + preparedText + deckText, '#66bb6a');
+    }
     G.shopAnimating = false;
     if (opts.deferRender) return p;
     this.renderAll();
@@ -1145,7 +3825,16 @@ class GameScene extends Phaser.Scene {
   advanceFromShopping() {
     if (G.shop.length) {
       G.shop.shift();
-      G.shop.push(randomShopType(G.round + 1));
+      G.shop.push(randomShopType(G.round + 1, G.shop, { map: G.map, mode: G.mode }));
+      if (typeof normalizeOpeningRouteShop === 'function') {
+        G.shop = normalizeOpeningRouteShop(G.shop, G.round + 1, {
+          map: G.map,
+          mode: G.mode,
+          boardingCount: G.boardingCount,
+          newSlotIndex: G.shop.length - 1,
+          openingCounterPlan: false,
+        });
+      }
     }
     this.prepareNextRound();
   }
@@ -1153,13 +3842,34 @@ class GameScene extends Phaser.Scene {
   prepareNextRound() {
     if (G.phase !== 'shopping') return;
     G.busy = true;
-    const discardAnimEnd = this.animateCurrentHandToDiscard();
-    const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
     const allCrewIds = new Set(G.allCrew.map(p => p.id));
-    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id)));
+    const reports = this.consumeEarlyReportPirates();
+    const reportIds = reports.ids;
+    const openingRouteMuster = this.consumeOpeningRouteMusterPirates(reportIds);
+    const shortCrewReportIds = new Set((reports.shortCrew || []).map(pirate => pirate && pirate.id));
+    const watchSkipIds = new Set(reportIds);
+    openingRouteMuster.forEach((pirate) => {
+      if (pirate && pirate.id != null) watchSkipIds.add(pirate.id);
+    });
+    const counterWatch = this.consumeCounterWatchPirates(watchSkipIds, { preserveSentIds: shortCrewReportIds });
+    const topDeckReturnIds = new Set(reportIds);
+    openingRouteMuster.forEach(pirate => topDeckReturnIds.add(pirate.id));
+    counterWatch.forEach(pirate => topDeckReturnIds.add(pirate.id));
+    const handCards = this.snapshotHandCardsForDiscard();
+    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !topDeckReturnIds.has(card.id)));
+    const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => topDeckReturnIds.has(card.id)));
+    const nextTurnDelay = Math.max(discardAnimEnd, reportAnimEnd) + CARD_MOTION.betweenTurnsDelay;
+    G.discard.push(...G.hand.filter(p => allCrewIds.has(p.id) && !topDeckReturnIds.has(p.id)));
+    this.placeCounterWatchPiratesOnDeck(counterWatch);
+    this.placeOpeningRouteMusterPiratesOnDeck(openingRouteMuster);
+    this.placeShortCrewReportPiratesOnDeck(reports.shortCrew);
+    this.placeCacheDrillMusterPiratesOnDeck(reports.cache);
     G.hand = [];
     G.sent = [];
     G.enthusiasm = 0;
+    G.fullCrewDiscount = 0;
+    G.openingCounterPlan = false;
+    G.openingRoutePrimaryCommitmentMainKey = null;
     this.clearCombatState();
     this._sendingToIsland.clear();
     this._pendingEndSending = false;
@@ -1228,6 +3938,72 @@ class GameScene extends Phaser.Scene {
       duration: 420,
       startScale: 0.5,
     });
+    return true;
+  }
+
+  boardingCanDrawReinforcements() {
+    if (this.isBattleTest()) return false;
+    if (G.phase !== 'boarding') return false;
+    return this.readyCrew().length > 0;
+  }
+
+  discardBoardingHand() {
+    const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map((pirate) => pirate.id));
+    G.discard.push(...(G.hand || []).filter((pirate) => pirate && allCrewIds.has(pirate.id)));
+    G.hand = [];
+  }
+
+  drawReadyBoardingHand(n) {
+    const max = Math.max(0, Math.floor(Number(n) || 0));
+    const cards = [];
+    const selectedIds = new Set();
+
+    const takeFromDeck = () => {
+      for (let idx = G.deck.length - 1; idx >= 0 && cards.length < max; idx--) {
+        const pirate = G.deck[idx];
+        if (!pirate || this.pirateWounded(pirate) || selectedIds.has(pirate.id)) continue;
+        cards.push(pirate);
+        selectedIds.add(pirate.id);
+        G.deck.splice(idx, 1);
+      }
+    };
+
+    takeFromDeck();
+    if (cards.length < max && G.discard.length) {
+      G.deck.push(...Phaser.Utils.Array.Shuffle([...G.discard]));
+      G.discard = [];
+      takeFromDeck();
+    }
+
+    G.hand = cards;
+    return cards;
+  }
+
+  drawBoardingReinforcements(combat = G.combat) {
+    if (!combat || combat.mode !== 'fighting') return false;
+    if (!this.boardingCanDrawReinforcements()) return false;
+
+    this.discardBoardingHand();
+    const cards = this.drawReadyBoardingHand(5);
+    if (!cards.length) return false;
+
+    const rows = this.combatDefaultPlayerSetupRows(combat);
+    combat.playerSetupRows = rows;
+    combat.playerFighters = this.buildPlayerCombatFighters(rows, combat);
+    combat.reinforcementCount = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) + 1;
+
+    const now = this.time.now;
+    (combat.playerFighters || []).forEach((fighter) => {
+      if (!fighter) return;
+      fighter.nextAttackAt = now + Phaser.Math.Between(COMBAT.initialDelayMin, COMBAT.initialDelayMax);
+      fighter.incomingUntil = 0;
+      fighter.attacksMade = 0;
+    });
+    combat.nextAttackStartAt = Math.max(combat.nextAttackStartAt || 0, now + COMBAT.attackStartGapMs);
+
+    this.effectText(this.L.cx, this.combatFormationRowY('player', 0) - 42 * this.L.k, 'Reinforcements!', '#8bd17c', false);
+    this.renderAll();
+    this.scheduleNextCombatAttack();
     return true;
   }
 
@@ -1337,14 +4113,54 @@ class GameScene extends Phaser.Scene {
 
   combatDefaultPlayerSetupRows(combat = G.combat) {
     const rows = this.combatEmptySetupRows();
+    const frontCounterId = this.combatDefaultFrontCounterPirateId(combat);
+    if (frontCounterId != null) rows[0].push(frontCounterId);
     (G.hand || []).forEach((pirate) => {
       if (!pirate) return;
+      if (this.pirateWounded(pirate)) return;
+      if (frontCounterId != null && pirate.id === frontCounterId) return;
       const weaponKey = this.pirateWeaponKey(pirate);
       const weapon = weaponKey ? WEAPON_TYPES[weaponKey] : null;
-      const rowIndex = weapon && weapon.range === 'ranged' ? 1 : 0;
+      const rowIndex = weapon && weapon.range === 'ranged' ? 2 : 0;
       rows[rowIndex].push(pirate.id);
     });
-    return rows;
+    return this.combatCompactSetupRows(rows);
+  }
+
+  combatDefaultFrontCounterPirateId(combat = G.combat) {
+    const counterSet = new Set(this.counterAmbushTypes(combat));
+    if (!counterSet.size) return null;
+
+    const drilledPirate = this.combatDefaultCacheDrillBountyPirate(combat, counterSet);
+    if (drilledPirate) return drilledPirate.id;
+
+    const pirate = (G.hand || []).find((entry) =>
+      entry && !this.pirateWounded(entry) && counterSet.has(entry.type)
+    );
+    return pirate ? pirate.id : null;
+  }
+
+  combatDefaultCacheDrillBountyPirate(combat = G.combat, counterSet = null) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    const mainKey = this.counterAmbushMainKey(combat);
+    if (!mainKey) return null;
+    const counters = counterSet || new Set(this.counterAmbushTypes(combat));
+    if (!counters.size) return null;
+
+    const markedIds = new Set(this.cacheDrillBountyMarksForCombat(combat)
+      .filter(mark => mark.mainKey === mainKey)
+      .map(mark => mark.pirateId));
+    if (!markedIds.size) return null;
+
+    const pirate = (G.hand || []).find(entry =>
+      entry
+      && markedIds.has(entry.id)
+      && counters.has(entry.type)
+      && !this.pirateWounded(entry)
+      && this.pirateStillInCrew(entry)
+    ) || null;
+    if (!pirate || this.pirateWounded(pirate) || !this.pirateStillInCrew(pirate)) return null;
+    return pirate;
   }
 
   combatCompactSetupRows(rows) {
@@ -1472,10 +4288,15 @@ class GameScene extends Phaser.Scene {
     const key = side === 'enemy' ? 'enemySetupRows' : 'playerSetupRows';
     const ids = side === 'enemy'
       ? (combat.enemyParty || []).filter(Boolean).map((enemy) => enemy.id)
-      : (G.hand || []).filter(Boolean).map((pirate) => pirate.id);
+      : (G.hand || []).filter((pirate) => pirate && !this.pirateWounded(pirate)).map((pirate) => pirate.id);
     const fallback = side === 'enemy'
       ? this.combatRandomEnemySetupRows(combat.enemyParty || [])
       : this.combatDefaultPlayerSetupRows(combat);
+    if (side === 'player') {
+      const sourceRows = Array.isArray(combat[key]) ? combat[key] : fallback;
+      combat[key] = this.combatCompactSetupRows(this.combatNormalizeSetupRows(sourceRows, ids, fallback));
+      return combat[key];
+    }
     combat[key] = this.combatNormalizeSetupRows(combat[key], ids, fallback);
     if (side === 'enemy') combat[key] = this.combatCompactSetupRows(combat[key]);
     return combat[key];
@@ -1521,10 +4342,12 @@ class GameScene extends Phaser.Scene {
   combatSetupDropTarget(pirateId, pointer, combat = G.combat) {
     const rows = this.combatSetupRows('player', combat)
       .map((row) => row.filter((id) => id !== pirateId));
+    const pointerX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+    const pointerY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
     let rowIndex = 0;
     let bestRowDist = Infinity;
     for (let idx = 0; idx < this.combatSetupRowTotal(); idx++) {
-      const rowDist = Math.abs((pointer && pointer.y) - this.combatFormationRowY('player', idx));
+      const rowDist = Math.abs((Number.isFinite(pointerY) ? pointerY : this.combatFormationRowY('player', 0)) - this.combatFormationRowY('player', idx));
       if (rowDist < bestRowDist) {
         bestRowDist = rowDist;
         rowIndex = idx;
@@ -1535,7 +4358,7 @@ class GameScene extends Phaser.Scene {
     let insertIndex = 0;
     let bestXDist = Infinity;
     insertSlots.forEach((slot, idx) => {
-      const xDist = Math.abs((pointer && pointer.x) - slot.x);
+      const xDist = Math.abs((Number.isFinite(pointerX) ? pointerX : slot.x) - slot.x);
       if (xDist < bestXDist) {
         bestXDist = xDist;
         insertIndex = idx;
@@ -1547,12 +4370,14 @@ class GameScene extends Phaser.Scene {
 
   moveCombatSetupPirate(pirateId, rowIndex, insertIndex, combat = G.combat) {
     if (!combat || combat.mode !== 'setup' || pirateId == null) return false;
+    const readyIds = new Set(this.activeCombatHandPirates().map((pirate) => pirate.id));
+    if (!readyIds.has(pirateId)) return false;
     const rows = this.combatSetupRows('player', combat)
       .map((row) => row.filter((id) => id !== pirateId));
     const nextRowIndex = Phaser.Math.Clamp(Math.floor(Number(rowIndex) || 0), 0, this.combatSetupRowTotal() - 1);
     const nextInsertIndex = Phaser.Math.Clamp(Math.floor(Number(insertIndex) || 0), 0, rows[nextRowIndex].length);
     rows[nextRowIndex].splice(nextInsertIndex, 0, pirateId);
-    combat.playerSetupRows = rows;
+    combat.playerSetupRows = this.combatCompactSetupRows(rows);
     return true;
   }
 
@@ -1564,6 +4389,7 @@ class GameScene extends Phaser.Scene {
     if (!archetype) return null;
     const enemy = {
       id,
+      key: archetype.key,
       name: archetype.name,
       emoji: archetype.emoji,
       hp: archetype.hp,
@@ -1587,7 +4413,36 @@ class GameScene extends Phaser.Scene {
     if (merged.maxHp == null || ((overrides || {}).hp != null && (overrides || {}).maxHp == null)) {
       merged.maxHp = merged.hp;
     }
+    merged.alertGuard = !!(merged.alertGuard || String(merged.id || '').startsWith('alertGuard_'));
     return merged;
+  }
+
+  combatEnemyLateScaling(boardingNo) {
+    const tier = Math.max(0, Math.floor(Number(boardingNo) || 0) - 6);
+    if (tier <= 0) return null;
+    return {
+      tier,
+      label: tier >= 2 ? 'Elite' : 'Veteran',
+      hpBonus: tier * 4,
+      damageBonus: Math.ceil(tier / 2),
+      attackMsMultiplier: Math.max(0.78, 1 - tier * 0.06),
+    };
+  }
+
+  combatScaledEnemyOverrides(archetype, boardingNo) {
+    const scaling = this.combatEnemyLateScaling(boardingNo);
+    if (!archetype || !scaling) return {};
+    const hp = Math.max(1, Math.floor(Number(archetype.hp) || 1) + scaling.hpBonus);
+    const damage = Math.max(1, Math.floor(Number(archetype.damage) || 1) + scaling.damageBonus);
+    const attackMs = Math.max(250, Math.round((Number(archetype.attackMs) || 1000) * scaling.attackMsMultiplier));
+    return {
+      name: `${scaling.label} ${archetype.name}`,
+      hp,
+      maxHp: hp,
+      damage,
+      attackMs,
+      summary: `${archetype.summary || ''} Late-run enemy: +${scaling.hpBonus} HP, +${scaling.damageBonus} damage.`,
+    };
   }
 
   combatArchetypeByKey(key) {
@@ -1632,6 +4487,9 @@ class GameScene extends Phaser.Scene {
     } else if (boardingNo <= 4) {
       strongCount = Math.min(count - 1, 1 + Math.floor(boardingNo / 2));
       weakCount = count - strongCount;
+    } else if (boardingNo === 5) {
+      strongCount = Math.min(count, 4);
+      weakCount = count - strongCount;
     } else {
       strongCount = count;
       weakCount = 0;
@@ -1652,6 +4510,927 @@ class GameScene extends Phaser.Scene {
     return Phaser.Utils.Array.Shuffle(archetypes);
   }
 
+  boardingAlertGuardArchetypes(guardCount) {
+    const count = Math.max(0, Math.min(3, Math.floor(Number(guardCount) || 0)));
+    const guardKeys = ['cabinBoy', 'bilgeRat', 'cabinBoy'];
+    return guardKeys.slice(0, count)
+      .map((key) => this.combatArchetypeByKey(key))
+      .filter(Boolean);
+  }
+
+  boardingAlertGuardPlunder(guardCount) {
+    const plunder = { wood: 0, stone: 0, gold: 0 };
+    this.boardingAlertGuardArchetypes(guardCount).forEach((archetype) => {
+      if (!archetype) return;
+      if (archetype.key === 'cabinBoy') plunder.wood += 1;
+      if (archetype.key === 'bilgeRat') plunder.stone += 1;
+    });
+    plunder.total = (plunder.wood || 0) + (plunder.stone || 0) + (plunder.gold || 0);
+    return plunder;
+  }
+
+  boardingAlertPlunderItems(plunder) {
+    const order = ['wood', 'stone', 'gold'];
+    return order
+      .map((key) => ({
+        key,
+        emoji: RES_EMOJI[key],
+        count: Math.max(0, Math.floor(Number(plunder && plunder[key]) || 0)),
+      }))
+      .filter((item) => item.count > 0 && item.emoji);
+  }
+
+  grantBoardingAlertPlunder(combat = G.combat) {
+    if (!combat || combat.alertGuardPlunderGranted) return null;
+    combat.alertGuardPlunderGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const guardCount = Math.max(0, Math.min(3, Math.floor(Number(combat.boardingAlertGuards) || 0)));
+    const removedKeys = this.counterAmbushRemovedAlertGuardKeys(combat);
+    const plunder = this.boardingAlertGuardPlunder(guardCount);
+    if (removedKeys.length) plunder.removedByCounterAmbush = removedKeys;
+    combat.alertGuardPlunder = plunder;
+    if (!plunder.total) return plunder;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    this.boardingAlertPlunderItems(plunder).forEach((item) => {
+      G.res[item.key] = Math.max(0, Math.floor(Number(G.res[item.key]) || 0)) + item.count;
+    });
+    return plunder;
+  }
+
+  showBoardingAlertPlunder(plunder) {
+    if (!plunder || !plunder.total || !this.L) return;
+    const items = this.boardingAlertPlunderItems(plunder);
+    if (!items.length) return;
+
+    const label = items
+      .map((item) => `+${item.count > 1 ? item.count : ''}${item.emoji}`)
+      .join(' ');
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 84 * L.k;
+    this.effectText(x, y, `Guard plunder ${label}`, '#66bb6a', 700);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, items);
+    }
+  }
+
+  openingBreakPlunderResource(supportKey) {
+    if (supportKey === 'cabinBoy') return 'wood';
+    if (supportKey === 'bilgeRat') return 'stone';
+    return null;
+  }
+
+  openingBreakPlunderItem(plunder) {
+    if (!plunder || !plunder.resource) return null;
+    const key = plunder.resource;
+    const count = Math.max(0, Math.floor(Number(plunder.count) || 0));
+    const emoji = RES_EMOJI[key];
+    return count > 0 && emoji ? { key, emoji, count } : null;
+  }
+
+  grantOpeningBreakPlunder(combat = G.combat) {
+    if (!combat || combat.openingBreakPlunderGranted) return null;
+    combat.openingBreakPlunderGranted = true;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (combat.result && combat.result !== 'win') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+
+    const ambush = combat.counterAmbush;
+    const routedSupport = ambush && ambush.armedAmbush && ambush.openingCounterBreak
+      ? ambush.routedSupport
+      : null;
+    const removedAlertGuardCount = Math.max(0, Math.floor(Number(ambush && ambush.removedAlertGuardCount) || 0));
+    const removedAlertGuards = Array.isArray(ambush && ambush.removedAlertGuards)
+      ? ambush.removedAlertGuards
+      : [];
+    if (!routedSupport || removedAlertGuardCount > 0 || removedAlertGuards.length > 0) return null;
+
+    const supportKey = String(routedSupport.key || routedSupport.targetKey || '').trim();
+    const resource = this.openingBreakPlunderResource(supportKey);
+    if (!resource) return null;
+
+    const archetype = this.combatArchetypeByKey(supportKey);
+    const plunder = {
+      supportId: routedSupport.id,
+      supportKey,
+      supportName: routedSupport.name || (archetype && archetype.name) || supportKey,
+      resource,
+      count: 1,
+      wood: resource === 'wood' ? 1 : 0,
+      stone: resource === 'stone' ? 1 : 0,
+      gold: 0,
+      total: 1,
+    };
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + 1;
+    combat.openingBreakPlunder = plunder;
+    return plunder;
+  }
+
+  showOpeningBreakPlunder(plunder) {
+    if (!plunder || !this.L) return;
+    const item = this.openingBreakPlunderItem(plunder);
+    if (!item) return;
+
+    const label = `+${item.count > 1 ? item.count : ''}${item.emoji}`;
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 204 * L.k;
+    this.effectText(x, y, `Opening plunder ${label}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [item]);
+    }
+  }
+
+  ambushBountyItem(bounty) {
+    if (!bounty || !bounty.resource) return null;
+    const key = bounty.resource;
+    const count = Math.max(0, Math.floor(Number(bounty.count) || 0));
+    const emoji = RES_EMOJI[key];
+    return count > 0 && emoji ? { key, emoji, count } : null;
+  }
+
+  grantAmbushBounty(combat = G.combat) {
+    if (!combat || combat.ambushBountyGranted) return null;
+    combat.ambushBountyGranted = true;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (combat.result && combat.result !== 'win') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const ambush = combat.counterAmbush;
+    if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
+
+    const mainKey = ambush.mainKey || this.counterAmbushMainKey(combat);
+    const resource = mainKey && SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === ambush.pirateId
+    );
+    if (!survivor) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || null;
+    const type = (pirate && pirate.type) || ambush.type || survivor.type;
+    const def = TYPES[type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    const drilled = this.hasCacheDrillBountyMark(ambush.pirateId, mainKey, combat);
+    const count = drilled ? 2 : 1;
+    const bounty = {
+      pirateId: ambush.pirateId,
+      type,
+      name: def.name || ambush.name || type || 'Pirate',
+      mainKey,
+      enemyName: enemy ? enemy.name : (ambush.targetName || mainKey),
+      resource,
+      count,
+      drilled,
+      doubled: count > 1,
+      wood: resource === 'wood' ? count : 0,
+      stone: resource === 'stone' ? count : 0,
+      gold: resource === 'gold' ? count : 0,
+      total: count,
+    };
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + count;
+    combat.ambushBounty = bounty;
+    return bounty;
+  }
+
+  showAmbushBounty(bounty) {
+    if (!bounty || !this.L) return;
+    const item = this.ambushBountyItem(bounty);
+    if (!item) return;
+
+    const label = `+${item.count > 1 ? item.count : ''}${item.emoji}`;
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 244 * L.k;
+    this.effectText(x, y, `Ambush bounty ${label}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [item]);
+    }
+  }
+
+  refreshCombatPlayerFighterStatsFromPirate(fighter, pirate, combat = G.combat) {
+    if (!fighter || !pirate) return false;
+    const oldMaxHp = Math.max(0, Math.floor(Number(fighter.maxHp) || 0));
+    const oldHp = Math.max(0, Math.floor(Number(fighter.hp) || 0));
+    const stats = this.combatPirateStats(pirate, combat);
+    const nextMaxHp = Math.max(1, Math.floor(Number(stats.hp) || oldMaxHp || COMBAT.pirateHp));
+    const gainedMaxHp = Math.max(0, nextMaxHp - oldMaxHp);
+
+    fighter.maxHp = nextMaxHp;
+    fighter.hp = Math.max(0, Math.min(nextMaxHp, oldHp + gainedMaxHp));
+    fighter.baseDamage = stats.baseDamage;
+    fighter.damage = stats.damage;
+    fighter.attackMs = stats.attackMs;
+    fighter.weaponKey = stats.weaponKey;
+    fighter.attackRange = stats.attackRange;
+    fighter.targetMode = stats.targetMode;
+    fighter.might = stats.might;
+    fighter.tempo = stats.tempo;
+    fighter.buffCount = stats.buffCount;
+    fighter.counterEdgeDamage = stats.counterEdgeDamage;
+    fighter.watchReadyCounter = stats.watchReadyCounter;
+    return true;
+  }
+
+  grantOpeningRoutePromotion(combat = G.combat, ambush = null, opts = {}) {
+    return this.applyOpeningRoutePromotion(combat, ambush && typeof ambush === 'object'
+      ? ambush
+      : (combat && combat.counterAmbush), opts);
+  }
+
+  applyOpeningRoutePromotion(combat = G.combat, ambush = null, opts = {}) {
+    if (!combat) return null;
+    if (combat.openingRoutePromotion) return combat.openingRoutePromotion;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
+
+    const mainKey = ambush.mainKey || this.counterAmbushMainKey(combat);
+    if (!mainKey
+      || G.openingRouteCounterBoughtMainKey !== mainKey
+      || G.openingRouteCounterBoughtPirateId !== ambush.pirateId
+      || typeof OPENING_ROUTE_PRIMARY_COUNTERS === 'undefined') {
+      return null;
+    }
+
+    const primaryType = OPENING_ROUTE_PRIMARY_COUNTERS[mainKey];
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === ambush.pirateId
+    );
+    if (!primaryType || !survivor) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || null;
+    if (!pirate || !this.pirateStillInCrew(pirate) || pirate.type !== primaryType) return null;
+
+    const gains = this.preparedCounterGains(pirate.type);
+    if (!gains.length) return null;
+
+    const applied = this.applyPersonalGainsToPirate(pirate, gains);
+    if (!applied.applied) return null;
+    this.refreshCombatPlayerFighterStatsFromPirate(survivor, pirate, combat);
+
+    const def = TYPES[pirate.type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.openingRoutePromotion = {
+      pirateId: pirate.id,
+      fighterId: survivor.id,
+      type: pirate.type,
+      name: def.name || ambush.name || pirate.type || 'Pirate',
+      mainKey,
+      enemyName: enemy ? enemy.name : (ambush.targetName || mainKey),
+      gains: applied.gains,
+      text: applied.text,
+    };
+    combat.openingRoutePromotionGranted = true;
+    if (!opts.silent) this.showOpeningRoutePromotion(combat.openingRoutePromotion);
+    return combat.openingRoutePromotion;
+  }
+
+  showOpeningRoutePromotion(promotion) {
+    if (!promotion || !this.L) return;
+    const label = promotion.text ? ` +${promotion.text}` : '';
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 324 * L.k, `Route Promotion${label}`, '#ffca28', 760);
+    if (G.combat && G.combat.openingRoutePromotion === promotion) {
+      G.combat.openingRoutePromotionShown = true;
+    }
+  }
+
+  isFinalBoardingNode() {
+    if (!G.map || !Array.isArray(G.map.layers)) return false;
+    const layerIdx = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+    if (layerIdx < 0) return false;
+    return layerIdx >= G.map.layers.length - 1;
+  }
+
+  counterAmbusherReportEligibility(combat = G.combat, result = null) {
+    if (!combat || this.isBattleTest() || G.phase !== 'boarding') return null;
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.isFinalBoardingNode()) return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const ambush = combat.counterAmbush;
+    if (!ambush || !ambush.applied || ambush.pirateId == null) return null;
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === ambush.pirateId
+    );
+    if (!survivor) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === ambush.pirateId)
+      || null;
+    if (!pirate || !this.pirateStillInCrew(pirate)) return null;
+
+    const type = pirate.type || ambush.type || survivor.type;
+    const def = TYPES[type] || {};
+    return {
+      pirateId: pirate.id,
+      type,
+      name: def.name || ambush.name || type || 'Pirate',
+      mainKey: ambush.mainKey || this.counterAmbushMainKey(combat),
+    };
+  }
+
+  markCounterAmbusherReport(combat = G.combat, result = null) {
+    if (!combat) return null;
+    if (combat.counterAmbusherReport || combat.openingAmbusherReport) {
+      const existing = combat.counterAmbusherReport || combat.openingAmbusherReport;
+      combat.counterAmbusherReport = existing;
+      combat.openingAmbusherReport = existing;
+      return existing;
+    }
+    const report = this.counterAmbusherReportEligibility(combat, result);
+    if (!report) return null;
+    combat.counterAmbusherReport = report;
+    combat.openingAmbusherReport = report;
+    return report;
+  }
+
+  consumeCounterAmbusherReportPirates(combat = G.combat) {
+    if (!combat) return [];
+    if (!combat.counterAmbusherReport && !combat.openingAmbusherReport) {
+      this.markCounterAmbusherReport(combat, combat.result);
+    }
+    const marker = combat.counterAmbusherReport || combat.openingAmbusherReport || null;
+    combat.counterAmbusherReportConsumed = true;
+    combat.openingAmbusherReportConsumed = true;
+    if (!marker || this.isBattleTest() || marker.pirateId == null) return [];
+
+    const pirate = (G.allCrew || []).find((entry) => entry && entry.id === marker.pirateId);
+    if (!pirate || !this.pirateStillInCrew(pirate)) return [];
+    return [pirate];
+  }
+
+  placeCounterAmbusherReportPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  showCounterAmbusherReport(report) {
+    if (!report || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 284 * L.k, `${report.name} reports next`, '#ffd166', 760);
+  }
+
+  openingAmbusherReportEligibility(combat = G.combat, result = null) {
+    return this.counterAmbusherReportEligibility(combat, result);
+  }
+
+  markOpeningAmbusherReport(combat = G.combat, result = null) {
+    return this.markCounterAmbusherReport(combat, result);
+  }
+
+  consumeOpeningAmbusherReportPirates(combat = G.combat) {
+    return this.consumeCounterAmbusherReportPirates(combat);
+  }
+
+  placeOpeningAmbusherReportPiratesOnDeck(pirates) {
+    return this.placeCounterAmbusherReportPiratesOnDeck(pirates);
+  }
+
+  showOpeningAmbusherReport(report) {
+    return this.showCounterAmbusherReport(report);
+  }
+
+  routeSidekickReportEligibility(combat = G.combat, result = null) {
+    if (!combat || this.isBattleTest() || G.phase !== 'boarding') return null;
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const marker = G.openingRouteSidekick || null;
+    if (!marker || marker.pirateId == null || !marker.mainKey) return null;
+
+    const pirate = (G.allCrew || []).find((entry) => entry && entry.id === marker.pirateId);
+    if (!pirate || !this.pirateStillInCrew(pirate) || this.pirateWounded(pirate)) return null;
+    if (marker.type && pirate.type !== marker.type) return null;
+
+    const inFinalHand = (G.hand || []).some((entry) => entry && entry.id === pirate.id);
+    if (!inFinalHand) return null;
+
+    const survivor = this.combatLiving('player').find((fighter) =>
+      fighter && fighter.pirateId === pirate.id
+    );
+    if (!survivor) return null;
+
+    const def = TYPES[pirate.type] || {};
+    return {
+      pirateId: pirate.id,
+      type: pirate.type,
+      name: def.name || pirate.type || 'Pirate',
+      mainKey: marker.mainKey,
+    };
+  }
+
+  grantRouteSidekickBounty(report, combat = G.combat) {
+    if (!combat || combat.routeSidekickBounty) return combat ? combat.routeSidekickBounty : null;
+    if (!report || report.pirateId == null || !report.mainKey) return null;
+    const resource = SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[report.mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + 1;
+
+    const bounty = {
+      pirateId: report.pirateId,
+      type: report.type,
+      name: report.name,
+      mainKey: report.mainKey,
+      resource,
+      count: 1,
+      wood: resource === 'wood' ? 1 : 0,
+      stone: resource === 'stone' ? 1 : 0,
+      gold: resource === 'gold' ? 1 : 0,
+      total: 1,
+    };
+    combat.routeSidekickBounty = bounty;
+    report.bounty = bounty;
+    return bounty;
+  }
+
+  markRouteSidekickReport(combat = G.combat, result = null) {
+    if (!combat) return null;
+    if (combat.routeSidekickReport) {
+      this.grantRouteSidekickBounty(combat.routeSidekickReport, combat);
+      return combat.routeSidekickReport;
+    }
+    const report = this.routeSidekickReportEligibility(combat, result);
+    if (!report) return null;
+    combat.routeSidekickReport = report;
+    this.grantRouteSidekickBounty(report, combat);
+    return report;
+  }
+
+  firstShipOpeningRouteMainKey() {
+    if (!G.map || !Array.isArray(G.map.layers) || typeof firstShipLayerIndex !== 'function') return null;
+    const firstShipLayer = firstShipLayerIndex(G.map);
+    const firstShip = firstShipLayer >= 0 && G.map.layers[firstShipLayer]
+      ? G.map.layers[firstShipLayer][0]
+      : null;
+    return firstShip && firstShip.openingRouteMainKey ? firstShip.openingRouteMainKey : null;
+  }
+
+  selectedOpeningRouteVictoryCacheNode(mainKey = this.firstShipOpeningRouteMainKey()) {
+    if (!G.map || !Array.isArray(G.map.layers) || !mainKey || typeof firstShipLayerIndex !== 'function') return null;
+    const firstShipLayer = firstShipLayerIndex(G.map);
+    const cacheLayerIdx = firstShipLayer - 1;
+    if (cacheLayerIdx !== 0) return null;
+    const cacheLayer = G.map.layers[cacheLayerIdx] || [];
+    const visited = new Set(Array.isArray(G.map.visited) ? G.map.visited : []);
+    return cacheLayer.find(node =>
+      node
+      && visited.has(node.id)
+      && node.scoutedCache
+      && node.scoutedCache.mainKey === mainKey
+    ) || null;
+  }
+
+  grantOpeningRouteVictoryCache(combat = G.combat, result = null) {
+    if (!combat) return null;
+    if (combat.openingRouteVictoryCache) return combat.openingRouteVictoryCache;
+
+    const resolvedResult = result != null ? result : combat.result;
+    if (resolvedResult !== 'win') return null;
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (this.currentBoardingNumber() !== 1) return null;
+
+    const mainKey = this.firstShipOpeningRouteMainKey();
+    const node = this.selectedOpeningRouteVictoryCacheNode(mainKey);
+    const cache = node && node.scoutedCache;
+    if (!cache || !cache.claimed || cache.openingRouteVictoryCacheGranted) return null;
+
+    const resource = mainKey && SCOUTED_COUNTER_CACHE_RES && SCOUTED_COUNTER_CACHE_RES[mainKey];
+    if (!resource || !RES_EMOJI[resource]) return null;
+
+    const alert = this.activeBoardingAlertState();
+    const boardingAlert = Math.max(0, Math.floor(Number(alert && alert.amount) || 0));
+    const count = boardingAlert > 0 ? 3 : 1;
+    if (!G.res) G.res = { wood: 0, stone: 0, gold: 0 };
+    G.res[resource] = Math.max(0, Math.floor(Number(G.res[resource]) || 0)) + count;
+    cache.openingRouteVictoryCacheGranted = true;
+
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.openingRouteVictoryCache = {
+      nodeId: node.id,
+      mainKey,
+      enemyName: enemy ? enemy.name : mainKey,
+      resource,
+      count,
+      boardingAlert,
+      wood: resource === 'wood' ? count : 0,
+      stone: resource === 'stone' ? count : 0,
+      gold: resource === 'gold' ? count : 0,
+      total: count,
+    };
+    return combat.openingRouteVictoryCache;
+  }
+
+  consumeRouteSidekickReportPirates(combat = G.combat, skipIds = new Set()) {
+    if (!combat) return [];
+    if (!combat.routeSidekickReport) this.markRouteSidekickReport(combat, combat.result);
+    const marker = combat.routeSidekickReport || null;
+    combat.routeSidekickReportConsumed = true;
+    if (!marker || this.isBattleTest() || marker.pirateId == null) return [];
+    if (skipIds && typeof skipIds.has === 'function' && skipIds.has(marker.pirateId)) return [];
+
+    const pirate = (G.allCrew || []).find((entry) => entry && entry.id === marker.pirateId);
+    if (!pirate || !this.pirateStillInCrew(pirate) || this.pirateWounded(pirate)) return [];
+    if (!(G.hand || []).some((entry) => entry && entry.id === pirate.id)) return [];
+    return [pirate];
+  }
+
+  placeRouteSidekickReportPiratesOnDeck(pirates) {
+    return this.placePiratesOnDeckTop(pirates);
+  }
+
+  showRouteSidekickReport(report) {
+    if (!report || !this.L) return;
+    const L = this.L;
+    const bounty = report.bounty || (G.combat && G.combat.routeSidekickBounty) || null;
+    const emoji = bounty && RES_EMOJI[bounty.resource] ? RES_EMOJI[bounty.resource] : '';
+    const count = Math.max(0, Math.floor(Number(bounty && bounty.count) || 0));
+    const reward = emoji && count > 0 ? ` +${count > 1 ? count : ''}${emoji}` : '';
+    const x = L.cx;
+    const y = this.islandContinueY() - 244 * L.k;
+    this.effectText(x, y, `${report.name} sidekick reports${reward}`, '#ffd166', 760);
+    if (reward && typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [{ key: bounty.resource, emoji, count }]);
+    }
+  }
+
+  showOpeningRouteVictoryCache(reward) {
+    if (!reward || !this.L) return;
+    const emoji = RES_EMOJI[reward.resource] || '';
+    const count = Math.max(0, Math.floor(Number(reward.count) || 0));
+    if (!emoji || count <= 0) return;
+
+    const L = this.L;
+    const x = L.cx;
+    const y = this.islandContinueY() - 364 * L.k;
+    this.effectText(x, y, `Route cache +${count}${emoji}`, '#66bb6a', 760);
+    if (typeof this.animateResourceGain === 'function') {
+      this.animateResourceGain(x, y, [{ key: reward.resource, emoji, count }]);
+    }
+  }
+
+  grantBoardingTrophy(combat = G.combat) {
+    if (!combat || combat.boardingTrophyGranted) return null;
+    combat.boardingTrophyGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const fighter = this.combatLiving('player')[0];
+    if (!fighter || fighter.pirateId == null) return null;
+
+    const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId);
+    if (!pirate) return null;
+
+    pirate.might = Math.max(0, Math.floor(Number(pirate.might) || 0)) + 1;
+    const def = TYPES[pirate.type] || {};
+    combat.boardingTrophy = {
+      pirateId: pirate.id,
+      type: pirate.type,
+      name: def.name || pirate.type,
+      count: 1,
+      might: pirate.might,
+    };
+    return combat.boardingTrophy;
+  }
+
+  counterTrophyMainKey(combat = G.combat) {
+    return (G.enemyShip && G.enemyShip.encounter && G.enemyShip.encounter.mainKey)
+      || (combat && combat.encounterMainKey)
+      || (this.currentEncounterBlueprint() && this.currentEncounterBlueprint().mainKey)
+      || null;
+  }
+
+  counterEdgeMainKey(combat = G.combat) {
+    return this.counterTrophyMainKey(combat);
+  }
+
+  counterEdgeTypes(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    const mainKey = this.counterEdgeMainKey(combat);
+    return this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
+  }
+
+  combatCounterEdgeDamageForPirate(pirate, combat = G.combat) {
+    if (!pirate || this.pirateWounded(pirate)) return 0;
+    return this.counterEdgeTypes(combat).includes(pirate.type) ? 1 : 0;
+  }
+
+  grantCounterTrophy(combat = G.combat) {
+    if (!combat || combat.counterTrophyGranted) return null;
+    combat.counterTrophyGranted = true;
+    if (this.isBattleTest()) return null;
+
+    const mainKey = this.counterTrophyMainKey(combat);
+    const counters = this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
+    if (!counters.length) return null;
+
+    const counterSet = new Set(counters);
+    const living = this.combatLiving('player');
+    for (const fighter of living) {
+      if (!fighter || fighter.pirateId == null) continue;
+      const pirate = (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+        || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId);
+      const type = pirate ? pirate.type : fighter.type;
+      if (!counterSet.has(type)) continue;
+
+      if (!pirate) return null;
+      pirate.tempo = Math.max(0, Math.floor(Number(pirate.tempo) || 0)) + 1;
+      const def = TYPES[pirate.type] || {};
+      const enemy = this.combatArchetypeByKey(mainKey);
+      combat.counterTrophy = {
+        pirateId: pirate.id,
+        type: pirate.type,
+        name: def.name || pirate.type,
+        mainKey,
+        enemyName: enemy ? enemy.name : mainKey,
+        count: 1,
+        tempo: pirate.tempo,
+      };
+      return combat.counterTrophy;
+    }
+
+    return null;
+  }
+
+  counterAmbushMainKey(combat = G.combat) {
+    return this.counterTrophyMainKey(combat);
+  }
+
+  counterAmbushTypes(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    const mainKey = this.counterAmbushMainKey(combat);
+    return this.gameplayCounterTypesForShip(mainKey, this.currentBoardingNumber());
+  }
+
+  combatEnemyArchetypeKey(fighter) {
+    if (!fighter) return null;
+    if (fighter.key) return fighter.key;
+    if (fighter.archetypeKey) return fighter.archetypeKey;
+    const id = String(fighter.id || '');
+    const archetype = (COMBAT.enemyArchetypes || []).find((entry) => {
+      if (!entry || !entry.key) return false;
+      return id === entry.key || id.startsWith(`${entry.key}_`) || id.includes(`_${entry.key}_`);
+    });
+    return archetype ? archetype.key : null;
+  }
+
+  counterAmbushPirateForFighter(fighter) {
+    if (!fighter || fighter.pirateId == null) return null;
+    return (G.hand || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || (G.allCrew || []).find((entry) => entry && entry.id === fighter.pirateId)
+      || null;
+  }
+
+  watchReadyCounterIdsForCombat(combat = G.combat) {
+    if (this.isBattleTest() || G.phase !== 'boarding') return [];
+    const source = combat && Array.isArray(combat.watchReadyCounterIds)
+      ? combat.watchReadyCounterIds
+      : (G.enemyShip && Array.isArray(G.enemyShip.watchReadyCounterIds) ? G.enemyShip.watchReadyCounterIds : []);
+    const seen = new Set();
+    const ids = [];
+    source.forEach((id) => {
+      if (id == null || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  counterAmbushPirateIsWatchReady(pirate, combat = G.combat) {
+    if (!pirate || pirate.id == null) return false;
+    return this.watchReadyCounterIdsForCombat(combat).includes(pirate.id);
+  }
+
+  counterAmbushPirateHasPermanentUpgrade(pirate) {
+    return !!(pirate
+      && (this.pirateHasWeapon(pirate)
+        || this.pirateMight(pirate) > 0
+        || this.pirateTempo(pirate) > 0));
+  }
+
+  counterAmbushPirateIsArmed(pirate, combat = G.combat) {
+    return this.counterAmbushPirateHasPermanentUpgrade(pirate)
+      || this.counterAmbushPirateIsWatchReady(pirate, combat);
+  }
+
+  counterAmbushDamageForPirate(pirate, combat = G.combat) {
+    return this.counterAmbushPirateIsArmed(pirate, combat) ? 5 : 3;
+  }
+
+  findCounterAmbushAmbusher(combat = G.combat) {
+    const counterSet = new Set(this.counterAmbushTypes(combat));
+    if (!counterSet.size) return null;
+    return this.combatFrontRow('player').find((fighter) => {
+      if (!fighter || !fighter.alive) return false;
+      const pirate = this.counterAmbushPirateForFighter(fighter);
+      const type = pirate ? pirate.type : fighter.type;
+      return counterSet.has(type);
+    }) || null;
+  }
+
+  findCounterAmbushTarget(mainKey) {
+    if (!mainKey) return null;
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter && fighter.alive && this.combatEnemyArchetypeKey(fighter) === mainKey
+    ) || null;
+  }
+
+  isBoardingAlertGuardFighter(fighter) {
+    if (!fighter || fighter.side !== 'enemy') return false;
+    return !!fighter.alertGuard || String(fighter.id || '').startsWith('alertGuard_');
+  }
+
+  findCounterAmbushAlertGuard(combat = G.combat) {
+    if (!combat) return null;
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter && fighter.alive && this.isBoardingAlertGuardFighter(fighter)
+    ) || null;
+  }
+
+  counterAmbushRemovedAlertGuardKeys(combat = G.combat) {
+    const removed = combat && combat.counterAmbush && Array.isArray(combat.counterAmbush.removedAlertGuards)
+      ? combat.counterAmbush.removedAlertGuards
+      : [];
+    return removed
+      .map((guard) => guard && (guard.key || guard.targetKey || this.combatEnemyArchetypeKey(guard)))
+      .map((key) => String(key || ''))
+      .filter(Boolean);
+  }
+
+  removeCounterAmbushAlertGuard(combat = G.combat, deathPositions = []) {
+    const guard = this.findCounterAmbushAlertGuard(combat);
+    if (!guard) return null;
+
+    const key = this.combatEnemyArchetypeKey(guard);
+    const point = this.combatWorldPoint(guard);
+    if (!this.defeatCombatFighter(guard, deathPositions)) return null;
+    return {
+      id: guard.id,
+      key,
+      name: guard.name || (this.combatArchetypeByKey(key) || {}).name || key,
+      point,
+    };
+  }
+
+  findOpeningCounterBreakSupport(combat = G.combat) {
+    if (!combat) return null;
+    const weakSupportKeys = new Set(['bilgeRat', 'cabinBoy']);
+    return this.combatLiving('enemy').find((fighter) =>
+      fighter
+      && fighter.alive
+      && !this.isBoardingAlertGuardFighter(fighter)
+      && weakSupportKeys.has(this.combatEnemyArchetypeKey(fighter))
+    ) || null;
+  }
+
+  removeOpeningCounterBreakSupport(combat = G.combat, deathPositions = []) {
+    const support = this.findOpeningCounterBreakSupport(combat);
+    if (!support) return null;
+
+    const key = this.combatEnemyArchetypeKey(support);
+    const point = this.combatWorldPoint(support);
+    if (!this.defeatCombatFighter(support, deathPositions)) return null;
+    return {
+      id: support.id,
+      key,
+      name: support.name || (this.combatArchetypeByKey(key) || {}).name || key,
+      point,
+    };
+  }
+
+  applyCounterAmbush(combat = G.combat, opts = {}) {
+    if (!combat || combat.counterAmbushResolved) return null;
+    combat.counterAmbushResolved = true;
+    combat.counterAmbush = null;
+
+    if (this.isBattleTest() || G.phase !== 'boarding') return null;
+    if (Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0)) > 0) return null;
+
+    const mainKey = this.counterAmbushMainKey(combat);
+    const ambusher = this.findCounterAmbushAmbusher(combat);
+    const target = this.findCounterAmbushTarget(mainKey);
+    if (!mainKey || !ambusher || !target) return null;
+
+    const pirate = this.counterAmbushPirateForFighter(ambusher);
+    const watchReadyAmbush = this.counterAmbushPirateIsWatchReady(pirate, combat);
+    const permanentArmedAmbush = this.counterAmbushPirateHasPermanentUpgrade(pirate);
+    const armedAmbush = permanentArmedAmbush || watchReadyAmbush;
+    const damage = this.counterAmbushDamageForPirate(pirate, combat);
+    const beforeHp = Math.max(0, Math.floor(Number(target.hp) || 0));
+    const woundResult = this.combatApplyWounds(target, 1);
+    target.hp = Math.max(0, beforeHp - damage);
+
+    const deathPositions = [];
+    const defeatedTargets = [];
+    if (target.hp <= 0 && this.defeatCombatFighter(target, deathPositions)) {
+      defeatedTargets.push(target);
+    }
+    const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, this.time.now, deathPositions);
+    const removedAlertGuards = [];
+    const guardRemovalLimit = armedAmbush ? 2 : 1;
+    for (let i = 0; i < guardRemovalLimit; i++) {
+      const removedAlertGuard = this.removeCounterAmbushAlertGuard(combat, deathPositions);
+      if (!removedAlertGuard) break;
+      removedAlertGuards.push(removedAlertGuard);
+    }
+    const routedSupport = armedAmbush
+      && this.currentBoardingNumber() === 1
+      && removedAlertGuards.length === 0
+      ? this.removeOpeningCounterBreakSupport(combat, deathPositions)
+      : null;
+
+    const def = TYPES[(pirate && pirate.type) || ambusher.type] || {};
+    const enemy = this.combatArchetypeByKey(mainKey);
+    combat.counterAmbush = {
+      applied: true,
+      ambusherId: ambusher.id,
+      pirateId: pirate ? pirate.id : ambusher.pirateId,
+      type: pirate ? pirate.type : ambusher.type,
+      name: def.name || ambusher.type || 'Pirate',
+      targetId: target.id,
+      targetKey: this.combatEnemyArchetypeKey(target),
+      targetName: target.name || (enemy && enemy.name) || mainKey,
+      mainKey,
+      damage,
+      armedAmbush,
+      upgradedAmbush: armedAmbush,
+      watchReadyAmbush,
+      permanentArmedAmbush,
+      wounds: Math.max(0, Math.floor(Number(woundResult.added) || 0)),
+      beforeHp,
+      afterHp: Math.max(0, Math.floor(Number(target.hp) || 0)),
+      defeated: !target.alive,
+      alertGuardRemovalLimit: guardRemovalLimit,
+      removedAlertGuardCount: removedAlertGuards.length,
+      removedAlertGuards,
+      openingCounterBreak: !!routedSupport,
+      routedSupport,
+      blastEvents,
+      deathPositions,
+    };
+
+    const routePromotion = this.grantOpeningRoutePromotion(combat, combat.counterAmbush, { silent: true });
+    if (!opts.silent) {
+      this.showCounterAmbush(combat.counterAmbush);
+      if (routePromotion && !combat.openingRoutePromotionShown) {
+        this.showOpeningRoutePromotion(routePromotion);
+      }
+    }
+    return combat.counterAmbush;
+  }
+
+  showCounterAmbush(result) {
+    if (!result || !this.L) return;
+    const L = this.L;
+    const target = this.combatFindFighter(result.targetId);
+    const targetPoint = target ? this.combatWorldPoint(target) : { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+    const label = result.watchReadyAmbush ? 'Watch Ambush!' : (result.armedAmbush ? 'Armed Ambush!' : 'Counter Ambush!');
+    this.effectText(L.cx, this.combatFormationRowY('enemy', 0) + 28 * L.k, label, '#ffd54f', 700);
+    this.effectText(targetPoint.x, targetPoint.y - 44 * L.k, `-${result.damage} +Wound`, '#ffb74d', 620);
+    const removedGuards = Array.isArray(result.removedAlertGuards) ? result.removedAlertGuards : [];
+    if (removedGuards.length) {
+      const removedGuard = removedGuards[0];
+      const point = removedGuard.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+      const guardLabel = removedGuards.length > 1 ? `Alarm cut x${removedGuards.length}!` : 'Alarm cut!';
+      this.effectText(point.x, point.y - 64 * L.k, guardLabel, '#7bdff2', 620);
+    }
+    if (result.routedSupport) {
+      const point = result.routedSupport.point || { x: L.cx, y: this.combatFormationRowY('enemy', 0) };
+      this.effectText(point.x, point.y - 64 * L.k, 'Opening break!', '#7bdff2', 620);
+    }
+    this.showCombatAftermath(result.blastEvents || [], result.deathPositions || []);
+  }
+
+  showBoardingTrophy(trophy) {
+    if (!trophy || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 124 * L.k, 'Boarding Trophy +💪', '#ffca28', 760);
+  }
+
+  showCounterTrophy(trophy) {
+    if (!trophy || !this.L) return;
+    const L = this.L;
+    this.effectText(L.cx, this.islandContinueY() - 164 * L.k, 'Counter Trophy +⚡', '#7bdff2', 760);
+  }
+
   currentEncounterBlueprint() {
     if (!G.map || !G.map.currentNodeId) return null;
     const node = mapNodeById(G.map, G.map.currentNodeId);
@@ -1668,12 +5447,25 @@ class GameScene extends Phaser.Scene {
   generateCombatEncounter() {
     const boardingNo = this.currentBoardingNumber();
     const blueprint = this.currentEncounterBlueprint();
+    const alert = this.activeBoardingAlertState();
     const archetypes = this.combatEncounterArchetypesFromBlueprint(blueprint, boardingNo);
     const enemies = [];
 
     archetypes.forEach((archetype, i) => {
       if (!archetype) return;
-      enemies.push(this.buildCombatEnemyMember(archetype, `${archetype.key}_${boardingNo}_${i}`));
+      enemies.push(this.buildCombatEnemyMember(
+        archetype,
+        `${archetype.key}_${boardingNo}_${i}`,
+        this.combatScaledEnemyOverrides(archetype, boardingNo)
+      ));
+    });
+
+    this.boardingAlertGuardArchetypes(alert.guardCount).forEach((archetype, i) => {
+      enemies.push(this.buildCombatEnemyMember(
+        archetype,
+        `alertGuard_${archetype.key}_${boardingNo}_${i}`,
+        this.combatScaledEnemyOverrides(archetype, boardingNo)
+      ));
     });
 
     const mainArch = blueprint ? this.combatArchetypeByKey(blueprint.mainKey) : null;
@@ -1681,6 +5473,7 @@ class GameScene extends Phaser.Scene {
 
     return {
       name: `Boarding Party ${boardingNo}`,
+      mainKey: blueprint ? blueprint.mainKey : null,
       encounterDesc: encounterDesc || null,
       enemies,
       rows: this.combatRandomEnemySetupRows(enemies),
@@ -1694,6 +5487,23 @@ class GameScene extends Phaser.Scene {
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'inspectedEnemyId')) G.combat.inspectedEnemyId = null;
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'returnedPirateIds')) G.combat.returnedPirateIds = [];
       if (!Object.prototype.hasOwnProperty.call(G.combat, 'introStarted')) G.combat.introStarted = false;
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'boardingAlert')) {
+        const alert = this.activeBoardingAlertState();
+        G.combat.boardingAlert = alert.amount;
+      }
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'boardingAlertGuards')) {
+        const alert = this.activeBoardingAlertState();
+        G.combat.boardingAlertGuards = alert.guardCount;
+      }
+      if (!Object.prototype.hasOwnProperty.call(G.combat, 'encounterMainKey')) {
+        G.combat.encounterMainKey = this.counterTrophyMainKey(G.combat);
+      }
+      if (!Array.isArray(G.combat.watchReadyCounterIds)) {
+        G.combat.watchReadyCounterIds = this.watchReadyCounterIdsForCombat(G.combat);
+      }
+      if (!Array.isArray(G.combat.cacheDrillBountyMarks)) {
+        G.combat.cacheDrillBountyMarks = this.cacheDrillBountyMarksForCombat(G.combat);
+      }
       if (!Array.isArray(G.combat.playerSetupRows)) {
         G.combat.playerSetupRows = this.combatDefaultPlayerSetupRows(G.combat);
       }
@@ -1706,6 +5516,7 @@ class GameScene extends Phaser.Scene {
     }
 
     const encounter = this.generateCombatEncounter();
+    const alert = this.activeBoardingAlertState();
     this.clearCombatSetupPopupDismiss();
     this._combatSetupPopupPinned = false;
     this._combatSetupDragState = null;
@@ -1714,7 +5525,12 @@ class GameScene extends Phaser.Scene {
       inspectedPirateId: null,
       inspectedEnemyId: null,
       enemyName: encounter.name,
+      encounterMainKey: encounter.mainKey || null,
       encounterDesc: encounter.encounterDesc || null,
+      boardingAlert: alert.amount,
+      boardingAlertGuards: alert.guardCount,
+      watchReadyCounterIds: this.watchReadyCounterIdsForCombat(),
+      cacheDrillBountyMarks: this.cacheDrillBountyMarksForCombat(),
       enemyParty: encounter.enemies,
       playerSetupRows: this.combatDefaultPlayerSetupRows(),
       enemySetupRows: this.combatNormalizeSetupRows(
@@ -1826,10 +5642,38 @@ class GameScene extends Phaser.Scene {
 
   combatFighterDescription(fighter) {
     if (!fighter) return '';
-    if (fighter.side === 'enemy') return this.combatEnemyCharacteristics(fighter);
-    return fighter.weaponKey
-      ? `${this.combatFighterDisplayName(fighter)} attacks with ${WEAPON_TYPES[fighter.weaponKey].emoji} ${WEAPON_TYPES[fighter.weaponKey].name}.`
-      : 'No weapon equipped. Front-row melee attacker.';
+    if (fighter.side === 'enemy') {
+      const enemyParts = [this.combatEnemyCharacteristics(fighter)];
+      const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
+      const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+      const statuses = [];
+      if (poison > 0) statuses.push(`${poison} poison`);
+      if (wounds > 0) statuses.push(`${wounds} wounds`);
+      if (statuses.length) enemyParts.push(`Status: ${statuses.join(', ')}.`);
+      return enemyParts.join(' ');
+    }
+    const parts = [];
+    if (fighter.weaponKey && WEAPON_TYPES[fighter.weaponKey]) {
+      parts.push(`${this.combatFighterDisplayName(fighter)} attacks with ${WEAPON_TYPES[fighter.weaponKey].emoji} ${WEAPON_TYPES[fighter.weaponKey].name}.`);
+    } else {
+      parts.push('No weapon equipped. Front-row melee attacker.');
+    }
+    const buffs = [];
+    const might = Math.max(0, Math.floor(Number(fighter.might) || 0));
+    const tempo = Math.max(0, Math.floor(Number(fighter.tempo) || 0));
+    if (might > 0) buffs.push(`${BUFF_EMOJI.might}${might}`);
+    if (tempo > 0) buffs.push(`${BUFF_EMOJI.tempo}${tempo}`);
+    if (buffs.length) parts.push(`Buffs: ${buffs.join(' ')}.`);
+    const counterEdgeDamage = Math.max(0, Math.floor(Number(fighter.counterEdgeDamage) || 0));
+    if (counterEdgeDamage > 0) parts.push(`Counter Edge +${counterEdgeDamage} damage.`);
+    if (fighter.watchReadyCounter) parts.push('Counter Watch ready for Armed Ambush.');
+    const statuses = [];
+    const poison = Math.max(0, Math.floor(Number(fighter.poison) || 0));
+    const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+    if (poison > 0) statuses.push(`${poison} poison`);
+    if (wounds > 0) statuses.push(`${wounds} wounds`);
+    if (statuses.length) parts.push(`Status: ${statuses.join(', ')}.`);
+    return parts.join(' ');
   }
 
   combatFighterTooltipEntries(fighter) {
@@ -1932,14 +5776,35 @@ class GameScene extends Phaser.Scene {
     const weaponKey = this.combatPirateWeaponKey(pirate, combat);
     const weapon = this.combatWeaponByKey(weaponKey);
     const baseDamage = Number(COMBAT.pirateDamage) || 0;
+    const might = this.pirateMight(pirate);
+    const tempo = this.pirateTempo(pirate);
+    const buffCount = might + tempo;
+    const counterEdgeDamage = this.combatCounterEdgeDamageForPirate(pirate, combat);
+    let damage = this.combatWeaponBaseDamage(baseDamage, weapon) + might;
+    if (weapon && weapon.damagePerBuff) damage += buffCount * weapon.damagePerBuff;
+    damage += counterEdgeDamage;
+    let attackMultiplier = weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1;
+    if (tempo > 0) attackMultiplier *= Math.pow(0.8, tempo);
+    if (weapon && weapon.attackMsMultiplierPerBuff) {
+      attackMultiplier *= Math.pow(weapon.attackMsMultiplierPerBuff, buffCount);
+    }
+    let targetMode = (weapon && weapon.targetMode) || 'frontBand';
+    if (weapon && weapon.frontRowAllAtBuffCount && buffCount >= weapon.frontRowAllAtBuffCount) {
+      targetMode = 'frontRowAll';
+    }
     return {
       hp: COMBAT.pirateHp + (weapon && weapon.hpBonus ? weapon.hpBonus : 0),
       baseDamage,
-      damage: this.combatWeaponBaseDamage(baseDamage, weapon),
-      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * (weapon && weapon.attackMsMultiplier ? weapon.attackMsMultiplier : 1))),
+      damage: Math.max(0, Math.floor(damage)),
+      attackMs: Math.max(250, Math.round(COMBAT.pirateAttackMs * attackMultiplier)),
       weaponKey,
       attackRange: (weapon && weapon.range) || 'melee',
-      targetMode: (weapon && weapon.targetMode) || 'frontBand',
+      targetMode,
+      might,
+      tempo,
+      buffCount,
+      counterEdgeDamage,
+      watchReadyCounter: this.counterAmbushPirateIsWatchReady(pirate, combat),
     };
   }
 
@@ -1962,6 +5827,13 @@ class GameScene extends Phaser.Scene {
       weaponKey: stats.weaponKey,
       attackRange: stats.attackRange,
       targetMode: stats.targetMode,
+      might: stats.might,
+      tempo: stats.tempo,
+      buffCount: stats.buffCount,
+      counterEdgeDamage: stats.counterEdgeDamage,
+      watchReadyCounter: stats.watchReadyCounter,
+      poison: 0,
+      wounds: 0,
     };
   }
 
@@ -1979,6 +5851,7 @@ class GameScene extends Phaser.Scene {
       damage: enemy.damage,
       attackMs: enemy.attackMs,
       attacksMade: 0,
+      key: enemy.key || this.combatEnemyArchetypeKey(enemy),
       color: enemy.color,
       attackRange: enemy.attackRange || 'melee',
       targetMode: enemy.targetMode || 'frontBand',
@@ -1991,6 +5864,9 @@ class GameScene extends Phaser.Scene {
       triggerKey: enemy.triggerKey || null,
       triggerValue: enemy.triggerValue ? { ...enemy.triggerValue } : null,
       summary: enemy.summary || null,
+      alertGuard: !!(enemy.alertGuard || String(enemy.id || '').startsWith('alertGuard_')),
+      poison: 0,
+      wounds: 0,
     };
   }
 
@@ -2001,6 +5877,7 @@ class GameScene extends Phaser.Scene {
       (Array.isArray(rowIds) ? rowIds : []).forEach((pirateId, rowOrder) => {
         const pirate = piratesById.get(pirateId);
         if (!pirate) return;
+        if (this.pirateWounded(pirate)) return;
         fighters.push(this.buildPlayerCombatFighter(pirate, rowIndex, rowOrder, combat));
       });
     });
@@ -2074,20 +5951,26 @@ class GameScene extends Phaser.Scene {
   }
 
   combatFormationVisuals(side) {
-    const scale = 1;
-    const cardH = 99 * this.L.k * scale;
+    const L = this.L || {};
+    const k = Number.isFinite(L.k) ? L.k : 1;
+    const h = Number.isFinite(L.H) ? L.H : 800 * k;
+    const yNav = Number.isFinite(L.Y_NAV) ? L.Y_NAV : h - 26 * k;
+    const topSafe = Math.min(h * 0.22, 88 * k);
+    const bottomSafe = Math.min(h - 32 * k, yNav - 36 * k);
+    const availableH = Math.max(360 * k, bottomSafe - topSafe);
+    const scale = Phaser.Math.Clamp(availableH / ((6 * 99 + 5 * 8) * k), 0.68, 1);
+    const cardH = 99 * k * scale;
     const halfCardH = cardH / 2;
-    const rowGap = cardH + 8 * this.L.k;
-    const topInset = 18 * this.L.k + halfCardH;
-    const bottomInset = this.L.Y_NAV - 64 * this.L.k - halfCardH;
+    const rowGap = cardH + 8 * k * scale;
+    const topCenter = topSafe + halfCardH;
     return {
       scale,
       rowGap,
-      maxStep: 72 * this.L.k,
-      edgePad: side === 'enemy' ? 32 * this.L.k : 24 * this.L.k,
+      maxStep: 72 * k * scale,
+      edgePad: side === 'enemy' ? 32 * k : 24 * k,
       frontY: side === 'enemy'
-        ? topInset + rowGap * 2
-        : bottomInset - rowGap * 2,
+        ? topCenter + rowGap * 2
+        : topCenter + rowGap * 3,
     };
   }
 
@@ -2356,6 +6239,43 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  combatApplyPoison(target, stacks = 1, deathPositions = []) {
+    const totalStacks = Math.max(0, Math.floor(Number(stacks) || 0));
+    if (!target || !target.alive || totalStacks <= 0) {
+      return { applied: false, repeats: 0, damage: 0, defeated: false };
+    }
+
+    let repeats = 0;
+    let damage = 0;
+    const wounds = Math.max(0, Math.floor(Number(target.wounds) || 0));
+    const totalApplications = totalStacks * (wounds + 1);
+    for (let i = 0; i < totalApplications; i++) {
+      if (!target.alive) break;
+      const poisonDamage = Math.max(0, Math.floor(Number(target.poison) || 0));
+      if (poisonDamage > 0) {
+        target.hp = Math.max(0, target.hp - poisonDamage);
+        damage += poisonDamage;
+        if (target.hp <= 0) {
+          const defeated = this.defeatCombatFighter(target, deathPositions);
+          return { applied: true, repeats: repeats + 1, damage, defeated };
+        }
+      }
+      target.poison = Math.max(0, Math.floor(Number(target.poison) || 0)) + 1;
+      repeats += 1;
+    }
+
+    return { applied: repeats > 0, repeats, damage, defeated: false };
+  }
+
+  combatApplyWounds(target, stacks = 1) {
+    const totalStacks = Math.max(0, Math.floor(Number(stacks) || 0));
+    if (!target || !target.alive || totalStacks <= 0) {
+      return { applied: false, added: 0 };
+    }
+    target.wounds = Math.max(0, Math.floor(Number(target.wounds) || 0)) + totalStacks;
+    return { applied: true, added: totalStacks };
+  }
+
   healCombatRowBehind(attacker, amount) {
     const healAmount = Math.max(0, Number(amount) || 0);
     if (!attacker || healAmount <= 0) return [];
@@ -2379,14 +6299,31 @@ class GameScene extends Phaser.Scene {
   combatResultFromLiving() {
     const livingPlayers = this.combatLiving('player');
     const livingEnemies = this.combatLiving('enemy');
-    if (!livingPlayers.length || !livingEnemies.length) {
-      return livingPlayers.length > 0 ? 'win' : 'loss';
-    }
+    if (!livingPlayers.length && !this.boardingCanDrawReinforcements()) return 'loss';
+    if (!livingEnemies.length) return 'win';
+    if (!livingPlayers.length) return this.boardingCanDrawReinforcements() ? 'reinforce' : 'loss';
     return null;
+  }
+
+  handleCombatResult(result) {
+    if (!result) return false;
+    if (result === 'reinforce') {
+      if (this.drawBoardingReinforcements()) return true;
+      this.finishBoardingCombat('loss');
+      return true;
+    }
+    this.finishBoardingCombat(result);
+    return true;
   }
 
   showCombatAftermath(blastEvents = [], deathPositions = []) {
     blastEvents.forEach((blast) => {
+      if (blast.disarmed) {
+        if (blast.origin) {
+          this.effectText(blast.origin.x, blast.origin.y - 30 * this.L.k, 'Fizzle!', '#b0bec5', false);
+        }
+        return;
+      }
       if (blast.origin) {
         this.effectText(blast.origin.x, blast.origin.y - 30 * this.L.k, 'Boom!', '#ffb74d', false);
       }
@@ -2445,10 +6382,7 @@ class GameScene extends Phaser.Scene {
         this.renderAll();
 
         const result = this.combatResultFromLiving();
-        if (result) {
-          this.finishBoardingCombat(result);
-          return;
-        }
+        if (this.handleCombatResult(result)) return;
         this.scheduleNextCombatAttack();
       });
       target.bleedTimers.push(bleedTimer);
@@ -2460,7 +6394,10 @@ class GameScene extends Phaser.Scene {
     const deathPoint = this.combatWorldPoint(fighter);
     fighter.alive = false;
     fighter.incomingUntil = 0;
-    if (fighter.side === 'player') this.queueCombatPirateReturn(fighter, deathPoint);
+    if (fighter.side === 'player') {
+      if (!this.isBattleTest()) this.markPirateWounded(fighter.pirateId);
+      this.queueCombatPirateReturn(fighter, deathPoint);
+    }
     if (Array.isArray(deathPositions)) deathPositions.push(deathPoint);
     return true;
   }
@@ -2470,6 +6407,12 @@ class GameScene extends Phaser.Scene {
     const blastEvents = [];
     queued.forEach((fighter) => {
       if (!fighter.alive && fighter.deathEffect === 'frontRowBlast') {
+        const origin = this.combatWorldPoint(fighter);
+        const wounds = Math.max(0, Math.floor(Number(fighter.wounds) || 0));
+        if (wounds > 0) {
+          blastEvents.push({ origin, disarmed: true });
+          return;
+        }
         const damage = Math.max(0, fighter.deathEffectDamage != null ? fighter.deathEffectDamage : fighter.damage || 0);
         if (damage <= 0) return;
         const targets = this.combatFrontRow(this.combatOpposingSide(fighter.side)).slice();
@@ -2485,7 +6428,7 @@ class GameScene extends Phaser.Scene {
           }
         });
         blastEvents.push({
-          origin: this.combatWorldPoint(fighter),
+          origin,
           damage,
           targetPositions,
         });
@@ -2627,7 +6570,7 @@ class GameScene extends Phaser.Scene {
     const livingPlayers = this.combatLiving('player');
     const livingEnemies = this.combatLiving('enemy');
     if (!livingPlayers.length || !livingEnemies.length) {
-      this.finishBoardingCombat(livingPlayers.length > 0 ? 'win' : 'loss');
+      this.handleCombatResult(this.combatResultFromLiving());
       return;
     }
 
@@ -2692,7 +6635,7 @@ class GameScene extends Phaser.Scene {
 
     const plan = this.combatTargetPlanFor(attacker);
     if (!plan || !plan.targets || !plan.targets.length) {
-      this.finishBoardingCombat(attacker.side === 'player' ? 'win' : 'loss');
+      this.handleCombatResult(this.combatResultFromLiving() || (attacker.side === 'player' ? 'win' : 'loss'));
       return;
     }
 
@@ -2742,6 +6685,31 @@ class GameScene extends Phaser.Scene {
       }
       this.combatApplyAttackerOnHitEffect(attacker, target, now, addStatusText);
       this.combatApplyTargetReaction(target, targetDamage, plan, now, addStatusText);
+      if (weapon && weapon.woundsOnHit) {
+        const woundResult = this.combatApplyWounds(target, weapon.woundsOnHit);
+        if (woundResult.applied) {
+          addStatusText(
+            target.id,
+            woundResult.added > 1 ? `+${woundResult.added} Wounds` : 'Wounded!',
+            '#ffb74d'
+          );
+        }
+      }
+      if (weapon && weapon.poisonOnHit) {
+        const poisonResult = this.combatApplyPoison(target, weapon.poisonOnHit, deathPositions);
+        if (poisonResult.applied) {
+          damageByTargetId[target.id] = (damageByTargetId[target.id] || 0) + poisonResult.damage;
+          addStatusText(
+            target.id,
+            poisonResult.repeats > 1 ? `Poison x${poisonResult.repeats}!` : 'Poisoned!',
+            '#81c784'
+          );
+        }
+        if (poisonResult.defeated) {
+          defeatedTargets.push(target);
+          return;
+        }
+      }
     });
     const blastEvents = this.resolveCombatDeathEffects(defeatedTargets, now, deathPositions);
 
@@ -2768,10 +6736,7 @@ class GameScene extends Phaser.Scene {
       });
       this.showCombatAftermath(blastEvents, deathPositions);
       this.renderAll();
-      if (combatResult) {
-        this.finishBoardingCombat(combatResult);
-        return;
-      }
+      if (this.handleCombatResult(combatResult)) return;
       this.scheduleNextCombatAttack();
     });
   }
@@ -2779,11 +6744,34 @@ class GameScene extends Phaser.Scene {
   finishBoardingCombat(result) {
     const combat = G.combat;
     if (!combat || combat.mode === 'resolved') return;
+    const plunder = result === 'win' ? this.grantBoardingAlertPlunder(combat) : null;
+    const openingPlunder = result === 'win' ? this.grantOpeningBreakPlunder(combat) : null;
+    const trophy = result === 'win' ? this.grantBoardingTrophy(combat) : null;
+    const counterTrophy = result === 'win' ? this.grantCounterTrophy(combat) : null;
+    const ambushBounty = result === 'win' ? this.grantAmbushBounty(combat) : null;
+    const routePromotion = result === 'win' && combat.openingRoutePromotion && !combat.openingRoutePromotionShown
+      ? combat.openingRoutePromotion
+      : null;
+    const ambusherReport = result === 'win' ? this.markCounterAmbusherReport(combat, result) : null;
+    const routeSidekickReport = result === 'win' ? this.markRouteSidekickReport(combat, result) : null;
+    const routeVictoryCache = result === 'win' ? this.grantOpeningRouteVictoryCache(combat, result) : null;
+    this.clearCacheDrillBountyMarks();
+    this.clearOpeningRouteSidekick();
+    if (this.currentBoardingNumber() === 1) this.clearOpeningRouteCounterBought();
     combat.mode = 'resolved';
     combat.result = result;
     this.clearCombatTimers();
     G.busy = false;
     this.renderAll();
+    this.showBoardingTrophy(trophy);
+    this.showCounterTrophy(counterTrophy);
+    this.showBoardingAlertPlunder(plunder);
+    this.showOpeningBreakPlunder(openingPlunder);
+    this.showAmbushBounty(ambushBounty);
+    this.showOpeningRoutePromotion(routePromotion);
+    this.showCounterAmbusherReport(ambusherReport);
+    this.showRouteSidekickReport(routeSidekickReport);
+    this.showOpeningRouteVictoryCache(routeVictoryCache);
   }
 
   continueFromResolvedBoarding() {
@@ -2800,9 +6788,23 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    const discardAnimEnd = this.animateCurrentHandToDiscard();
-    const nextTurnDelay = discardAnimEnd + CARD_MOTION.betweenTurnsDelay;
-    G.discard.push(...G.hand);
+    const ambusherReportPirates = this.consumeCounterAmbusherReportPirates(combat);
+    const ambusherReportIds = new Set(ambusherReportPirates.map((pirate) => pirate.id));
+    const sidekickReportPirates = this.consumeRouteSidekickReportPirates(combat, ambusherReportIds);
+    const reportIds = new Set([
+      ...ambusherReportPirates.map((pirate) => pirate.id),
+      ...sidekickReportPirates.map((pirate) => pirate.id),
+    ]);
+    const handCards = this.snapshotHandCardsForDiscard();
+    const discardAnimEnd = this.animateCardsToDiscard(handCards.filter(card => !reportIds.has(card.id)));
+    const reportAnimEnd = this.animateCardsToDraw(handCards.filter(card => reportIds.has(card.id)));
+    const nextTurnDelay = Math.max(discardAnimEnd, reportAnimEnd) + CARD_MOTION.betweenTurnsDelay;
+    const allCrewIds = new Set((G.allCrew || []).filter(Boolean).map(pirate => pirate.id));
+    G.discard.push(...(G.hand || []).filter(pirate =>
+      pirate && allCrewIds.has(pirate.id) && !reportIds.has(pirate.id)
+    ));
+    this.placeRouteSidekickReportPiratesOnDeck(sidekickReportPirates);
+    this.placeCounterAmbusherReportPiratesOnDeck(ambusherReportPirates);
     G.hand = [];
     G.sent = [];
     this._sendingToIsland.clear();
@@ -2830,8 +6832,10 @@ class GameScene extends Phaser.Scene {
     if (G.phase !== 'boarding' || G.busy) return;
     const combat = this.ensureBoardingCombat();
     if (!combat || combat.mode !== 'setup') return;
-    const playerRows = this.combatSetupRows('player', combat);
+    const playerRows = this.combatCompactSetupRows(this.combatSetupRows('player', combat));
     const enemyRows = this.combatSetupRows('enemy', combat);
+    combat.playerSetupRows = playerRows;
+    combat.enemySetupRows = enemyRows;
 
     G.busy = true;
     combat.mode = 'fighting';
@@ -2844,6 +6848,11 @@ class GameScene extends Phaser.Scene {
     combat.playerFighters = this.buildPlayerCombatFighters(playerRows, combat);
     combat.enemyFighters = this.buildEnemyCombatFighters(enemyRows, combat);
     this.renderAll();
+    const ambush = this.applyCounterAmbush(combat);
+    if (ambush) {
+      this.renderAll();
+      if (this.handleCombatResult(this.combatResultFromLiving())) return;
+    }
     this.startCombatAutoplay();
   }
 
@@ -3159,27 +7168,117 @@ class GameScene extends Phaser.Scene {
     return Math.max(1, count);
   }
 
+  combatEncounterPreviewArchetypes(blueprint) {
+    if (!blueprint || typeof blueprint !== 'object') return [];
+    const main = this.combatArchetypeByKey(blueprint.mainKey);
+    if (!main) return [];
+
+    const total = Math.max(1, Math.floor(Number(blueprint.totalCount) || 1));
+    const archetypes = [main];
+    const supportKeys = Array.isArray(blueprint.supportKeys) ? blueprint.supportKeys : [];
+    supportKeys.forEach((key) => {
+      if (archetypes.length >= total) return;
+      const archetype = this.combatArchetypeByKey(key);
+      if (archetype) archetypes.push(archetype);
+    });
+    while (archetypes.length < total) archetypes.push(main);
+    return archetypes.slice(0, total);
+  }
+
+  enemyRosterMemberLabel(archetype, boardingNo) {
+    if (!archetype) return '';
+    const scaling = this.combatEnemyLateScaling(boardingNo);
+    const name = scaling ? `${scaling.label} ${archetype.name}` : archetype.name;
+    return `${archetype.emoji} ${name}`;
+  }
+
+  nextShipIntel() {
+    if (this.isBattleTest() || !G.map || !Array.isArray(G.map.layers)) return null;
+    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
+
+    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
+      const layer = G.map.layers[li];
+      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
+      const node = layer[0];
+      const boardingNo = this.mapBoardingNumberForLayer(li);
+      if (boardingNo === 1 && !node.openingRouteMainKey) {
+        return {
+          nodeId: node.id,
+          layerIdx: li,
+          turnsAway: li - currentLayer,
+          boardingNo,
+          mainKey: null,
+          encounterDesc: 'Choose an opening contract',
+          rosterLabels: ['Route decides'],
+          mainLabel: 'Route decides',
+        };
+      }
+      const roster = this.combatEncounterPreviewArchetypes(node.encounter);
+      const rosterLabels = roster
+        .map((archetype) => this.enemyRosterMemberLabel(archetype, boardingNo))
+        .filter(Boolean);
+      const main = roster[0] || (node.encounter ? this.combatArchetypeByKey(node.encounter.mainKey) : null);
+      const encounterDesc = node.encounter && node.encounter.encounterDesc ? node.encounter.encounterDesc : null;
+      return {
+        nodeId: node.id,
+        layerIdx: li,
+        turnsAway: li - currentLayer,
+        boardingNo,
+        mainKey: main ? main.key : (node.encounter && node.encounter.mainKey) || null,
+        encounterDesc,
+        rosterLabels,
+        mainLabel: this.enemyRosterMemberLabel(main, boardingNo),
+      };
+    }
+
+    return null;
+  }
+
+  boardingAlertIntelText(amount = this.pendingBoardingAlert(), guardCount = this.boardingAlertGuardCount(amount), opts = {}) {
+    const alert = Math.max(0, Math.floor(Number(amount) || 0));
+    if (alert <= 0) return '';
+    const label = this.boardingAlertGuardLabel(guardCount);
+    const includePlunder = opts.includePlunder !== false;
+    const plunder = includePlunder ? this.boardingAlertPlunderLabel(guardCount) : '';
+    const suffix = [label, plunder].filter(Boolean).join(', ');
+    return suffix ? `Alert ${alert}: ${suffix}` : `Alert ${alert}`;
+  }
+
+  nextShipIntelText(intel = null, opts = {}) {
+    const info = intel || this.nextShipIntel();
+    if (!info) return '';
+    const prefix = opts.prefix === false ? '' : 'Next ship: ';
+    const rosterLine = info.rosterLabels && info.rosterLabels.length
+      ? `${prefix}${info.rosterLabels.join(', ')}`
+      : (info.encounterDesc || `Battle #${info.boardingNo}`);
+    const alertAmount = opts.alertAmount != null
+      ? Math.max(0, Math.floor(Number(opts.alertAmount) || 0))
+      : this.pendingBoardingAlert();
+    const alertGuardCount = opts.alertGuardCount != null
+      ? Math.max(0, Math.min(3, Math.floor(Number(opts.alertGuardCount) || 0)))
+      : this.boardingAlertGuardCount(alertAmount);
+    const alertLine = opts.includeAlert === false
+      ? ''
+      : this.boardingAlertIntelText(alertAmount, alertGuardCount, opts);
+    const routeWatchLine = opts.includeRouteWatch === false
+      ? ''
+      : this.openingRouteCounterWatchText(info);
+    return [rosterLine, routeWatchLine, alertLine].filter(Boolean).join(' · ');
+  }
+
   isLandingRoundPhase() {
     return !!G.island && G.phase !== 'map' && G.phase !== 'boarding';
   }
 
   nextEnemyState() {
-    if (!G.map || !Array.isArray(G.map.layers)) return null;
-
-    const currentLayer = Number.isFinite(G.map.currentLayer) ? G.map.currentLayer : -1;
-    for (let li = Math.max(0, currentLayer + 1); li < G.map.layers.length; li++) {
-      const layer = G.map.layers[li];
-      if (!layer || layer.length !== 1 || layer[0].type !== 'ship') continue;
-      const turnsAway = li - currentLayer;
-      const bp = this.encounterBlueprintForLayer(li);
-      const desc = bp && bp.encounterDesc ? bp.encounterDesc : null;
+    const intel = this.nextShipIntel();
+    if (intel) {
       return {
         icon: '🏴‍☠️',
-        line1: `Enemy in ${turnsAway} turn${turnsAway === 1 ? '' : 's'}.`,
-        line2: desc || `Battle #${this.mapBoardingNumberForLayer(li)}`,
+        line1: `Enemy in ${intel.turnsAway} turn${intel.turnsAway === 1 ? '' : 's'}.`,
+        line2: this.nextShipIntelText(intel) || `Battle #${intel.boardingNo}`,
       };
     }
-
     return { icon: '⭐', line1: 'No more enemy ships.', line2: 'Sail to the end' };
   }
 
@@ -3194,33 +7293,68 @@ class GameScene extends Phaser.Scene {
       };
     }
 
+    if (G.phase === 'healing') {
+      const wounded = this.woundedCrew().length;
+      const remaining = Math.max(0, this.healingLimit() - this.healingUsed());
+      return {
+        icon: WOUNDED_EMOJI,
+        line1: 'Heal wounded pirates.',
+        line2: wounded ? `${remaining} heals left` : 'No wounded pirates',
+      };
+    }
+
     if (G.phase === 'boarding' && G.enemyShip) {
       const combat = this.ensureBoardingCombat();
+      const alert = this.activeBoardingAlertState();
+      const alertLine = this.boardingAlertSummary(alert.amount, alert.guardCount);
       if (combat && combat.mode === 'intro') {
         return {
           icon: '🏴‍☠️',
           line1: 'Boarding party spotted.',
-          line2: 'Crew moving into formation',
+          line2: alertLine || 'Crew moving into formation',
         };
       }
       if (combat && combat.mode === 'fighting') {
+        const wave = Math.max(0, Math.floor(Number(combat.reinforcementCount) || 0));
+        const baseLine = `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes${wave ? ` · hand ${wave + 1}` : ''}`;
         return {
           icon: '⚔️',
           line1: 'Boarding underway.',
-          line2: `${this.combatLiving('player').length} cats vs ${this.combatLiving('enemy').length} foes`,
+          line2: alertLine ? `${baseLine} · ${this.boardingAlertGuardLabel(alert.guardCount)}` : baseLine,
         };
       }
       if (combat && combat.mode === 'resolved') {
+        const trophy = combat.boardingTrophy;
+        const counterTrophy = combat.counterTrophy;
+        const rewardParts = [];
+        if (trophy) rewardParts.push(`${trophy.name} +💪`);
+        if (counterTrophy) rewardParts.push(`${counterTrophy.name} +⚡`);
+        const ambusherReport = combat.counterAmbusherReport || combat.openingAmbusherReport;
+        if (ambusherReport) rewardParts.push(`${ambusherReport.name} reports next`);
+        if (combat.routeSidekickReport) {
+          const bounty = combat.routeSidekickBounty || combat.routeSidekickReport.bounty || null;
+          const bountyEmoji = bounty && RES_EMOJI[bounty.resource] ? RES_EMOJI[bounty.resource] : '';
+          rewardParts.push(`${combat.routeSidekickReport.name} sidekick reports${bountyEmoji ? ` +${bountyEmoji}` : ''}`);
+        }
+        if (combat.openingRouteVictoryCache) {
+          const reward = combat.openingRouteVictoryCache;
+          const emoji = RES_EMOJI[reward.resource] || '';
+          rewardParts.push(`Route cache +${reward.count}${emoji}`);
+        }
         return {
           icon: combat.result === 'win' ? '⚔️' : '💀',
-          line1: combat.result === 'win' ? 'Deck cleared.' : 'Boarding lost.',
-          line2: combat.result === 'win' ? 'Taking the ship' : 'The crew fell',
+          line1: combat.result === 'win' ? 'Deck cleared.' : 'Crew exhausted.',
+          line2: combat.result === 'win'
+            ? (rewardParts.length ? `Rewards: ${rewardParts.join(' · ')}` : 'Taking the ship')
+            : 'All pirates are wounded',
         };
       }
+      const ready = this.activeCombatHandPirates().length;
+      const sittingOut = (G.hand || []).filter((pirate) => this.pirateWounded(pirate)).length;
       return {
         icon: '🏴‍☠️',
-        line1: 'Arrange your pirates in 3 rows.',
-        line2: 'Drag rows. Hover or hold cards for tooltips',
+        line1: 'Arrange boarding formation.',
+        line2: alertLine || (sittingOut ? `${ready} ready, ${sittingOut} wounded sit out` : `${ready} pirates ready to fight`),
       };
     }
 
@@ -3232,11 +7366,23 @@ class GameScene extends Phaser.Scene {
       };
     }
 
+    if (G.phase === 'openingContract') {
+      return {
+        icon: '🧭',
+        line1: 'Choose an opening contract.',
+        line2: 'Safe cache, risky bomber, or greedy port',
+      };
+    }
+
     if (G.phase === 'shopping') {
+      const alertLine = this.boardingAlertSummary(this.pendingBoardingAlert());
+      const discount = this.activeFullCrewDiscount();
+      const discountLine = discount > 0 ? `Full Crew Discount -${discount}☠️` : null;
+      const prepLine = this.openingCounterPrepActiveForState() ? 'Opening Counter Prep' : null;
       return {
         icon: '🛒',
         line1: 'Visit the shop.',
-        line2: 'Buy crew or continue sailing',
+        line2: [discountLine, prepLine, alertLine].filter(Boolean).join(' · ') || 'Buy crew or continue sailing',
       };
     }
 
@@ -3265,14 +7411,21 @@ class GameScene extends Phaser.Scene {
 
   islandDescription() {
     if (!G.island) return 'Choose a route on the map';
-    if (G.island.bonus === 'wood') return 'Pirates gain twice more wood';
-    if (G.island.bonus === 'stone') return 'Pirates gain twice more stone';
-    if (G.island.bonus === 'gold') return 'Pirates gain twice more gold';
-    if (G.island.extraSend) return 'You can send one extra pirate';
-    if (G.island.maxSend != null) return `Send up to ${G.island.maxSend} pirates`;
-    if (G.island.bonusEnthusiasm) return `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
-    if (G.island.sacrifice) return 'Pirates sent here are lost forever';
-    return 'Set sail and gather what you can';
+    let base = 'Set sail and gather what you can';
+    if (G.island.bonus === 'wood') base = 'Pirates gain twice more wood';
+    else if (G.island.bonus === 'stone') base = 'Pirates gain twice more stone';
+    else if (G.island.bonus === 'gold') base = 'Pirates gain twice more gold';
+    else if (G.island.fullSendBuff) {
+      const drillText = personalGainText([G.island.fullSendBuff]);
+      base = `Send ${this.maxSend()} pirates. Full crew: leftmost sent gains ${drillText}`;
+    } else if (G.island.extraSend) base = 'You can send one extra pirate';
+    else if (G.island.maxSend != null) base = `Send up to ${G.island.maxSend} pirates`;
+    else if (G.island.bonusEnthusiasm) base = `Gain ${G.island.bonusEnthusiasm}☠️ on landing`;
+    else if (G.island.sacrifice) base = 'Pirates sent here are lost forever';
+    else if (G.island.healWounded) base = `Heal up to ${G.island.healWounded} wounded pirates`;
+
+    const cacheDrill = this.scoutedCacheDrillDescription();
+    return cacheDrill ? `${cacheDrill}. ${base}` : base;
   }
 
   inventoryDisplayItems(extraKeys = []) {
@@ -3288,6 +7441,9 @@ class GameScene extends Phaser.Scene {
   currentIslandAction() {
     if (G.busy) return null;
     if (this.weaponAssignmentActive()) return null;
+    if (G.phase === 'healing') {
+      return { label: 'Continue', onClick: () => this.continueFromHealing(), variant: 'continue' };
+    }
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
       if (!combat || combat.mode === 'intro' || combat.mode === 'fighting') return null;
@@ -3303,9 +7459,16 @@ class GameScene extends Phaser.Scene {
     if (G.phase === 'sending') {
       if (G.sent.length >= this.maxSend()) {
         if (this._sendingToIsland.size > 0) return null;
-        return { label: 'Work on Ship', onClick: () => this.endSending(), variant: 'continue' };
+        const preview = this.shipWagePreview();
+        const wageText = preview.wages > 0 ? ` +${preview.wages}☠️` : '';
+        return { label: `Work on Ship${wageText}`, onClick: () => this.endSending(), variant: 'continue' };
       }
-      return { label: 'End', onClick: () => this.endSending(), variant: 'end' };
+      const preview = this.shipWagePreview();
+      const wageAlert = this.boardingAlertGuardLabel(this.boardingAlertGuardCount(this.pendingBoardingAlert() + preview.alert));
+      const wageLabel = preview.wages > 0
+        ? `End +${preview.wages}☠️${wageAlert ? ` ${wageAlert}` : ''}`
+        : 'End';
+      return { label: wageLabel, onClick: () => this.endSending(), variant: 'end' };
     }
     if (G.phase === 'shopping' && !this._shopPanelOpen) {
       return { label: 'Continue', onClick: () => this.openShopPanel(), variant: 'continue' };
@@ -3538,6 +7701,7 @@ class GameScene extends Phaser.Scene {
       const visible = visibleByIdx[handIdx];
       if (visible) {
         cards.push({
+          id: pirate.id,
           type: pirate.type,
           x: visible.container.x,
           y: visible.container.y,
@@ -3545,6 +7709,9 @@ class GameScene extends Phaser.Scene {
           scale: visible.container.scaleX || 1,
           slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
           slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         });
         return;
       }
@@ -3552,6 +7719,7 @@ class GameScene extends Phaser.Scene {
       if (combatFighter && this._combatPlayerViews && this._combatPlayerViews[combatFighter.id]) {
         const view = this._combatPlayerViews[combatFighter.id];
         cards.push({
+          id: pirate.id,
           type: pirate.type,
           x: view.x,
           y: view.y,
@@ -3559,12 +7727,16 @@ class GameScene extends Phaser.Scene {
           scale: 0.5,
           slotState: combatFighter.weaponKey ? 'armed' : 'none',
           slotWeaponKey: combatFighter.weaponKey || null,
+          wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         });
         return;
       }
       if (!sentSlotByIdx.has(handIdx)) return;
       const placement = this.sentCardPlacement(sentSlotByIdx.get(handIdx));
       cards.push({
+        id: pirate.id,
         type: pirate.type,
         x: placement.x,
         y: placement.y,
@@ -3572,6 +7744,9 @@ class GameScene extends Phaser.Scene {
         scale: placement.scale != null ? placement.scale : 1,
         slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
         slotWeaponKey: this.pirateWeaponKey(pirate),
+        wounded: !!pirate.wounded,
+        might: this.pirateMight(pirate),
+        tempo: this.pirateTempo(pirate),
       });
     });
     return cards;
@@ -3598,6 +7773,9 @@ class GameScene extends Phaser.Scene {
       const built = buildCardTexture(this, card.type, L, {
         slotState: card.slotState || 'none',
         slotWeaponKey: card.slotWeaponKey || null,
+        wounded: !!card.wounded,
+        might: card.might || 0,
+        tempo: card.tempo || 0,
       });
       const baseScale = built.textureResolution > 1 ? (1 / built.textureResolution) : 1;
       const ghost = this.add.image(card.x, card.y, built.texKey)
@@ -3660,8 +7838,32 @@ class GameScene extends Phaser.Scene {
     return endAt;
   }
 
+  animateCardsToDraw(cards, opts = {}) {
+    if (!Array.isArray(cards) || cards.length === 0) return opts.delay || 0;
+    const target = this.pileButtonCenter('draw');
+    const baseDelay = opts.delay || 0;
+    const stagger = opts.stagger != null ? opts.stagger : CARD_MOTION.discardStagger;
+    let endAt = baseDelay;
+    cards.forEach((card, idx) => {
+      endAt = Math.max(endAt, this.animateCardGhost(card, target, {
+        delay: baseDelay + idx * stagger,
+        duration: CARD_MOTION.discardDuration,
+        arcHeight: 110 * this.L.k,
+        arcSpreadX: 64 * this.L.k,
+        endScale: 0.34,
+        endAlpha: 0.2,
+      }));
+    });
+    return endAt;
+  }
+
   animateCurrentHandToDiscard(opts = {}) {
-    return this.animateCardsToDiscard(this.snapshotHandCardsForDiscard(), opts);
+    const excludeIds = opts.excludeIds instanceof Set
+      ? opts.excludeIds
+      : new Set(Array.isArray(opts.excludeIds) ? opts.excludeIds : []);
+    const cards = this.snapshotHandCardsForDiscard()
+      .filter(card => !excludeIds.has(card.id));
+    return this.animateCardsToDiscard(cards, opts);
   }
 
   animateReshuffleToDraw(reshuffles, opts = {}) {
@@ -3683,6 +7885,11 @@ class GameScene extends Phaser.Scene {
           y: from.y - idx * 4 * this.L.k,
           rotation: -0.12 + idx * 0.06,
           scale: 0.34,
+          slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+          slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: !!pirate.wounded,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
         }, to, {
           delay: cursor + idx * CARD_MOTION.reshuffleStagger,
           duration: CARD_MOTION.reshuffleDuration,
@@ -3860,6 +8067,68 @@ class GameScene extends Phaser.Scene {
         fontSize: L.fs(Math.max(10, 14 * scale)),
       })).setOrigin(0, 0);
       ct.add(weaponNode);
+    }
+
+    if (opts.side === 'player') {
+      const buffParts = [];
+      const might = Math.max(0, Math.floor(Number(opts.might) || 0));
+      const tempo = Math.max(0, Math.floor(Number(opts.tempo) || 0));
+      const counterEdgeDamage = Math.max(0, Math.floor(Number(opts.counterEdgeDamage) || 0));
+      if (might > 0) buffParts.push(`${BUFF_EMOJI.might}${might}`);
+      if (tempo > 0) buffParts.push(`${BUFF_EMOJI.tempo}${tempo}`);
+      if (buffParts.length) {
+        const buffText = buffParts.join(' ');
+        const buffLabel = this.add.text(0, h / 2 - 35 * L.k * scale, buffText, uiBodyStyle(L, UI_THEME.colors.ink, {
+          fontSize: L.fs(Math.max(8, 9 * scale)),
+          fontStyle: 'bold',
+        })).setOrigin(0.5, 0.5);
+        const padX = 4 * L.k * scale;
+        const padY = 2 * L.k * scale;
+        const buffBg = this.add.graphics();
+        buffBg.fillStyle(uiColorInt('#f4df74'), 0.92);
+        buffBg.lineStyle(Math.max(1, Math.round(1 * L.k * scale)), uiColorInt('#9d8424'), 1);
+        buffBg.fillRoundedRect(
+          -buffLabel.width / 2 - padX,
+          buffLabel.y - buffLabel.height / 2 - padY,
+          buffLabel.width + padX * 2,
+          buffLabel.height + padY * 2,
+          Math.max(2, Math.round(4 * L.k * scale))
+        );
+        buffBg.strokeRoundedRect(
+          -buffLabel.width / 2 - padX,
+          buffLabel.y - buffLabel.height / 2 - padY,
+          buffLabel.width + padX * 2,
+          buffLabel.height + padY * 2,
+          Math.max(2, Math.round(4 * L.k * scale))
+        );
+        ct.add([buffBg, buffLabel]);
+      }
+      if (counterEdgeDamage > 0) {
+        const edgeLabel = this.add.text(w / 2 - 5 * L.k * scale, -h / 2 + 5 * L.k * scale, `Edge +${counterEdgeDamage}`, uiBodyStyle(L, UI_THEME.colors.ink, {
+          fontSize: L.fs(Math.max(8, 8 * scale)),
+          fontStyle: 'bold',
+        })).setOrigin(1, 0);
+        const padX = 3 * L.k * scale;
+        const padY = 2 * L.k * scale;
+        const edgeBg = this.add.graphics();
+        edgeBg.fillStyle(uiColorInt('#7bdff2'), 0.96);
+        edgeBg.lineStyle(Math.max(1, Math.round(1 * L.k * scale)), uiColorInt('#246a7a'), 1);
+        edgeBg.fillRoundedRect(
+          edgeLabel.x - edgeLabel.width - padX,
+          edgeLabel.y - padY,
+          edgeLabel.width + padX * 2,
+          edgeLabel.height + padY * 2,
+          Math.max(2, Math.round(3 * L.k * scale))
+        );
+        edgeBg.strokeRoundedRect(
+          edgeLabel.x - edgeLabel.width - padX,
+          edgeLabel.y - padY,
+          edgeLabel.width + padX * 2,
+          edgeLabel.height + padY * 2,
+          Math.max(2, Math.round(3 * L.k * scale))
+        );
+        ct.add([edgeBg, edgeLabel]);
+      }
     }
 
     const hpLabel = this.add.text(0, h / 2 - 22 * L.k * scale, `${hp}/${maxHp}`, uiBodyStyle(L, UI_THEME.colors.ink, {
@@ -4072,9 +8341,17 @@ class GameScene extends Phaser.Scene {
             type: pirate.type,
             weaponKey: preview.weaponKey,
             damage: preview.damage,
+            might: preview.might,
+            tempo: preview.tempo,
+            buffCount: preview.buffCount,
+            counterEdgeDamage: preview.counterEdgeDamage,
+            watchReadyCounter: preview.watchReadyCounter,
+            poison: 0,
+            wounds: 0,
           };
           const playerTipEntries = this.combatPlayerTooltipEntries(fighterModel);
           const playerTipKey = `combat-player-${pirate.id}`;
+          const canArrange = combat && combat.mode === 'setup';
           this.renderCombatMiniCard('island', pos.x, pos.y, {
             id: pirate.id,
             tooltipKey: playerTipKey,
@@ -4083,10 +8360,13 @@ class GameScene extends Phaser.Scene {
             hp: preview.hp,
             maxHp: preview.hp,
             weaponKey: preview.weaponKey,
+            might: preview.might,
+            tempo: preview.tempo,
+            counterEdgeDamage: preview.counterEdgeDamage,
             alive: true,
             scale: playerVisuals.scale,
             interactive: true,
-            draggable: true,
+            draggable: canArrange,
             onHover: () => {
               this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
                 key: playerTipKey,
@@ -4118,36 +8398,35 @@ class GameScene extends Phaser.Scene {
                 targetKind: 'body',
               });
             },
-            onDragPreview: () => {
-              this.showCombatTooltip(this._combatNodes[pirate.id], playerTipEntries, {
-                key: playerTipKey,
-                kind: 'combat-player',
-                fighterId: pirate.id,
-                targetKind: 'body',
-              });
-            },
-            onDragStart: (_pointer, cardNode) => {
-              this._combatSetupDragState = { pirateId: pirate.id };
+            onDragStart: (pointer, node) => {
+              if (!canArrange) return;
+              const dragX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+              const dragY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
               this.clearCombatSetupInspection(combat, { silent: true });
-              cardNode.setDepth(130);
-              cardNode.setScale(1.05);
-              cardNode.setAlpha(0.96);
+              this.clearCombatTooltip();
+              this._combatSetupDragState = {
+                pirateId: pirate.id,
+                offsetX: Number.isFinite(dragX) ? dragX - node.x : 0,
+                offsetY: Number.isFinite(dragY) ? dragY - node.y : 0,
+              };
+              node.setDepth(120);
+              node.setAlpha(0.9);
             },
-            onDrag: (pointer, cardNode) => {
-              if (!pointer) return;
-              cardNode.setPosition(pointer.x, pointer.y);
-              cardNode.setDepth(130);
-              this.showCombatTooltip(cardNode, playerTipEntries, {
-                key: playerTipKey,
-                kind: 'combat-player',
-                fighterId: pirate.id,
-                targetKind: 'body',
-              });
+            onDrag: (pointer, node) => {
+              const dragState = this._combatSetupDragState;
+              if (!dragState || dragState.pirateId !== pirate.id) return;
+              const dragX = pointer && Number.isFinite(pointer.worldX) ? pointer.worldX : (pointer && pointer.x);
+              const dragY = pointer && Number.isFinite(pointer.worldY) ? pointer.worldY : (pointer && pointer.y);
+              if (Number.isFinite(dragX)) node.x = dragX - dragState.offsetX;
+              if (Number.isFinite(dragY)) node.y = dragY - dragState.offsetY;
             },
             onDragEnd: (pointer) => {
-              const drop = this.combatSetupDropTarget(pirate.id, pointer, combat);
+              const dragState = this._combatSetupDragState;
+              if (dragState && dragState.pirateId === pirate.id) {
+                const target = this.combatSetupDropTarget(pirate.id, pointer, combat);
+                this.moveCombatSetupPirate(pirate.id, target.rowIndex, target.insertIndex, combat);
+              }
               this._combatSetupDragState = null;
-              this.moveCombatSetupPirate(pirate.id, drop.rowIndex, drop.insertIndex, combat);
               this.renderAll();
             },
           });
@@ -4226,6 +8505,9 @@ class GameScene extends Phaser.Scene {
         hp: fighter.hp,
         maxHp: fighter.maxHp,
         weaponKey: fighter.weaponKey,
+        might: fighter.might,
+        tempo: fighter.tempo,
+        counterEdgeDamage: fighter.counterEdgeDamage,
         alive: fighter.alive,
         scale: playerVisuals.scale,
         interactive: true,
@@ -4289,7 +8571,10 @@ class GameScene extends Phaser.Scene {
     const rightReserve = 188 * L.k;
     const goal = this.currentGoalState();
     const blocks = [{ kind: 'goal', state: goal }];
-    if (this.isLandingRoundPhase()) {
+    const showNextEnemy = !this.isBattleTest()
+      && G.phase !== 'boarding'
+      && (G.phase === 'map' || G.phase === 'sending' || G.phase === 'shopping' || this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0);
+    if (showNextEnemy) {
       const nextEnemy = this.nextEnemyState();
       if (nextEnemy) blocks.push({ kind: 'nextEnemy', state: nextEnemy });
     }
@@ -4347,12 +8632,23 @@ class GameScene extends Phaser.Scene {
     }
 
     if (!G.island) {
-      const title = this.add.text(cx, titleY, 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
+      const opening = G.phase === 'openingContract';
+      const emptyTitleY = opening ? Math.max(78 * L.k, cy - 132 * L.k) : titleY;
+      const title = this.add.text(cx, emptyTitleY, opening ? 'Opening Contract' : 'Open Sea', uiHeadingStyle(L, 64, UI_THEME.colors.paper, {
         align: 'center',
         lineSpacing: titleLineSpacing,
+        wordWrap: { width: L.W - 72 * L.k },
       })).setOrigin(0.5, 0);
       this.addTo('island', title);
-      this.addTo('island', this.add.text(cx, titleY + title.height + titleDescMargin, 'Choose the next place to sail', uiBodyStyle(L, UI_THEME.colors.paper))
+      this.addTo('island', this.add.text(
+        cx,
+        emptyTitleY + title.height + titleDescMargin,
+        opening ? 'Pick the first cache and Boarding 1 threat' : 'Choose the next place to sail',
+        uiBodyStyle(L, UI_THEME.colors.paper, {
+          align: 'center',
+          wordWrap: { width: L.W - 96 * L.k },
+        })
+      )
         .setOrigin(0.5, 0));
       return;
     }
@@ -4389,6 +8685,9 @@ class GameScene extends Phaser.Scene {
           ? 'assign'
           : (this.pirateHasWeapon(p) ? 'armed' : 'none'),
         slotWeaponKey: this.pirateWeaponKey(p),
+        wounded: !!p.wounded,
+        might: this.pirateMight(p),
+        tempo: this.pirateTempo(p),
         L,
         container: this.ct.island,
       });
@@ -4422,12 +8721,326 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  renderHealingChoices() {
+    const L = this.L;
+    const candidates = this.woundedCrew();
+    const max = this.healingLimit();
+    const used = this.healingUsed();
+    const remaining = Math.max(0, max - used);
+    const statusText = candidates.length
+      ? (remaining > 0 ? `Choose wounded pirates to heal (${used}/${max})` : `Healing limit reached (${used}/${max})`)
+      : 'No wounded pirates to heal';
+
+    this.addTo('phase', this.add.text(L.cx, L.Y_ISL_LBL + 118 * L.k, statusText, uiHeadingStyle(L, 22, UI_THEME.colors.paper, {
+      align: 'center',
+      wordWrap: { width: L.W - 80 * L.k },
+    })).setOrigin(0.5, 0.5));
+
+    if (!candidates.length) return;
+
+    const perRow = L.IS_MOBILE ? 4 : 8;
+    const baseScale = L.IS_MOBILE ? 0.44 : 0.52;
+    const rows = [];
+    for (let i = 0; i < candidates.length; i += perRow) {
+      rows.push(candidates.slice(i, i + perRow));
+    }
+    const rowGap = CARD.H * L.k * baseScale * 0.86;
+    const firstY = L.Y_ISL_LBL + 206 * L.k;
+
+    rows.forEach((row, rowIndex) => {
+      const rowY = firstY + rowIndex * rowGap;
+      const slots = cardRowLayout(row.length, L, {
+        y: rowY,
+        scale: baseScale,
+        maxStep: 76 * L.k,
+        edgePad: 30 * L.k,
+      });
+      row.forEach((pirate, idx) => {
+        const slot = slots[idx];
+        const tipKey = `heal-${pirate.id}`;
+        const cardView = createPirateCard(this, {
+          type: pirate.type,
+          x: slot.x,
+          y: slot.y,
+          scale: baseScale,
+          depth: 22 + rowIndex,
+          interactive: true,
+          slotState: this.pirateHasWeapon(pirate) ? 'armed' : 'none',
+          slotWeaponKey: this.pirateWeaponKey(pirate),
+          wounded: true,
+          might: this.pirateMight(pirate),
+          tempo: this.pirateTempo(pirate),
+          L,
+          container: this.ct.phase,
+        });
+        if (remaining <= 0) {
+          cardView.cardImg.setTint(0x8a8a8a);
+          cardView.cardImg.setAlpha(0.72);
+        }
+        const showTips = () => this._cardTips && this._cardTips.showForCard(cardView.container, pirateCardEffectTips(pirate), { key: tipKey });
+        cardView.cardImg.on('pointerover', showTips);
+        cardView.cardImg.on('pointerout', () => {
+          if (this._cardTips) this._cardTips.hideForKey(tipKey);
+        });
+        cardView.cardImg.on('pointerdown', (ptr) => {
+          if (ptr && ptr.event) ptr.event.stopPropagation();
+          if (remaining <= 0) return;
+          this.healPirate(pirate.id);
+        });
+      });
+    });
+  }
+
+  shouldShowSendingPlanComparison() {
+    return !this.isBattleTest()
+      && G.phase === 'sending'
+      && !!G.island
+      && !G.island.healWounded;
+  }
+
+  formatSendingPlanLine(plan) {
+    const wage = plan.wage || { wages: 0, alert: 0 };
+    const baseAlert = plan.baseBoardingAlert != null
+      ? Math.max(0, Math.floor(Number(plan.baseBoardingAlert) || 0))
+      : this.pendingBoardingAlert();
+    const nextAlert = plan.boardingAlert != null
+      ? Math.max(0, Math.floor(Number(plan.boardingAlert) || 0))
+      : baseAlert + Math.max(0, Math.floor(Number(wage.alert) || 0));
+    const netAlert = Math.max(0, nextAlert - baseAlert);
+    const alertRisk = this.boardingAlertRiskText(this.boardingAlertGuardCount(nextAlert));
+    const projectedRefund = Math.max(0, Math.floor(Number(
+      plan.shortCrewDrill
+        && plan.shortCrewDrill.counterAlertRefund
+        && plan.shortCrewDrill.counterAlertRefund.projectedAmount
+    ) || 0));
+    let alertText = 'Alert +0';
+    if (wage.alert > 0 && projectedRefund > 0) {
+      alertText = `Alert +${wage.alert}->+${netAlert}${alertRisk ? ` (${alertRisk})` : ''}`;
+    } else if (wage.alert > 0) {
+      alertText = `Alert +${wage.alert}${alertRisk ? ` (${alertRisk})` : ''}`;
+    }
+    const commissionText = wage.openingCommission > 0
+      ? ` (incl. +${wage.openingCommission}☠️ Opening Commission)`
+      : '';
+    const discountText = plan.discount > 0 ? `Full Crew -${plan.discount}☠️` : 'No discount';
+    const openingPlanText = plan.openingCounterPlan ? 'Opening Counter Prep' : null;
+    const drillText = plan.portDrill && plan.portDrill.text ? `Port Drill +${plan.portDrill.text}` : null;
+    const shortCrew = plan.shortCrewDrill;
+    let shortCrewText = null;
+    if (shortCrew && shortCrew.text) {
+      const refund = shortCrew.counterAlertRefund || {};
+      const routeCounterPlan = shortCrew.routeCounterPlan;
+      if (routeCounterPlan && routeCounterPlan.name) {
+        const routeWatchText = routeCounterPlan.watched ? ' · Watch' : '';
+        const refundText = routeCounterPlan.showCounterPayoff
+          ? (routeCounterPlan.conditional ? ', counter refunds Alert if sent' : ', counter refunds Alert')
+          : '';
+        const watchText = !routeCounterPlan.watched && routeCounterPlan.showCounterPayoff ? ', Watch' : '';
+        shortCrewText = `Route counter: ${routeCounterPlan.name}${routeWatchText} · Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+      } else {
+        let refundText = '';
+        if (refund.eligible) refundText = ', counter refunds Alert';
+        else if (refund.possible && !shortCrew.targetKnown) refundText = ', counter refunds Alert';
+        else if (refund.possible) refundText = ', leftmost counter refunds Alert';
+        const watchText = shortCrew.counterWatch ? ', Watch' : '';
+        shortCrewText = `Short Crew +${shortCrew.text}${shortCrew.reportsEarly ? ', reports next' : ''}${watchText}${refundText}`;
+      }
+    }
+    return `+${wage.wages}☠️ Wages${commissionText} · ${alertText}\n${[discountText, openingPlanText, drillText, shortCrewText, plan.shopText].filter(Boolean).join(' · ')}`;
+  }
+
+  sendingPlanRows() {
+    const max = this.maxSend();
+    const currentSent = Array.isArray(G.sent) ? G.sent.length : 0;
+    const rows = [
+      { label: 'End now', plan: this.sendingPlanProjection(currentSent) },
+    ];
+    if (max > 1 && currentSent < max - 1) {
+      rows.push({ label: 'One short', plan: this.sendingPlanProjection(max - 1) });
+    }
+    rows.push({ label: 'Fill crew', plan: this.sendingPlanProjection(max, { includePortDrill: true }) });
+    return rows;
+  }
+
+  renderSendingPlanComparison() {
+    if (!this.shouldShowSendingPlanComparison()) return;
+    const L = this.L;
+    const rows = this.sendingPlanRows();
+    const w = Math.min(L.W - 36 * L.k, (L.IS_MOBILE ? 356 : 620) * L.k);
+    const pad = 8 * L.k;
+    const routeLines = this.openingRoutePlanLines({ context: 'sending' });
+    const routeText = routeLines.length
+      ? this.add.text(0, 0, routeLines.join('\n'), uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(10),
+        lineSpacing: uiLineSpacingPx(L, 10, 12),
+        wordWrap: { width: w - pad * 2 },
+      })).setOrigin(0, 0)
+      : null;
+    const routeH = routeText ? routeText.height + 12 * L.k : 0;
+    const rowH = (routeText ? 50 : 54) * L.k;
+    const h = pad * 2 + routeH + rowH * rows.length;
+    const topBase = L.IS_MOBILE && (this.isLandingRoundPhase() || this.pendingBoardingAlert() > 0)
+      ? (routeText ? 76 : 104) * L.k
+      : (routeText ? 78 : 96) * L.k;
+    const topLimit = this.islandCenterY() - 160 * L.k;
+    const top = Math.max(92 * L.k, Math.min(topBase, topLimit));
+    const x = L.cx;
+    const left = x - w / 2;
+    const rowLeft = left + pad;
+    const labelW = 72 * L.k;
+    const detailX = rowLeft + labelW + 8 * L.k;
+    const detailW = Math.max(120 * L.k, w - labelW - pad * 2 - 8 * L.k);
+
+    const bg = this.add.graphics();
+    bg.fillStyle(uiColorInt(UI_THEME.colors.cocoa), 0.92);
+    bg.fillRoundedRect(left, top, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.9);
+    bg.strokeRoundedRect(left, top, w, h, 8 * L.k);
+    bg.lineStyle(Math.max(1, Math.round(1 * L.k)), uiColorInt(UI_THEME.colors.sandBorder), 0.65);
+    if (routeText) {
+      const y = top + pad + routeH;
+      bg.lineBetween(left + pad, y, left + w - pad, y);
+    }
+    for (let i = 1; i < rows.length; i++) {
+      const y = top + pad + routeH + rowH * i;
+      bg.lineBetween(left + pad, y, left + w - pad, y);
+    }
+    this.addTo('phase', bg);
+
+    if (routeText) {
+      routeText.setPosition(left + pad, top + pad + 2 * L.k);
+      this.addTo('phase', routeText);
+    }
+
+    rows.forEach((row, index) => {
+      const rowY = top + pad + routeH + index * rowH;
+      const label = this.add.text(rowLeft, rowY + rowH / 2, row.label, uiHeadingStyle(L, 13, '#f6d28a', {
+        align: 'left',
+      })).setOrigin(0, 0.5);
+      const detail = this.add.text(detailX, rowY + rowH / 2, this.formatSendingPlanLine(row.plan), uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(11),
+        lineSpacing: uiLineSpacingPx(L, 11, 13),
+        wordWrap: { width: detailW },
+      })).setOrigin(0, 0.5);
+      this.addTo('phase', label);
+      this.addTo('phase', detail);
+    });
+  }
+
+  openingContractCardLines(choice) {
+    const island = choice && ISLANDS[choice.islandIdx];
+    const info = this.openingRouteInfoForMainKey(choice && choice.mainKey);
+    if (!choice || !island || !info) return null;
+    const stakes = this.openingRouteCacheStakesFromNode({
+      type: 'island',
+      islandIdx: choice.islandIdx,
+    }, choice.mainKey);
+    const cacheText = this.openingRouteCacheStakesText(stakes);
+    const alert = Math.max(0, Math.floor(Number(stakes && stakes.alert) || 0));
+    const fullCacheText = `${cacheText}${alert === 0 ? ' +0 Alert' : ''}`;
+    const encounter = typeof firstBoardingEncounterBlueprint === 'function'
+      ? firstBoardingEncounterBlueprint(choice.mainKey)
+      : null;
+    const support = (Array.isArray(encounter && encounter.supportKeys) ? encounter.supportKeys : [])
+      .map((key) => this.combatArchetypeByKey(key))
+      .filter(Boolean)
+      .map(arch => arch.name)
+      .join(' + ');
+    const risk = choice.key === 'forest'
+      ? 'Safe'
+      : (choice.key === 'rocky' ? 'Volatile' : 'Greedy');
+    return {
+      title: `${island.emoji || ''} ${choice.label}`,
+      enemy: info.enemyLabel,
+      cache: `${risk} cache: ${fullCacheText}`,
+      shop: `${info.starterName} -> ${info.primaryName}`,
+      side: `Prep unlocks ${info.sideName}`,
+      support,
+    };
+  }
+
+  renderOpeningContractChoices() {
+    const choices = typeof openingContractChoices === 'function' ? openingContractChoices() : [];
+    if (!choices.length) return;
+    const L = this.L;
+    const isStacked = L.IS_MOBILE || L.W < 700;
+    const gap = 12 * L.k;
+    const cardW = isStacked
+      ? Math.min(L.W - 44 * L.k, 356 * L.k)
+      : Math.min(214 * L.k, (L.W - 76 * L.k - gap * 2) / 3);
+    const cardH = isStacked ? 104 * L.k : 160 * L.k;
+    const totalH = isStacked ? cardH * choices.length + gap * (choices.length - 1) : cardH;
+    const top = Math.max(
+      146 * L.k,
+      Math.min(this.islandCenterY() + 96 * L.k, L.Y_NAV - totalH - 60 * L.k)
+    );
+    const left = isStacked ? L.cx - cardW / 2 : L.cx - (cardW * choices.length + gap * (choices.length - 1)) / 2;
+    const radius = 8 * L.k;
+
+    choices.forEach((choice, index) => {
+      const lines = this.openingContractCardLines(choice);
+      if (!lines) return;
+      const x = isStacked ? left : left + index * (cardW + gap);
+      const y = isStacked ? top + index * (cardH + gap) : top;
+      const bg = this.add.graphics();
+      const drawBg = (fill, stroke, alpha = 0.94) => {
+        bg.clear();
+        bg.fillStyle(uiColorInt(fill), alpha);
+        bg.fillRoundedRect(x, y, cardW, cardH, radius);
+        bg.lineStyle(Math.max(1, Math.round(2 * L.k)), uiColorInt(stroke), 0.95);
+        bg.strokeRoundedRect(x, y, cardW, cardH, radius);
+      };
+      drawBg(UI_THEME.colors.cocoa, UI_THEME.colors.sandBorder);
+      this.addTo('phase', bg);
+
+      const pad = 10 * L.k;
+      const title = this.add.text(x + pad, y + pad, lines.title, uiHeadingStyle(L, isStacked ? 18 : 17, '#f6d28a', {
+        wordWrap: { width: cardW - pad * 2 },
+      })).setOrigin(0, 0);
+      this.addTo('phase', title);
+
+      const detail = [
+        lines.enemy,
+        lines.support ? `Support: ${lines.support}` : '',
+        lines.cache,
+        lines.shop,
+        lines.side,
+      ].filter(Boolean).join('\n');
+      const body = this.add.text(x + pad, y + pad + (isStacked ? 28 : 34) * L.k, detail, uiBodyStyle(L, UI_THEME.colors.paper, {
+        fontSize: L.fs(isStacked ? 11 : 12),
+        lineSpacing: uiLineSpacingPx(L, isStacked ? 11 : 12, isStacked ? 13 : 15),
+        wordWrap: { width: cardW - pad * 2 },
+      })).setOrigin(0, 0);
+      this.addTo('phase', body);
+
+      const hit = this.add.zone(x + cardW / 2, y + cardH / 2, cardW, cardH)
+        .setInteractive({ useHandCursor: true });
+      hit.on('pointerover', () => drawBg(UI_THEME.colors.cocoaDark, '#f6d28a', 0.98));
+      hit.on('pointerout', () => drawBg(UI_THEME.colors.cocoa, UI_THEME.colors.sandBorder));
+      hit.on('pointerdown', (ptr) => {
+        if (ptr && ptr.event) ptr.event.stopPropagation();
+        this.chooseOpeningContract(choice.key);
+      });
+      this.addTo('phase', hit);
+    });
+  }
+
   renderPhase() {
     this.clearCt('phase');
     if (this.weaponAssignmentActive()) {
       return;
     }
     const L = this.L;
+
+    if (G.phase === 'openingContract') {
+      this.renderOpeningContractChoices();
+      return;
+    }
+
+    if (G.phase === 'healing') {
+      this.renderHealingChoices();
+      return;
+    }
 
     if (G.phase === 'boarding') {
       const combat = this.ensureBoardingCombat();
@@ -4436,11 +9049,44 @@ class GameScene extends Phaser.Scene {
         const resultText = this.add.text(
           L.cx,
           this.islandContinueY() - 44 * L.k,
-          won ? 'Won Combat' : 'Lost Combat',
+          won ? 'Won Combat' : 'Crew Exhausted',
           uiHeadingStyle(L, 28, won ? '#8bd17c' : '#ff8a80')
         ).setOrigin(0.5, 0.5);
         this.addTo('phase', resultText);
+        if (won) {
+          const rewardLines = [];
+          if (combat.boardingTrophy) rewardLines.push('Boarding Trophy +💪');
+          if (combat.counterTrophy) rewardLines.push('Counter Trophy +⚡');
+          const openingPlunderItem = this.openingBreakPlunderItem(combat.openingBreakPlunder);
+          if (openingPlunderItem) {
+            const label = `+${openingPlunderItem.count > 1 ? openingPlunderItem.count : ''}${openingPlunderItem.emoji}`;
+            rewardLines.push(`Opening plunder ${label}`);
+          }
+          const ambushBountyItem = this.ambushBountyItem(combat.ambushBounty);
+          if (ambushBountyItem) {
+            const label = `+${ambushBountyItem.count > 1 ? ambushBountyItem.count : ''}${ambushBountyItem.emoji}`;
+            rewardLines.push(`Ambush bounty ${label}`);
+          }
+          if (combat.openingRouteVictoryCache) {
+            const reward = combat.openingRouteVictoryCache;
+            const emoji = RES_EMOJI[reward.resource] || '';
+            rewardLines.push(`Route cache +${reward.count}${emoji}`);
+          }
+          rewardLines.forEach((line, i) => {
+            const rewardText = this.add.text(
+              L.cx,
+              this.islandContinueY() - (76 + i * 22) * L.k,
+              line,
+              uiBodyStyle(L, UI_THEME.colors.paper, { align: 'center' })
+            ).setOrigin(0.5, 0.5);
+            this.addTo('phase', rewardText);
+          });
+        }
       }
+    }
+
+    if (G.phase === 'sending') {
+      this.renderSendingPlanComparison();
     }
 
     if (G.phase !== 'removing') return;
@@ -4477,6 +9123,11 @@ class GameScene extends Phaser.Scene {
   renderHand() {
     const isBoarding = G.phase === 'boarding';
     const combat = isBoarding ? this.ensureBoardingCombat() : null;
+    if (G.phase === 'healing' || G.phase === 'openingContract') {
+      this.clearCt('hand');
+      this._cardHand.destroy();
+      return;
+    }
     if (isBoarding && combat && combat.mode === 'intro' && combat.introStarted) {
       return;
     }
@@ -4503,7 +9154,7 @@ class GameScene extends Phaser.Scene {
     };
 
     const isSending = G.phase === 'sending' && !isWeaponAssignment;
-    const allowInteraction = isWeaponAssignment || isSending || (isBoarding && combat && combat.mode === 'setup');
+    const allowInteraction = isWeaponAssignment || isSending;
     const handVisible = !(isBoarding && combat && !this.boardingHandVisible(combat));
 
     if (!handVisible) return;
@@ -4529,6 +9180,7 @@ class GameScene extends Phaser.Scene {
           : (this.pirateHasWeapon(pirate) ? 'armed' : 'none')
       ),
       cardSlotWeaponKeyForCard: (pirate) => this.pirateWeaponKey(pirate),
+      cardBadgeForCard: isSending ? (pirate) => this.routeCounterBadgeForCard(pirate) : null,
       touchTapPreviewsAction: !isWeaponAssignment,
       onCardPointerDown: isWeaponAssignment ? (handIdx) => this.assignWeaponToHandPirate(handIdx) : null,
       onSendToIsland: isSending ? (idx, fromPos) => this.sendToIsland(idx, fromPos) : null,
@@ -4584,8 +9236,9 @@ class GameScene extends Phaser.Scene {
     const L = this.L;
     this.renderInventory();
 
-    const panelEnabled = !this.weaponAssignmentActive() && G.phase !== 'boarding';
-    const mapEnabled = panelEnabled;
+    const panelEnabled = !this.weaponAssignmentActive() && G.phase !== 'boarding' && G.phase !== 'openingContract';
+    const showMapButton = this.shouldShowMapPanelButton();
+    const mapEnabled = panelEnabled && showMapButton;
     const shopEnabled = panelEnabled && !G.busy;
     const pileEnabled = panelEnabled && !G.busy;
     const pauseEnabled = true;
@@ -4617,20 +9270,24 @@ class GameScene extends Phaser.Scene {
     });
     this._panelButtons.shopModal = shopBtn;
 
-    const mapBtn = this.mkBtn('nav', shopBtn.x - shopBtn.width / 2 - topGap, topY, '🗺️', () => {
-      this.toggleMapPanel();
-    }, {
-      ...iconOpts,
-      enabled: mapEnabled,
-      bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
-      hoverBg: UI_THEME.colors.cocoaDark,
-      disabledBg: UI_THEME.colors.disabled,
-      color: UI_THEME.colors.paper,
-      disabledColor: UI_THEME.colors.ink,
-    });
-    this._panelButtons.map = mapBtn;
+    let pauseX = shopBtn.x - shopBtn.width / 2 - topGap;
+    if (showMapButton) {
+      const mapBtn = this.mkBtn('nav', pauseX, topY, '🗺️', () => {
+        this.toggleMapPanel();
+      }, {
+        ...iconOpts,
+        enabled: mapEnabled,
+        bg: mapOpen ? UI_THEME.colors.cocoaDark : UI_THEME.colors.cocoa,
+        hoverBg: UI_THEME.colors.cocoaDark,
+        disabledBg: UI_THEME.colors.disabled,
+        color: UI_THEME.colors.paper,
+        disabledColor: UI_THEME.colors.ink,
+      });
+      this._panelButtons.map = mapBtn;
+      pauseX = mapBtn.x - mapBtn.width / 2 - topGap;
+    }
 
-    this.mkBtn('nav', mapBtn.x - mapBtn.width / 2 - topGap, topY, '⏸', () => {
+    this.mkBtn('nav', pauseX, topY, '⏸', () => {
       this.openPauseMenu();
     }, {
       ...iconOpts,
