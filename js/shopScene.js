@@ -10,6 +10,10 @@ class ShopScene extends Phaser.Scene {
     this._skipOpenAnim = !!(data && data.skipOpenAnim);
   }
 
+  preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
+  }
+
   create() {
     ensureCatTextures(this);
     this.L = computeLayout(this.scale.width, this.scale.height);
@@ -77,6 +81,7 @@ class ShopScene extends Phaser.Scene {
   requestClose() {
     if (this._panelClosing) return;
     this._panelClosing = true;
+    playSfx(this, 'panelClose');
     const game = this.scene.get('game');
     if (game && typeof game.panelFlagKey === 'function') {
       const flagKey = game.panelFlagKey(this.scene.key);
@@ -301,6 +306,7 @@ class ShopScene extends Phaser.Scene {
         }
         if (!canBuy) return;
         if (this._cardTips) this._cardTips.hide();
+        playSfx(this, 'shopBuy');
         this.animateBuyTransition(i, m, cardScale);
       });
 
@@ -336,6 +342,7 @@ class ShopScene extends Phaser.Scene {
         action.on('pointerdown', (ptr) => {
           ptr.event.stopPropagation();
           if (this._cardTips) this._cardTips.hide();
+          playSfx(this, 'shopBuy');
           this.animateBuyTransition(i, m, cardScale);
         });
       }
@@ -374,6 +381,7 @@ class ShopScene extends Phaser.Scene {
     }));
     action.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       game.handleShoppingContinue();
     });
   }

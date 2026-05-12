@@ -11,12 +11,13 @@ Browser deck-builder about pirate cats, built with Phaser 3.
 
 ### Current Build
 
-- Sail a 50-layer branching map with 10 boarding fights.
-- Draw up to 5 pirates each turn.
-- On island turns, send up to 2 pirates ashore (3 on Port Island); pirates left on ship resolve ship actions.
-- On boarding turns, total strength = crew strength + 🗡️ weapons + 💣 cannons.
-- The shop has 4 slots; bought pirates go into the deck; the shop rotates at the end of shopping.
-- The redesigned wood-and-parchment UI keeps strength and the current goal in the header, the island or ship in the center, a fan hand at the bottom, `🗺️` and `🛒` in the top-right, and `Draw Pile` / `Discard` panels in the footer.
+- Sail a 40-layer branching map with 8 generated boarding fights; victory comes after the final ship on layer 39.
+- Draw up to 5 pirates each turn from a 10-pirate starter crew; when the deck empties, the discard pile shuffles back in.
+- On island turns, send up to 2 pirates ashore (3 on Port Island); pirates left on ship resolve ship actions in hand order.
+- Ship actions produce `☠️`, personal weapons, and permanent buffs. Weapons and buffs stay on individual pirates until they leave the crew.
+- Boarding is automatic 3-row combat against generated enemy parties. Defeated pirates become `🩹 Wounded`, sit out future boardings, and can be healed at Infirmary Island.
+- The shop appears after island rounds with 4 slots. Bought pirates go to discard, purchase refills add one new slot, and `Continue` rotates the window.
+- The menu includes `Play`, `Battle Test`, `Costumes`, `All Pirates`, and `Survey`; the main UI has route/goal hints, center island or combat, a fanned hand, `⏸` / `🗺️` / `🛒` buttons, and `Draw Pile` / `Discard` panels.
 
 Full gameplay rules and the complete pirate list live in [rules.md](rules.md).
 
@@ -42,12 +43,13 @@ Balance and content are still being adjusted. Feedback on balance, pacing, and p
 
 ### Текущая версия
 
-- Плавание по ветвящейся карте на 50 слоёв с 10 абордажами.
-- Каждый ход вы тянете до 5 пиратов.
-- На островах можно отправить до 2 пиратов на берег (3 на Port Island); оставшиеся на корабле разыгрывают корабельные эффекты.
-- В абордаже общая сила = сила команды + 🗡️ оружие + 💣 пушки.
-- В магазине 4 слота; купленные пираты идут в колоду; в конце шопинга витрина сдвигается.
-- В обновлённом деревянно-пергаментном интерфейсе сверху показаны сила и текущая цель, в центре остров или вражеский корабль, снизу веер карт, справа сверху `🗺️` и `🛒`, а в футере панели `Draw Pile` и `Discard`.
+- Плавание по ветвящейся карте на 40 слоёв с 8 сгенерированными абордажами; победа наступает после финального корабля на слое 39.
+- Каждый ход вы тянете до 5 пиратов из стартовой команды на 10 карт; когда колода заканчивается, discard замешивается обратно.
+- На островах можно отправить до 2 пиратов на берег (3 на Port Island); оставшиеся на корабле разыгрывают корабельные эффекты по порядку руки.
+- Корабельные эффекты дают `☠️`, личное оружие и постоянные баффы. Оружие и баффы остаются на конкретном пирате, пока он не покинет команду.
+- Абордаж теперь автоматический бой в 3 ряда против сгенерированной вражеской команды. Побеждённые пираты получают статус `🩹 Wounded`, пропускают будущие абордажи и могут лечиться на Infirmary Island.
+- Магазин появляется после островов и всегда имеет 4 слота. Купленные пираты идут в discard, покупка сразу добавляет новый слот, а `Continue` сдвигает витрину.
+- В меню есть `Play`, `Battle Test`, `Costumes`, `All Pirates` и `Survey`; основной интерфейс показывает подсказки маршрута и цели, остров или бой в центре, веер карт, кнопки `⏸` / `🗺️` / `🛒`, а также панели `Draw Pile` и `Discard`.
 
 Полные правила и полный список пиратов находятся в [rules.md](rules.md).
 

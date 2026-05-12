@@ -14,6 +14,7 @@ class PilePanelScene extends Phaser.Scene {
   }
 
   preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
@@ -97,6 +98,7 @@ class PilePanelScene extends Phaser.Scene {
   requestClose() {
     if (this._panelClosing) return;
     this._panelClosing = true;
+    playSfx(this, 'panelClose');
     const game = this.scene.get('game');
     if (game && typeof game.panelFlagKey === 'function') {
       const flagKey = game.panelFlagKey(this.scene.key);

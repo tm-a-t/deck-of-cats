@@ -6,6 +6,7 @@ class AllPiratesScene extends Phaser.Scene {
   constructor() { super('allPirates'); }
 
   preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
@@ -271,6 +272,7 @@ class AllPiratesScene extends Phaser.Scene {
     text.on('pointerout', () => text.setColor(baseColor));
     text.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       cb();
     });
     return text;

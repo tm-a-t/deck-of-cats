@@ -11,6 +11,7 @@ class MapScene extends Phaser.Scene {
   }
 
   preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
@@ -91,6 +92,7 @@ class MapScene extends Phaser.Scene {
   requestClose() {
     if (this._panelClosing) return;
     this._panelClosing = true;
+    playSfx(this, 'panelClose');
     const game = this.scene.get('game');
     if (game && typeof game.panelFlagKey === 'function') {
       const flagKey = game.panelFlagKey(this.scene.key);
@@ -481,6 +483,7 @@ class MapScene extends Phaser.Scene {
 
   selectMapNode(nodeId) {
     if (G.phase !== 'map') return;
+    playSfx(this, 'mapSelect');
     const game = this.scene.get('game');
     let handled = false;
     if (game && game.scene && game.scene.isActive()) {

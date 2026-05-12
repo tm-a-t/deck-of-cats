@@ -150,6 +150,7 @@ class CostumesScene extends Phaser.Scene {
   constructor() { super('costumes'); this._texKeys = []; }
 
   preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
@@ -268,7 +269,11 @@ class CostumesScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: hoverBg }));
     btn.on('pointerout',  () => btn.setStyle({ backgroundColor: bg }));
-    btn.on('pointerdown', (ptr) => { ptr.event.stopPropagation(); cb(); });
+    btn.on('pointerdown', (ptr) => {
+      ptr.event.stopPropagation();
+      playSfx(this, 'button');
+      cb();
+    });
     this.root.add(btn);
     return btn;
   }

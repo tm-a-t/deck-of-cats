@@ -1110,6 +1110,7 @@ class CardHand {
       );
       ghost.setRotation(0);
       this._dragGhost = ghost;
+      playSfx(scene, 'cardPickup');
     };
 
     const resetDragVisual = () => {
@@ -1180,11 +1181,14 @@ class CardHand {
     cardImg.on('dragend', (pointer) => {
       const wasActivated = dragActivated;
       const wasMoved = dragMoved;
+      const shouldSend = wasActivated && wasMoved && pointer.y < L.Y_HAND_CENTER;
       resetDragVisual();
 
-      if (wasActivated && wasMoved && pointer.y < L.Y_HAND_CENTER) {
+      if (shouldSend) {
+        playSfx(scene, 'cardPlace');
         if (onSendToIsland) onSendToIsland(dragCard.handIdx, { x: pointer.x, y: pointer.y });
       } else {
+        if (wasActivated) playSfx(scene, 'cardReturn');
         if (!dragCard.hovered) this._animateHover(dragCard, false, L);
       }
     });

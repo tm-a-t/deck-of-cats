@@ -5,6 +5,10 @@
 class MenuScene extends Phaser.Scene {
   constructor() { super('menu'); }
 
+  preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
+  }
+
   create() {
     this.cameras.main.setBackgroundColor(UI_THEME.colors.sand);
     this.L = computeLayout(this.scale.width, this.scale.height);
@@ -117,6 +121,7 @@ class MenuScene extends Phaser.Scene {
     }));
     btn.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       cb();
     });
     this.root.add(btn);
@@ -139,6 +144,7 @@ class MenuScene extends Phaser.Scene {
     text.on('pointerout', () => text.setColor(opts.color || UI_THEME.colors.cocoa));
     text.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       cb();
     });
     this.root.add(text);

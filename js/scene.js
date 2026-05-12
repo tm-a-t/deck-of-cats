@@ -10,6 +10,7 @@ class GameScene extends Phaser.Scene {
   }
 
   preload() {
+    if (typeof preloadSfx === 'function') preloadSfx(this);
     if (!this.textures.exists('catsImg')) {
       this.load.image('catsImg', 'assets/cats.png');
     }
@@ -630,6 +631,7 @@ class GameScene extends Phaser.Scene {
     const originRect = this.panelButtonRect(sceneKey);
     this.closePanels(sceneKey);
     if (this.scene.isActive(sceneKey)) return;
+    playSfx(this, 'panelOpen');
     this.scene.launch(sceneKey, { originRect });
     this.scene.bringToTop(sceneKey);
     this.setPanelOpen(sceneKey, true);
@@ -4201,6 +4203,7 @@ class GameScene extends Phaser.Scene {
       } else if (step.type === 'reshuffle') {
         const nextStep = steps[idx + 1];
         const previewCards = nextStep && nextStep.type === 'draw' ? nextStep.cards : null;
+        this.time.delayedCall(Math.max(0, cursor), () => playSfx(this, 'shuffle'));
         cursor = this.animateReshuffleToDraw([{ ...step, previewCards }], { delay: cursor });
       }
       if (idx < steps.length - 1) cursor += stepGap;
@@ -5193,6 +5196,7 @@ class GameScene extends Phaser.Scene {
       disabledBg: UI_THEME.colors.disabled,
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
+      sfx: false,
     });
     this._panelButtons.shopModal = shopBtn;
 
@@ -5206,6 +5210,7 @@ class GameScene extends Phaser.Scene {
       disabledBg: UI_THEME.colors.disabled,
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
+      sfx: false,
     });
     this._panelButtons.map = mapBtn;
 
@@ -5233,6 +5238,7 @@ class GameScene extends Phaser.Scene {
       disabledBg: UI_THEME.colors.disabled,
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
+      sfx: false,
     });
     this._panelButtons.drawPileModal = drawBtn;
 
@@ -5248,6 +5254,7 @@ class GameScene extends Phaser.Scene {
       disabledBg: UI_THEME.colors.disabled,
       color: UI_THEME.colors.paper,
       disabledColor: UI_THEME.colors.ink,
+      sfx: false,
     });
     this._panelButtons.discardPileModal = discardBtn;
   }
@@ -5281,7 +5288,11 @@ class GameScene extends Phaser.Scene {
         textColor,
       }));
       btn.on('pointerout', () => btn.setPillStyle({ fill, textColor }));
-      btn.on('pointerdown', (ptr) => { ptr.event.stopPropagation(); cb(); });
+      btn.on('pointerdown', (ptr) => {
+        ptr.event.stopPropagation();
+        if (opts.sfx !== false) playSfx(this, 'button');
+        cb();
+      });
     }
     this.addTo(k, btn);
     return btn;

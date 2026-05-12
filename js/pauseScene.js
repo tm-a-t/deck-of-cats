@@ -74,6 +74,7 @@ class PauseScene extends Phaser.Scene {
     }));
     resumeBtn.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       this.resumeGame();
     });
 
@@ -98,6 +99,7 @@ class PauseScene extends Phaser.Scene {
     }));
     abandonBtn.on('pointerdown', (ptr) => {
       ptr.event.stopPropagation();
+      playSfx(this, 'button');
       this.abandonGame();
     });
   }
