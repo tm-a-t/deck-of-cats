@@ -19,7 +19,7 @@ Browser deck-builder about pirate cats, built with Phaser 3.
 - The shop appears after island rounds with 4 slots. Bought pirates go to discard, purchase refills add one new slot, and `Continue` rotates the window.
 - The menu includes `Play`, `Battle Test`, `Costumes`, `All Pirates`, and `Survey`; the main UI has route/goal hints, center island or combat, a fanned hand, `⏸` / `🗺️` / `🛒` buttons, and `Draw Pile` / `Discard` panels.
 
-Full gameplay rules and the complete pirate list live in [rules.md](rules.md).
+Full gameplay rules and the complete pirate list live in [rules.md](rules.md)._
 
 ### Local Run
 

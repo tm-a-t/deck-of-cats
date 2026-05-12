@@ -98,7 +98,6 @@ class PilePanelScene extends Phaser.Scene {
   requestClose() {
     if (this._panelClosing) return;
     this._panelClosing = true;
-    playSfx(this, 'panelClose');
     const game = this.scene.get('game');
     if (game && typeof game.panelFlagKey === 'function') {
       const flagKey = game.panelFlagKey(this.scene.key);

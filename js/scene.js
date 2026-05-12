@@ -5300,6 +5300,14 @@ class GameScene extends Phaser.Scene {
 
   // ──────────── RESOURCE ANIMATIONS ────────────
 
+  resourceGainSfxName(item) {
+    if (!item) return null;
+    if (item.emoji === RES_EMOJI.wood) return 'resourceWood';
+    if (item.emoji === RES_EMOJI.stone) return 'resourceStone';
+    if (item.emoji === RES_EMOJI.gold) return 'resourceTreasure';
+    return null;
+  }
+
   animateResourceGain(fromX, fromY, items) {
     const L = this.L;
     let delay = 0;
@@ -5308,8 +5316,10 @@ class GameScene extends Phaser.Scene {
       const targetX = target.x;
       const targetY = target.y;
       const n = Math.min(item.count || 1, 8);
+      const sfxName = this.resourceGainSfxName(item);
       for (let i = 0; i < n; i++) {
         this.time.delayedCall(delay, () => {
+          if (i === 0 && sfxName) playSfx(this, sfxName);
           const ox = (Math.random() - 0.5) * 30 * L.k;
           const sx = fromX + ox;
           const sy = fromY;
